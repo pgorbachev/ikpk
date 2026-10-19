@@ -569,12 +569,21 @@ def sha256_file_bytes(payload: bytes) -> str:
 
 
 def _run_as_cms(config: dict[str, Any], cwd: Path, argv: list[str], timeout: int = 1800,
-                environment: Optional[dict[str, str]] = None) -> str:
+                environment: Optional[dict[str, str]] = None,
+                read_only_path: Optional[Path] = None) -> str:
     user = pwd.getpwnam(config["cmsUser"])
     runtime_max = max(1, timeout - 30)
     command = ["/usr/bin/systemd-run", "--wait", "--collect", "--pipe", f"--uid={user.pw_name}",
                f"--working-directory={cwd}", f"--property=RuntimeMaxSec={runtime_max}s",
                "--property=TimeoutStopSec=15s"]
+    if read_only_path is not None:
+        read_only = Path(read_only_path)
+        if not read_only.is_absolute() or read_only.is_symlink() or not read_only.is_dir():
+            raise HostFailure("transient read-only path must be a real absolute directory")
+        resolved = read_only.resolve(strict=True)
+        if resolved != read_only:
+            raise HostFailure("transient read-only path must be canonical")
+        command.append(f"--property=ReadOnlyPaths={resolved}")
     for key, value in (environment or {}).items():
         if not re.fullmatch(r"[A-Z0-9_]+", key) or "\x00" in value:
             raise HostFailure("invalid unprivileged command environment")
@@ -748,7 +757,7 @@ def _validate_prepared_cms_candidate(config: dict[str, Any], source_root: Path, 
     except (OSError, ValueError, AttributeError) as error:
         raise HostFailure("CMS source lockfile Strapi identity is unreadable") from error
     if (not isinstance(expected_strapi, str) or artifact_strapi != expected_strapi
-            or installed_package.get("version") != locked_strapi):
+            or locked_strapi != expected_strapi or installed_package.get("version") != expected_strapi):
         raise HostFailure("CMS source, artifact, and installed Strapi identities do not match")
     _validate_prepared_web_dependencies(source_root)
     return source_root, artifact, dependencies
@@ -786,7 +795,8 @@ def _prepare_cms_candidate(config: dict[str, Any], source_root: Path, operation_
     if os.path.lexists(artifact):
         raise HostFailure("CMS artifact path already exists without a complete prepared candidate")
     _run_as_cms(config, source_cms, ["/usr/bin/bash", str(source_root / "scripts/build-cms-artifact.sh"),
-        str(artifact)], timeout=3600, environment={"NODE_OPTIONS": "--max-old-space-size=1536"})
+        str(artifact)], timeout=3600, environment={"NODE_OPTIONS": "--max-old-space-size=1536"},
+        read_only_path=dependencies)
     if os.path.lexists(artifact / "node_modules"):
         raise HostFailure("CMS artifact unexpectedly contains node_modules before dependency linking")
     (artifact / "node_modules").symlink_to(dependencies, target_is_directory=True)

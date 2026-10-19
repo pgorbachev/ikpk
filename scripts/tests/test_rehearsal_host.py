@@ -117,6 +117,66 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
         self.assertEqual(run_command.call_args.kwargs["timeout"], 90)
         self.assertEqual(result, "finished")
 
+    def test_cms_artifact_build_can_mount_only_its_validated_dependency_tree_read_only(self):
+        with tempfile.TemporaryDirectory(prefix="ikpk-readonly-cms-deps-") as temporary:
+            dependencies = Path(temporary) / "deps/node_modules"
+            dependencies.mkdir(parents=True)
+            completed = subprocess.CompletedProcess([], 0, stdout="finished", stderr="")
+            user = type("User", (), {"pw_name": "ikpk-cms"})()
+            with patch.object(rehearsal_host.pwd, "getpwnam", return_value=user), \
+                 patch.object(rehearsal_host, "run", return_value=completed) as run_command:
+                rehearsal_host._run_as_cms({"cmsUser": "ikpk-cms"}, Path("/tmp/cms"),
+                    ["/usr/bin/bash", "build-cms-artifact.sh"], read_only_path=dependencies.resolve())
+
+            command = run_command.call_args.args[0]
+            self.assertIn(f"--property=ReadOnlyPaths={dependencies.resolve()}", command)
+            self.assertEqual(command[-2:], ["/usr/bin/bash", "build-cms-artifact.sh"])
+
+    def test_prepared_candidate_refuses_reused_generation_with_strapi_version_mismatch(self):
+        with tempfile.TemporaryDirectory(prefix="ikpk-cms-strapi-mismatch-") as temporary:
+            root = Path(temporary)
+            source_sha, operation_id = "a" * 40, "strapi-op"
+            source = root / f"{source_sha}-{operation_id}"
+            cms = source / "cms"
+            cms.mkdir(parents=True)
+            (source / ".ikpk-rehearsal-ci.json").write_text(json.dumps(
+                {"sourceSha": source_sha, "ref": "refs/heads/dev"}))
+            (cms / "package.json").write_text(json.dumps({"dependencies": {"@strapi/strapi": "5.51.1"}}))
+            lock = {"packages": {"node_modules/@strapi/strapi": {"version": "5.51.2"}}}
+            lock_bytes = json.dumps(lock, sort_keys=True).encode()
+            (cms / "package-lock.json").write_bytes(lock_bytes)
+            dependencies = root / "deps/node_modules"
+            (dependencies / "@strapi/strapi").mkdir(parents=True)
+            (dependencies / "@strapi/strapi/package.json").write_text(json.dumps({"version": "5.51.2"}))
+            (cms / "node_modules").symlink_to(dependencies, target_is_directory=True)
+            artifact = rehearsal_host._cms_artifact_path(source, operation_id)
+            (artifact / "dist/config").mkdir(parents=True)
+            (artifact / "database").mkdir()
+            (artifact / "scripts").mkdir()
+            (artifact / "package.json").write_text(json.dumps({"dependencies": {"@strapi/strapi": "5.51.1"}}))
+            (artifact / "package-lock.json").write_bytes(lock_bytes)
+            for name in ("tsconfig.json", "dist/config/database.js", "database/.migrations-expected",
+                         "scripts/run-data-migrations.mjs"):
+                (artifact / name).write_text("test")
+            (artifact / "node_modules").symlink_to(dependencies, target_is_directory=True)
+            web_dependencies = source / "web/node_modules"
+            for package in ("astro", "tsx"):
+                (web_dependencies / package).mkdir(parents=True)
+                (web_dependencies / package / "package.json").write_text("{}")
+            (web_dependencies / ".bin").mkdir()
+            for package in ("astro", "tsx"):
+                (web_dependencies / package / "bin.js").write_text("")
+                (web_dependencies / ".bin" / package).symlink_to(f"../{package}/bin.js")
+            expected = {"version": 1, "lockSha256": sha(lock_bytes), "profile": "full-build",
+                        "nodeVersion": "v24.1.0", "nodeAbi": "137", "platform": "linux",
+                        "architecture": "x64"}
+            config = {"allowedSourceRef": "refs/heads/dev", "cmsUser": getpass.getuser()}
+            with patch.object(rehearsal_host, "_cms_build_generation", return_value=(root / "unused", expected)), \
+                 patch.object(rehearsal_host, "_validate_cms_build_generation", return_value=dependencies.resolve()):
+                with self.assertRaisesRegex(rehearsal_host.HostFailure, "identities do not match"):
+                    rehearsal_host._validate_prepared_cms_candidate(
+                        config, source, operation_id, {"sourceSha": source_sha, "ref": "refs/heads/dev"})
+
     def test_prefence_candidate_installs_full_cms_deps_then_builds_artifact_with_bounded_heap(self):
         with tempfile.TemporaryDirectory(prefix="ikpk-cms-artifact-heap-") as temporary:
             source = Path(temporary) / "candidate"
@@ -149,6 +209,7 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
             self.assertEqual(calls[1][1][:2], ["/usr/bin/bash", str(source / "scripts/build-cms-artifact.sh")])
             self.assertEqual(calls[1][2]["timeout"], 3600)
             self.assertEqual(calls[1][2]["environment"], {"NODE_OPTIONS": "--max-old-space-size=1536"})
+            self.assertEqual(calls[1][2]["read_only_path"], dependencies)
 
     def test_complete_cms_build_dependency_generation_is_reused_without_mutation(self):
         with tempfile.TemporaryDirectory(prefix="ikpk-cms-build-deps-") as temporary:

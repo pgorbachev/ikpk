@@ -1,7 +1,7 @@
 ## 1. First release
 
-- [ ] Admit one reconciled full `dev` SHA with exact canonical push `Tests` run and every mandatory job successful; before creating the operation journal or marker, extract that source, install CMS/web dependencies, build the CMS artifact, and retain separate CMS/static payload digests for same-candidate checks.
-- [ ] On staging193, hold the host flock and reject an existing marker, unfinished operation, or used operation ID before preparation; after complete preparation, record the fresh old/new pair, fence and stop writers, checkpoint WAL, prove no DB handles, and verify actual DB/media backup bytes off-host before mutation.
+- [ ] Admit one reconciled full `dev` SHA with exact canonical push `Tests` run and every mandatory job successful; before creating the operation journal or marker, extract that source, install CMS/web dependencies, and build the CMS artifact. Keep CMS and static payload digests separate; static output is built later from the sealed capture.
+- [ ] On staging193, hold the host flock and reject an existing marker, unfinished operation, or used operation ID before preparation; after complete preparation, record the old pair, fence and stop writers, checkpoint WAL, prove no DB handles, and verify actual DB/media backup bytes off-host before mutation.
 - [ ] After backup confirmation, run CMS migration/audit unprivileged; verify CMS health, process DB path, and media. Build static output from the sealed capture with the prepared web dependencies, verify served `/release.json`, routes, and images, then durably commit both acceptances before reopening writers.
 
 ## 2. Pre-commit recovery
