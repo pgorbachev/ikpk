@@ -22,7 +22,7 @@ function fixture() {
     sourceId: 'initial-prod-server-db', sourceSha, runId, attempt,
     operationId: 'initial-prod-20261019-A-01', schemaDigest: 'b'.repeat(64),
     databaseSha256: 'c'.repeat(64), mediaManifestSha256: 'd'.repeat(64),
-  };
+  } as const;
   const captureBytes = Buffer.from(JSON.stringify(capture));
   const content = {
     types: {

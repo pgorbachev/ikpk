@@ -13,7 +13,7 @@ export interface SnapshotMedia {
  */
 export interface SnapshotOrigin {
   kind: 'live' | 'pinned' | 'server-db';
-  sourceId?: 'demo193-cms';
+  sourceId?: 'demo193-cms' | 'initial-prod-server-db';
   /** Адрес системы управления — только для живого. */
   url?: string;
   /** Время снятия, ISO — только для живого. */
