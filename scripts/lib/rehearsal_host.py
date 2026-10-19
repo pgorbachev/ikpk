@@ -174,12 +174,12 @@ def _write_gate(config: dict[str, Any], enabled: bool) -> None:
     expressions = [re.escape(prefix.rstrip("/")) for prefix in config["writerPrefixes"]]
     exceptions = [re.escape(prefix.rstrip("/")) for prefix in config["preservePrefixes"]]
     lines = ["# managed by ikpk-rehearsal; included from nginx http context",
-             'map "$request_method:$request_uri" $ikpk_rehearsal_write_block {', "    default 0;"]
+             'map "$request_method:$uri" $ikpk_rehearsal_write_block {', "    default 0;"]
     for prefix in exceptions:
-        lines.append(f"    ~*^(POST|PUT|PATCH|DELETE):{prefix}(?:/|\\?|$) 0;")
+        lines.append(f"    ~*^(POST|PUT|PATCH|DELETE):{prefix}(?:/|$) 0;")
     if enabled:
         for prefix in expressions:
-            lines.append(f"    ~*^(POST|PUT|PATCH|DELETE):{prefix}(?:/|\\?|$) 1;")
+            lines.append(f"    ~*^(POST|PUT|PATCH|DELETE):{prefix}(?:/|$) 1;")
     lines.extend(["}", ""])
     map_bytes = "\n".join(lines).encode()
     # This is the existing server-level include in both demo vhosts; no locations are added.

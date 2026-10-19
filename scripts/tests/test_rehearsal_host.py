@@ -4,6 +4,7 @@ import getpass
 import importlib.util
 import io
 import json
+import re
 import sqlite3
 import subprocess
 import shutil
@@ -824,6 +825,32 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
                     rehearsal_host._write_gate(config, True)
             self.assertEqual(map_file.read_text(), "previous map\n")
             self.assertEqual(server_file.read_text(), "previous server gate\n")
+
+    def test_writer_gate_matches_normalized_uri_and_keeps_path_boundaries(self):
+        with tempfile.TemporaryDirectory(prefix="ikpk-nginx-gate-normalized-") as temporary:
+            root = Path(temporary)
+            map_file = root / "writer-map.conf"
+            server_file = root / "writer-server.conf"
+            active = f"{map_file}\n{server_file}\nikpk_rehearsal_write_block"
+            config = {"writerPrefixes": ["/admin"], "preservePrefixes": ["/api/payments/"],
+                      "nginxMapFile": str(map_file), "nginxServerGateFile": str(server_file),
+                      "nginxBinary": "nginx", "nginxService": "nginx.service"}
+            with patch.object(rehearsal_host, "run", side_effect=[
+                    subprocess.CompletedProcess(["nginx", "-T"], 0, active, ""),
+                    subprocess.CompletedProcess(["nginx", "-t"], 0, "", ""),
+                    subprocess.CompletedProcess(["systemctl", "reload"], 0, "", "")]):
+                rehearsal_host._write_gate(config, True)
+
+            generated = map_file.read_text()
+            self.assertIn('map "$request_method:$uri" $ikpk_rehearsal_write_block {', generated)
+            self.assertIn(r"~*^(POST|PUT|PATCH|DELETE):/admin(?:/|$) 1;", generated)
+            self.assertIn(r"~*^(POST|PUT|PATCH|DELETE):/api/payments(?:/|$) 0;", generated)
+            writer_pattern = re.compile(r"^(POST|PUT|PATCH|DELETE):/admin(?:/|$)", re.IGNORECASE)
+            # Nginx's $uri is normalized and excludes query arguments: an encoded /admin
+            # path maps to POST:/admin, while query strings cannot change the path decision.
+            self.assertRegex("POST:/admin", writer_pattern)
+            self.assertRegex("POST:/admin/anything", writer_pattern)
+            self.assertNotRegex("POST:/administrator", writer_pattern)
 
     def test_writer_fence_keeps_disabled_payment_status_route_at_404(self):
         commands = []
