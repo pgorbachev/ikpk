@@ -33,6 +33,21 @@ cp -R dist package.json package-lock.json tsconfig.json "$OUT/"
 # Миграции базы: Strapi ищет их в `<корень релиза>/database/migrations`, а не в `dist`.
 [[ -d database ]] && cp -R database "$OUT/"
 mkdir -p "$OUT/database/migrations"
+# The migration preflight uses this exact compiled-target schema as evidence when
+# the recorded native rename predates retirement of the seminar status attribute.
+mkdir -p "$OUT/database/migrations/target-schema"
+cp src/api/seminar/content-types/seminar/schema.json "$OUT/database/migrations/target-schema/seminar.json"
+# Compiled publication lifecycle loads this runtime data file via the release-root cwd.
+mkdir -p "$OUT/src/lib"
+cp src/lib/demo193-source-empty-fields.json "$OUT/src/lib/demo193-source-empty-fields.json"
+# Операторский runner и те же узкие data helpers, что используются в их focused CLI.
+# План ссылается только на versioned entrypoints внутри database/migrations/data-steps.
+mkdir -p "$OUT/scripts"
+cp scripts/run-data-migrations.mjs \
+  scripts/audit-data-migration.mjs \
+  scripts/audit-schema-snapshot.mjs \
+  scripts/institute-method-author-classification.mjs \
+  scripts/normalize-null-documents-state.mjs "$OUT/scripts/"
 
 # --- Проверки собранного вывода (не текста исходника) ---
 node -e '
@@ -76,5 +91,10 @@ require("fs").writeFileSync(
 );
 console.log(`[artifact] проверки собранного вывода пройдены (миграций: ${migrations.length})`);
 ' "$OUT" "$REPO_ROOT"
+
+# Тот же release gate проверяется над готовым артефактом: точные пути и байты каждого
+# payload должны совпадать с versioned plan, включая запускаемый runner и его helpers.
+source "$REPO_ROOT/scripts/lib/release-migrations.sh"
+check_release_migrations "$OUT"
 
 echo "[artifact] готов: $OUT"

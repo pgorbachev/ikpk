@@ -1,8 +1,8 @@
 /**
- * Съём снимка идёт отдельным процессом по REST. Публичная роль этот REST не открывает:
- * на демо `institutes` отвечает 403, и кнопка останавливается на фазе capture.
- * Токен только на чтение создаётся здесь и живёт в памяти процесса; в состояние и логи
- * он не пишется (worker передаёт его заголовком, а redact вычищает строку CMS_TOKEN).
+ * Съём снимка идёт отдельным процессом по REST; публичная роль REST не открывает.
+ * Ключ сохраняется в Strapi как API-токен, а значение передаётся worker только через
+ * CMS_TOKEN. Обычный запуск не должен создавать такой ключ: bootstrap включает его
+ * только для явно отмеченной частной репетиции.
  */
 const CAPTURE_TOKEN_NAME = 'site-refresh-capture';
 
@@ -35,4 +35,12 @@ export async function ensureCaptureToken(strapi: { service: (name: string) => To
         ).accessKey;
   if (!accessKey) throw new Error('Токен съёма сайта не получен.');
   process.env.CMS_TOKEN = accessKey;
+}
+
+/** Provision the capture token only in an explicitly opted-in private rehearsal. */
+export async function bootstrapCaptureTokenForRehearsal(
+  strapi: { service: (name: string) => TokenService },
+): Promise<void> {
+  if (process.env.IKPK_ENABLE_CAPTURE_TOKEN_BOOTSTRAP !== '1') return;
+  await ensureCaptureToken(strapi);
 }

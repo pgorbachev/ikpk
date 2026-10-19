@@ -28,6 +28,8 @@ const work = fs.mkdtempSync(path.join(os.tmpdir(), 'ikpk-import-trust-'));
 const dbFile = path.join(work, 'data.db');
 const SEMINAR = 'api::seminar.seminar';
 const ENTRY = 'api::schedule-entry.schedule-entry';
+const TEACHER = 'api::teacher.teacher';
+const ARTICLE = 'api::article.article';
 
 function freePort() {
   return new Promise((resolve, reject) => {
@@ -54,7 +56,13 @@ describe('доверенный перенос в собранном Strapi', { t
 
   const createPublishedSeminar = (data) => app.documents(SEMINAR).create({
     status: 'published',
-    data: { ...data, course_group: publishedProgram.documentId },
+    data: {
+      description: 'Описание семинара для проверки переноса',
+      seo: { seo_title: 'Семинар для проверки', seo_description: 'Описание для проверки' },
+      documents_state: 'not-issued',
+      ...data,
+      course_group: publishedProgram.documentId,
+    },
   });
 
   // Заголовок авторизации по виду запрашивающего; null — без заголовка.
@@ -120,6 +128,8 @@ describe('доверенный перенос в собранном Strapi', { t
     fs.mkdirSync(path.join(cmsRoot, 'public/uploads'), { recursive: true });
     const { createStrapi } = loadCommonjs('@strapi/strapi');
     app = createStrapi({ appDir: cmsRoot, distDir: path.join(cmsRoot, 'dist') });
+    app.dirs.static.public = path.join(work, 'public');
+    fs.mkdirSync(path.join(app.dirs.static.public, 'uploads'), { recursive: true });
     await app.load();
     // В development Strapi сам открывает админку в браузере разработчика при каждом запуске.
     app.config.set('admin.autoOpen', false);
@@ -158,7 +168,10 @@ describe('доверенный перенос в собранном Strapi', { t
       type: 'custom',
       kind: 'content-api',
       lifespan: null,
-      permissions: [`${SEMINAR}.find`, `${SEMINAR}.create`, `${SEMINAR}.update`, `${ENTRY}.create`],
+      permissions: [
+        `${SEMINAR}.find`, `${SEMINAR}.create`, `${SEMINAR}.update`, `${ENTRY}.create`,
+        `${TEACHER}.find`, `${TEACHER}.create`, `${TEACHER}.update`,
+      ],
     });
     customToken = custom.accessKey;
     assert.equal(custom.type, 'custom');
@@ -192,12 +205,21 @@ describe('доверенный перенос в собранном Strapi', { t
 
     const institute = await app.documents('api::institute.institute').create({
       status: 'published',
-      data: { name: 'Институт переноса', slug: 'institut-perenosa', legacy_id: 'trust-institute' },
+      data: {
+        name: 'Институт переноса',
+        slug: 'institut-perenosa',
+        legacy_id: 'trust-institute',
+        description: 'Описание института для проверки переноса',
+        order: 1,
+        seo: { seo_title: 'Институт переноса', seo_description: 'Описание для поиска' },
+      },
     });
     publishedProgram = await app.documents('api::course-group.course-group').create({
       status: 'published',
       data: {
         name: 'Программа переноса', slug: 'programma-perenosa', legacy_id: 'trust-program',
+        description: 'Описание программы для проверки переноса',
+        seo: { seo_title: 'Программа переноса', seo_description: 'Описание для поиска' },
         institute: institute.documentId,
       },
     });
@@ -207,6 +229,216 @@ describe('доверенный перенос в собранном Strapi', { t
   after(async () => {
     if (app) await app.destroy();
     fs.rmSync(work, { recursive: true, force: true });
+  });
+
+  // ── Публикация через Document Service и Content API ────────────────────────
+
+  const validTeacher = (slug) => ({ name: `Преподаватель ${slug}`, slug, trait: 'teacher' });
+  const publishedTeacher = (documentId) => app.documents(TEACHER).findOne({ documentId, status: 'published' });
+  const publishedTeachersBySlug = (slug) => app.documents(TEACHER).findMany({ filters: { slug }, status: 'published' });
+  const createPublishedArticle = async (slug) => {
+    const form = new FormData();
+    form.append('files', new Blob([fs.readFileSync(path.join(cmsRoot, 'favicon.png'))], { type: 'image/png' }), 'publication-test.png');
+    const uploadResponse = await fetch(`${base}/api/upload`, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${fullToken}` },
+      body: form,
+    });
+    const uploadText = await uploadResponse.text();
+    assert.equal(uploadResponse.status, 201, `загрузка изображения статьи: ${uploadResponse.status} ${uploadText}`);
+    const [image] = JSON.parse(uploadText);
+    return app.documents(ARTICLE).create({
+      status: 'published',
+      data: {
+        title: `Статья ${slug}`,
+        slug,
+        body: '<p>Текст статьи</p>',
+        image: image.id,
+        published_date: '2026-10-11T00:00:00.000Z',
+        seo: { seo_title: `Статья ${slug}`, seo_description: 'Описание статьи' },
+        categories: [publishedProgram.documentId],
+      },
+    });
+  };
+
+  test('Document Service отклоняет create published без признака персоны', async () => {
+    await assert.rejects(
+      () => app.documents(TEACHER).create({
+        status: 'published',
+        data: { name: 'Преподаватель без признака', slug: 'publication-no-trait-service-create' },
+      }),
+      /trait|признак персоны|обязательные поля/i,
+    );
+    assert.equal((await publishedTeachersBySlug('publication-no-trait-service-create')).length, 0);
+  });
+
+  test('Document Service отклоняет update published с удалением признака и сохраняет публикацию', async () => {
+    const teacher = await app.documents(TEACHER).create({
+      status: 'published',
+      data: validTeacher('publication-no-trait-service-update'),
+    });
+    await assert.rejects(
+      () => app.documents(TEACHER).update({
+        documentId: teacher.documentId,
+        status: 'published',
+        data: { trait: null },
+      }),
+      /trait|признак персоны|обязательные поля/i,
+    );
+    assert.equal((await publishedTeacher(teacher.documentId)).trait, 'teacher');
+  });
+
+  test('scoped Content API POST published отклоняет персону без признака', async () => {
+    const slug = 'publication-no-trait-rest-create';
+    const result = await call('POST', '/api/teachers?status=published', customToken, {
+      data: { name: 'Преподаватель без признака', slug },
+    });
+    assert.ok(result.status >= 400, `публикация должна быть отклонена: ${result.status} ${result.text}`);
+    assert.equal((await publishedTeachersBySlug(slug)).length, 0);
+  });
+
+  test('scoped Content API PUT published отклоняет снятие признака и оставляет запись опубликованной', async () => {
+    const teacher = await app.documents(TEACHER).create({
+      status: 'published',
+      data: validTeacher('publication-no-trait-rest-update'),
+    });
+    const result = await call('PUT', `/api/teachers/${teacher.documentId}?status=published`, customToken, {
+      data: { trait: null },
+    });
+    assert.ok(result.status >= 400, `публикация должна быть отклонена: ${result.status} ${result.text}`);
+    assert.equal((await publishedTeacher(teacher.documentId)).trait, 'teacher');
+  });
+
+  test('полный токен переноса не публикует семинар, если источник не передал состояние документов', async () => {
+    const slug = 'publication-missing-documents-state';
+    const result = await call('POST', '/api/seminars', fullToken, {
+      data: {
+        name: 'Семинар без состояния документов',
+        slug,
+        course_group: publishedProgram.documentId,
+        description: 'Описание семинара',
+        seo: { seo_title: 'Семинар без состояния документов', seo_description: 'Описание для поиска' },
+      },
+    });
+    assert.ok(result.status >= 400, `публикация без состояния должна быть отклонена: ${result.status} ${result.text}`);
+    assert.equal((await app.documents(SEMINAR).findMany({ filters: { slug }, status: 'published' })).length, 0);
+  });
+
+  test('валидная публикация персоны через scoped Content API разрешена', async () => {
+    const slug = 'publication-valid-rest-create';
+    const result = ok(await call('POST', '/api/teachers?status=published', customToken, {
+      data: validTeacher(slug),
+    }), 'публикация персоны');
+    assert.equal((await publishedTeacher(result.data.documentId)).trait, 'teacher');
+  });
+
+  test('неполная персона остаётся черновиком при создании и обновлении', async () => {
+    const teacher = await app.documents(TEACHER).create({
+      data: { name: 'Черновик персоны', slug: 'publication-incomplete-draft' },
+    });
+    await app.documents(TEACHER).update({
+      documentId: teacher.documentId,
+      data: { name: 'Обновлённый черновик персоны' },
+    });
+    assert.equal((await app.documents(TEACHER).findOne({ documentId: teacher.documentId, status: 'draft' })).name,
+      'Обновлённый черновик персоны');
+    assert.equal(await publishedTeacher(teacher.documentId), null);
+  });
+
+  test('валидное создание семинара с опубликованной программой и частичное SEO-обновление разрешены', async () => {
+    const seminarDoc = await createPublishedSeminar({ name: 'Семинар с частичным SEO', slug: 'publication-seo-merge' });
+    const draft = await app.documents(SEMINAR).findOne({
+      documentId: seminarDoc.documentId,
+      status: 'draft',
+      populate: { seo: true },
+    });
+    await app.documents(SEMINAR).update({
+      documentId: seminarDoc.documentId,
+      status: 'published',
+      data: { seo: { id: draft.seo.id, seo_title: 'Новое название для SEO' } },
+    });
+    const published = await app.documents(SEMINAR).findOne({
+      documentId: seminarDoc.documentId,
+      status: 'published',
+      populate: { seo: true, course_group: true },
+    });
+    assert.equal(published.seo.seo_title, 'Новое название для SEO');
+    assert.equal(published.seo.seo_description, 'Описание для проверки');
+    assert.equal(published.course_group.documentId, publishedProgram.documentId);
+  });
+
+  test('замена SEO-компонента без id проверяет заменённые поля и сохраняет старую публикацию при отказе', async () => {
+    const seminarDoc = await createPublishedSeminar({ name: 'Семинар для замены SEO', slug: 'publication-seo-replace' });
+    await assert.rejects(
+      () => app.documents(SEMINAR).update({
+        documentId: seminarDoc.documentId,
+        status: 'published',
+        data: { seo: { seo_title: 'Новый заголовок без описания' } },
+      }),
+      /seo_description|обязательные поля/i,
+    );
+    let published = await app.documents(SEMINAR).findOne({
+      documentId: seminarDoc.documentId,
+      status: 'published',
+      populate: { seo: true },
+    });
+    assert.equal(published.seo.seo_title, 'Семинар для проверки');
+    assert.equal(published.seo.seo_description, 'Описание для проверки');
+
+    await app.documents(SEMINAR).update({
+      documentId: seminarDoc.documentId,
+      status: 'published',
+      data: { seo: { seo_title: 'Полная замена SEO', seo_description: 'Новое описание SEO' } },
+    });
+    published = await app.documents(SEMINAR).findOne({
+      documentId: seminarDoc.documentId,
+      status: 'published',
+      populate: { seo: true },
+    });
+    assert.equal(published.seo.seo_title, 'Полная замена SEO');
+    assert.equal(published.seo.seo_description, 'Новое описание SEO');
+  });
+
+  test('published update не позволяет отключить обязательную программу семинара', async () => {
+    const seminarDoc = await createPublishedSeminar({ name: 'Семинар без программы', slug: 'publication-relation-remove' });
+    await assert.rejects(
+      () => app.documents(SEMINAR).update({
+        documentId: seminarDoc.documentId,
+        status: 'published',
+        data: { course_group: { disconnect: [publishedProgram.documentId] } },
+      }),
+      /course_group|обязательные поля|опубликованную программу/i,
+    );
+    const published = await app.documents(SEMINAR).findOne({
+      documentId: seminarDoc.documentId,
+      status: 'published',
+      populate: { course_group: true },
+    });
+    assert.equal(published.course_group.documentId, publishedProgram.documentId);
+  });
+
+  test('published article update отклоняет disconnect категории по числовому id', async () => {
+    const article = await createPublishedArticle('publication-category-numeric-disconnect');
+    const draft = await app.documents(ARTICLE).findOne({
+      documentId: article.documentId,
+      status: 'draft',
+      populate: { categories: true },
+    });
+    const categoryId = draft.categories[0].id;
+    await assert.rejects(
+      () => app.documents(ARTICLE).update({
+        documentId: article.documentId,
+        status: 'published',
+        data: { categories: { disconnect: [{ id: categoryId }] } },
+      }),
+      /categories|категори|обязательные поля/i,
+    );
+    const published = await app.documents(ARTICLE).findOne({
+      documentId: article.documentId,
+      status: 'published',
+      populate: { categories: true },
+    });
+    assert.deepEqual(published.categories.map(({ documentId }) => documentId), [publishedProgram.documentId]);
   });
 
   // ── Имя проведения ─────────────────────────────────────────────────────────
@@ -222,7 +454,7 @@ describe('доверенный перенос в собранном Strapi', { t
   });
 
   test('перенос по токену полного доступа сохраняет исходное имя проведения', async () => {
-    const created = ok(await call('POST', '/api/schedule-entries', fullToken, entryBody('Н-ПК-1')), 'создание');
+      const created = ok(await call('POST', '/api/schedule-entries?status=draft', fullToken, entryBody('Н-ПК-1')), 'создание');
     const stored = await draftOf(ENTRY, created.data.documentId);
     // В теле нет поля trustedImport: доверие определяется токеном, а не телом.
     assert.equal(stored.name, 'Н-ПК-1');
@@ -248,7 +480,7 @@ describe('доверенный перенос в собранном Strapi', { t
   ]) {
     test(`${who} не доверенный: имя проведения задано по правилам редактора`, async () => {
       const created = ok(
-        await call('POST', '/api/schedule-entries', auth(), entryBody(`Н-ПК-1 ${who}`)),
+        await call('POST', '/api/schedule-entries?status=draft', auth(), entryBody(`Н-ПК-1 ${who}`)),
         `создание: ${who}`,
       );
       const stored = await draftOf(ENTRY, created.data.documentId);
@@ -257,7 +489,7 @@ describe('доверенный перенос в собранном Strapi', { t
   }
 
   test('токен только для чтения не может создать проведение: отказ 403 по правам', async () => {
-    const result = await call('POST', '/api/schedule-entries', readOnlyToken, entryBody('Н-ПК-1 read-only'));
+    const result = await call('POST', '/api/schedule-entries?status=draft', readOnlyToken, entryBody('Н-ПК-1 read-only'));
     assert.equal(result.status, 403, `создание read-only токеном: ожидался отказ по правам 403: ${result.status} ${result.text}`);
   });
 
@@ -275,7 +507,7 @@ describe('доверенный перенос в собранном Strapi', { t
     const name = 'Авторский семинар-практикум «Осознание и управление своей жизнью»';
     const slug = 'osoznanie-i-upravlenie-svoej-zhiznyu';
     assert.notEqual(await slugFromName(name), slug, 'пример не различает адрес и название');
-    const created = ok(await call('POST', '/api/seminars', fullToken, {
+    const created = ok(await call('POST', '/api/seminars?status=draft', fullToken, {
       data: { name, slug, course_group: publishedProgram.documentId },
     }), 'создание');
     assert.equal((await draftOf(SEMINAR, created.data.documentId)).slug, slug);
@@ -284,7 +516,7 @@ describe('доверенный перенос в собранном Strapi', { t
   test('перенос без адреса: slug создан из названия', async () => {
     const name = 'Перенос без адреса';
     const expected = await slugFromName(name);
-    const created = ok(await call('POST', '/api/seminars', fullToken, {
+    const created = ok(await call('POST', '/api/seminars?status=draft', fullToken, {
       data: { name, slug: '', course_group: publishedProgram.documentId },
     }), 'создание');
     assert.equal((await draftOf(SEMINAR, created.data.documentId)).slug, expected);
@@ -408,7 +640,7 @@ describe('доверенный перенос в собранном Strapi', { t
     const host = await createPublishedSeminar({ name: 'Семинар снятого проведения' });
     const unpublishedEntry = await entries.create({
       status: 'published',
-      data: { seminar: host.documentId, city: 'Прежний город', legacy_id: ids.unpublishedEntry, ...dates },
+      data: { seminar: host.documentId, city: 'Прежний город', entry_status: 'active', legacy_id: ids.unpublishedEntry, ...dates },
     });
     await entries.unpublish({ documentId: unpublishedEntry.documentId });
 
@@ -416,7 +648,7 @@ describe('доверенный перенос в собранном Strapi', { t
     const hidden = await createPublishedSeminar({ name: 'Снятый семинар проведения' });
     const entryOfUnpublished = await entries.create({
       status: 'published',
-      data: { seminar: hidden.documentId, city: 'Прежний город', legacy_id: ids.entryOfUnpublished, ...dates },
+      data: { seminar: hidden.documentId, city: 'Прежний город', entry_status: 'active', legacy_id: ids.entryOfUnpublished, ...dates },
     });
     await seminars.unpublish({ documentId: hidden.documentId });
 
@@ -427,7 +659,7 @@ describe('доверенный перенос в собранном Strapi', { t
     // Опубликованное проведение опубликованного семинара.
     const publishedEntry = await entries.create({
       status: 'published',
-      data: { seminar: published.documentId, city: 'Прежний город', legacy_id: ids.publishedEntry, ...dates },
+      data: { seminar: published.documentId, city: 'Прежний город', entry_status: 'active', legacy_id: ids.publishedEntry, ...dates },
     });
 
     // Опубликованное проведение семинара, которого в CMS ещё нет: этот прогон его СОЗДАСТ
@@ -436,7 +668,7 @@ describe('доверенный перенос в собранном Strapi', { t
     const placeholderHost = await createPublishedSeminar({ name: 'Заглушка до переноса' });
     const entryOfCreatedSeminar = await entries.create({
       status: 'published',
-      data: { seminar: placeholderHost.documentId, city: 'Прежний город', legacy_id: ids.entryOfCreatedSeminar, ...dates },
+      data: { seminar: placeholderHost.documentId, city: 'Прежний город', entry_status: 'active', legacy_id: ids.entryOfCreatedSeminar, ...dates },
     });
 
     fixtures = { host, hidden, entryOfUnpublished, published, publishedEntry, entryOfCreatedSeminar };
@@ -455,10 +687,10 @@ describe('доверенный перенос в собранном Strapi', { t
     fs.writeFileSync(
       path.join(transfer, 'seminars.json'),
       JSON.stringify([
-        { legacy_id: ids.neverPublished, name: 'Ни разу не опубликован', slug: 'ni-razu-ne-opublikovan', description_html: 'из повторного переноса' },
-        { legacy_id: ids.unpublished, name: 'Снят с публикации', slug: unpublished.slug, description_html: 'из повторного переноса' },
-        { legacy_id: ids.published, name: 'Остаётся опубликованным', slug: published.slug, description_html: 'из повторного переноса' },
-        { legacy_id: ids.createdSeminar, name: 'Создан в этом прогоне переноса', slug: createdSeminarSlug, description_html: 'из повторного переноса' },
+        { legacy_id: ids.neverPublished, name: 'Ни разу не опубликован', slug: 'ni-razu-ne-opublikovan', description_html: 'из повторного переноса', seo_title: 'Ни разу не опубликован', seo_description: 'Описание переноса', documents_state: 'not-issued' },
+        { legacy_id: ids.unpublished, name: 'Снят с публикации', slug: unpublished.slug, description_html: 'из повторного переноса', seo_title: 'Снят с публикации', seo_description: 'Описание переноса', documents_state: 'not-issued' },
+        { legacy_id: ids.published, name: 'Остаётся опубликованным', slug: published.slug, description_html: 'из повторного переноса', seo_title: 'Остаётся опубликованным', seo_description: 'Описание переноса', documents_state: 'not-issued' },
+        { legacy_id: ids.createdSeminar, name: 'Создан в этом прогоне переноса', slug: createdSeminarSlug, description_html: 'из повторного переноса', seo_title: 'Создан в этом прогоне переноса', seo_description: 'Описание переноса', documents_state: 'not-issued' },
       ].map((row) => ({ ...row, course_group_legacy_id: 'trust-program' }))),
     );
     // Семинаров проведений нет в seminars.json: связь ищется запросом по slug (поиск с черновиками).

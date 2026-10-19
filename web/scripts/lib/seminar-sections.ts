@@ -10,12 +10,16 @@
  * Имена полей в API обманчивы:
  *   curriculum      — РЕЖИМ обучения: «2 дня (с 10:00 до 18:00)», «объём 36 часов»
  *   learningProcess — УЧЕБНЫЙ ПЛАН: темы теории и практики
+ *
+ * «Выдаваемые документы» сюда не входят: секция построена из структурных полей
+ * CMS (`documents_state`, `documents`), а не из произвольного текста — см.
+ * `openspec/changes/cms-content-authoring-and-migration`, D2. Второй источник
+ * истины о том же самом не заводится.
  */
 
 export interface ApiSeminarSections {
   curriculum?: string | null;
   learningProcess?: string | null;
-  certificates?: string | null;
   recommendations?: string | null;
 }
 
@@ -31,7 +35,6 @@ export function sectionsHtml(s: ApiSeminarSections): string {
   const parts: Array<[string, string | null | undefined]> = [
     [SECTION_TITLES.plan, s.learningProcess],
     [SECTION_TITLES.process, s.curriculum],
-    [SECTION_TITLES.documents, s.certificates],
     [SECTION_TITLES.recommendations, s.recommendations],
   ];
 

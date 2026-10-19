@@ -1,0 +1,11 @@
+# Production occurrence rules retained from main #324
+
+The curated promotion source tree omitted 220 production occurrence rules from the ten routes changed by main #324. This records the narrow restoration in the production-only output registry; it does not change the matcher, source-slot registry, generator, or `ciMustNotRegenerate` policy.
+
+The 220 rules are the 22 production-build occurrences per route from `main@09347070ceb5634cf4b46774934238c0eac306d1`. Their current source slots were matched by exact source identity: 128 remained at the same slot, 85 moved to a unique current slot, and seven old TopNav module slots no longer have a current identity. Those seven and the three old ContactShell module rows map to the current ContactShell module identity; the fixture retains one current module occurrence per route.
+
+Output evidence is bounded by identity. Of the retained rows, 180 have an exact route, placement, and output identity in the public HTML from staging operation A01. That A01 bundle is a staging194 candidate, not a production build or production provenance. Its capture manifest is bound to candidate source `b06e9ea354c7fdbd58e347258a076b4a0860786b`, and the archive SHA-256 is `7d6c52328df0498ab13539e1acda7dee5ce5bd76913279f55f0d4fbf720c91f8`.
+
+The remaining rules use explicit current-source evidence: ten production canonical outputs retain the historical `https://ikpk.su` contract with the unchanged canonical source identity; ten Analytics outputs retain the unchanged source and output identity seen on all 459 other current production routes; ten stylesheet rows use the current `global.Brh7EeVH.css` identity; and ten module rows use the current ContactShell module identity. The current stylesheet and ContactShell output identities are also present in all ten A01 route pages and all 459 other current production routes. No staging-origin canonical is recorded as production evidence.
+
+The append adds exactly 220 rows with `builds: ["production"]`; the prior 11,052 rows and all registry metadata remain unchanged. The machine-readable per-row old-to-new mapping and evidence categories are in `production-occurrence-retention-report-2026-10-19.json`; SHA-256 `6aa4961c884bd531aa83730a72e9093d4ec87cbf5936faf12755bf9ac271ab28`.

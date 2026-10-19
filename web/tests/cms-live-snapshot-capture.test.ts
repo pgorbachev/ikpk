@@ -7,10 +7,10 @@
 //
 // Три требования, восемь сценариев. Соответствие «сценарий → тест» — в отчёте сессии.
 
-import { existsSync, mkdtempSync, readFileSync, readdirSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   SNAPSHOT_ORIGIN_FIELD,
   STUB_DEFAULT_PAGE_SIZE,
@@ -39,7 +39,6 @@ const media = (n: number): Record<string, unknown> => ({
   mime: 'image/webp',
   hash: `img_${n}`,
 });
-
 const seo = (name: string): Record<string, unknown> => ({
   id: 1,
   seo_title: `${name} — заголовок страницы`,
@@ -100,9 +99,9 @@ function dataset(over: Record<string, StubCollection> = {}): Record<string, Stub
   const courseGroups = Array.from({ length: 3 }, (_, i) =>
     ({ ...base('cg', i + 1, `Программа ${i + 1}`), description: '<p>О программе</p>', image: media(i + 1), institute: ref('inst', 1, 'Институт 1'), order: i, seo: seo(`Программа ${i + 1}`) }));
   const teachers = Array.from({ length: 5 }, (_, i) =>
-    ({ ...base('teach', i + 1, `Преподаватель ${i + 1}`), photo: media(i + 1), bio: '<p>Биография</p>', order: i, institute: ref('inst', 1, 'Институт 1') }));
+    ({ ...base('teach', i + 1, `Преподаватель ${i + 1}`), photo: media(i + 1), bio: '<p>Биография</p>', order: i, trait: i === 0 ? 'method-author' : 'teacher', institute: ref('inst', 1, 'Институт 1') }));
   const seminars = Array.from({ length: 4 }, (_, i) =>
-    ({ ...base('sem', i + 1, `Семинар ${i + 1}`), description: '<p>О семинаре</p>', full_text: '<p>Подробно</p>', image: media(i + 1), price: 1000 + i, duration: '2 дня', seminar_status: 'planned', course_group: ref('cg', 1, 'Программа 1'), order: i, teachers: [ref('teach', 1, 'Преподаватель 1')], seo: seo(`Семинар ${i + 1}`) }));
+    ({ ...base('sem', i + 1, `Семинар ${i + 1}`), description: '<p>О семинаре</p>', full_text: '<p>Подробно</p>', image: media(i + 1), price: 1000 + i, duration: '2 дня', seminar_status: 'planned', learning_mode: null, learning_plan: null, recommendations: null, course_group: ref('cg', 1, 'Программа 1'), order: i, teachers: [ref('teach', 1, 'Преподаватель 1')], seo: seo(`Семинар ${i + 1}`) }));
   const scheduleEntries = Array.from({ length: 3 }, (_, i) => ({
     ...without(base('ev', i + 1, `Событие ${i + 1}`), 'slug'),
     startAt: `2026-09-0${i + 1}T00:00:00.000Z`,
@@ -116,6 +115,8 @@ function dataset(over: Record<string, StubCollection> = {}): Record<string, Stub
     description: '<p>Описание события</p>',
     additionalText: '<p>Дополнение</p>',
     duration: '2 дня',
+    image: media(i + 1),
+    isEventCollection: false,
     seminar: ref('sem', 1, 'Семинар 1'),
     teachers: [{ id: 1, fullName: 'Преподаватель 1' }],
   }));
@@ -127,8 +128,8 @@ function dataset(over: Record<string, StubCollection> = {}): Record<string, Stub
     teachers: { records: teachers },
     articles: { records: Array.from({ length: ARTICLE_COUNT }, (_, i) => article(i + 1)) },
     'schedule-entries': { records: scheduleEntries },
-    'news-items': { records: Array.from({ length: 2 }, (_, i) => ({ ...without(base('news', i + 1, `Новость ${i + 1}`), 'slug'), description: '<p>Новость</p>', image: media(i + 1), link: 'https://example.invalid', priority: i })) },
-    promotions: { records: Array.from({ length: 2 }, (_, i) => ({ ...without(base('promo', i + 1, `Акция ${i + 1}`), 'slug'), description: '<p>Акция</p>', image: media(i + 1), link: 'https://example.invalid', priority: i, active: true })) },
+    'news-items': { records: Array.from({ length: 2 }, (_, i) => ({ ...without(base('news', i + 1, `Новость ${i + 1}`), 'slug'), date: '2026-01-01T00:00:00.000Z', description: '<p>Новость</p>', image: media(i + 1), link: 'https://example.invalid', priority: i })) },
+    promotions: { records: Array.from({ length: 2 }, (_, i) => ({ ...without(base('promo', i + 1, `Акция ${i + 1}`), 'slug'), date: '2026-01-01T00:00:00.000Z', description: '<p>Акция</p>', type: 'SHOP', image: media(i + 1), link: 'https://example.invalid', priority: i, active: true })) },
     pages: { records: Array.from({ length: 2 }, (_, i) => ({ ...without(base('page', i + 1, `Страница ${i + 1}`), 'name'), title: `Страница ${i + 1}`, body: '<p>Тело страницы</p>', seo: seo(`Страница ${i + 1}`) })) },
     'video-playlists': { records: Array.from({ length: 2 }, (_, i) => ({ ...base('vp', i + 1, `Плейлист ${i + 1}`), videos: [{ url: 'https://example.invalid/v' }], seo: seo(`Плейлист ${i + 1}`) })) },
     ...over,
@@ -275,6 +276,86 @@ describe('снимок читается из живой системы упра�
       const found = Object.entries(types).find(([name]) => match.test(name));
       expect(found, `в снимке нет типа ${label}`).toBeDefined();
       expect(found?.[1].length, `${label}: записей в снимке ${found?.[1].length}, в источнике ${count}`).toBe(count);
+    }
+  });
+
+  it('сохраняет CMS trait человека в снимке', async () => {
+    const cms = await stub();
+    const dir = outDir();
+
+    const run = await runCapture({ CMS_URL: cms.url, CONTENT_SNAPSHOT_DIR: dir });
+    expect(run.status, run.output).toBe(0);
+
+    const types = typesOf(readSnapshot(dir));
+    const teachers = Object.entries(types).find(([name]) => /teachers?/i.test(name))?.[1] ?? [];
+    expect(teachers[0]?.trait).toBe('method-author');
+    expect(teachers[0]?.institute_legacy_id).toBe('inst-001');
+    expect(teachers.slice(1).every((teacher) => teacher.trait === 'teacher')).toBe(true);
+  });
+
+  it('отказывает, если живая CMS не классифицировала персону', async () => {
+    const records = dataset();
+    records.teachers!.records[0] = { ...records.teachers!.records[0]!, trait: null };
+    const cms = await stub(records);
+    const dir = outDir();
+
+    const run = await runCapture({ CMS_URL: cms.url, CONTENT_SNAPSHOT_DIR: dir });
+
+    expect(run.status, `пустая классификация принята:
+${run.output}`).not.toBe(0);
+    expect(run.output, 'отказ не называет персону и причину').toMatch(/trait.*teach-001/);
+    expect(existsSync(join(dir, 'snapshot.json')), 'неклассифицированный живой снимок записан').toBe(false);
+  });
+
+  it('сохраняет slug relation института без legacy_id и поддерживает lookup персоны', async () => {
+    const records = dataset();
+    const institute = records.institutes!.records[0]!;
+    const relation = { ...institute, slug: 'new-inst', legacy_id: null };
+    records.institutes!.records[0] = { ...institute, slug: 'new-inst', legacy_id: 'inst-old' };
+    for (const group of records['course-groups']!.records) group.institute = relation;
+    for (const person of records.teachers!.records) person.institute = relation;
+    records.teachers!.records[0] = {
+      ...records.teachers!.records[0]!,
+      slug: 'cms-native-person',
+    };
+    const cms = await stub(records);
+    const dir = outDir();
+    const previousSnapshotDir = process.env.CONTENT_SNAPSHOT_DIR;
+
+    try {
+      const run = await runCapture({ CMS_URL: cms.url, CONTENT_SNAPSHOT_DIR: dir });
+      expect(run.status, run.output).toBe(0);
+      const snapshot = readSnapshot(dir);
+      const teachers = Object.entries(typesOf(snapshot)).find(([name]) => /teachers?/i.test(name))?.[1] ?? [];
+      expect(teachers[0]).toEqual(expect.objectContaining({
+        slug: 'cms-native-person',
+        institute_legacy_id: 'new-inst',
+      }));
+      const groups = typesOf(snapshot).course_groups ?? [];
+      expect(groups[0]).toEqual(expect.objectContaining({ institute_legacy_id: 'new-inst' }));
+      const schedule = typesOf(snapshot).schedule_entries ?? [];
+      expect(schedule[0], 'live capture потерял институт у события расписания').toEqual(
+        expect.objectContaining({
+          program: expect.objectContaining({ slug: 'cg-001' }),
+          institute: expect.objectContaining({ name: 'Институт 1' }),
+        }),
+      );
+
+      process.env.CONTENT_SNAPSHOT_DIR = dir;
+      vi.resetModules();
+      const { getCourseGroups, getInstitute, getScheduleEntries, getTeacher, getTeachers } = await import('../src/lib/data.js');
+      expect(getTeachers('new-inst').map((teacher) => teacher.slug),
+        'list lookup по institute slug потерял CMS-native персону').toContain('cms-native-person');
+      expect(getTeacher('cms-native-person')?.institute_legacy_id,
+        'detail lookup потерял сохранённый relation slug').toBe('new-inst');
+      expect(getCourseGroups('new-inst').map((group) => group.slug)).toContain('cg-001');
+      expect(getInstitute('new-inst')?.name).toBe('Институт 1');
+      expect(getScheduleEntries()[0]?.institute.name,
+        'schedule consumer должен получить институт из slug relation').toBe('Институт 1');
+    } finally {
+      if (previousSnapshotDir === undefined) delete process.env.CONTENT_SNAPSHOT_DIR;
+      else process.env.CONTENT_SNAPSHOT_DIR = previousSnapshotDir;
+      vi.resetModules();
     }
   });
 
@@ -605,6 +686,131 @@ describe('снимок несёт происхождение', () => {
   });
 });
 
+// ═══════════════════ DEMO193 projection into the existing renderers ═══════════════════════
+
+describe('синтетическая CMS проекция сохраняет принятые публичные поля', () => {
+  it('сохраняет legacy-формы медиа и преподавателя при полном feature-контракте CMS', async () => {
+    const cms = await stub();
+    const dir = outDir();
+
+    try {
+      const capture = await runCapture({ CMS_URL: cms.url, CONTENT_SNAPSHOT_DIR: dir });
+      expect(capture.status, `legacy capture failed:\n${capture.output}`).toBe(0);
+
+      const types = typesOf(readSnapshot(dir));
+      expect(types.news?.[0]?.createdAt).toBe('2026-01-01T00:00:00.000Z');
+      expect(types.promotions?.[0]?.createdAt).toBe('2026-01-01T00:00:00.000Z');
+      expect(types.institutes?.[0]?.images).toEqual(['/uploads/img-1.webp']);
+      expect(types.schedule_entries?.[0]?.teachers).toEqual([{ id: 1, fullName: 'Преподаватель 1' }]);
+      expect(types.seminars?.[0]).toHaveProperty('learning_mode', null);
+      expect(types.seminars?.[0]).toHaveProperty('learning_plan', null);
+      expect(types.seminars?.[0]).toHaveProperty('recommendations', null);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }, 15_000);
+
+  it('проводит семинар, расписание, новости и акции через фактический захват снимка', async () => {
+    const source = dataset();
+    const seminar = source.seminars.records[0]!;
+    seminar.description = '<p>DEMO193_SUMMARY_SENTINEL</p>';
+    seminar.full_text = '<h2>Целевая аудитория</h2><p>DEMO193_AUDIENCE_SENTINEL</p><p>DEMO193_DETAIL_SENTINEL</p>';
+    seminar.learning_mode = '<p>DEMO193_MODE_SENTINEL</p>';
+    seminar.learning_plan = '<p>DEMO193_PLAN_SENTINEL</p>';
+    seminar.recommendations = '<p>DEMO193_RECOMMENDATIONS_SENTINEL</p>';
+
+    const event = source['schedule-entries'].records[0]!;
+    event.startAt = '2099-01-01T00:00:00.000Z';
+    event.endAt = '2099-01-02T00:00:00.000Z';
+    event.entry_status = 'active';
+    event.image = media(1);
+    event.isEventCollection = true;
+
+    const news = source['news-items'].records[0]!;
+    news.date = '2031-03-04T00:00:00.000Z';
+    const promotion = source.promotions.records[0]!;
+    promotion.date = '2032-05-06T00:00:00.000Z';
+    promotion.type = 'SHOP';
+
+    const uploads = Object.fromEntries(
+      Array.from({ length: ARTICLE_COUNT }, (_, index) => [
+        `/uploads/img-${index + 1}.webp`,
+        { bytes: Buffer.from(`live-capture-image-${index + 1}`) },
+      ]),
+    );
+    const cms = await startCmsStub(source, uploads);
+    stubs.push(cms);
+    const dir = outDir();
+    const issues: string[] = [];
+
+    try {
+      const schema = readSchema('cms/src/api/schedule-entry/content-types/schedule-entry/schema.json');
+      const scheduleAttrs = schema.attributes as Record<string, Record<string, unknown>>;
+      const scheduleImage = scheduleAttrs.image;
+      if (scheduleImage?.type !== 'media' || scheduleImage.multiple !== false || JSON.stringify(scheduleImage.allowedTypes) !== '["images"]') {
+        issues.push('CMS schedule-entry schema must support one image with allowedTypes=[images]');
+      }
+      const collectionFlag = scheduleAttrs.isEventCollection;
+      if (collectionFlag?.type !== 'boolean' || collectionFlag.default !== false) {
+        issues.push('CMS schedule-entry schema must declare isEventCollection as boolean default false');
+      }
+
+      const promotionSchema = readSchema('cms/src/api/promotion/content-types/promotion/schema.json');
+      const promotionAttrs = promotionSchema.attributes as Record<string, Record<string, unknown>>;
+      const promotionType = promotionAttrs.type;
+      if (promotionType?.type !== 'enumeration' || !['SHOP', 'INSTITUTE'].every((value) =>
+        Array.isArray(promotionType.enum) && promotionType.enum.includes(value))) {
+        issues.push('CMS promotion schema must preserve the SHOP and INSTITUTE values used by the public badge');
+      }
+
+      const map = await fieldMapModule();
+      const hasMapping = (type: string, field: string, sourcePath: string, transform?: string): boolean =>
+        map.FIELD_MAP.some((entry) => entry.type === type && entry.field === field && entry.source === sourcePath && entry.transform === transform);
+      for (const [type, field, sourcePath, transform] of [
+        ['seminars', 'learning_mode', 'learning_mode', undefined],
+        ['seminars', 'learning_plan', 'learning_plan', undefined],
+        ['seminars', 'recommendations', 'recommendations', undefined],
+        ['schedule_entries', 'image', 'image', 'mediaRef'],
+        ['schedule_entries', 'isEventCollection', 'isEventCollection', undefined],
+        ['news', 'createdAt', 'date', undefined],
+        ['promotions', 'createdAt', 'date', undefined],
+        ['promotions', 'type', 'type', undefined],
+      ] as const) {
+        if (!hasMapping(type, field, sourcePath, transform)) issues.push(`missing CMS projection ${type}.${field} <- ${sourcePath}`);
+      }
+
+      const capture = await runCapture({ CMS_URL: cms.url, CONTENT_SNAPSHOT_DIR: dir });
+      if (capture.status !== 0) throw new Error(`synthetic live capture failed:\n${capture.output}`);
+
+      const types = typesOf(readSnapshot(dir));
+      const capturedSeminar = types.seminars?.find((record) => record.slug === 'sem-001');
+      const capturedEvent = types.schedule_entries?.find((record) => record.name === 'Событие 1');
+      const capturedNews = types.news?.[0];
+      const capturedPromotion = types.promotions?.[0];
+      for (const [field, value] of [
+        ['full_text_html', 'DEMO193_AUDIENCE_SENTINEL'],
+        ['learning_mode', 'DEMO193_MODE_SENTINEL'],
+        ['learning_plan', 'DEMO193_PLAN_SENTINEL'],
+        ['recommendations', 'DEMO193_RECOMMENDATIONS_SENTINEL'],
+      ] as const) {
+        if (!String(capturedSeminar?.[field] ?? '').includes(value)) issues.push(`captured seminar is missing ${field}=${value}`);
+      }
+      const eventImage = capturedEvent?.image as { url?: string; id?: string } | undefined;
+      if (eventImage?.url !== '/uploads/img-1.webp' || eventImage.id !== 'media-1') {
+        issues.push(`captured schedule image must be normalized with its id; got ${JSON.stringify(eventImage)}`);
+      }
+      if (capturedEvent?.isEventCollection !== true) issues.push('captured schedule entry lost isEventCollection=true');
+      if (capturedNews?.createdAt !== '2031-03-04T00:00:00.000Z') issues.push('news date was not projected to createdAt');
+      if (capturedPromotion?.createdAt !== '2032-05-06T00:00:00.000Z') issues.push('promotion date was not projected to createdAt');
+      if (capturedPromotion?.type !== 'SHOP') issues.push('promotion type SHOP was not projected for the existing badge');
+
+      expect(issues, 'CMS public fields must survive schema and the actual capture pipeline').toEqual([]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }, 15_000);
+});
+
 // ═════════════════════════ Общий срок съёма, отдельно от срока одного запроса ════════════
 
 describe('съём отказывается сам, когда общий срок вышел', () => {
@@ -792,15 +998,14 @@ describe('съём понимает формы данных установлен
     expect(run.status, run.output).toBe(0);
   });
 
-  it('заполненные «Рекомендации» семинара — отказ с названием записи', async () => {
+  it('сохраняет заполненные «Рекомендации» семинара как feature-поле', async () => {
     const cms = await stub({ seminars: { records: d.seminars!.records.map((r, i) => ({ ...r, recommendations: i === 1 ? '<p>Совет</p>' : null })) } });
     const dir = outDir();
 
     const run = await runCapture({ CMS_URL: cms.url, CONTENT_SNAPSHOT_DIR: dir });
 
-    expect(run.status, `съём прошёл с заполненными рекомендациями:\n${run.output}`).not.toBe(0);
-    expect(run.output).toMatch(/seminars\.recommendations.*sem-002/);
-    expect(existsSync(join(dir, 'snapshot.json'))).toBe(false);
+    expect(run.status, run.output).toBe(0);
+    expect(typesOf(readSnapshot(dir)).seminars?.find((record) => record.slug === 'sem-002')?.recommendations).toBe('<p>Совет</p>');
   });
 
   it('отметка documents_state у семинара не мешает съёму и названа в выводе', async () => {
@@ -824,13 +1029,12 @@ describe('съём понимает формы данных установлен
   it('несколько классов отказа — одним сообщением', async () => {
     const cms = await stub({
       teachers: { records: d.teachers!.records.map((r) => ({ ...r, mystery: 'x' })) },
-      seminars: { records: d.seminars!.records.map((r, i) => ({ ...r, recommendations: i === 0 ? '<p>Совет</p>' : null })) },
+      seminars: { records: d.seminars!.records.map((r) => ({ ...r })) },
     });
 
     const run = await runCapture({ CMS_URL: cms.url, CONTENT_SNAPSHOT_DIR: outDir() });
 
     expect(run.status).not.toBe(0);
-    expect(run.output).toMatch(/поля CMS без решения: teachers\.mystery.*заполнены поля, которые сайт ещё не показывает: seminars\.recommendations/s);
+    expect(run.output).toMatch(/поля CMS без решения: teachers\.mystery/s);
   });
 });
-

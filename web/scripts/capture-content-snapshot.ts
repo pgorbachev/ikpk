@@ -6,9 +6,10 @@
  * Имя скрипта входит в признак производителя снимка в проверках pipeline.
  */
 import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { assertSnapshotContract } from './lib/content-contract.ts';
+import { assertCaptureSnapshotContract } from './lib/capture-snapshot-contract.ts';
 import {
   FIELD_MAP,
   SOURCE_TYPES,
@@ -22,7 +23,7 @@ import {
   type CmsSchema,
   type FieldMapEntry,
 } from './lib/content-field-map.ts';
-import { contentFingerprint, snapshotId, type Snapshot, type SnapshotContent } from './lib/content-snapshot.ts';
+import { contentFingerprint, snapshotId, type DemoCaptureProof, type InitialProductionCaptureProof, type Snapshot, type SnapshotContent } from './lib/content-snapshot.ts';
 import { contentIdOf, readFromStore } from './lib/content-media-store.ts';
 
 const webRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -30,6 +31,44 @@ const repoRoot = join(webRoot, '..');
 const outDir = process.env.CONTENT_SNAPSHOT_DIR || join(webRoot, '.snapshot');
 
 const cmsUrl = process.env.CMS_URL ?? process.env.STRAPI_URL ?? '';
+
+interface SealedCaptureMedia {
+  url: string;
+  file: string;
+  sha256: string;
+  verifiedStoredSha256?: string;
+}
+
+interface Staging193Capture {
+  directory: string;
+  profile: 'staging194' | 'initial-prod';
+  media: SealedCaptureMedia[];
+  readback: { collections: Record<string, unknown[]>; schemaDigest: string };
+  manifest: { capturedAt: string };
+  proof: DemoCaptureProof | InitialProductionCaptureProof;
+}
+
+// An explicit sealed server input supersedes any earlier capture attempt. Invalidate the
+// prior snapshot before bundle verification, which can fail before liveCapture starts.
+if (process.argv[2] === '--server-capture') {
+  rmSync(join(outDir, 'snapshot.json'), { force: true });
+}
+
+async function serverInput(): Promise<Staging193Capture | undefined> {
+  const args = process.argv.slice(2);
+  if (args.length === 0) return undefined;
+  const profile = args.length === 2 ? 'staging194' : args[1] === '--profile' && args[2] === 'initial-prod' ? 'initial-prod' : '';
+  const bundle = profile === 'staging194' ? args[1] : args[3];
+  if (args[0] !== '--server-capture' || !profile || args.length !== (profile === 'staging194' ? 2 : 4) || cmsUrl) {
+    throw new Error('server capture requires its fixed profile, sealed bundle, and no CMS_URL');
+  }
+  const verifier = await import('../../scripts/lib/staging193-capture-bundle.mjs');
+  const capture = profile === 'staging194'
+    ? verifier.verifyStaging193Bundle(bundle!, join(repoRoot, 'cms', 'src'))
+    : verifier.verifyInitialProdBundle(bundle!, join(repoRoot, 'cms', 'src'));
+  return { ...capture, profile } as Staging193Capture;
+}
+const serverCapture = await serverInput();
 
 /**
  * Предел ожидания ОДНОГО обращения к CMS.
@@ -99,7 +138,7 @@ function copyPinned(): void {
   // оставлял на диске снимок, не прошедший проверку: следующая сборка молча брала именно его,
   // потому что `prepare-snapshot.ts` контракт не запускает вовсе.
   const snap = JSON.parse(readFileSync(source, 'utf-8')) as Snapshot;
-  assertSnapshotContract(snap);
+  assertCaptureSnapshotContract(snap);
   snap.origin = { kind: 'pinned' };
 
   mkdirSync(outDir, { recursive: true });
@@ -267,13 +306,6 @@ function mapRecord(type: string, record: Record<string, unknown>): Record<string
   for (const sys of ['id', 'createdAt', 'updatedAt', 'publishedAt'] as const) {
     if (record[sys] !== undefined) out[sys] = record[sys];
   }
-  // Специфический для teachers случай: в схеме `teacher` нет отношения `institute` (только
-  // `seminars`), но данные (в т.ч. в тестовой заглушке) могут его нести. Раз источника в схеме
-  // нет, соответствие им не управляет — прямой passthrough, вне FIELD_MAP.
-  if (type === 'teachers' && record.institute && typeof record.institute === 'object') {
-    const inst = record.institute as Record<string, unknown>;
-    if (inst.legacy_id !== undefined) out.institute_legacy_id = inst.legacy_id;
-  }
   for (const entry of FIELD_MAP) {
     if (entry.type === type) applyEntry(record, entry, out);
   }
@@ -286,6 +318,12 @@ interface StrapiPage {
 }
 
 async function fetchAllPages(endpoint: string): Promise<Record<string, unknown>[]> {
+  if (serverCapture) {
+    const collections = serverCapture.readback.collections as Record<string, Record<string, unknown>[]>;
+    const records = collections[endpoint];
+    if (!Array.isArray(records)) throw new Error(`server SQLite capture omitted ${endpoint}`);
+    return records;
+  }
   const records: Record<string, unknown>[] = [];
   let page = 1;
   for (;;) {
@@ -310,12 +348,12 @@ async function fetchAllPages(endpoint: string): Promise<Record<string, unknown>[
 }
 
 /** Finds actual root upload URLs in mapped records, including rich HTML fields. */
-function uploadRefsIn(value: unknown): string[] {
+function uploadRefsIn(value: unknown, includeStatic = false): string[] {
   const found = new Set<string>();
   // A quoted value is the boundary for both relative and absolute URLs. Including `=` here
   // would also match the query value in `https://third.example/?next=/uploads/x` and make an
   // unrelated external URL look like a CMS asset.
-  const pattern = /(?:^|["'])((?:https?:\/\/[^/"'\s]+)?\/uploads\/[A-Za-z0-9._~!$&()*+,;=@%/-]+)/g;
+  const pattern = /(?:^|["'])((?:https?:\/\/[^/"'\s]+)?\/(?:uploads|media)\/[A-Za-z0-9._~!$&()*+,;=@%/-]+)/g;
 
   const walk = (node: unknown): void => {
     if (typeof node === 'string') {
@@ -323,7 +361,7 @@ function uploadRefsIn(value: unknown): string[] {
       for (const match of node.matchAll(pattern)) {
         const candidate = match[1]!;
         const normalized = normalizeCmsMediaUrl(candidate);
-        if (normalized.startsWith('/uploads/')) found.add(normalized);
+        if (normalized.startsWith('/uploads/') || (includeStatic && normalized.startsWith('/media/'))) found.add(normalized);
       }
       return;
     }
@@ -341,24 +379,37 @@ function uploadRefsIn(value: unknown): string[] {
 }
 
 async function captureMedia(types: Record<string, Record<string, unknown>[]>): Promise<SnapshotContent['media']> {
-  const refs = uploadRefsIn(types);
+  const refs = uploadRefsIn(types, Boolean(serverCapture));
   const storeDir = join(outDir, 'media');
   const media: SnapshotContent['media'] = [];
+  const captureMedia = serverCapture?.media ?? [];
+  const mediaByUrl = new Map(captureMedia.map((item) => [item.url, item]));
 
   for (const sourceRef of refs) {
     assertWithinBudget(`медиа ${sourceRef}`);
-    const url = new URL(sourceRef, cmsUrl).toString();
-    let response: Response;
-    try {
-      response = await fetch(url, { signal: AbortSignal.timeout(CMS_REQUEST_TIMEOUT_MS) });
-    } catch (err) {
-      throw new Error(`медиа ${sourceRef}: не удалось скачать (${(err as Error).message})`, { cause: err });
+    let bytes: Uint8Array;
+    if (serverCapture) {
+      const saved = mediaByUrl.get(sourceRef);
+      const digest = saved?.sha256 ?? saved?.verifiedStoredSha256;
+      if (!saved || typeof digest !== 'string' || !/^[a-f0-9]{64}$/.test(digest)) throw new Error(`sealed capture has no verified media row for ${sourceRef}`);
+      const path = join(serverCapture.directory, saved.file);
+      bytes = new Uint8Array(readFileSync(path));
+      if (createHash('sha256').update(bytes).digest('hex') !== digest) {
+        throw new Error(`sealed media bytes do not match the capture witness for ${sourceRef}`);
+      }
+    } else {
+      const url = new URL(sourceRef, cmsUrl).toString();
+      let response: Response;
+      try {
+        response = await fetch(url, { signal: AbortSignal.timeout(CMS_REQUEST_TIMEOUT_MS) });
+      } catch (err) {
+        throw new Error(`медиа ${sourceRef}: не удалось скачать (${(err as Error).message})`, { cause: err });
+      }
+      if (!response.ok) {
+        throw new Error(`медиа ${sourceRef}: HTTP ${response.status}`);
+      }
+      bytes = new Uint8Array(await response.arrayBuffer());
     }
-    if (!response.ok) {
-      throw new Error(`медиа ${sourceRef}: HTTP ${response.status}`);
-    }
-
-    const bytes = new Uint8Array(await response.arrayBuffer());
     if (bytes.length === 0) {
       throw new Error(`медиа ${sourceRef}: CMS вернула пустой файл`);
     }
@@ -382,7 +433,8 @@ async function captureMedia(types: Record<string, Record<string, unknown>[]>): P
 
     // The snapshot keeps the source records in CMS form. The separate media index is already
     // in the static-site address space, so build steps can use it without another rewrite.
-    media.push({ ref: `/media${sourceRef}`, contentId });
+    const ref = serverCapture && sourceRef.startsWith('/media/') ? sourceRef : `/media${sourceRef}`;
+    if (!media.some((item) => item.ref === ref)) media.push({ ref, contentId });
   }
   return media;
 }
@@ -409,7 +461,6 @@ async function liveCapture(): Promise<void> {
       );
     }
   }
-
   // Первая сверка — против схем в checkout: исчезнувший из схемы источник — отказ. Схема в
   // checkout может отставать от установленной CMS, поэтому ниже та же карта сверяется ещё и с
   // ответом CMS по каждой записи.
@@ -479,6 +530,15 @@ async function liveCapture(): Promise<void> {
     types[st.type] = rawByType[st.type]!.map((record) => mapRecord(st.type, record));
   }
 
+  const unclassifiedPeople = (types.teachers ?? [])
+    .filter((person) => person.trait !== 'teacher' && person.trait !== 'method-author')
+    .map((person) => String(person.legacy_id ?? '(без legacy_id)'));
+  if (unclassifiedPeople.length > 0) {
+    throw new Error(
+      `живой захват: trait не задан у персон (${unclassifiedPeople.join(', ')}) — снимок не записан`,
+    );
+  }
+
   // Связи расписания достраиваются ПОСЛЕ отображения всех типов: они требуют перекрёстного
   // поиска, которого построчное отображение не умеет по построению.
   //
@@ -495,8 +555,8 @@ async function liveCapture(): Promise<void> {
     const groupByLegacyId = new Map(
       (types.course_groups ?? []).map((r) => [String(r.legacy_id ?? ''), r] as const),
     );
-    const instituteByLegacyId = new Map(
-      (types.institutes ?? []).map((r) => [String(r.legacy_id ?? ''), r] as const),
+    const instituteBySlug = new Map(
+      (types.institutes ?? []).map((r) => [String(r.slug ?? ''), r] as const),
     );
 
     for (const entry of types.schedule_entries ?? []) {
@@ -507,7 +567,17 @@ async function liveCapture(): Promise<void> {
 
       const seminar = seminarBySlug.get(slug);
       const group = seminar ? groupByLegacyId.get(String(seminar.course_group_legacy_id ?? '')) : undefined;
-      const institute = group ? instituteByLegacyId.get(String(group.institute_legacy_id ?? '')) : undefined;
+      const institute = group ? instituteBySlug.get(String(group.institute_legacy_id ?? '')) : undefined;
+      // An empty institute collection is rejected by the existing required-type
+      // check below. Keep that more useful diagnostic for skeletal captures;
+      // when institutes are present, however, an unresolved relation is a
+      // broken join and must not silently produce a partial schedule entry.
+      if (group && instituteBySlug.size > 0 && !institute) {
+        throw new Error(
+          `живой захват: проведение ${String(entry.legacy_id ?? entry.id ?? '(без id)')} ` +
+            `не разрешает институт по slug ${String(group.institute_legacy_id ?? '(пусто)')}`,
+        );
+      }
       if (group) {
         // `program` сайт читает наравне с `institute`
         // (`raspisanie-i-tseny.astro`, `entry.program.name`), и в CMS его тоже нет полем.
@@ -527,13 +597,19 @@ async function liveCapture(): Promise<void> {
   const content: SnapshotContent = { types, media };
   const fingerprint = contentFingerprint(content);
   const referenceDate = new Date().toISOString().slice(0, 10);
-  const snap: Snapshot = {
+  const snapshotBase = {
     content,
     referenceDate,
     fingerprint,
     snapshotId: snapshotId({ fingerprint, referenceDate }),
-    origin: { kind: 'live', url: cmsUrl, capturedAt: new Date().toISOString() },
   };
+  const snap: Snapshot = serverCapture?.profile === 'initial-prod'
+    ? { ...snapshotBase, origin: { kind: 'server-db', sourceId: 'initial-prod-server-db', capturedAt: serverCapture.manifest.capturedAt },
+        sourcePolicy: 'initial-production', sourceAge: 'source-bound', captureProof: serverCapture.proof as InitialProductionCaptureProof }
+    : serverCapture
+      ? { ...snapshotBase, origin: { kind: 'server-db', sourceId: 'demo193-cms', capturedAt: serverCapture.manifest.capturedAt },
+          sourcePolicy: 'demo-publication-only', sourceAge: 'untracked', captureProof: serverCapture.proof as DemoCaptureProof }
+    : { ...snapshotBase, origin: { kind: 'live', url: cmsUrl, capturedAt: new Date().toISOString() } };
 
   // ПУСТОЙ съём — это «не смог измерить», а не «нарушений нет». Контракт на пустоте проходит
   // по определению: он перебирает записи, а перебирать нечего. Замерено 06.09.2026 — снятие
@@ -569,7 +645,7 @@ async function liveCapture(): Promise<void> {
 
   // Тот же контракт, что и у фикстуры (design.md, решение 2): второго, более слабого контракта
   // для живого пути нет. Снимок не должен появиться на диске, пока не прошёл эту проверку.
-  assertSnapshotContract(snap);
+  assertCaptureSnapshotContract(snap, undefined, serverCapture?.profile === 'initial-prod' ? 'initial-prod' : undefined);
 
   mkdirSync(outDir, { recursive: true });
   writeFileSync(join(outDir, 'snapshot.json'), JSON.stringify(snap, null, 2));
@@ -609,7 +685,7 @@ async function liveCapture(): Promise<void> {
   }
 }
 
-if (cmsUrl) {
+if (cmsUrl || serverCapture) {
   await liveCapture();
 } else {
   copyPinned();

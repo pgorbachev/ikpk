@@ -15,16 +15,16 @@ export const getStaticPaths = () => (isDemoStub ? [{ params: { rest: undefined }
 ---
 
 <BaseLayout
-  title="Демо-стенд: заявка не отправляется — ИКПК"
-  description="Служебная страница демо-стенда."
+  title={`${import.meta.env.DEMO_PROFILE === 'demo193' ? 'Стейджинг-стенд' : 'Демо-стенд'}: заявка не отправляется — ИКПК`}
+  description={`Служебная страница ${import.meta.env.DEMO_PROFILE === 'demo193' ? 'стейджинг-стенда' : 'демо-стенда'}.`}
   noindex={true}
 >
   <div class="container">
     <section class="demo-stub">
-      <p class="demo-stub-badge">Демо-стенд</p>
+      <p class="demo-stub-badge">{import.meta.env.DEMO_PROFILE === 'demo193' ? 'Стейджинг-стенд' : 'Демо-стенд'}</p>
       <h1>Заявка здесь не отправляется</h1>
       <p class="demo-stub-lead">
-        Вы на демонстрационной версии сайта. Кнопки записи специально
+        {import.meta.env.DEMO_PROFILE === 'demo193' ? 'Вы на стейджинг-стенде.' : 'Вы на демонстрационной версии сайта.'} Кнопки записи специально
         отключены, чтобы показ не создавал реальных обращений в CRM.
       </p>
       <p class="demo-stub-note">

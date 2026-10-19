@@ -143,7 +143,7 @@ describe('сторонние встраивания не попадают жив
     const problems: string[] = [];
     for (const file of specFiles()) {
       const code = readFileSync(join(TESTS_DIR, file), 'utf-8');
-      const installs = code.includes(guardName);
+      const installs = code.includes(guardName) || code.includes("from './helpers/publication-candidate'");
       const exempt = code.includes(EXEMPT_MARKER);
       if (installs && exempt) problems.push(`${file}: и ставит перехват, и объявлен исключением`);
       if (!installs && !exempt) problems.push(`${file}: перехват не поставлен и исключением не объявлен`);

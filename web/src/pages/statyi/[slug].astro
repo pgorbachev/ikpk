@@ -74,7 +74,11 @@ const articleSchema = {
 };
 ---
 
-<BaseLayout title={article.seo_title} description={article.seo_description} schema={articleSchema}>
+<BaseLayout
+  title={article.seo_title || article.title}
+  description={article.seo_description || article.body_text.slice(0, 200)}
+  schema={articleSchema}
+>
   <div class="container">
     <Breadcrumbs
       items={[

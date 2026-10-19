@@ -10,6 +10,21 @@ import { after, before, describe, test } from 'node:test';
 const loadCommonjs = createRequire(import.meta.url);
 const cmsRoot = path.join(import.meta.dirname, '..');
 const dbFile = path.join(os.tmpdir(), `ikpk-seminar-management-${process.pid}.db`);
+const validCourseGroupPublicationFields = {
+  description: 'Описание программы для теста',
+  seo: {
+    seo_title: 'Программа подготовки',
+    seo_description: 'Описание образовательной программы для сайта',
+  },
+};
+const validSeminarPublicationFields = {
+  description: 'Описание семинара для теста',
+  seo: {
+    seo_title: 'Семинар подготовки',
+    seo_description: 'Описание семинара для сайта',
+  },
+  documents_state: 'not-issued',
+};
 
 function freePort() {
   return new Promise((resolve, reject) => {
@@ -58,6 +73,8 @@ describe('семинары в собранном Strapi', { timeout: 360000 }, (
     process.env.DATABASE_CLIENT = 'sqlite';
     process.env.DATABASE_FILENAME = dbFile;
     process.env.STRAPI_TELEMETRY_DISABLED = 'true';
+    delete process.env.IKPK_ENABLE_CAPTURE_TOKEN_BOOTSTRAP;
+    delete process.env.CMS_TOKEN;
     delete process.env.CONTENT_ADMIN_EMAIL;
     delete process.env.CONTENT_ADMIN_PASSWORD;
 
@@ -65,6 +82,9 @@ describe('семинары в собранном Strapi', { timeout: 360000 }, (
     const { createStrapi } = loadCommonjs('@strapi/strapi');
     app = createStrapi({ appDir: cmsRoot, distDir: path.join(cmsRoot, 'dist') });
     await app.load();
+    assert.ok(!process.env.CMS_TOKEN, 'обычный запуск не должен выдавать токен съёма');
+    assert.equal(Boolean(await app.service('admin::api-token').getByName('site-refresh-capture')), false,
+      'обычный запуск не должен сохранять токен съёма');
     // В development Strapi сам открывает админку в браузере разработчика при каждом запуске.
     app.config.set('admin.autoOpen', false);
     await app.listen();
@@ -96,7 +116,14 @@ describe('семинары в собранном Strapi', { timeout: 360000 }, (
 
     publishedInstitute = await app.documents('api::institute.institute').create({
       status: 'published',
-      data: { name: 'Институт для теста', slug: 'institut-dlya-testa', legacy_id: 'institut-dlya-testa' },
+      data: {
+        name: 'Институт для теста',
+        slug: 'institut-dlya-testa',
+        legacy_id: 'institut-dlya-testa',
+        description: 'Описание института для теста',
+        order: 1,
+        seo: { seo_title: 'Институт для теста', seo_description: 'Описание для поиска' },
+      },
     });
     publishedProgram = await app.documents('api::course-group.course-group').create({
       status: 'published',
@@ -104,6 +131,7 @@ describe('семинары в собранном Strapi', { timeout: 360000 }, (
         name: 'Программа для теста',
         slug: 'programma-dlya-testa',
         legacy_id: 'programma-dlya-testa',
+        ...validCourseGroupPublicationFields,
         institute: publishedInstitute.documentId,
       },
     });
@@ -243,23 +271,34 @@ describe('семинары в собранном Strapi', { timeout: 360000 }, (
         name: 'Программа-черновик',
         slug: 'programma-chernovik',
         legacy_id: 'programma-chernovik',
+        ...validCourseGroupPublicationFields,
         institute: publishedInstitute.documentId,
       },
     });
     const seminar = await seminars.create({
-      data: { name: 'Ждёт программу', course_group: program.documentId },
+      data: {
+        name: 'Ждёт программу',
+        ...validSeminarPublicationFields,
+        course_group: program.documentId,
+      },
     });
     await assert.rejects(
       () => seminars.publish({ documentId: seminar.documentId }),
       /Выберите опубликованную программу перед публикацией семинара/,
     );
     await programs.publish({ documentId: program.documentId });
+    const publishedProgramRecord = await programs.findOne({
+      documentId: program.documentId,
+      status: 'published',
+    });
+    assert.ok(publishedProgramRecord?.publishedAt, 'программа должна быть опубликована до семинара');
     await seminars.publish({ documentId: seminar.documentId });
     const published = await seminars.findOne({
       documentId: seminar.documentId,
       status: 'published',
       populate: ['course_group'],
     });
+    assert.ok(published?.publishedAt, 'семинар должен быть опубликован');
     assert.equal(published.course_group.documentId, program.documentId);
     await seminars.update({
       documentId: seminar.documentId,
@@ -277,31 +316,42 @@ describe('семинары в собранном Strapi', { timeout: 360000 }, (
 
     const noSiteId = await programs.create({
       status: 'published',
-      data: { name: 'Без идентификатора сайта', slug: 'bez-identifikatora-sayta' },
+      data: {
+        name: 'Без идентификатора сайта',
+        slug: 'bez-identifikatora-sayta',
+        institute: publishedInstitute.documentId,
+        ...validCourseGroupPublicationFields,
+      },
     });
     await assert.rejects(
       () => seminars.create({
         status: 'published',
-        data: { name: 'Не попадёт на сайт', course_group: noSiteId.documentId },
+        data: {
+          name: 'Не попадёт на сайт',
+          ...validSeminarPublicationFields,
+          course_group: noSiteId.documentId,
+        },
       }),
       /нет идентификатора для сайта/,
     );
 
-    const noInstitute = await programs.create({
-      status: 'published',
-      data: { name: 'Без института', slug: 'bez-instituta', legacy_id: 'bez-instituta' },
-    });
     await assert.rejects(
-      () => seminars.create({
+      () => programs.create({
         status: 'published',
-        data: { name: 'Неизвестный институт', course_group: noInstitute.documentId },
+        data: {
+          name: 'Без института',
+          slug: 'bez-instituta',
+          legacy_id: 'bez-instituta',
+          ...validCourseGroupPublicationFields,
+        },
       }),
-      /нет опубликованного института для сайта/,
+      /не заполнены обязательные поля: institute/,
     );
     const matchingIds = await seminars.create({
       status: 'published',
       data: {
         name: 'Совпадающие идентификаторы',
+        ...validSeminarPublicationFields,
         course_group: { id: publishedProgram.id, documentId: publishedProgram.documentId },
       },
     });
@@ -426,7 +476,7 @@ describe('семинары в собранном Strapi', { timeout: 360000 }, (
 
     const publishedSeminar = await seminars.create({
       status: 'published',
-      data: { name: 'Опубликованный', course_group: publishedProgram.documentId },
+      data: { name: 'Опубликованный', ...validSeminarPublicationFields, course_group: publishedProgram.documentId },
     });
     const published = await entries.create({
       status: 'published',
@@ -434,6 +484,8 @@ describe('семинары в собранном Strapi', { timeout: 360000 }, (
         seminar: publishedSeminar.documentId,
         startAt: '2026-07-01T00:00:00.000Z',
         endAt: '2026-07-02T00:00:00.000Z',
+        city: 'Москва',
+        entry_status: 'active',
       },
     });
     const beforeRemoval = await entries.findOne({
@@ -467,11 +519,11 @@ describe('семинары в собранном Strapi', { timeout: 360000 }, (
 
     const source = await seminars.create({
       status: 'published',
-      data: { name: 'Семинар А', course_group: publishedProgram.documentId },
+      data: { name: 'Семинар А', ...validSeminarPublicationFields, course_group: publishedProgram.documentId },
     });
     const target = await seminars.create({
       status: 'published',
-      data: { name: 'Семинар Б', course_group: publishedProgram.documentId },
+      data: { name: 'Семинар Б', ...validSeminarPublicationFields, course_group: publishedProgram.documentId },
     });
     const reassignment = [
       ['numericString', () => String(target.id)],
@@ -488,6 +540,8 @@ describe('семинары в собранном Strapi', { timeout: 360000 }, (
           seminar: source.documentId,
           startAt: '2026-08-01T00:00:00.000Z',
           endAt: '2026-08-02T00:00:00.000Z',
+          city: 'Москва',
+          entry_status: 'active',
         },
       });
       assert.equal(row.name, 'Семинар А');
@@ -511,6 +565,8 @@ describe('семинары в собранном Strapi', { timeout: 360000 }, (
         seminar: source.documentId,
         startAt: '2026-08-03T00:00:00.000Z',
         endAt: '2026-08-04T00:00:00.000Z',
+        city: 'Москва',
+        entry_status: 'active',
       },
     });
     await assert.rejects(
@@ -576,6 +632,7 @@ describe('семинары в собранном Strapi', { timeout: 360000 }, (
         startAt: '2026-11-01T23:30:00+02:00',
         endAt: '2026-11-02T01:00:00+02:00',
         city: 'Никосия',
+        entry_status: 'active',
       },
     });
     assert.equal(created.admin_label, '1 ноября 2026 · Никосия');
@@ -590,12 +647,20 @@ describe('семинары в собранном Strapi', { timeout: 360000 }, (
         startAt: '2026-10-01T00:00:00+03:00',
         endAt: '2026-10-01T10:00:00+03:00',
         city: 'Москва',
+        entry_status: 'active',
       },
     });
     assert.equal(midnight.admin_label, '1 октября 2026 · Москва');
   });
 
   test('съём читает тип, закрытый для публичной роли', async () => {
+    process.env.IKPK_ENABLE_CAPTURE_TOKEN_BOOTSTRAP = '1';
+    const { bootstrapCaptureTokenForRehearsal } = loadCommonjs(
+      path.join(cmsRoot, 'dist/src/seminar-management/capture-token.js'),
+    );
+    await bootstrapCaptureTokenForRehearsal(app);
+    delete process.env.IKPK_ENABLE_CAPTURE_TOKEN_BOOTSTRAP;
+
     const action = 'api::institute.institute.find';
     const permissions = app.db.query('plugin::users-permissions.permission');
     const rows = await permissions.findMany({ where: { action } });
@@ -613,8 +678,9 @@ describe('семинары в собранном Strapi', { timeout: 360000 }, (
     const body = await authed.json();
     assert.ok(Array.isArray(body.data));
     const kept = createHash('sha256').update(process.env.CMS_TOKEN).digest('hex');
-    const { ensureCaptureToken } = loadCommonjs(path.join(cmsRoot, 'dist/src/seminar-management/capture-token.js'));
-    await ensureCaptureToken(app);
+    process.env.IKPK_ENABLE_CAPTURE_TOKEN_BOOTSTRAP = '1';
+    await bootstrapCaptureTokenForRehearsal(app);
+    delete process.env.IKPK_ENABLE_CAPTURE_TOKEN_BOOTSTRAP;
     assert.equal(createHash('sha256').update(process.env.CMS_TOKEN).digest('hex'), kept);
   });
 });

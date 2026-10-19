@@ -15,13 +15,24 @@
  */
 import { describe, expect, it } from 'vitest';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync, readFileSync } from 'node:fs';
+import { copyFileSync, mkdtempSync, mkdirSync, rmSync, writeFileSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import { createHash } from 'node:crypto';
 
 const ROOT = join(import.meta.dirname, '..', '..');
 const SCRIPT = join(ROOT, 'scripts', 'bootstrap-vps.sh');
 const LIB = join(ROOT, 'scripts', 'lib', 'release-migrations.sh');
+const PACKAGED_SCRIPTS = [
+  'run-data-migrations.mjs',
+  'audit-data-migration.mjs',
+  'institute-method-author-classification.mjs',
+  'normalize-null-documents-state.mjs',
+] as const;
+
+function sha256(bytes: Buffer | string): string {
+  return createHash('sha256').update(bytes).digest('hex');
+}
 
 /** Тело функции — из того файла, который выкатка вливает в поток; доставку проверяет
  * отдельный describe выше, потому что тело и его достижимость — разные утверждения. */
@@ -60,11 +71,40 @@ function remoteStream(): string {
  * проверки происхождения давало тот же код 1 — файла нет, `tr` падает, `set -e` прерывает, —
  * и проверка по коду оставалась зелёной на снятом гейте.
  */
-function runGate(opts: { migrations: string[]; expected?: string }): { code: number; err: string } {
+function runGate(opts: { migrations: string[]; expected?: string; tamper?: string }): { code: number; err: string } {
   const dir = mkdtempSync(join(tmpdir(), 'ikpk-rel-'));
   try {
-    mkdirSync(join(dir, 'database', 'migrations'), { recursive: true });
-    for (const m of opts.migrations) writeFileSync(join(dir, 'database', 'migrations', m), '');
+    const migrationsDir = join(dir, 'database', 'migrations');
+    const scriptsDir = join(dir, 'scripts');
+    mkdirSync(migrationsDir, { recursive: true });
+    mkdirSync(scriptsDir, { recursive: true });
+    for (const name of PACKAGED_SCRIPTS) {
+      copyFileSync(join(ROOT, 'cms', 'scripts', name), join(scriptsDir, name));
+    }
+    const steps = opts.migrations.map((m) => {
+      const plannedBytes = Buffer.from(`fixture payload for ${m}\n`);
+      const actualBytes = opts.tamper === m ? Buffer.from('substituted payload\n') : plannedBytes;
+      writeFileSync(join(migrationsDir, m), actualBytes);
+      return {
+        id: `fixture-${m}`,
+        phase: 'before-sync',
+        path: m,
+        sha256: sha256(plannedBytes),
+        source: { strapiVersion: '5.51.2', schema: { engine: 'sqlite', requiredColumns: { fixture: ['id', 'value'] } } },
+        preconditions: { fixture: true },
+        postconditions: { fixture: true },
+        readback: { fixture: true },
+      };
+    });
+    const integrityFiles = PACKAGED_SCRIPTS.map((name) => ({
+      path: `scripts/${name}`,
+      sha256: sha256(readFileSync(join(scriptsDir, name))),
+    }));
+    writeFileSync(join(migrationsDir, 'plan.json'), JSON.stringify({
+      version: 1,
+      steps,
+      integrity: { files: integrityFiles },
+    }, null, 2));
     if (opts.expected !== undefined) {
       writeFileSync(join(dir, 'database', '.migrations-expected'), opts.expected);
     }
@@ -111,6 +151,12 @@ describe('доставка проверки на сервер', () => {
 describe('состав миграций в релизе', () => {
   it('пропускает релиз, где миграций столько же, сколько объявлено', () => {
     expect(runGate({ migrations: ['2026.01.01.a.js'], expected: '1\n' }).code).toBe(0);
+  });
+
+  it('отказывает при подмене файла с тем же количеством миграций', () => {
+    const r = runGate({ migrations: ['2026.01.01.a.js'], expected: '1\n', tamper: '2026.01.01.a.js' });
+    expect(r.code, 'одинаковое количество скрыло подмену содержимого').toBe(1);
+    expect(r.err, 'отказ не назвал расхождение payload hash').toMatch(/sha|hash|хеш/i);
   });
 
   it('отказывает, когда миграция не доехала', () => {

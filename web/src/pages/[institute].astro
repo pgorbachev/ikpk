@@ -5,7 +5,7 @@ import Breadcrumbs from '../components/Breadcrumbs.astro';
 import InstituteHeroLogo from '../components/institutes/InstituteHeroLogo.astro';
 import InstituteProgramsSection from '../components/institutes/InstituteProgramsSection.astro';
 import InstituteTeacherCard from '../components/institutes/InstituteTeacherCard.astro';
-import { cleanBodyHtml, excerpt, getCourseGroups, getInstitutes, getSeminars, getTeachers } from '../lib/data';
+import { cleanBodyHtml, excerpt, getCourseGroups, getInstitutes, getSeminars, getTeachers, institutePeopleSectionLabel, teacherPageHref } from '../lib/data';
 import RichContent from '../components/RichContent.astro';
 import { getCourseGroupPreviewImage } from '../lib/course-group-previews.js';
 import type { Institute } from '../lib/data';
@@ -121,15 +121,21 @@ const programCards = courseGroups.map((courseGroup) => {
   };
 });
 
-const teacherCards = teachers.map((teacher) => ({
-  href: `/${institute.slug}/prepodavatel/${teacher.slug}`,
-  name: teacher.name,
-  photo: teacher.photo,
-  excerpt: teacherLead(teacher.bio_html || '', teacher.bio_text || '', teacher.name),
-}));
-
+const teacherCards = teachers.flatMap((teacher) => {
+  const href = teacherPageHref(teacher);
+  return href
+    ? [{
+        href,
+        name: teacher.name,
+        photo: teacher.photo,
+        excerpt: teacherLead(teacher.bio_html || '', teacher.bio_text || '', teacher.name),
+      }]
+    : [];
+});
+const peopleSectionLabel = institutePeopleSectionLabel(institute.slug);
 const visibleTeachers = teacherCards.slice(0, 3);
 const hiddenTeachers = teacherCards.slice(3);
+
 ---
 
 <BaseLayout title={institute.seo_title} description={institute.seo_description}>
@@ -152,22 +158,18 @@ const hiddenTeachers = teacherCards.slice(3);
     {teacherCards.length > 0 && (
       <section class="section institute-teachers" data-testid="institute-teachers">
         <header class="institute-section-header">
-          <h2 class="section-title">Преподаватели</h2>
+          <h2 class="section-title">{peopleSectionLabel}</h2>
         </header>
 
         <div class="institute-teacher-grid">
-          {visibleTeachers.map((teacher) => (
-            <InstituteTeacherCard {...teacher} />
-          ))}
+          {visibleTeachers.map((teacher) => <InstituteTeacherCard {...teacher} />)}
         </div>
 
         {hiddenTeachers.length > 0 && (
           <details class="institute-more">
             <summary>Показать всех</summary>
             <div class="institute-teacher-grid institute-more-grid">
-              {hiddenTeachers.map((teacher) => (
-                <InstituteTeacherCard {...teacher} />
-              ))}
+              {hiddenTeachers.map((teacher) => <InstituteTeacherCard {...teacher} />)}
             </div>
           </details>
         )}

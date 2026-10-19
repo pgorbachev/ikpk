@@ -3,7 +3,7 @@
  * Faculty: ключевые преподаватели — главный блок, 4×2, реальные первые 8 (§7.3).
  * Не отбор «лучших»: рваность фонов должна быть видна владельцу.
  */
-import { getTeachers } from '../../../lib/data';
+import { getTeachers, teacherPageHref } from '../../../lib/data';
 import { getAssetDimensions, srcsetFor } from '../../../lib/media';
 
 function shortName(full: string): string {
@@ -21,7 +21,7 @@ const teachers = getTeachers()
     name: shortName(t.name),
     credentials: credentials(t.name),
     photo: t.photo,
-    href: `/${t.institute_legacy_id}/prepodavatel/${t.slug}`,
+    href: teacherPageHref(t),
     dim: getAssetDimensions(t.photo),
   }));
 ---
@@ -32,21 +32,18 @@ const teachers = getTeachers()
       <p class="section-sub">Реальные портреты из медиатеки — без отбора «лучших кадров».</p>
     </div>
     <div class="tf-grid">
-      {teachers.map((t) => (
+      {teachers.map((t) => t.href ? (
         <a class="tf-card teacher-card" href={t.href}>
-          <img
-            class="tf-photo teacher-photo"
-            src={t.photo}
-            srcset={srcsetFor(t.photo)}
-            sizes="(max-width: 640px) 45vw, 280px"
-            alt=""
-            width={t.dim?.width}
-            height={t.dim?.height}
-            loading="lazy"
-          />
+          <img class="tf-photo teacher-photo" src={t.photo} srcset={srcsetFor(t.photo)} sizes="(max-width: 640px) 45vw, 280px" alt="" width={t.dim?.width} height={t.dim?.height} loading="lazy" />
           <span class="tf-name">{t.name}</span>
           {t.credentials && <span class="tf-cred">{t.credentials}</span>}
         </a>
+      ) : (
+        <div class="tf-card teacher-card">
+          <img class="tf-photo teacher-photo" src={t.photo} srcset={srcsetFor(t.photo)} sizes="(max-width: 640px) 45vw, 280px" alt="" width={t.dim?.width} height={t.dim?.height} loading="lazy" />
+          <span class="tf-name">{t.name}</span>
+          {t.credentials && <span class="tf-cred">{t.credentials}</span>}
+        </div>
       ))}
     </div>
   </div>

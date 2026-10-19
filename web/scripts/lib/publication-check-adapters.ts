@@ -35,7 +35,7 @@ export interface RollbackAdapterOptions {
 }
 type CheckContext = PublicationCheckContext | RollbackCheckContext;
 
-export const PUBLICATION_BROWSER_ARGS = ['test', 'tests/publication-smoke.spec.ts', '--config', 'playwright.publication.config.ts', '--project=desktop', '--project=mobile', '--reporter=json'] as const;
+export const PUBLICATION_BROWSER_ARGS = ['test', 'tests/publication-smoke.spec.ts', 'tests/publication-catalog.spec.ts', 'tests/publication-content.spec.ts', 'tests/publication-schedule.spec.ts', 'tests/publication-widgets.spec.ts', '--config', 'playwright.publication.config.ts', '--project=desktop', '--project=mobile', '--reporter=json'] as const;
 const safeNames = ['PATH', 'LANG', 'LC_ALL', 'TZ', 'HOME', 'TMPDIR', 'DEMO_FORMS', 'CHAT_LOADER_SRC'] as const;
 const defaultPath = `${dirname(process.execPath)}:/usr/bin:/bin`;
 function safeEnv(source: Record<string, string | undefined>) {

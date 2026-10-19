@@ -82,7 +82,7 @@ export const FIELD_MAP: readonly FieldMapEntry[] = [
   { type: 'course_groups', field: 'slug', source: 'slug' },
   { type: 'course_groups', field: 'order', source: 'order' },
   { type: 'course_groups', field: 'images', source: 'image', transform: 'mediaUrlList' },
-  { type: 'course_groups', field: 'institute_legacy_id', source: 'institute.legacy_id' },
+  { type: 'course_groups', field: 'institute_legacy_id', source: 'institute.slug' },
   { type: 'course_groups', field: 'seo_title', source: 'seo.seo_title' },
   { type: 'course_groups', field: 'seo_description', source: 'seo.seo_description' },
   { type: 'course_groups', field: 'description_html', source: 'description' },
@@ -105,17 +105,20 @@ export const FIELD_MAP: readonly FieldMapEntry[] = [
   { type: 'seminars', field: 'description_html', source: 'description' },
   { type: 'seminars', field: 'description_text', source: 'description', transform: 'htmlToText' },
   { type: 'seminars', field: 'full_text_html', source: 'full_text' },
+  { type: 'seminars', field: 'learning_mode', source: 'learning_mode' },
+  { type: 'seminars', field: 'learning_plan', source: 'learning_plan' },
+  { type: 'seminars', field: 'recommendations', source: 'recommendations' },
   { type: 'seminars', field: 'image', source: 'image', transform: 'mediaRef' },
   { type: 'seminars', field: 'teachers', source: 'teachers', transform: 'refList' },
 
-  // teachers: связь с институтом добавлена в схему CMS и в импортёр. Прежде её не было ни там,
-  // ни там, хотя в данных переноса она есть у всех 29, — и живой захват отказывал на первом же
-  // преподавателе, потому что контракт проверяет эту связь кодом.
+  // teachers: trait и институт снимаются из записи CMS. `institute_legacy_id` в snapshot
+  // выводится из relation `institute`, а не из одноимённого legacy-поля персоны.
   { type: 'teachers', field: 'legacy_id', source: 'legacy_id' },
   { type: 'teachers', field: 'legacy_url', source: 'legacy_id', transform: 'legacyUrlFromId' },
   { type: 'teachers', field: 'name', source: 'name' },
   { type: 'teachers', field: 'slug', source: 'slug' },
-  { type: 'teachers', field: 'institute_legacy_id', source: 'institute.legacy_id' },
+  { type: 'teachers', field: 'trait', source: 'trait' },
+  { type: 'teachers', field: 'institute_legacy_id', source: 'institute.slug' },
   { type: 'teachers', field: 'bio_html', source: 'bio' },
   { type: 'teachers', field: 'bio_text', source: 'bio', transform: 'htmlToText' },
   { type: 'teachers', field: 'photo', source: 'photo', transform: 'mediaUrl' },
@@ -142,6 +145,8 @@ export const FIELD_MAP: readonly FieldMapEntry[] = [
   { type: 'schedule_entries', field: 'price', source: 'price' },
   { type: 'schedule_entries', field: 'oldPrice', source: 'oldPrice' },
   { type: 'schedule_entries', field: 'isFree', source: 'isFree' },
+  { type: 'schedule_entries', field: 'image', source: 'image', transform: 'mediaRef' },
+  { type: 'schedule_entries', field: 'isEventCollection', source: 'isEventCollection' },
   { type: 'schedule_entries', field: 'status', source: 'entry_status' },
   { type: 'schedule_entries', field: 'registrationFormLink', source: 'registrationFormLink' },
   { type: 'schedule_entries', field: 'description', source: 'description' },
@@ -154,6 +159,7 @@ export const FIELD_MAP: readonly FieldMapEntry[] = [
   { type: 'news', field: 'legacy_id', source: 'legacy_id' },
   { type: 'news', field: 'name', source: 'name' },
   { type: 'news', field: 'description', source: 'description' },
+  { type: 'news', field: 'createdAt', source: 'date' },
   { type: 'news', field: 'image', source: 'image', transform: 'mediaRef' },
   { type: 'news', field: 'link', source: 'link' },
   { type: 'news', field: 'priority', source: 'priority' },
@@ -162,6 +168,8 @@ export const FIELD_MAP: readonly FieldMapEntry[] = [
   { type: 'promotions', field: 'legacy_id', source: 'legacy_id' },
   { type: 'promotions', field: 'name', source: 'name' },
   { type: 'promotions', field: 'description', source: 'description' },
+  { type: 'promotions', field: 'createdAt', source: 'date' },
+  { type: 'promotions', field: 'type', source: 'type' },
   { type: 'promotions', field: 'image', source: 'image', transform: 'mediaRef' },
   { type: 'promotions', field: 'link', source: 'link' },
   { type: 'promotions', field: 'priority', source: 'priority' },
@@ -208,15 +216,12 @@ export const UNMAPPED_SCHEMA_FIELDS: Readonly<Record<string, Readonly<Record<str
     documents_confirmation_author: NOT_YET,
     documents_confirmation_date: NOT_YET,
     documents_confirmation_source: NOT_YET,
-    learning_plan: UNSHOWN,
-    learning_mode: UNSHOWN,
-    recommendations: UNSHOWN,
   },
-  teachers: { seminars: REVERSE, trait: NOT_YET },
+  teachers: { seminars: REVERSE },
   articles: { categories: NOT_YET },
   schedule_entries: { admin_label: 'служебная подпись для редактора, на сайт не выводится' },
-  news: { date: NOT_YET },
-  promotions: { date: NOT_YET },
+  news: {},
+  promotions: {},
 };
 
 /** Служебные поля ответа Strapi 5 и компонента: не атрибуты схемы. */
@@ -271,7 +276,7 @@ export function missingSourceFields(type: string, record: Record<string, unknown
 export function hasValue(value: unknown): boolean {
   if (value === null || value === undefined || value === false) return false;
   if (typeof value === 'string') {
-    return value.replace(/<(?!(?:img|iframe|video|audio|embed|object)\b|https?:)[^>]*>|&nbsp;|&#160;|&#xa0;/gi, '').trim() !== '';
+    return value.replace(/<(?!img|iframe|video|audio|embed|object|https?:)[^>]*>|&nbsp;|&#160;|&#xa0;/gi, '').trim() !== '';
   }
   if (Array.isArray(value)) return value.length > 0;
   return true;

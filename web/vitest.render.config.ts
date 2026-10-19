@@ -25,9 +25,14 @@ export default await getViteConfig({
   test: {
     include: [
       'tests/schedule-filters.render.test.ts',
+      'tests/teacher-links.render.test.ts',
+      'tests/home-people.render.test.ts',
+      'tests/footer-snapshot-clock.render.test.ts',
+      'tests/maintenance-notice.render.test.ts',
       'tests/seminar-price.render.test.ts',
       'tests/rich-content-render.test.ts',
-      'tests/maintenance-notice.render.test.ts',
+      'tests/seminar-snapshot-fields.render.test.ts',
+      'tests/demo193-profile.render.test.ts',
     ],
   },
 })({ command: 'serve', mode: 'test' });
