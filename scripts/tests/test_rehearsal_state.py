@@ -30,6 +30,26 @@ class RehearsalStateTests(unittest.TestCase):
     def tearDown(self) -> None:
         self.temp.cleanup()
 
+    def test_new_operation_admission_refuses_marker_unfinished_or_reused_id(self):
+        self.state.assert_new_operation_allowed("fresh", SOURCE_SHA)
+        self.state.begin("active", SOURCE_SHA, OLD_PAIR)
+        with self.assertRaisesRegex(RehearsalRefusal, "maintenance marker"):
+            self.state.assert_new_operation_allowed("other", SOURCE_SHA)
+
+        self.state.marker_path.unlink()
+        with self.assertRaisesRegex(RehearsalRefusal, "unfinished operation"):
+            self.state.assert_new_operation_allowed("other", SOURCE_SHA)
+
+        self.state.journal_path.write_text("", encoding="utf-8")
+        self.state.begin("used", SOURCE_SHA, OLD_PAIR)
+        self.state.confirm_fence("used", lambda: True)
+        self.state.mark_cms_activated("used")
+        self.state.accept_new_pair("used", NEW_PAIR)
+        self.state.commit("used")
+        self.state.finalize("used", lambda: True)
+        with self.assertRaisesRegex(RehearsalRefusal, "already exists"):
+            self.state.assert_new_operation_allowed("used", SOURCE_SHA)
+
     def test_marker_replace_is_durable_and_leaves_no_partial_file(self):
         path = self.root / "marker.json"
         durable_json(path, {"phase": "old"})

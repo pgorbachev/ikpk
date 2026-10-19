@@ -16,6 +16,7 @@ from unittest.mock import patch
 
 from scripts.lib import rehearsal_host
 from scripts.lib.rehearsal_host import _copy_atomic, _switch_pointer
+from scripts.lib.rehearsal_state import RehearsalState
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -116,26 +117,140 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
         self.assertEqual(run_command.call_args.kwargs["timeout"], 90)
         self.assertEqual(result, "finished")
 
-    def test_cms_artifact_build_uses_a_bounded_node_heap_only_for_packaging(self):
+    def test_cms_artifact_build_can_mount_only_its_validated_dependency_tree_read_only(self):
+        with tempfile.TemporaryDirectory(prefix="ikpk-readonly-cms-deps-") as temporary:
+            dependencies = Path(temporary) / "deps/node_modules"
+            dependencies.mkdir(parents=True)
+            completed = subprocess.CompletedProcess([], 0, stdout="finished", stderr="")
+            user = type("User", (), {"pw_name": "ikpk-cms"})()
+            with patch.object(rehearsal_host.pwd, "getpwnam", return_value=user), \
+                 patch.object(rehearsal_host, "run", return_value=completed) as run_command:
+                rehearsal_host._run_as_cms({"cmsUser": "ikpk-cms"}, Path("/tmp/cms"),
+                    ["/usr/bin/bash", "build-cms-artifact.sh"], read_only_path=dependencies.resolve())
+
+            command = run_command.call_args.args[0]
+            self.assertIn(f"--property=ReadOnlyPaths={dependencies.resolve()}", command)
+            self.assertEqual(command[-2:], ["/usr/bin/bash", "build-cms-artifact.sh"])
+
+    def test_prepared_candidate_refuses_reused_generation_with_strapi_version_mismatch(self):
+        with tempfile.TemporaryDirectory(prefix="ikpk-cms-strapi-mismatch-") as temporary:
+            root = Path(temporary)
+            source_sha, operation_id = "a" * 40, "strapi-op"
+            source = root / f"{source_sha}-{operation_id}"
+            cms = source / "cms"
+            cms.mkdir(parents=True)
+            (source / ".ikpk-rehearsal-ci.json").write_text(json.dumps(
+                {"sourceSha": source_sha, "ref": "refs/heads/dev"}))
+            (cms / "package.json").write_text(json.dumps({"dependencies": {"@strapi/strapi": "5.51.1"}}))
+            lock = {"packages": {"node_modules/@strapi/strapi": {"version": "5.51.2"}}}
+            lock_bytes = json.dumps(lock, sort_keys=True).encode()
+            (cms / "package-lock.json").write_bytes(lock_bytes)
+            dependencies = root / "deps/node_modules"
+            (dependencies / "@strapi/strapi").mkdir(parents=True)
+            (dependencies / "@strapi/strapi/package.json").write_text(json.dumps({"version": "5.51.2"}))
+            (cms / "node_modules").symlink_to(dependencies, target_is_directory=True)
+            artifact = rehearsal_host._cms_artifact_path(source, operation_id)
+            (artifact / "dist/config").mkdir(parents=True)
+            (artifact / "database").mkdir()
+            (artifact / "scripts").mkdir()
+            (artifact / "package.json").write_text(json.dumps({"dependencies": {"@strapi/strapi": "5.51.1"}}))
+            (artifact / "package-lock.json").write_bytes(lock_bytes)
+            for name in ("tsconfig.json", "dist/config/database.js", "database/.migrations-expected",
+                         "scripts/run-data-migrations.mjs"):
+                (artifact / name).write_text("test")
+            (artifact / "node_modules").symlink_to(dependencies, target_is_directory=True)
+            web_dependencies = source / "web/node_modules"
+            for package in ("astro", "tsx"):
+                (web_dependencies / package).mkdir(parents=True)
+                (web_dependencies / package / "package.json").write_text("{}")
+            (web_dependencies / ".bin").mkdir()
+            for package in ("astro", "tsx"):
+                (web_dependencies / package / "bin.js").write_text("")
+                (web_dependencies / ".bin" / package).symlink_to(f"../{package}/bin.js")
+            expected = {"version": 1, "lockSha256": sha(lock_bytes), "profile": "full-build",
+                        "nodeVersion": "v24.1.0", "nodeAbi": "137", "platform": "linux",
+                        "architecture": "x64"}
+            config = {"allowedSourceRef": "refs/heads/dev", "cmsUser": getpass.getuser()}
+            with patch.object(rehearsal_host, "_cms_build_generation", return_value=(root / "unused", expected)), \
+                 patch.object(rehearsal_host, "_validate_cms_build_generation", return_value=dependencies.resolve()):
+                with self.assertRaisesRegex(rehearsal_host.HostFailure, "identities do not match"):
+                    rehearsal_host._validate_prepared_cms_candidate(
+                        config, source, operation_id, {"sourceSha": source_sha, "ref": "refs/heads/dev"})
+
+    def test_prefence_candidate_installs_full_cms_deps_then_builds_artifact_with_bounded_heap(self):
         with tempfile.TemporaryDirectory(prefix="ikpk-cms-artifact-heap-") as temporary:
             source = Path(temporary) / "candidate"
-            source.mkdir()
-            live_database = Path(temporary) / "live.db"
-            live_database.write_bytes(b"live database")
+            (source / "cms").mkdir(parents=True)
+            (source / "web").mkdir()
+            dependencies = Path(temporary) / "shared-deps/node_modules"
+            dependencies.mkdir(parents=True)
             user = type("User", (), {"pw_name": "ikpk-cms", "pw_uid": 0, "pw_gid": 0})()
-            with patch.object(rehearsal_host.pwd, "getpwnam", return_value=user), \
-                 patch.object(rehearsal_host.os, "chown"), \
-                 patch.object(rehearsal_host, "_run_as_cms",
-                              side_effect=rehearsal_host.HostFailure("stop after artifact build")) as run_as_cms:
-                with self.assertRaisesRegex(rehearsal_host.HostFailure, "stop after artifact build"):
-                    rehearsal_host._install_migrated_database(
-                        {"cmsUser": "ikpk-cms", "cmsDatabase": str(live_database)}, source, "op", Path("/old/cms"))
+            calls = []
 
-            argv = run_as_cms.call_args.args[2]
-            self.assertEqual(argv[:2], ["/usr/bin/bash", str(source / "scripts/build-cms-artifact.sh")])
-            self.assertEqual(run_as_cms.call_args.kwargs["timeout"], 3600)
-            self.assertEqual(run_as_cms.call_args.kwargs["environment"],
-                             {"NODE_OPTIONS": "--max-old-space-size=1536"})
+            def run_as_cms(_config, cwd, argv, **kwargs):
+                calls.append((cwd, argv, kwargs))
+                if "build-cms-artifact.sh" in " ".join(argv):
+                    artifact = Path(argv[-1])
+                    artifact.mkdir(parents=True)
+                return ""
+
+            with patch.object(rehearsal_host, "_prepare_cms_build_dependencies", return_value=dependencies), \
+                 patch.object(rehearsal_host, "_validate_prepared_cms_candidate",
+                              return_value=(source, source / ".staging193-rehearsal/op/migration/cms-artifact", dependencies)), \
+                 patch.object(rehearsal_host.pwd, "getpwnam", return_value=user), \
+                 patch.object(rehearsal_host.os, "chown"), patch.object(rehearsal_host.os, "chmod"), \
+                 patch.object(rehearsal_host, "_run_as_cms", side_effect=run_as_cms):
+                rehearsal_host._prepare_cms_candidate(
+                    {"cmsUser": "ikpk-cms"}, source, "op", {"sourceSha": "a" * 40})
+
+            self.assertEqual(len(calls), 2)
+            self.assertEqual(calls[0][1], ["/usr/bin/npm", "ci", "--no-audit", "--no-fund"])
+            self.assertEqual(calls[0][0], source / "web")
+            self.assertEqual(calls[1][1][:2], ["/usr/bin/bash", str(source / "scripts/build-cms-artifact.sh")])
+            self.assertEqual(calls[1][2]["timeout"], 3600)
+            self.assertEqual(calls[1][2]["environment"], {"NODE_OPTIONS": "--max-old-space-size=1536"})
+            self.assertEqual(calls[1][2]["read_only_path"], dependencies)
+
+    def test_complete_cms_build_dependency_generation_is_reused_without_mutation(self):
+        with tempfile.TemporaryDirectory(prefix="ikpk-cms-build-deps-") as temporary:
+            root = Path(temporary)
+            source_cms = root / "source/cms"
+            source_cms.mkdir(parents=True)
+            lock = {"packages": {"node_modules/@strapi/strapi": {"version": "5.20.0"}}}
+            lock_bytes = json.dumps(lock, sort_keys=True).encode()
+            (source_cms / "package-lock.json").write_bytes(lock_bytes)
+            (source_cms / "package.json").write_text(json.dumps({"dependencies": {"@strapi/strapi": "5.20.0"}}))
+            release_root = root / "artifact/releases"
+            release_root.mkdir(parents=True)
+            config = {"releaseRoot": str(release_root), "cmsUser": getpass.getuser()}
+            lock_hash = hashlib.sha256(lock_bytes).hexdigest()
+            runtime = {"abi": "137", "platform": "linux", "arch": "x64"}
+            key = f"{lock_hash}-full-build-node24.1.0-linux-x64-abi137"
+            generation = root / "artifact/deps" / key
+            dependencies = generation / "node_modules"
+            strapi = dependencies / "@strapi/strapi"
+            strapi.mkdir(parents=True)
+            (generation / "package-lock.json").write_bytes(lock_bytes)
+            (strapi / "package.json").write_text(json.dumps({"version": "5.20.0"}))
+            expected = {"version": 1, "lockSha256": lock_hash, "profile": "full-build",
+                        "nodeVersion": "v24.1.0", "nodeAbi": "137", "platform": "linux",
+                        "architecture": "x64"}
+            (generation / ".complete").write_text(json.dumps(expected))
+            result = lambda stdout: subprocess.CompletedProcess([], 0, stdout=stdout, stderr="")
+            current_user = rehearsal_host.pwd.getpwnam(getpass.getuser())
+            before = {path.relative_to(generation).as_posix(): path.read_bytes()
+                      for path in generation.rglob("*") if path.is_file()}
+            with patch.object(rehearsal_host, "run", side_effect=[result("v24.1.0\n"),
+                         result(json.dumps(runtime)), result("v24.1.0\n"), result(json.dumps(runtime))]), \
+                 patch.object(rehearsal_host.pwd, "getpwnam", return_value=current_user), \
+                 patch.object(rehearsal_host, "_run_as_cms", side_effect=AssertionError("ready deps must not reinstall")):
+                reused = rehearsal_host._prepare_cms_build_dependencies(config, root / "source")
+
+            self.assertEqual(reused, dependencies.resolve())
+            self.assertEqual(key.split("-full-build-", 1)[0], lock_hash)
+            after = {path.relative_to(generation).as_posix(): path.read_bytes()
+                     for path in generation.rglob("*") if path.is_file()}
+            self.assertEqual(after, before)
 
     def test_packaged_cms_uploads_reuse_the_external_original_name_tree(self):
         with tempfile.TemporaryDirectory(prefix="ikpk-cms-media-link-") as temporary:
@@ -235,7 +350,7 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
             (release / "nested/asset").write_bytes(b"asset")
             self.assertEqual(len(rehearsal_host._tree_sha256(release)), 64)
 
-    def test_archive_sha256_length_reaches_real_extraction_and_retry_marker(self):
+    def test_source_archive_extraction_is_bound_to_operation_and_provenance(self):
         sha_value = "a" * 40
         provenance = {"sourceSha": sha_value, "ref": "refs/heads/dev", "workflow": "Tests",
                       "workflowName": "Tests", "headBranch": "dev", "event": "push", "runId": 7,
@@ -255,26 +370,9 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
             releases.mkdir()
             config = {"releaseRoot": str(releases), "allowedSourceRef": "refs/heads/dev",
                       "cmsUser": getpass.getuser(), "backupRoot": str(root / "backups")}
-            operation_backup = Path(config["backupRoot"]) / "source-op"
-            operation_backup.mkdir(parents=True)
-            (operation_backup / "manifest.json").write_text("{}", encoding="utf-8")
-            args = Namespace(operation_id="source-op", source_sha=sha_value,
-                             provenance_b64=base64.b64encode(json.dumps(provenance).encode()).decode(),
-                             offhost_sha256="b" * 64, archive_sha256=digest)
-
-            class Phase:
-                @staticmethod
-                def phase(_operation_id):
-                    return {"phase": "acquiring", "sourceSha": sha_value}
-
-            with patch.object(rehearsal_host, "_start_acquisition", return_value={"phase": "acquiring"}), \
-                 patch.object(rehearsal_host, "_backup_manifest", return_value={"archiveSha256": "b" * 64}), \
-                 patch.object(rehearsal_host, "_run_as_cms", side_effect=rehearsal_host.HostFailure("stop after extract")), \
-                 patch.object(rehearsal_host, "sys") as host_sys:
-                host_sys.stdin.buffer.read.return_value = payload
-                with self.assertRaisesRegex(rehearsal_host.HostFailure, "stop after extract"):
-                    rehearsal_host._cms_update(config, Phase(), args)
             candidate = releases / f"{sha_value}-source-op"
+            self.assertEqual(rehearsal_host._extract_source_archive(config, sha_value, "source-op", payload,
+                digest, provenance), candidate.resolve())
             self.assertEqual((candidate / "candidate.txt").read_bytes(), b"candidate")
             self.assertEqual(json.loads((candidate / ".ikpk-rehearsal-ci.json").read_text()), provenance)
             self.assertEqual(rehearsal_host._extract_source_archive(config, sha_value, "source-op", payload,
@@ -285,14 +383,107 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
             (second / "cms/index.js").write_bytes(b"second operation build output")
             self.assertEqual((candidate / "cms/index.js").read_bytes(), old_cms)
             self.assertNotEqual(second, candidate)
-            bad_args = Namespace(**{**vars(args), "archive_sha256": digest[:40]})
-            with patch.object(rehearsal_host, "_start_acquisition", return_value={"phase": "acquiring"}), \
+
+    def test_new_cms_command_prepares_before_journal_fence_and_backup(self):
+        with tempfile.TemporaryDirectory(prefix="ikpk-cms-prefence-order-") as temporary:
+            root = Path(temporary)
+            releases = root / "releases"
+            releases.mkdir()
+            (root / "state").mkdir()
+            state = RehearsalState(root / "state")
+            archive = b"admitted source"
+            sha_value = "a" * 40
+            provenance = {"sourceSha": sha_value, "ref": "refs/heads/dev", "workflow": "Tests",
+                          "workflowName": "Tests", "headBranch": "dev", "event": "push", "runId": 7,
+                          "attempt": 1, "repository": "pgorbachev/ikpk", "runUrl": "https://github.com/pgorbachev/ikpk/actions/runs/7"}
+            config = {"releaseRoot": str(releases), "allowedSourceRef": "refs/heads/dev",
+                      "cmsUser": getpass.getuser(), "backupRoot": str(root / "backups")}
+            args = Namespace(operation_id="prefence-op", source_sha=sha_value,
+                             provenance_b64=base64.b64encode(json.dumps(provenance).encode()).decode(),
+                             archive_sha256=sha(archive), offhost_sha256=None)
+            events = []
+            source_root = releases / f"{sha_value}-{args.operation_id}"
+            (root / "backups").mkdir()
+
+            def prepare(_config, candidate, operation_id, _provenance):
+                events.append("prepare")
+                self.assertEqual(operation_id, args.operation_id)
+                self.assertFalse(state.journal_path.exists())
+                self.assertFalse(state.marker_path.exists())
+                return candidate / ".staging193-rehearsal" / operation_id / "migration/cms-artifact"
+
+            def start(_config, operation_state, operation_id, source_sha):
+                events.append("start")
+                operation_state.begin(operation_id, source_sha, {"cmsPath": "/old/cms"})
+                operation_state.confirm_fence(operation_id, lambda: True)
+                return operation_state.phase(operation_id)
+
+            def backup(_config, operation_id):
+                events.append("backup")
+                directory = Path(config["backupRoot"]) / operation_id
+                directory.mkdir()
+                (directory / "manifest.json").write_text(json.dumps({"archiveSha256": "b" * 64}), encoding="utf-8")
+                return {"archiveSha256": "b" * 64}
+
+            host_stdin = type("HostStdin", (), {"buffer": io.BytesIO(archive)})()
+            with patch.object(rehearsal_host.sys, "stdin", host_stdin), \
+                 patch.object(rehearsal_host, "_extract_source_archive",
+                              side_effect=lambda *_args: events.append("extract") or source_root), \
+                 patch.object(rehearsal_host, "_prepare_cms_candidate", side_effect=prepare), \
+                 patch.object(rehearsal_host, "_start_acquisition", side_effect=start), \
+                 patch.object(rehearsal_host, "_verify_fence", side_effect=lambda *_args: events.append("verify")), \
+                 patch.object(rehearsal_host, "_backup", side_effect=backup):
+                result = rehearsal_host._cms_update(config, state, args)
+
+            self.assertEqual(events, ["extract", "prepare", "start", "verify", "backup"])
+            self.assertTrue(result["offhostBackupRequired"])
+            self.assertEqual(result["backupSha256"], "b" * 64)
+
+    def test_offhost_followup_reuses_prepared_candidate_without_npm_or_build(self):
+        with tempfile.TemporaryDirectory(prefix="ikpk-cms-prefence-followup-") as temporary:
+            root = Path(temporary)
+            state_root = root / "state"
+            state_root.mkdir()
+            state = RehearsalState(state_root)
+            operation_id, sha_value = "prepared-op", "a" * 40
+            state.begin(operation_id, sha_value, {"cmsPath": "/old/cms"})
+            state.confirm_fence(operation_id, lambda: True)
+            backup_root = root / "backups"
+            manifest_dir = backup_root / operation_id
+            manifest_dir.mkdir(parents=True)
+            (manifest_dir / "manifest.json").write_text(json.dumps({"archiveSha256": "b" * 64}), encoding="utf-8")
+            provenance = {"sourceSha": sha_value, "ref": "refs/heads/dev", "workflow": "Tests",
+                          "workflowName": "Tests", "headBranch": "dev", "event": "push", "runId": 7,
+                          "attempt": 1, "repository": "pgorbachev/ikpk", "runUrl": "https://github.com/pgorbachev/ikpk/actions/runs/7"}
+            config = {"releaseRoot": str(root / "releases"), "backupRoot": str(backup_root),
+                      "cmsDatabase": str(root / "live.db"), "cmsUnit": "ikpk-cms-prototype193.service",
+                      "cmsHealthUrl": "http://127.0.0.1:1338/_health"}
+            source_root = root / "candidate"
+            args = Namespace(operation_id=operation_id, source_sha=sha_value,
+                             provenance_b64=base64.b64encode(json.dumps(provenance).encode()).decode(),
+                             archive_sha256=None, offhost_sha256="b" * 64)
+            events = []
+            host_stdin = type("HostStdin", (), {"buffer": type("NoRead", (), {
+                "read": lambda *_args: self.fail("off-host follow-up must not read a new archive")})()})()
+            with patch.object(rehearsal_host.sys, "stdin", host_stdin), \
+                 patch.object(rehearsal_host, "_candidate_root", return_value=source_root), \
+                 patch.object(rehearsal_host, "_validate_prepared_cms_candidate",
+                              side_effect=lambda *_args: events.append("validate-prepared") or (source_root, source_root / "artifact", source_root / "deps/node_modules")), \
+                 patch.object(rehearsal_host, "_prepare_cms_candidate",
+                              side_effect=AssertionError("follow-up must not rebuild or install")), \
+                 patch.object(rehearsal_host, "_start_acquisition", return_value=state.phase(operation_id)), \
+                 patch.object(rehearsal_host, "_run_as_cms", side_effect=AssertionError("follow-up must not run npm")), \
+                 patch.object(rehearsal_host, "_verify_fence"), \
                  patch.object(rehearsal_host, "_backup_manifest", return_value={"archiveSha256": "b" * 64}), \
-                 patch.object(rehearsal_host, "_run_as_cms", side_effect=AssertionError("must reject before install")), \
-                 patch.object(rehearsal_host, "sys") as host_sys:
-                host_sys.stdin.buffer.read.return_value = payload
-                with self.assertRaisesRegex(rehearsal_host.HostFailure, "source archive SHA-256"):
-                    rehearsal_host._cms_update(config, Phase(), bad_args)
+                 patch.object(rehearsal_host, "_install_migrated_database",
+                              return_value=(root / "candidate.db", root / "artifact", "c" * 64)), \
+                 patch.object(rehearsal_host, "_create_capture_bundle", return_value=root / "capture"), \
+                 patch.object(rehearsal_host, "_activate_cms", return_value={"db": "accepted"}), \
+                 patch.object(rehearsal_host, "_wait_health"):
+                result = rehearsal_host._cms_update(config, state, args)
+
+            self.assertEqual(events, ["validate-prepared"])
+            self.assertEqual(result["phase"], "cms-activated")
 
     def test_static_build_uses_capture_snapshot_for_prepare_and_build(self):
         with tempfile.TemporaryDirectory(prefix="ikpk-static-capture-env-") as temporary:
@@ -316,10 +507,13 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
                     (dist / "index.html").write_text("candidate", encoding="utf-8")
                 return ""
 
-            with patch.object(rehearsal_host, "_run_as_cms", side_effect=run_build):
+            with patch.object(rehearsal_host, "_validate_prepared_web_dependencies"), \
+                 patch.object(rehearsal_host, "_run_as_cms", side_effect=run_build):
                 dist, _ = rehearsal_host._build_static({"staticReleaseRoot": str(retained),
                                                         "siteBaseUrl": "https://193.124.115.99"}, source,
                                                        Path(temporary) / "capture")
+            self.assertFalse(any(argv[:2] == ["/usr/bin/npm", "ci"] for argv, _ in calls),
+                             "static build must reuse web dependencies prepared before the fence")
             expected = {"CONTENT_SNAPSHOT_DIR": str(snapshot_dir), "DEMO_PROFILE": "demo193",
                         "DEPLOY_MODE": "stand", "PAYMENT_ROLE": "ci", "DEMO_FORMS": "stub",
                         "CHAT_LOADER_SRC": "none", "CHAT_OFFLINE_MESSAGE": "absent",
