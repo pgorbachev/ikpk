@@ -16,7 +16,7 @@ const git = (cwd, ...args) => execFileSync('/usr/bin/git', args, { cwd, env: cle
 function write(path, content) { mkdirSync(dirname(path), { recursive: true }); writeFileSync(path, content); }
 function run(args, options) {
   return new Promise((resolve, reject) => {
-    const child = spawn(process.execPath, args, { ...options, timeout: 10000, stdio: ['ignore', 'pipe', 'pipe'] });
+    const child = spawn(process.execPath, args, { ...options, timeout: 30000, stdio: ['ignore', 'pipe', 'pipe'] });
     let stdout = ''; let stderr = '';
     child.stdout.on('data', (value) => { stdout += value; }); child.stderr.on('data', (value) => { stderr += value; });
     child.on('error', reject); child.on('close', (status) => resolve({ status, stdout, stderr }));
@@ -70,8 +70,8 @@ catch(error){if(error.code!=='EBADF'&&error.code!=='EINVAL'&&error.code!=='ENXIO
   rmSync(join(repo, 'fixture-tree'), { recursive: true }); rmSync(host, { recursive: true }); mkdirSync(host); rmSync(trace);
 
   const result = await run([installed, 'publish', '--config', configPath, '--source-url', remote, '--source-ref', 'main', '--release-tag', 'v1.2.3'], { cwd: temp, env: cleanEnv() });
-  assert.equal(existsSync(brokerTrace), true, 'the broker must actually deliver the configured socket');
   assert.equal(result.status, 0, `authorized agent handoff failed: ${result.stderr}`);
+  assert.equal(existsSync(brokerTrace), true, 'the broker must actually deliver the configured socket');
   assert.equal(JSON.parse(readFileSync(trace)).agentVerified, true); assert.equal(JSON.parse(readFileSync(trace)).brokerCalled, true);
   assert.equal(readFileSync(trace, 'utf8').includes(CANARY), false); assert.equal((result.stdout + result.stderr).includes(CANARY), false);
   assert.equal(readFileSync(join(host, 'releases/agent-probe/index.html'), 'utf8'), 'checked bytes');

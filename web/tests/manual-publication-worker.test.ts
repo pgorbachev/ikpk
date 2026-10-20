@@ -168,6 +168,16 @@ describe('concrete publication worker integration', () => {
     expect(f.state.appendPublication).not.toHaveBeenCalled();
   });
 
+  it('a tag deleted during the final GitHub check is observed before activation', async () => {
+    const f = await fixture();
+    f.ci.mockResolvedValueOnce(f.evidence).mockImplementationOnce(async () => {
+      git(f.cwd, 'push', 'origin', ':refs/tags/v1.2.3');
+      return f.evidence;
+    });
+    await expect(f.run()).rejects.toThrow('canonical release changed');
+    expect(f.state.appendPublication).not.toHaveBeenCalled();
+  });
+
   it.each(['PUBLICATION_CONFIG', 'PUBLICATION_LAUNCHER', 'PUBLICATION_SOURCE_SHA', 'PUBLICATION_RELEASE_TAG'] as const)('missing %s fails before install or transfer', async (name) => {
     const f = await fixture(); delete f.env[name]; await expect(f.run()).rejects.toThrow();
     expect(f.installs).toHaveLength(0); expect(f.ci).not.toHaveBeenCalled(); expect(f.transport).not.toHaveBeenCalled();

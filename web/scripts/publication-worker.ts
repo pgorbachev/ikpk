@@ -121,11 +121,10 @@ export async function runPublicationWorker({ argv, env, cwd }: WorkerInput) {
           return { report, snapshot: readPublicationSnapshot(snapshotDir) };
         },
         async readMain() {
-          const main = readMain();
           // Local build/checks can take a while: revoked releases or a new red CI
           // attempt must still stop activation after an initially successful admission.
           await readCiEvidence({ commit, releaseTag: env.PUBLICATION_RELEASE_TAG!, token: env.GH_TOKEN });
-          return main;
+          return readMain();
         }, state,
         digest: (treeDir) => digestTree(treeDir, artifactFiles(treeDir)),
         createTransport: ({ authorize }) => createSshTransport({ ...transportConfig, authorize }),
