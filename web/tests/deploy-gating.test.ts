@@ -13,6 +13,7 @@ import { canBeTrue, evaluateToValue, isAlwaysFalse, usesAlways } from './helpers
 // Общие guards оставшихся workflow_run (Dependabot) сохраняются.
 const { OWN_REPO, FORK_REPO, TESTED_SHA } = CONTEXT_CONSTANTS;
 const GATED_WORKFLOW_NAME = 'Tests';
+const RELEASE_WORKFLOW_NAMES = ['Tests', 'Lint and Typecheck', 'Security', 'Lighthouse CI'];
 const asList = (v: unknown): string[] =>
   Array.isArray(v) ? v.map(String) : typeof v === 'string' ? [v] : [];
 const workflows = loadWorkflows();
@@ -198,7 +199,7 @@ describe('гейт публикации: документация', () => {
   // ФАКТИЧЕСКОМУ составу `.github/workflows`, а не по списку известных имён. Так
   // добавленный workflow, о котором документация промолчала, роняет проверку.
   it('документация называет, какие проверки входят в гейт и какие нет', () => {
-    const gated = new Set(requiredTestWorkflows(workflows).map((wf) => wf.displayName));
+    const gated = new Set(RELEASE_WORKFLOW_NAMES);
     const others = workflows
       .map((wf) => wf.displayName);
     const notGated = others.filter((n) => !gated.has(n));

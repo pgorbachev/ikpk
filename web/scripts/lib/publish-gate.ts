@@ -21,6 +21,9 @@ export interface CiEvidence {
   repository: string; workflow: string; event: string; branch: string; commit: string;
   runId: number; conclusion: CheckConclusion; executedTests: number;
   jobs: { name: string; conclusion: CheckConclusion }[];
+  // Optional only for historical records used by rollback; new admission always supplies these.
+  release?: { tag: string; id: number; publishedAt: string };
+  workflows?: { workflow: string; runId: number; conclusion: CheckConclusion }[];
 }
 export interface LocalChecks {
   commit: string; snapshotId: string; destinationId: string; treeDigest: string;

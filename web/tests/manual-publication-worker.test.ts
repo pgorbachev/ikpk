@@ -25,7 +25,7 @@ async function fixture() {
   const configPath = join(protectedDir, 'config.json'); const knownHostsFile = join(protectedDir, 'known_hosts');
   write(join(cwd, 'web/package.json'), '{"private":true}'); write(join(cwd, 'web/package-lock.json'), '{}');
   git(cwd, 'init', '--initial-branch=main'); git(cwd, 'add', '.'); git(cwd, 'commit', '-m', 'fixture canonical source');
-  git(temp, 'clone', '--bare', cwd, remote); git(cwd, 'remote', 'add', 'origin', remote);
+  git(temp, 'clone', '--bare', cwd, remote); git(cwd, 'remote', 'add', 'origin', remote); git(cwd, 'tag', 'v1.2.3'); git(cwd, 'push', 'origin', 'refs/tags/v1.2.3');
   const commit = git(cwd, 'rev-parse', 'HEAD');
   mkdirSync(protectedDir); copyFileSync(join(ROOT, 'scripts/publication-launcher.mjs'), launcher); chmodSync(launcher, 0o700);
   write(knownHostsFile, 'fixture-host-key\n');
@@ -35,7 +35,7 @@ async function fixture() {
   function saveConfig() { write(configPath, JSON.stringify(config)); chmodSync(configPath, 0o600); }
   saveConfig();
   const env: Record<string, string> = { PATH: process.env.PATH!, HOME: temp, DEPLOY_MODE: config.deployMode,
-    PUBLICATION_CONFIG: configPath, PUBLICATION_LAUNCHER: launcher, PUBLICATION_SOURCE_SHA: commit, PUBLICATION_DESTINATION_ID: 'stand',
+    PUBLICATION_CONFIG: configPath, PUBLICATION_LAUNCHER: launcher, PUBLICATION_SOURCE_SHA: commit, PUBLICATION_RELEASE_TAG: 'v1.2.3', PUBLICATION_DESTINATION_ID: 'stand',
     GH_TOKEN: CANARY, CMS_TOKEN: CANARY, CMS_URL: 'https://cms.test.invalid', SSH_AUTH_SOCK: join(protectedDir, CANARY),
     SSH_KEY: CANARY, IKPK_SECRET: CANARY, NODE_OPTIONS: '--import=evil.mjs', NPM_CONFIG_USERCONFIG: '/unsafe/npmrc',
     SNAPSHOT_SOURCE: 'pinned', CONTENT_SNAPSHOT_DIR: '/unsafe/snapshot', PUBLICATION_REPORT: '/unsafe/report.json' };
@@ -150,7 +150,25 @@ describe('concrete publication worker integration', () => {
     expect(f.ci).toHaveBeenCalledTimes(1); expect(f.checks).not.toHaveBeenCalled(); expect(f.transport).not.toHaveBeenCalled();
   });
 
-  it.each(['PUBLICATION_CONFIG', 'PUBLICATION_LAUNCHER', 'PUBLICATION_SOURCE_SHA'] as const)('missing %s fails before install or transfer', async (name) => {
+  it('a release revoked or CI turned red during preparation cannot activate the staged tree', async () => {
+    const f = await fixture();
+    f.ci.mockResolvedValueOnce(f.evidence).mockRejectedValueOnce(new Error('release revoked'));
+    await expect(f.run()).rejects.toThrow('release revoked');
+    expect(f.ci).toHaveBeenCalledTimes(2);
+    expect(f.stage).toHaveBeenCalledTimes(1);
+    expect(f.state.appendPublication).not.toHaveBeenCalled();
+  });
+
+  it('a deleted canonical release tag stops activation after local preparation', async () => {
+    const f = await fixture();
+    f.stage.mockImplementationOnce(async () => {
+      git(f.cwd, 'push', 'origin', ':refs/tags/v1.2.3');
+    });
+    await expect(f.run()).rejects.toThrow('canonical release changed');
+    expect(f.state.appendPublication).not.toHaveBeenCalled();
+  });
+
+  it.each(['PUBLICATION_CONFIG', 'PUBLICATION_LAUNCHER', 'PUBLICATION_SOURCE_SHA', 'PUBLICATION_RELEASE_TAG'] as const)('missing %s fails before install or transfer', async (name) => {
     const f = await fixture(); delete f.env[name]; await expect(f.run()).rejects.toThrow();
     expect(f.installs).toHaveLength(0); expect(f.ci).not.toHaveBeenCalled(); expect(f.transport).not.toHaveBeenCalled();
   });

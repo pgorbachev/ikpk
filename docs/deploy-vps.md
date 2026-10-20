@@ -8,6 +8,15 @@
 Установка проверяемой ревизии CMS и дерева кнопки «Обновить сайт» на демостенд — без
 публикации сайта — описана отдельно: [runbook установки на демостенд](runbook-stand-demo-install.md).
 
+## Допуск релизной версии
+
+Новая установка кода сайта/CMS и публикация выполняются только из опубликованного
+GitHub Release `vX.Y.Z` с зелёными Tests, Lint/Typecheck, Security и Lighthouse на
+точном SHA тега. Draft/Prerelease и один тег не подходят. Порядок создания версии,
+preflight перед установкой и совместимость отката — [релизный процесс](release-process.md).
+Это правило от 20.10.2026 заменяет прежнее разрешение публиковать при одном зелёном
+`Tests`. Сначала CI и опубликованный релиз, затем явный деплой.
+
 ## Готовность назначения
 
 До настоящей публикации нужны все предусловия задач 1.4–1.7 change
@@ -72,18 +81,25 @@ CRM-режим и оплата независимы. `deployMode: prod` напр
 ```bash
 node /opt/ikpk-publication/stand/publication-launcher.mjs publish \
   --config /opt/ikpk-publication/stand/config.json \
-  --source-url git@github.com:pgorbachev/ikpk.git --source-ref main
+  --source-url git@github.com:pgorbachev/ikpk.git --source-ref main \
+  --release-tag v1.0.0
 ```
 
 Launcher подтверждает канонический `refs/heads/main` до выдачи учётных данных и запускает
 его чистую копию. Допустимый локальный `--source-dir` также должен точно соответствовать
 этому источнику; ветка PR, tag `main`, dirty checkout и произвольный worker не подходят.
+Указанный `--release-tag` должен существовать в каноническом репозитории и вести на
+тот же SHA, что и текущий main. Опубликованный GitHub Release проверяет worker;
+перенос тега и изменение main во время подготовки дают отказ.
 
-Обязательный CI — `.github/workflows/test.yml` основного репозитория для **этого SHA**,
+Релизный CI включает `test.yml`, `lint.yml`, `security.yml` и `lighthouse.yml`
+основного репозитория для **этого SHA**. Для `test.yml` допустимы
 события push/schedule основной ветки. Все пять джобов должны завершиться успехом:
 Capture content snapshot, Unit and build tests, Dependency update invariants,
 Scripts unit tests, Playwright smoke (desktop + mobile). Пропущенный джоб и зелёный PR
-не заменяют этот вердикт.
+не заменяют этот вердикт. Остальные три workflow также должны иметь последний
+успешный main-прогон и успех всех обязательных jobs; подробный перечень —
+[релизный процесс](release-process.md).
 
 Worker снимает один живой снимок, строит одно дерево и выполняет пять групп:
 снимок/журнал, сборка/содержимое, режим назначения, browser smoke desktop/mobile,

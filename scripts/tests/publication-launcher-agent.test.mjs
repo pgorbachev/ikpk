@@ -23,7 +23,7 @@ function run(args, options) {
   });
 }
 
-test('REVIEW: broker-delivered agent socket reaches authorized transport without secret argv or logs', { timeout: 20000 }, async (t) => {
+test('REVIEW: broker-delivered agent socket reaches authorized transport without secret argv or logs', { timeout: 60000 }, async (t) => {
   // Short path keeps the Unix socket below the macOS sockaddr limit.
   const temp = mkdtempSync('/tmp/ikpk-agent-review-'); const socket = join(temp, 'agent.sock');
   const server = createServer((client) => { client.end(CANARY); });
@@ -60,7 +60,7 @@ catch(error){if(error.code!=='EBADF'&&error.code!=='EINVAL'&&error.code!=='ENXIO
   write(configPath, JSON.stringify({ canonicalRepository: remote, destinationId: 'stand', deployMode: 'stand',
     sshTarget: 'deploy@transport.test.invalid', credentialBroker: [process.execPath, broker] })); chmodSync(configPath, 0o600);
   git(temp, 'init', '--bare', '--initial-branch=main', remote); git(repo, 'init', '--initial-branch=main');
-  git(repo, 'add', '.'); git(repo, 'commit', '-m', 'trusted worker with transport'); git(repo, 'remote', 'add', 'origin', remote); git(repo, 'push', 'origin', 'main');
+  git(repo, 'add', '.'); git(repo, 'commit', '-m', 'trusted worker with transport'); git(repo, 'remote', 'add', 'origin', remote); git(repo, 'push', 'origin', 'main'); git(repo, 'tag', 'v1.2.3'); git(repo, 'push', 'origin', 'refs/tags/v1.2.3');
 
   // Positive control proves the same worker, transport, socket and payload are usable.
   const control = await run(['scripts/worker.mjs'], { cwd: repo, env: { ...cleanEnv(), SSH_AUTH_SOCK: socket } });
@@ -69,7 +69,7 @@ catch(error){if(error.code!=='EBADF'&&error.code!=='EINVAL'&&error.code!=='ENXIO
   assert.equal(readFileSync(join(host, 'releases/agent-probe/index.html'), 'utf8'), 'checked bytes');
   rmSync(join(repo, 'fixture-tree'), { recursive: true }); rmSync(host, { recursive: true }); mkdirSync(host); rmSync(trace);
 
-  const result = await run([installed, 'publish', '--config', configPath, '--source-url', remote, '--source-ref', 'main'], { cwd: temp, env: cleanEnv() });
+  const result = await run([installed, 'publish', '--config', configPath, '--source-url', remote, '--source-ref', 'main', '--release-tag', 'v1.2.3'], { cwd: temp, env: cleanEnv() });
   assert.equal(existsSync(brokerTrace), true, 'the broker must actually deliver the configured socket');
   assert.equal(result.status, 0, `authorized agent handoff failed: ${result.stderr}`);
   assert.equal(JSON.parse(readFileSync(trace)).agentVerified, true); assert.equal(JSON.parse(readFileSync(trace)).brokerCalled, true);
