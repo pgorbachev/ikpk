@@ -296,6 +296,9 @@ function boot(formEl: HTMLFormElement) {
       if (el.name === 'website' || !el.name) continue;
       data[el.name] = el.type === 'checkbox' ? el.checked : el.value;
     }
+    // Места в DOM больше нет; при повторе сохраняем его только из снимка этой попытки.
+    const venue = readFields()[activeRequestId]?.venue;
+    if (typeof venue === 'string') data.venue = venue;
     return data;
   }
 
@@ -570,7 +573,8 @@ function boot(formEl: HTMLFormElement) {
   function payload(requestId: string, extra: Record<string, unknown> = {}) {
     const amount = Number((formEl.querySelector<HTMLInputElement>('[name="amount"]')?.value ?? '').trim());
     const start = (formEl.querySelector<HTMLInputElement>('[name="startDate"]')?.value ?? '').trim();
-    const venue = (formEl.querySelector<HTMLInputElement>('[name="venue"]')?.value ?? '').trim();
+    const savedVenue = readFields()[requestId]?.venue;
+    const venue = typeof savedVenue === 'string' ? savedVenue.trim() : '';
     return {
       requestId,
       firstName: (formEl.querySelector<HTMLInputElement>('[name="firstName"]')?.value ?? '').trim(),

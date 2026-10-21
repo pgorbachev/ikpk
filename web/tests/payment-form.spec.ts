@@ -1394,3 +1394,269 @@ async function submitForVerification(page: Page): Promise<{ requestId: string }>
   await expect(page.locator(STATE('verification_required'))).toBeVisible();
   return sent;
 }
+
+
+// remove-payment-venue: exercise the built stand client and its existing storage protocol.
+// Keyboard activation is a real user path. It also avoids this macOS headless shell's
+// missing animation frames, which prevent Playwright's pointer stability check completing.
+type VenueFields = Record<string, string | boolean>;
+type VenuePost = { requestId: string; venue: string | null; duplicateConfirmationToken?: string; duplicateConfirmed?: boolean };
+const legacyVenueFields = (venue: string): VenueFields => ({
+  firstName: 'Иван', lastName: 'Петров', seminar: 'Модуль 1', amount: '1',
+  startDate: '', venue, email: 'ivan@example.com', phone: '79111234567', consent: true,
+});
+
+async function keyboardFocus(page: Page, selector: string) {
+  const target = page.locator(selector);
+  await expect(target).toHaveCount(1);
+  await expect(target).toBeVisible();
+  await expect(target).toBeEnabled();
+  for (let i = 0; i < 100; i += 1) {
+    if (await target.evaluate((el) => el === document.activeElement)) break;
+    await page.keyboard.press('Tab');
+  }
+  await expect(target).toBeFocused();
+}
+
+async function keyboardActivate(page: Page, selector: string) {
+  await keyboardFocus(page, selector);
+  await page.keyboard.press('Enter');
+}
+
+async function venueConsent(page: Page) {
+  const selector = `${FORM} [name="consent"]`;
+  if (!(await page.locator(selector).isChecked())) {
+    await keyboardFocus(page, selector);
+    await page.keyboard.press('Space');
+  }
+  await expect(page.locator(selector)).toBeChecked();
+}
+
+async function fillVenueForm(page: Page) {
+  const fields = legacyVenueFields('');
+  for (const name of ['firstName', 'lastName', 'seminar', 'amount', 'email', 'phone']) {
+    await page.locator(`${FORM} [name="${name}"]`).fill(String(fields[name]));
+  }
+  await venueConsent(page);
+}
+
+async function openVenueForm(page: Page) {
+  await gotoOplata(page);
+  await keyboardActivate(page, `[${PAYMENT_ENTRY_ATTR}]`);
+  await expect(page.locator(FORM)).toBeVisible();
+}
+
+async function seedVenueHolds(page: Page, ids: string[], fields: Record<string, VenueFields>) {
+  await gotoOplata(page);
+  await page.evaluate(({ ids, fields, holdsKey, fieldsKey }) => {
+    localStorage.setItem(holdsKey, JSON.stringify(ids.map((requestId) => ({ requestId, createdAt: Date.now() }))));
+    sessionStorage.setItem(fieldsKey, JSON.stringify(fields));
+  }, { ids, fields, holdsKey: HOLDS_KEY, fieldsKey: FIELDS_SESSION_KEY });
+  await gotoOplata(page);
+}
+
+async function venueSnapshots(page: Page): Promise<Record<string, VenueFields>> {
+  return page.evaluate((key) => JSON.parse(sessionStorage.getItem(key) ?? '{}'), FIELDS_SESSION_KEY);
+}
+
+async function expectSavedVenue(page: Page, id: string, venue: string) {
+  await expect.poll(async () => String((await venueSnapshots(page))[id]?.venue ?? '').trim()).toBe(venue);
+  const local = await page.evaluate(() => Object.values(localStorage).join('\n'));
+  expect(local, 'historical venue leaked to persistent localStorage').not.toContain(venue);
+}
+
+async function resumeVenueForm(page: Page) {
+  if (!(await page.locator(FORM).isVisible())) {
+    await keyboardActivate(page, `[${PAYMENT_CONTINUE_ATTR}]`);
+  }
+  await expect(page.locator(FORM)).toBeVisible();
+}
+
+async function submitVenueForm(page: Page) {
+  await venueConsent(page);
+  await keyboardActivate(page, `${FORM} [type="submit"]`);
+}
+
+async function selectVenueHold(page: Page, id: string) {
+  await keyboardActivate(page, `[data-payment-attempt-id="${id}"] [data-payment-attempt-select]`);
+}
+
+test.describe('remove-payment-venue: built form and saved attempts', () => {
+  for (const width of [1280, 390]) {
+    test(`rendered stand form has seven data fields and no venue control, label or error at ${width}px`, async ({ page }) => {
+      await page.setViewportSize({ width, height: 844 });
+      await openVenueForm(page);
+      await expect(page.locator(`[${PAYMENT_ROLE_ATTR}="stand"]`)).toHaveCount(1);
+      for (const name of ['firstName', 'lastName', 'seminar', 'amount', 'startDate', 'email', 'phone']) {
+        await expect(page.locator(`${FORM} [name="${name}"]`)).toBeVisible();
+      }
+      await expect(page.locator(`${FORM} [name="venue"], #payment-venue, label[for="payment-venue"], #payment-err-venue`)).toHaveCount(0);
+      await page.keyboard.press('Escape');
+      await keyboardActivate(page, `[${PAYMENT_ENTRY_ATTR}]`);
+      await expect(page.locator(`${FORM} [name="venue"]`)).toHaveCount(0);
+    });
+  }
+
+  test('new attempt sends explicit null and retains the other payload fields', async ({ page }) => {
+    const posts: Record<string, unknown>[] = [];
+    await mockApi(page, (req) => {
+      if (req.method !== 'POST') return { status: 200, body: { status: 'pending' } };
+      const body = JSON.parse(req.postData ?? '{}') as Record<string, unknown>;
+      posts.push(body);
+      return { status: 503, body: { status: 'verification_required', requestId: body.requestId } };
+    });
+    await openVenueForm(page);
+    await fillVenueForm(page);
+    await submitVenueForm(page);
+    await expect(page.locator(STATE('verification_required'))).toBeVisible();
+    expect(posts).toHaveLength(1);
+    expect(posts[0]).toMatchObject({ firstName: 'Иван', lastName: 'Петров', seminar: 'Модуль 1', amount: 1,
+      startDate: null, venue: null, email: 'ivan@example.com', phone: '79111234567', consent: true });
+    expect(String(posts[0]?.requestId)).toMatch(UUID_RE);
+  });
+
+  for (const initial of ['pending', 'unknown']) {
+    test(`legacy ${initial} attempt preserves normalized venue through three POSTs and unknown restoration`, async ({ page }) => {
+      const id = randomUUID();
+      const posts: VenuePost[] = [];
+      let status = initial;
+      await mockApi(page, (req) => {
+        if (req.method !== 'POST') return { status: 200, body: { status } };
+        posts.push(JSON.parse(req.postData ?? '{}') as VenuePost);
+        return { status: 503, body: { status: 'verification_required', requestId: id } };
+      });
+      await seedVenueHolds(page, [id], { [id]: legacyVenueFields('  Москва  ') });
+      await expect(page.locator(STATE(initial))).toBeVisible();
+      for (let n = 1; n <= 3; n += 1) {
+        await resumeVenueForm(page);
+        await submitVenueForm(page);
+        await expect(page.locator(STATE('verification_required'))).toBeVisible();
+        expect(posts).toHaveLength(n);
+        expect(posts[n - 1]).toMatchObject({ requestId: id, venue: 'Москва' });
+        await expectSavedVenue(page, id, 'Москва');
+        if (n === 1) {
+          status = 'unknown';
+          await gotoOplata(page);
+          await expect(page.locator(STATE('unknown'))).toBeVisible();
+        }
+      }
+    });
+  }
+
+  test('legacy duplicate confirmation restores fields and preserves venue and the existing token protocol', async ({ page }) => {
+    const id = randomUUID();
+    const posts: VenuePost[] = [];
+    await mockApi(page, (req) => {
+      if (req.method !== 'POST') return { status: 200, body: { status: 'pending' } };
+      posts.push(JSON.parse(req.postData ?? '{}') as VenuePost);
+      return posts.length === 1
+        ? { status: 409, body: { status: 'duplicate_confirmation_required', confirmationToken: 'legacy-venue-token' } }
+        : { status: 503, body: { status: 'verification_required', requestId: id } };
+    });
+    await seedVenueHolds(page, [id], { [id]: legacyVenueFields('  Казань  ') });
+    await expect(page.locator(STATE('pending'))).toBeVisible();
+    await resumeVenueForm(page);
+    await submitVenueForm(page);
+    await expect(page.locator(STATE('duplicate_confirmation_required'))).toBeVisible();
+    await expect(page.locator(`${FORM} input`)).toHaveCount(0);
+    await expectSavedVenue(page, id, 'Казань');
+    await keyboardActivate(page, `[${PAYMENT_CONFIRM_DUPLICATE_ATTR}]`);
+    await expect(page.locator(STATE('verification_required'))).toBeVisible();
+    expect(posts).toHaveLength(2);
+    expect(posts[0]).toMatchObject({ requestId: id, venue: 'Казань' });
+    expect(posts[1]).toMatchObject({ requestId: id, venue: 'Казань', duplicateConfirmed: true,
+      duplicateConfirmationToken: 'legacy-venue-token' });
+    await expectSavedVenue(page, id, 'Казань');
+  });
+
+  test('two holds keep their own venue through canonical ID transfer and switching back', async ({ page }) => {
+    const a = randomUUID(), b = randomUUID(), canonical = randomUUID();
+    const posts: VenuePost[] = [];
+    await mockApi(page, (req) => {
+      if (req.method !== 'POST') return { status: 200, body: { status: 'pending' } };
+      const body = JSON.parse(req.postData ?? '{}') as VenuePost;
+      posts.push(body);
+      return { status: 503, body: { status: 'verification_required', requestId: body.requestId === a ? canonical : body.requestId } };
+    });
+    await seedVenueHolds(page, [a, b], { [a]: legacyVenueFields('  Москва '), [b]: legacyVenueFields(' Казань  ') });
+    await expect(page.locator('[data-payment-attempt]')).toHaveCount(2);
+    await selectVenueHold(page, a);
+    await resumeVenueForm(page);
+    await submitVenueForm(page);
+    await expect(page.locator(STATE('verification_required'))).toBeVisible();
+    await expectSavedVenue(page, canonical, 'Москва');
+    expect((await venueSnapshots(page))[a]).toBeUndefined();
+    await expectSavedVenue(page, b, 'Казань');
+    for (const [id, venue] of [[b, 'Казань'], [canonical, 'Москва']]) {
+      await selectVenueHold(page, id!);
+      await resumeVenueForm(page);
+      await submitVenueForm(page);
+      await expect(page.locator(STATE('verification_required'))).toBeVisible();
+      expect(posts.at(-1)).toMatchObject({ requestId: id, venue });
+      await expectSavedVenue(page, id!, venue!);
+    }
+    expect(posts.map((p) => p.requestId)).toEqual([a, b, canonical]);
+  });
+
+  test('canonical ID keeps its already available exact snapshot instead of the alias snapshot', async ({ page }) => {
+    const alias = randomUUID(), canonical = randomUUID();
+    const canonicalFields = legacyVenueFields('Москва');
+    const aliasFields = legacyVenueFields('  Москва  ');
+    await mockApi(page, (req) => req.method !== 'POST'
+      ? { status: 200, body: { status: 'pending' } }
+      : { status: 503, body: { status: 'verification_required', requestId: canonical } });
+    await seedVenueHolds(page, [canonical, alias], { [alias]: aliasFields, [canonical]: canonicalFields });
+    await expect(page.locator(STATE('pending'))).toBeVisible();
+    await resumeVenueForm(page);
+    await submitVenueForm(page);
+    await expect(page.locator(STATE('verification_required'))).toBeVisible();
+    const snapshots = await venueSnapshots(page);
+    expect(snapshots[canonical]).toEqual(canonicalFields);
+    expect(snapshots[alias]).toBeUndefined();
+  });
+
+  test('new attempt after legacy hold sends null without changing the old snapshot', async ({ page }) => {
+    const old = randomUUID();
+    const posts: VenuePost[] = [];
+    await mockApi(page, (req) => {
+      if (req.method !== 'POST') return { status: 200, body: { status: 'pending' } };
+      const body = JSON.parse(req.postData ?? '{}') as VenuePost;
+      posts.push(body);
+      return { status: 503, body: { status: 'verification_required', requestId: body.requestId } };
+    });
+    await seedVenueHolds(page, [old], { [old]: legacyVenueFields('  Москва  ') });
+    await expect(page.locator(STATE('pending'))).toBeVisible();
+    await keyboardActivate(page, `[${PAYMENT_OTHER_SEMINAR_ATTR}]`);
+    await fillVenueForm(page);
+    await submitVenueForm(page);
+    await expect(page.locator(STATE('verification_required'))).toBeVisible();
+    expect(posts).toHaveLength(1);
+    expect(posts[0]?.requestId).not.toBe(old);
+    expect(posts[0]?.venue).toBeNull();
+    await expectSavedVenue(page, old, 'Москва');
+  });
+
+  for (const snapshot of ['missing', 'without venue', 'blank venue']) {
+    test(`${snapshot}: retry sends null under the retained ID and preserves verification hold`, async ({ page }) => {
+      const id = randomUUID();
+      const posts: VenuePost[] = [];
+      await mockApi(page, (req) => {
+        if (req.method !== 'POST') return { status: 200, body: { status: 'verification_required' } };
+        posts.push(JSON.parse(req.postData ?? '{}') as VenuePost);
+        return { status: 503, body: { status: 'verification_required', requestId: id } };
+      });
+      const fields = legacyVenueFields('   ');
+      if (snapshot === 'without venue') delete fields.venue;
+      await seedVenueHolds(page, [id], snapshot === 'missing' ? {} : { [id]: fields });
+      await expect(page.locator(STATE('verification_required'))).toBeVisible();
+      await resumeVenueForm(page);
+      await fillVenueForm(page);
+      await submitVenueForm(page);
+      await expect(page.locator(STATE('verification_required'))).toBeVisible();
+      expect(posts).toHaveLength(1);
+      expect(posts[0]).toMatchObject({ requestId: id, venue: null });
+      const holds = await page.evaluate((key) => JSON.parse(localStorage.getItem(key) ?? '[]'), HOLDS_KEY);
+      expect(holds).toEqual([expect.objectContaining({ requestId: id })]);
+    });
+  }
+});

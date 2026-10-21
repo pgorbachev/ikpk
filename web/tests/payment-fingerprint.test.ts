@@ -5,6 +5,7 @@ import {
   TEST_HMAC_CURRENT_VERSION,
   prodEnv,
   validPayload,
+  fingerprintOf,
 } from './helpers/payment-contract';
 import {
   jsonOf,
@@ -521,4 +522,44 @@ describe('3.10a-6 журнал «нужна сверка»', () => {
     expect(after?.verificationAt ?? null).toBe(before?.verificationAt ?? null);
     expect(svc.readJournal().length).toBe(journalBefore);
   });
+});
+
+// Accepted remove-payment-venue boundary: seven matching fields do not make a full
+// fingerprint match when legacy venue is nonempty and the updated client sends null.
+describe('remove-payment-venue: bounded legacy cross-ID exception', () => {
+  for (const historicalStatus of ['pending', 'unknown', 'succeeded'] as const) {
+    it(`${historicalStatus}: legacy nonempty venue and new null can create separately; full matches and same IDs stay guarded`, async () => {
+      svc = await startPaymentService({ env: prodEnv() });
+      const legacy = validPayload({ venue: 'Москва' });
+      expect((await jsonOf(await postPayments(svc.url, legacy))).status).toBe(201);
+      svc.writeRecords(svc.readRecords().map((record) => ({
+        ...record,
+        status: historicalStatus,
+        ...(historicalStatus === 'succeeded' ? { confirmedAt: new Date().toISOString() } : {}),
+      })));
+      const updated = { ...legacy, requestId: randomUUID(), venue: null };
+      const separate = await jsonOf(await postPayments(svc.url, updated));
+      expect(separate.status).toBe(201);
+      expect(separate.body).toMatchObject({ status: 'created' });
+      expect(svc.yookassa.creates).toHaveLength(2);
+      const stored = svc.readRecords();
+      expect(stored.find((record) => record.requestId === legacy.requestId)).toMatchObject({
+        fingerprint: fingerprintOf(legacy, TEST_HMAC_CURRENT), keyVersion: TEST_HMAC_CURRENT_VERSION,
+      });
+      expect(stored.find((record) => record.requestId === updated.requestId)).toMatchObject({
+        fingerprint: fingerprintOf(updated, TEST_HMAC_CURRENT), keyVersion: TEST_HMAC_CURRENT_VERSION,
+      });
+
+      const exactLegacy = await jsonOf(await postPayments(svc.url, { ...legacy, requestId: randomUUID() }));
+      expect(exactLegacy.status).toBe(historicalStatus === 'succeeded' ? 409 : 503);
+      expect(exactLegacy.body).toMatchObject({ status: historicalStatus === 'succeeded'
+        ? 'duplicate_confirmation_required' : 'verification_required' });
+      const sameId = await jsonOf(await postPayments(svc.url, legacy));
+      expect(sameId.status).toBe(200);
+      expect(sameId.body).toMatchObject({ status: historicalStatus === 'succeeded' ? 'already_paid' : 'created' });
+      expect(svc.yookassa.creates).toHaveLength(2);
+      expect(svc.outbound.length).toBeGreaterThan(0);
+      expect(svc.outbound.every((request) => new URL(request.url).origin === new URL(svc!.yookassa.url).origin)).toBe(true);
+    });
+  }
 });
