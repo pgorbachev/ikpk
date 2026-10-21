@@ -1,0 +1,8 @@
+{
+  "command": "CHAT_LOADER_SRC=none npm --prefix web run test:build -- --maxWorkers=1",
+  "exitCode": 0,
+  "infraOutcome": "completed; 64 MiB guard did not fire",
+  "availableKiBBefore": 567976,
+  "availableKiBAfter": 557652,
+  "log": "docs/evidence/chat-entry-visibility/fresh-test-build.log"
+}

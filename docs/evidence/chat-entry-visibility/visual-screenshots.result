@@ -1,0 +1,24 @@
+{
+  "command": "node --import <web/node_modules/tsx/dist/loader.mjs> /private/tmp/chat-entry-visibility-capture-20261021.mjs",
+  "exitCode": 0,
+  "fixture": "fresh non-demo preview role, chat stub, local Pagefind; temporary probe disposed after capture",
+  "route": "/raspisanie-i-tseny",
+  "screenshots": 6,
+  "positions": [
+    "mid",
+    "footer"
+  ],
+  "viewports": [
+    "320x720",
+    "375x812",
+    "1280x720"
+  ],
+  "infraOutcome": "completed; 64 MiB guard did not fire; no probe directory remains",
+  "log": "docs/evidence/chat-entry-visibility/visual-screenshots.log",
+  "manifest": "docs/evidence/chat-entry-visibility/visual-screenshots.json",
+  "captureSetupNotes": [
+    "initial package loader resolution failed from repository root; no build started",
+    "initial route was a 404; corrected to the existing raspisanie-i-tseny template route",
+    "a derived lowerZoneHeight field was omitted because it selected the frame last child rather than the lower zone"
+  ]
+}

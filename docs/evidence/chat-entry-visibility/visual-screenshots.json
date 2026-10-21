@@ -1,0 +1,68 @@
+[
+  {
+    "file": "chat-entry-320-mid.png",
+    "width": 320,
+    "height": 720,
+    "route": "/raspisanie-i-tseny",
+    "position": "mid",
+    "requestedScrollTop": 11481,
+    "actualScrollTop": 11481,
+    "scrollHeight": 23603,
+    "clientHeight": 640
+  },
+  {
+    "file": "chat-entry-320-footer.png",
+    "width": 320,
+    "height": 720,
+    "route": "/raspisanie-i-tseny",
+    "position": "footer",
+    "requestedScrollTop": 23603,
+    "actualScrollTop": 22963,
+    "scrollHeight": 23603,
+    "clientHeight": 640
+  },
+  {
+    "file": "chat-entry-375-mid.png",
+    "width": 375,
+    "height": 812,
+    "route": "/raspisanie-i-tseny",
+    "position": "mid",
+    "requestedScrollTop": 11043,
+    "actualScrollTop": 11043,
+    "scrollHeight": 22819,
+    "clientHeight": 732
+  },
+  {
+    "file": "chat-entry-375-footer.png",
+    "width": 375,
+    "height": 812,
+    "route": "/raspisanie-i-tseny",
+    "position": "footer",
+    "requestedScrollTop": 22819,
+    "actualScrollTop": 22087,
+    "scrollHeight": 22819,
+    "clientHeight": 732
+  },
+  {
+    "file": "chat-entry-1280-mid.png",
+    "width": 1280,
+    "height": 720,
+    "route": "/raspisanie-i-tseny",
+    "position": "mid",
+    "requestedScrollTop": 4253,
+    "actualScrollTop": 4253,
+    "scrollHeight": 9147,
+    "clientHeight": 640
+  },
+  {
+    "file": "chat-entry-1280-footer.png",
+    "width": 1280,
+    "height": 720,
+    "route": "/raspisanie-i-tseny",
+    "position": "footer",
+    "requestedScrollTop": 9147,
+    "actualScrollTop": 8507,
+    "scrollHeight": 9147,
+    "clientHeight": 640
+  }
+]

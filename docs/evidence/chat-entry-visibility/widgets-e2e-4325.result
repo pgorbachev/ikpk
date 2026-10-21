@@ -1,0 +1,16 @@
+{
+  "command": "PREVIEW_PORT=4325 npm run test:e2e:widgets -- --workers=1 --config=playwright.chat-entry-4325.config.ts",
+  "exitCode": 1,
+  "projects": [
+    "desktop",
+    "mobile"
+  ],
+  "testsRun": 90,
+  "passed": 73,
+  "failed": 11,
+  "skipped": 6,
+  "infraOutcome": "completed; 64 MiB guard did not fire; used dedicated free port 4325 because 4322 belongs to another worktree",
+  "availableKiBBeforeRun": 559360,
+  "availableKiBAfter": 549208,
+  "log": "docs/evidence/chat-entry-visibility/widgets-e2e-4325.log"
+}

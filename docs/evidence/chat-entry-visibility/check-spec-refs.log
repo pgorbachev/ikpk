@@ -1,0 +1,16 @@
+check-spec-refs: содержимое сверено у 210, существование пути — ещё у 260, каталогов — ещё у 69, имён соседних артефактов — ещё у 116, неизмеримых 39 без фрагмента + 16 в сборочный вывод + 14 только по ревизии + 3 на объявленной внешней ревизии + 9 по неоднозначному имени + 24 отброшено как проза (всего 105, в реестре 105), объявленных отсутствующими 8 (объявлено 13), расхождений 5
+  ревизий вне refs/remotes/origin/main, объявлено заранее: 8 — пока ветка жива, содержимое сверяется; после её удаления гейт скажет «проверить нечем» и merge не заблокирует
+  ревизий недостижимо, объявлено вне main: 2 — merge это не блокирует
+  ссылок «ref@sha» без пути (проверена только достижимость ревизии): 15
+  спанов без расширения отброшено как проза: 24 (первый сегмент не существует в корне: text×4, application×3, shared×2, refs×2, origin×2)
+  голых SHA вне формы ссылки: 6, из них недостижимо из origin — 1. Гейт их не проверяет: свидетельство, которое должно быть проверяемым, пишется формой `<ref>@<sha>` или `<путь>@<sha>:<строка>`
+    fd5173fd1ea446fe009048ad89a1f62c908befd3 — openspec/changes/architecture-frame-prototypes/tasks.md
+
+РАСХОЖДЕНИЯ:
+  openspec/changes/payment-seminar-picker/design.md: web/src/scripts/payment-form.ts:93 — фрагмент «!actions || !panel) return;» там не найден; на 93-й строке: const attemptsWrap = document.querySelector<HTMLElement>('[data-paymen
+  openspec/changes/payment-seminar-picker/design.md: web/src/scripts/payment-form.ts:295 — фрагмент «querySelectorAll<HTMLInputElement>('input')» там не найден; на 295-й строке: holds.push({ requestId, createdAt: Date.now() });
+  openspec/changes/payment-seminar-picker/proposal.md: web/src/scripts/payment-form.ts:295 — фрагмент «querySelectorAll<HTMLInputElement>('input')» там не найден; на 295-й строке: holds.push({ requestId, createdAt: Date.now() });
+  openspec/changes/payment-seminar-picker/tasks.md: web/src/scripts/payment-form.ts:295 — фрагмент «querySelectorAll<HTMLInputElement>('input')» там не найден; на 295-й строке: holds.push({ requestId, createdAt: Date.now() });
+  openspec/specs/external-widgets/spec.md: web/src/layouts/BaseLayout.astro:79 — фрагмент «{!isDemoForms && <Analytics />}» там не найден; на 79-й строке: 
+
+Ссылка верна в день написания и молча становится ложной после сдвига файла.

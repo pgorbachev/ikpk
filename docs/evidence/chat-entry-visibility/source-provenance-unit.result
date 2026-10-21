@@ -1,0 +1,7 @@
+{
+  "command": "npx vitest run tests/external-widgets-registry.test.ts tests/rich-content-baseline.test.ts --maxWorkers=1",
+  "exitCode": 0,
+  "testFiles": 2,
+  "testsPassed": 43,
+  "log": "docs/evidence/chat-entry-visibility/source-provenance-unit.log"
+}

@@ -1,0 +1,7 @@
+{
+  "command": "node bin/check-spec-refs (offline, telemetry off)",
+  "exitCode": 1,
+  "writeDebt": false,
+  "durationSeconds": 6.8,
+  "log": "docs/evidence/chat-entry-visibility/check-spec-refs.log"
+}
