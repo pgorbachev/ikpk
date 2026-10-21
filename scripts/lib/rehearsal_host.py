@@ -1730,7 +1730,8 @@ def _static_main_prepare(config: dict[str, Any], state: RehearsalState, operatio
 
 
 def _static_main_rollback(config: dict[str, Any], state: RehearsalState, start: dict[str, Any],
-                          candidate: Path) -> None:
+                          candidate: Path, *, terminal_record: str = "static-main-rolled-back",
+                          details: Optional[dict[str, Any]] = None) -> None:
     pointer = Path(config["currentStatic"])
     if _current_target(pointer) != candidate.resolve(strict=True):
         raise HostFailure("static-main rollback refused because currentStatic no longer points to this candidate")
@@ -1740,9 +1741,75 @@ def _static_main_rollback(config: dict[str, Any], state: RehearsalState, start: 
     _switch_pointer(pointer, old, Path(config["staticReleaseRoot"]))
     if _current_target(pointer) != old:
         raise HostFailure("static-main rollback did not restore the old static tree")
-    state._append({"version": 1, "record": "static-main-rolled-back", "operationKind": "static-main",
-                   "operationId": start["operationId"], "sourceSha": start["sourceSha"],
-                   "restoredStaticPath": str(old)})
+    record = {"version": 1, "record": terminal_record, "operationKind": "static-main",
+              "operationId": start["operationId"], "sourceSha": start["sourceSha"],
+              "restoredStaticPath": str(old)}
+    if details:
+        record.update(details)
+    state._append(record)
+
+
+def _static_main_rollback_committed(config: dict[str, Any], state: RehearsalState, operation_id: str,
+                                   operator_name: Optional[str], reason: Optional[str]) -> dict[str, Any]:
+    if (not isinstance(operator_name, str) or not operator_name.strip() or len(operator_name) > 120
+            or any(ord(char) < 32 or ord(char) == 127 for char in operator_name)):
+        raise HostFailure("committed static rollback requires a valid operator name")
+    if (not isinstance(reason, str) or not reason.strip() or len(reason) > 1000
+            or any(ord(char) < 32 or ord(char) == 127 for char in reason)):
+        raise HostFailure("committed static rollback requires a valid reason")
+    rows = _static_main_rows(state, operation_id)
+    start = _static_main_start(rows)
+    committed = next((row for row in rows if row.get("record") == "static-main-committed"), None)
+    if not start or not committed or committed.get("sourceSha") != start.get("sourceSha"):
+        raise HostFailure("committed static rollback requires a matching durable release record")
+    source_sha = start["sourceSha"]
+    candidate = Path(config["staticReleaseRoot"]) / f"{source_sha}-{operation_id}"
+    old = Path(start["oldStaticPath"]).resolve(strict=True)
+    if candidate.is_symlink() or not candidate.is_dir():
+        raise HostFailure("committed static rollback candidate is missing or unsafe")
+    candidate_digest = _tree_sha256(candidate)
+    committed_digest = committed.get("staticTreeSha256")
+    prepared = _static_main_prepared(rows)
+    if (not isinstance(committed_digest, str) or candidate_digest != committed_digest
+            or prepared.get("staticTreeSha256") != committed_digest):
+        raise HostFailure("committed static rollback candidate differs from its release evidence")
+    old_digest = _tree_sha256(old)
+    if old_digest != start.get("oldStaticTreeSha256"):
+        raise HostFailure("committed static rollback target differs from the exact old static tree")
+    details = {"operator": operator_name.strip(), "reason": reason.strip(),
+               "candidateStaticPath": str(candidate.resolve(strict=True)),
+               "candidateStaticTreeSha256": candidate_digest,
+               "committedStaticTreeSha256": committed_digest,
+               "oldStaticPath": str(old), "oldStaticTreeSha256": old_digest,
+               "snapshotId": committed.get("snapshotId")}
+    completed = next((row for row in rows if row.get("record") == "static-main-rollback-completed"), None)
+    if completed:
+        if any(completed.get(key) != value for key, value in details.items()):
+            raise HostFailure("committed static rollback was already completed with different evidence")
+        return {"operationId": operation_id, "phase": "rolled-back", "restoredStaticPath": str(old)}
+    intent = next((row for row in rows if row.get("record") == "static-main-rollback-intent"), None)
+    if intent and any(intent.get(key) != value for key, value in details.items()):
+        raise HostFailure("committed static rollback intent has different operator or release evidence")
+    pointer = Path(config["currentStatic"])
+    current = _current_target(pointer)
+    if not intent:
+        if current != candidate.resolve(strict=True):
+            raise HostFailure("static-main rollback refused because currentStatic no longer points to this candidate")
+        state._append({"version": 1, "record": "static-main-rollback-intent", "operationKind": "static-main",
+                       "operationId": operation_id, "sourceSha": source_sha, **details})
+    if current == candidate.resolve(strict=True):
+        _static_main_rollback(config, state, start, candidate,
+                              terminal_record="static-main-rollback-completed", details=details)
+    elif current == old:
+        # A prior invocation may have switched the pointer and crashed before recording completion.
+        if _current_target(pointer) != old or _tree_sha256(old) != old_digest:
+            raise HostFailure("committed static rollback target changed before durable completion")
+        state._append({"version": 1, "record": "static-main-rollback-completed", "operationKind": "static-main",
+                       "operationId": operation_id, "sourceSha": source_sha,
+                       "restoredStaticPath": str(old), **details})
+    else:
+        raise HostFailure("static-main recovery refused to replace a newer foreign static pointer")
+    return {"operationId": operation_id, "phase": "rolled-back", "restoredStaticPath": str(old)}
 
 
 def _static_main_commit(config: dict[str, Any], state: RehearsalState, operation_id: str,
@@ -1846,13 +1913,21 @@ def _static_main_export(config: dict[str, Any], state: RehearsalState, operation
     return buffer.getvalue()
 
 
-def _static_main_recover(config: dict[str, Any], state: RehearsalState, operation_id: str) -> dict[str, Any]:
+def _static_main_recover(config: dict[str, Any], state: RehearsalState, operation_id: str, *,
+                         rollback_committed: bool = False, operator_name: Optional[str] = None,
+                         reason: Optional[str] = None) -> dict[str, Any]:
     rows = _static_main_rows(state, operation_id)
     start = _static_main_start(rows)
     if not start:
         raise HostFailure("static-main recovery has no matching durable operation")
     if any(row.get("record") == "static-main-committed" for row in rows):
+        if rollback_committed:
+            return _static_main_rollback_committed(config, state, operation_id, operator_name, reason)
+        if any(row.get("record") == "static-main-rollback-completed" for row in rows):
+            return {"operationId": operation_id, "phase": "rolled-back"}
         return {"operationId": operation_id, "phase": "committed"}
+    if rollback_committed:
+        raise HostFailure("committed static rollback requires a matching durable release record")
     if any(row.get("record") in ("static-main-recovered", "static-main-rolled-back") for row in rows):
         return {"operationId": operation_id, "phase": "recovered"}
     intent = next((row for row in rows if row.get("record") == "static-main-switch-intent"), None)
@@ -2160,6 +2235,13 @@ def dispatch(args: argparse.Namespace) -> dict[str, Any]:
         if args.action == "export-static-main":
             return {"_bytes": _static_main_export(config, state, args.operation_id, args.source_sha)}
         if args.action == "static-main-recover":
+            if args.rollback_committed:
+                if not args.operator or not args.reason:
+                    raise HostFailure("committed static rollback requires --operator and --reason")
+                return _static_main_recover(config, state, args.operation_id, rollback_committed=True,
+                                            operator_name=args.operator, reason=args.reason)
+            if args.operator is not None or args.reason is not None:
+                raise HostFailure("--operator and --reason require --rollback-committed")
             return _static_main_recover(config, state, args.operation_id)
         if args.action == "export-backup":
             manifest = _backup_manifest(config, args.operation_id)
@@ -2208,6 +2290,10 @@ def main(argv: Optional[list[str]] = None) -> int:
             command.add_argument("--source-sha", required=True)
         if name == "recover":
             command.add_argument("--backup-sha256")
+        if name == "static-main-recover":
+            command.add_argument("--rollback-committed", action="store_true")
+            command.add_argument("--operator")
+            command.add_argument("--reason")
     args = parser.parse_args(argv)
     try:
         if args.action == "validate-config":

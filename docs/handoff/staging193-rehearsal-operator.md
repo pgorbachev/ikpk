@@ -33,6 +33,15 @@ python3 scripts/rehearsal/staging193.py static-main --operation-id <fresh-id> --
 
 This command performs a static activation on staging194; it does not deploy the helper or config. Do not run it until the owner authorizes the deployment and the installed helper/config are confirmed to match the reviewed revision. For a crash during activation, use `static-main-recover --operation-id <same-id>`; it can restore only this operation's old static pointer and refuses to overwrite a newer foreign pointer.
 
+After a committed activation, rollback is a separate explicit action; recovery never undoes an accepted release automatically. The operator must supply an identity and reason:
+
+```sh
+python3 scripts/rehearsal/staging193.py static-main-recover --operation-id <same-id> \
+  --rollback-committed --operator '<operator>' --reason '<reason>'
+```
+
+The host checks the current candidate against the durable committed tree digest and the old target against its captured tree digest, then records operator/reason before the pointer switch. It uses compare-and-swap and refuses a newer foreign pointer or changed old tree. Repeating the exact completed request is idempotent; a different operator or reason is refused. This rollback changes only the static pointer and leaves CMS state untouched.
+
 Legacy `/media/` is captured from the selected current static release and restored by returning to the old static pointer; its tree digest is verified before recovery completes and writers reopen. Recovery writes media files only under mutable `/uploads/`.
 
 Before global commit, recover explicitly with the same ID. If a final backup exists, recovery requires the exact off-host archive; before backup creation it preserves the old live database and editor writes. A durable `committed` or `recovered` journal row forbids another database restore. If commit succeeded but reopening did not, retry `static-publish` to finish reopening.

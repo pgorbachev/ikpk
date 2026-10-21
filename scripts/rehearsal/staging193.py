@@ -552,9 +552,20 @@ def invoke(args: argparse.Namespace) -> None:
         if committed.get("phase") != "committed":
             raise Refusal(f"static-main publication did not reach durable commit: {committed.get('phase')}")
     elif args.command == "static-main-recover":
-        result = parse_host_json(ssh_remote(["static-main-recover", "--operation-id", args.operation_id]))
-        if result.get("phase") != "recovered":
-            raise Refusal(f"static-main recovery did not reach durable completion: {result.get('phase')}")
+        command = ["static-main-recover", "--operation-id", args.operation_id]
+        expected_phase = "recovered"
+        if args.rollback_committed:
+            if (not isinstance(args.operator, str) or not args.operator.strip()
+                    or not isinstance(args.reason, str) or not args.reason.strip()):
+                raise Refusal("committed static rollback requires --operator and --reason")
+            command.extend(["--rollback-committed", "--operator", args.operator, "--reason", args.reason])
+            expected_phase = "rolled-back"
+        elif args.operator is not None or args.reason is not None:
+            raise Refusal("--operator and --reason require --rollback-committed")
+        result = parse_host_json(ssh_remote(command))
+        allowed_phases = {expected_phase} if args.rollback_committed else {"recovered", "rolled-back"}
+        if result.get("phase") not in allowed_phases:
+            raise Refusal(f"static-main recovery did not reach {expected_phase}: {result.get('phase')}")
     else:
         backup_dir = backup_root(args.backup_dir, profile)
         target = backup_dir / f"{args.operation_id}.tar"
@@ -587,6 +598,10 @@ def main(argv: Optional[list[str]] = None) -> int:
         command.add_argument("--host")
         command.add_argument("--operation-id", required=True)
         command.add_argument("--backup-dir")
+        if action == "static-main-recover":
+            command.add_argument("--rollback-committed", action="store_true")
+            command.add_argument("--operator")
+            command.add_argument("--reason")
         if action not in ("recover", "static-main-recover"):
             command.add_argument("--source-sha", required=True)
     args = parser.parse_args(argv)

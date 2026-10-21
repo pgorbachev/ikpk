@@ -1110,6 +1110,39 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
 
 
 class StaticMainAdmissionTests(unittest.TestCase):
+    def _committed_static_main_fixture(self, root: Path, current_name="candidate"):
+        releases = root / "releases"
+        releases.mkdir()
+        old = releases / "old"
+        candidate = releases / f"{'a' * 40}-main-op"
+        foreign = releases / "foreign"
+        for directory, body in ((old, "old"), (candidate, "candidate"), (foreign, "foreign")):
+            directory.mkdir()
+            (directory / "index.html").write_text(body, encoding="utf-8")
+        pointer = root / "current"
+        pointer.symlink_to({"candidate": candidate, "foreign": foreign, "old": old}[current_name])
+        cms_release = root / "cms-release"
+        cms_release.mkdir()
+        (cms_release / "payload.json").write_text("cms unchanged", encoding="utf-8")
+        current_cms = root / "current-cms"
+        current_cms.symlink_to(cms_release)
+        state_dir = root / "state"
+        state_dir.mkdir()
+        state = RehearsalState(state_dir)
+        old_digest = rehearsal_host._tree_sha256(old)
+        candidate_digest = rehearsal_host._tree_sha256(candidate)
+        state._append({"version": 1, "record": "static-main-start", "operationKind": "static-main",
+            "operationId": "main-op", "sourceSha": "a" * 40, "oldStaticPath": str(old),
+            "oldStaticTreeSha256": old_digest})
+        state._append({"version": 1, "record": "static-main-prepared", "operationKind": "static-main",
+            "operationId": "main-op", "sourceSha": "a" * 40, "staticTreeSha256": candidate_digest,
+            "snapshotId": "snapshot-main"})
+        state._append({"version": 1, "record": "static-main-committed", "operationKind": "static-main",
+            "operationId": "main-op", "sourceSha": "a" * 40, "staticTreeSha256": candidate_digest,
+            "snapshotId": "snapshot-main"})
+        return {"currentStatic": str(pointer), "staticReleaseRoot": str(releases),
+                "currentCms": str(current_cms)}, state, pointer, old, candidate, foreign
+
     def test_static_main_fails_closed_until_release_policy_is_explicit(self):
         with self.assertRaisesRegex(rehearsal_host.HostFailure, "ci-only-approved"):
             rehearsal_host._static_main_release_policy({"profile": "staging194"})
@@ -1303,6 +1336,83 @@ class StaticMainAdmissionTests(unittest.TestCase):
                 rehearsal_host._static_main_rollback(
                     {"currentStatic": str(pointer), "staticReleaseRoot": str(releases)}, state, start, candidate)
             self.assertEqual(pointer.resolve(strict=True), newer.resolve(strict=True))
+
+    def test_static_main_explicit_committed_rollback_records_operator_and_reason_and_is_idempotent(self):
+        with tempfile.TemporaryDirectory(prefix="ikpk-static-main-committed-rollback-") as temporary:
+            config, state, pointer, old, _candidate, _foreign = self._committed_static_main_fixture(Path(temporary))
+            current_cms = Path(config["currentCms"])
+            cms_target = current_cms.resolve(strict=True)
+            cms_digest = rehearsal_host._tree_sha256(cms_target)
+            result = rehearsal_host._static_main_recover(
+                config, state, "main-op", rollback_committed=True,
+                operator_name="release-operator", reason="Post-activation route smoke failed")
+            self.assertEqual(result["phase"], "rolled-back")
+            self.assertEqual(pointer.resolve(strict=True), old.resolve(strict=True))
+            self.assertEqual(current_cms.resolve(strict=True), cms_target)
+            self.assertEqual(rehearsal_host._tree_sha256(cms_target), cms_digest)
+            records = state._operation_rows("main-op")
+            intent = next(row for row in records if row.get("record") == "static-main-rollback-intent")
+            completed = next(row for row in records if row.get("record") == "static-main-rollback-completed")
+            self.assertEqual(intent["operator"], "release-operator")
+            self.assertEqual(intent["reason"], "Post-activation route smoke failed")
+            self.assertEqual(completed["candidateStaticTreeSha256"], completed["committedStaticTreeSha256"])
+            count = len(records)
+            repeated = rehearsal_host._static_main_recover(
+                config, state, "main-op", rollback_committed=True,
+                operator_name="release-operator", reason="Post-activation route smoke failed")
+            self.assertEqual(repeated["phase"], "rolled-back")
+            self.assertEqual(len(state._operation_rows("main-op")), count)
+            with self.assertRaisesRegex(rehearsal_host.HostFailure, "already completed with different"):
+                rehearsal_host._static_main_recover(
+                    config, state, "main-op", rollback_committed=True,
+                    operator_name="release-operator", reason="Different rollback reason")
+
+    def test_static_main_committed_rollback_refuses_foreign_pointer_and_changed_old_tree(self):
+        with tempfile.TemporaryDirectory(prefix="ikpk-static-main-rollback-foreign-") as temporary:
+            config, state, pointer, _old, _candidate, foreign = self._committed_static_main_fixture(
+                Path(temporary), current_name="foreign")
+            with self.assertRaisesRegex(rehearsal_host.HostFailure, "no longer points to this candidate"):
+                rehearsal_host._static_main_recover(
+                    config, state, "main-op", rollback_committed=True,
+                    operator_name="release-operator", reason="Post-activation route smoke failed")
+            self.assertEqual(pointer.resolve(strict=True), foreign.resolve(strict=True))
+            self.assertFalse(any(row.get("record") == "static-main-rollback-intent"
+                                 for row in state._operation_rows("main-op")))
+
+        with tempfile.TemporaryDirectory(prefix="ikpk-static-main-rollback-old-tree-") as temporary:
+            config, state, pointer, old, _candidate, _foreign = self._committed_static_main_fixture(Path(temporary))
+            (old / "index.html").write_text("changed old tree", encoding="utf-8")
+            with self.assertRaisesRegex(rehearsal_host.HostFailure, "exact old static tree"):
+                rehearsal_host._static_main_recover(
+                    config, state, "main-op", rollback_committed=True,
+                    operator_name="release-operator", reason="Post-activation route smoke failed")
+            self.assertNotEqual(pointer.resolve(strict=True), old.resolve(strict=True))
+            self.assertFalse(any(row.get("record") == "static-main-rollback-intent"
+                                 for row in state._operation_rows("main-op")))
+
+    def test_static_main_committed_rollback_finishes_journal_after_switch_crash(self):
+        with tempfile.TemporaryDirectory(prefix="ikpk-static-main-rollback-crash-") as temporary:
+            config, state, pointer, old, _candidate, _foreign = self._committed_static_main_fixture(Path(temporary))
+
+            def switch_then_crash(config, _state, start, _candidate, **_kwargs):
+                rehearsal_host._switch_pointer(Path(config["currentStatic"]), old,
+                                               Path(config["staticReleaseRoot"]))
+                raise rehearsal_host.HostFailure("simulated crash after pointer switch")
+
+            with patch.object(rehearsal_host, "_static_main_rollback", side_effect=switch_then_crash):
+                with self.assertRaisesRegex(rehearsal_host.HostFailure, "simulated crash"):
+                    rehearsal_host._static_main_recover(
+                        config, state, "main-op", rollback_committed=True,
+                        operator_name="release-operator", reason="Post-activation route smoke failed")
+            self.assertEqual(pointer.resolve(strict=True), old.resolve(strict=True))
+            self.assertFalse(any(row.get("record") == "static-main-rollback-completed"
+                                 for row in state._operation_rows("main-op")))
+            result = rehearsal_host._static_main_recover(
+                config, state, "main-op", rollback_committed=True,
+                operator_name="release-operator", reason="Post-activation route smoke failed")
+            self.assertEqual(result["phase"], "rolled-back")
+            self.assertTrue(any(row.get("record") == "static-main-rollback-completed"
+                                for row in state._operation_rows("main-op")))
 
     def test_static_main_crash_recovery_restores_old_tree_only_after_durable_switch_intent(self):
         with tempfile.TemporaryDirectory(prefix="ikpk-static-main-recover-") as temporary:

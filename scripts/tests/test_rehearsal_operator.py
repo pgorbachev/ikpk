@@ -228,6 +228,22 @@ class OperatorAdmissionTests(unittest.TestCase):
                 admit.assert_not_called()
                 ssh.assert_not_called()
 
+    def test_committed_static_rollback_requires_explicit_operator_and_reason(self):
+        args = type("Args", (), {"host": staging193.TARGET_HOST, "command": "static-main-recover",
+            "operation_id": "main-static", "rollback_committed": True,
+            "operator": "release-operator", "reason": "Post-activation route smoke failed"})()
+        with patch.object(staging193, "ssh_remote", return_value=b'{"phase":"rolled-back"}') as ssh:
+            staging193.invoke(args)
+        ssh.assert_called_once_with(["static-main-recover", "--operation-id", "main-static",
+            "--rollback-committed", "--operator", "release-operator", "--reason",
+            "Post-activation route smoke failed"])
+
+        args.reason = "  "
+        with patch.object(staging193, "ssh_remote") as ssh:
+            with self.assertRaisesRegex(staging193.Refusal, "requires --operator and --reason"):
+                staging193.invoke(args)
+        ssh.assert_not_called()
+
     def test_cms_update_sends_source_archive_before_offhost_backup_confirmation(self):
         with tempfile.TemporaryDirectory(prefix="ikpk-operator-prefence-") as temporary:
             archive = b"admitted source archive"
