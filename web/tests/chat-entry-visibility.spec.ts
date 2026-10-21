@@ -545,12 +545,23 @@ test.describe('chat entry visibility approved contract', () => {
       const session = await page.context().newCDPSession(page);
       const beforeTouch = (await snapshotLayout(page)).scrollportScrollTop;
       await armGestureScrollEnd(beforeTouch);
-      await session.send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 1 });
-      await session.send('Input.synthesizeScrollGesture', { x: 180, y: 300, yDistance: -420, speed: 650, gestureSourceType: 'touch' });
-      await session.detach();
-      await expect.poll(async () => (await snapshotLayout(page)).scrollportScrollTop,
-        'Chromium touch-like scroll gesture advances the shared scrollport').toBeGreaterThan(beforeTouch);
-      await waitForGestureScrollEnd(beforeTouch, 'touch-like gesture settles on the shared scrollport');
+      try {
+        await session.send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 1 });
+        await session.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: 180, y: 300, id: 1 }] });
+        for (let y = 280; y >= 100; y -= 20) {
+          await session.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: 180, y, id: 1 }] });
+        }
+        await session.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+        await expect.poll(async () => (await snapshotLayout(page)).scrollportScrollTop,
+          'trusted CDP touch input advances the shared scrollport').toBeGreaterThan(beforeTouch);
+        await waitForGestureScrollEnd(beforeTouch, 'trusted touch gesture settles on the shared scrollport');
+      } finally {
+        try {
+          await session.send('Emulation.setTouchEmulationEnabled', { enabled: false });
+        } finally {
+          await session.detach();
+        }
+      }
 
       await navigateTo(activeUrl('/raspisanie-i-tseny'));
       const schedulePort = page.locator('[data-page-scrollport]');
