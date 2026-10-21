@@ -202,7 +202,9 @@ export function chatLoaderHits(html: string, loaderSrc: string) {
     throw new Error(
       `адрес загрузчика чата '${loaderSrc}' не разбирается как адрес — проверять нечем`,
     );
-  return embedAddressHits(html, { host: parsed.host, pathPrefix: parsed.path });
+  return embedAddressHits(html, { host: parsed.host, pathPrefix: parsed.path }).filter(
+    ({ tag, name }) => !isNavigationCarrier(tag, name),
+  );
 }
 
 /**
