@@ -1,0 +1,12 @@
+{
+  "command": "npm --prefix web run build",
+  "exitCode": 0,
+  "infraOutcome": "completed; 64 MiB guard did not fire",
+  "availableKiBBefore": 790120,
+  "availableKiBAfter": 682140,
+  "log": "docs/evidence/chat-entry-visibility/fresh-production-build.log",
+  "outputs": [
+    "web/dist",
+    "web/dist/pagefind"
+  ]
+}
