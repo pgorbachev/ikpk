@@ -1133,7 +1133,7 @@ class StaticMainAdmissionTests(unittest.TestCase):
         candidate_digest = rehearsal_host._tree_sha256(candidate)
         state._append({"version": 1, "record": "static-main-start", "operationKind": "static-main",
             "operationId": "main-op", "sourceSha": "a" * 40, "oldStaticPath": str(old),
-            "oldStaticTreeSha256": old_digest})
+            "oldStaticTreeSha256": old_digest, "provenance": {}})
         state._append({"version": 1, "record": "static-main-prepared", "operationKind": "static-main",
             "operationId": "main-op", "sourceSha": "a" * 40, "staticTreeSha256": candidate_digest,
             "snapshotId": "snapshot-main"})
@@ -1366,6 +1366,18 @@ class StaticMainAdmissionTests(unittest.TestCase):
                 rehearsal_host._static_main_recover(
                     config, state, "main-op", rollback_committed=True,
                     operator_name="release-operator", reason="Different rollback reason")
+
+    def test_static_main_commit_retry_is_refused_after_committed_rollback(self):
+        with tempfile.TemporaryDirectory(prefix="ikpk-static-main-commit-after-rollback-") as temporary:
+            config, state, pointer, old, candidate, _foreign = self._committed_static_main_fixture(Path(temporary))
+            rehearsal_host._static_main_recover(
+                config, state, "main-op", rollback_committed=True,
+                operator_name="release-operator", reason="Post-activation route smoke failed")
+            digest = rehearsal_host._tree_sha256(candidate)
+            with patch.object(rehearsal_host, "_validate_static_main_admission"):
+                with self.assertRaisesRegex(rehearsal_host.HostFailure, "cannot be committed after rollback"):
+                    rehearsal_host._static_main_commit(config, state, "main-op", "a" * 40, {}, digest)
+            self.assertEqual(pointer.resolve(strict=True), old.resolve(strict=True))
 
     def test_static_main_committed_rollback_refuses_foreign_pointer_and_changed_old_tree(self):
         with tempfile.TemporaryDirectory(prefix="ikpk-static-main-rollback-foreign-") as temporary:

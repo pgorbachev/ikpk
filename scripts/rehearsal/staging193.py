@@ -11,6 +11,7 @@ import io
 import json
 import os
 import re
+import shlex
 import socketserver
 import subprocess
 import sys
@@ -213,7 +214,7 @@ def ssh_remote(arguments: list[str], *, profile: str = "staging194", input_bytes
     command = ["ssh", "-i", str(identity), "-o", "IdentitiesOnly=yes", "-o", "BatchMode=yes",
                "-o", "StrictHostKeyChecking=yes", "-o", f"UserKnownHostsFile={known_hosts}",
                "-o", "GlobalKnownHostsFile=/dev/null", "-o", "ConnectTimeout=15",
-               f"{user}@{host}", "/usr/local/sbin/ikpk-rehearsal", *arguments]
+               f"{user}@{host}", shlex.join(["/usr/local/sbin/ikpk-rehearsal", *arguments])]
     result = subprocess.run(command, input=input_bytes, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                             check=False, cwd=ROOT)
     if result.returncode:

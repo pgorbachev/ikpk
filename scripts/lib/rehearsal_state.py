@@ -225,7 +225,16 @@ class RehearsalState:
                            and row.get("record") in ("static-main-committed", "static-main-recovered",
                                                      "static-main-rolled-back")
                            and isinstance(row.get("operationId"), str)}
-        return (starts - terminal) | (static_starts - static_terminal)
+        static_rollback_intents = {row["operationId"] for row in history
+                                   if row.get("operationKind") == "static-main"
+                                   and row.get("record") == "static-main-rollback-intent"
+                                   and isinstance(row.get("operationId"), str)}
+        static_rollback_completed = {row["operationId"] for row in history
+                                     if row.get("operationKind") == "static-main"
+                                     and row.get("record") == "static-main-rollback-completed"
+                                     and isinstance(row.get("operationId"), str)}
+        return ((starts - terminal) | (static_starts - static_terminal)
+                | (static_rollback_intents - static_rollback_completed))
 
     def assert_new_operation_allowed(self, operation_id: str, source_sha: str) -> None:
         """Refuse prefence preparation when durable state already belongs to an operation."""

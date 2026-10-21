@@ -1,4 +1,5 @@
 import json
+import shlex
 import subprocess
 import tempfile
 import unittest
@@ -205,8 +206,31 @@ class OperatorAdmissionTests(unittest.TestCase):
             self.assertIn("StrictHostKeyChecking=yes", argv)
             self.assertIn(f"UserKnownHostsFile={known_hosts}", argv)
             self.assertIn("GlobalKnownHostsFile=/dev/null", argv)
-            self.assertEqual(argv[-4:], ["/usr/local/sbin/ikpk-rehearsal", "status", "--operation-id", "op"])
+            self.assertEqual(len(argv[argv.index("root@194.226.99.10") + 1:]), 1)
+            self.assertEqual(shlex.split(argv[-1]), ["/usr/local/sbin/ikpk-rehearsal", "status",
+                                                     "--operation-id", "op"])
             self.assertNotIn("sudo", argv)
+
+    def test_ssh_remote_serializes_operator_arguments_as_one_remote_shell_command(self):
+        args = ["static-main-recover", "--operation-id", "main-op", "--rollback-committed",
+                "--operator", "release operator; $(touch /tmp/nope)", "--reason",
+                "failure: spaces, 'quotes', $HOME; `id`"]
+        with tempfile.TemporaryDirectory(prefix="ikpk-operator-identity-") as temporary:
+            identity = Path(temporary) / "identity"
+            known_hosts = Path(temporary) / "known_hosts"
+            identity.write_text("test fixture", encoding="utf-8")
+            known_hosts.write_text("194.226.99.10 ssh-ed25519 AAAATEST\n", encoding="utf-8")
+            result = subprocess.CompletedProcess(["ssh"], 0, b"{}", b"")
+            with patch.object(staging193, "TARGET_IDENTITY", identity), \
+                 patch.object(staging193, "TARGET_KNOWN_HOSTS", known_hosts), \
+                 patch.object(staging193.subprocess, "run", return_value=result) as invoke:
+                staging193.ssh_remote(args)
+            argv = invoke.call_args.args[0]
+            remote_command = argv[-1]
+            self.assertEqual(len(argv[argv.index("root@194.226.99.10") + 1:]), 1)
+            self.assertEqual(shlex.split(remote_command), ["/usr/local/sbin/ikpk-rehearsal", *args])
+            self.assertIn("'release operator; $(touch /tmp/nope)'", remote_command)
+            self.assertNotIn("; touch /tmp/nope", remote_command)
 
     def test_operator_refuses_an_unknown_host_before_ssh(self):
         with patch.object(staging193.subprocess, "run") as invoke:

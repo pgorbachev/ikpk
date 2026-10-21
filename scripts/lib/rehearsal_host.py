@@ -1820,6 +1820,9 @@ def _static_main_commit(config: dict[str, Any], state: RehearsalState, operation
     prepared = _static_main_prepared(rows)
     if not start or not prepared or start.get("sourceSha") != source_sha or start.get("provenance") != provenance:
         raise HostFailure("static-main browser acceptance has no matching durable prepared operation")
+    if any(row.get("record") in ("static-main-rollback-intent", "static-main-rollback-completed")
+           for row in rows):
+        raise HostFailure("static-main operation cannot be committed after rollback has started")
     if any(row.get("record") == "static-main-committed" for row in rows):
         return {"operationId": operation_id, "sourceSha": source_sha, "phase": "committed"}
     if any(row.get("record") in ("static-main-recovered", "static-main-rolled-back") for row in rows):

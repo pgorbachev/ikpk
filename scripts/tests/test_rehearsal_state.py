@@ -224,6 +224,24 @@ class RehearsalStateTests(unittest.TestCase):
                             "operationId": "static-op", "sourceSha": SOURCE_SHA})
         self.state.assert_new_operation_allowed("cms-op", "b" * 40)
 
+    def test_committed_static_rollback_intent_blocks_new_operations_until_completed(self):
+        self.state._append({"version": 1, "record": "static-main-start", "operationKind": "static-main",
+                            "operationId": "static-op", "sourceSha": SOURCE_SHA})
+        self.state._append({"version": 1, "record": "static-main-committed", "operationKind": "static-main",
+                            "operationId": "static-op", "sourceSha": SOURCE_SHA})
+        self.state.assert_new_operation_allowed("cms-op", "b" * 40)
+        self.state._append({"version": 1, "record": "static-main-rollback-intent", "operationKind": "static-main",
+                            "operationId": "static-op", "sourceSha": SOURCE_SHA})
+        with self.assertRaisesRegex(RehearsalRefusal, "unfinished operation"):
+            self.state.assert_new_operation_allowed("cms-op", "b" * 40)
+        with self.assertRaisesRegex(RehearsalRefusal, "unfinished operation"):
+            self.state.begin("cms-op", "b" * 40, OLD_PAIR)
+        self.assertFalse(self.state.marker_path.exists())
+        self.state._append({"version": 1, "record": "static-main-rollback-completed",
+                            "operationKind": "static-main", "operationId": "static-op",
+                            "sourceSha": SOURCE_SHA})
+        self.state.assert_new_operation_allowed("cms-op", "b" * 40)
+
     def test_real_sqlite_wal_checkpoint_and_backup_preserve_data(self):
         source_path = self.root / "live.db"
         backup_path = self.root / "backup.db"
