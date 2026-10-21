@@ -494,6 +494,8 @@ test.describe('chat entry visibility approved contract', () => {
       expect(lastLink.text, `${width}: last phone link remains the final menu control`).toBeTruthy();
       expect(lastLink.visible, `${width}: last menu control is reachable within the visible scrollport`).toBe(true);
 
+      await page.evaluate(() => (window as Window & { __setVisualViewportForTest?: (height: number, offsetTop: number) => void })
+        .__setVisualViewportForTest?.(420, 0));
       const openSearch = page.locator('[data-search-open]');
       await openSearch.scrollIntoViewIfNeeded();
       await openSearch.click();
@@ -533,26 +535,34 @@ test.describe('chat entry visibility approved contract', () => {
       });
       expect(lastResultVisible, `${width}: the final local search result remains reachable above the lower-zone clip`).toBe(true);
       const beforeSearchShrinkScroll = await port.evaluate((el: HTMLElement) => el.scrollTop);
+      await resultDrawer.evaluate((el: HTMLElement) => { el.scrollTop = 0; });
       await page.evaluate(() => (window as Window & { __setVisualViewportForTest?: (height: number, offsetTop: number) => void })
         .__setVisualViewportForTest?.(340, 0));
+      const resultsCanScroll = await resultDrawer.evaluate((el: HTMLElement) => el.scrollHeight > el.clientHeight);
+      expect(resultsCanScroll, `${width}: search results remain scrollable after visual viewport shrink`).toBe(true);
+      await resultDrawer.evaluate((el: HTMLElement) => { el.scrollTop = el.scrollHeight; });
       const resizedSearch = await page.evaluate(() => {
         const panel = document.querySelector<HTMLElement>('#header-search')!.getBoundingClientRect();
         const close = document.querySelector<HTMLElement>('#header-search-close')!.getBoundingClientRect();
         const results = [...document.querySelectorAll<HTMLElement>('#header-search-pagefind .pagefind-ui__result')];
         const last = results[results.length - 1]!.getBoundingClientRect();
+        const drawer = document.querySelector<HTMLElement>('#header-search-pagefind .pagefind-ui__drawer')!;
+        const drawerRect = drawer.getBoundingClientRect();
         const port = document.querySelector<HTMLElement>('[data-page-scrollport]')!;
         const clip = port.getBoundingClientRect();
+        const visibleHeight = Math.max(0, Math.min(last.bottom, drawerRect.bottom, panel.bottom, clip.bottom)
+          - Math.max(last.top, drawerRect.top, panel.top, clip.top));
         return {
           panelBottom: panel.bottom,
           closeVisible: close.top >= panel.top && close.bottom <= panel.bottom && close.bottom <= clip.bottom,
-          lastResultVisible: last.top >= clip.top && last.bottom <= clip.bottom,
+          lastResultVisible: visibleHeight > 0,
           scrollTop: port.scrollTop,
           portBottom: clip.bottom,
         };
       });
       expect(resizedSearch.panelBottom, `${width}: open search resizes to reduced visual viewport without manual scrolling`).toBeLessThanOrEqual(resizedSearch.portBottom + 1);
       expect(resizedSearch.closeVisible, `${width}: close control remains reachable after visual viewport shrink`).toBe(true);
-      expect(resizedSearch.lastResultVisible, `${width}: last search result remains reachable after visual viewport shrink`).toBe(true);
+      expect(resizedSearch.lastResultVisible, `${width}: last result is reachable by scrolling only its results drawer after shrink`).toBe(true);
       expect(resizedSearch.scrollTop, `${width}: search resize does not move the page scrollport`).toBe(beforeSearchShrinkScroll);
     }
   });
