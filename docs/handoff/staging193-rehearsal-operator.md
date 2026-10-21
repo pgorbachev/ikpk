@@ -23,7 +23,7 @@ python3 scripts/rehearsal/staging193.py static-publish --operation-id <id> --sou
 
 ## Static-only staging194 main refresh
 
-`static-main` is an independent operation kind for refreshing only the static site on staging194. It requires the exact current canonical `main` commit and successful push runs for `Tests`, `Lint and Typecheck`, `Security`, and `Lighthouse CI`; Tests must have all five mandatory jobs successful, and every job in the other three runs must complete successfully. The host takes a read-only SQLite backup, seals the current CMS/content/media capture with that exact source SHA, installs only the web dependencies, and builds a candidate without stopping or restarting CMS, changing its pointer, applying migrations, or writing the live database/uploads. It fingerprints the CMS unit, environment files, release payload, database/WAL, and media trees before and after capture and activation. After local browser acceptance, it rereads canonical source and CI, then atomically switches only `currentStatic`; the host verifies the served release declaration, routes, captured media and retained hashed assets. The journal records the pre-switch intent; rollback restores the exact previous static tree only while the pointer still names this operation's candidate. Static recovery is a separate command and generic CMS recovery refuses static-main journals.
+`static-main` is an independent operation kind for refreshing only the static site on staging194. It requires the exact current canonical `main` commit and successful push runs for `Tests`, `Lint and Typecheck`, `Security`, and `Lighthouse CI`; Tests must have all five mandatory jobs successful, and every job in the other three runs must complete successfully. Without the reuse option, the host takes a read-only SQLite backup and seals the current CMS/content/media capture with that exact source SHA. Both modes install only the web dependencies and build a candidate without stopping or restarting CMS, changing its pointer, applying migrations, or writing the live database/uploads. They fingerprint the CMS unit, environment files, release payload, database/WAL, and media trees before and after preparation and activation. After local browser acceptance, the operator rereads canonical source and CI, then atomically switches only `currentStatic`; the host verifies the served release declaration, routes, captured media and retained hashed assets. The journal records the pre-switch intent; rollback restores the exact previous static tree only while the pointer still names this operation's candidate. Static recovery is a separate command and generic CMS recovery refuses static-main journals.
 
 On 2026-10-22, the owner selected exact canonical `main` SHA plus green `Tests`, `Lint and Typecheck`, `Security`, and `Lighthouse CI` as the staging194 static-site admission rule, with no published Release requirement. This exception applies only to the staging194 static site: the CMS-button decision and production release policy are unchanged. The root-owned rehearsal config must contain `staticMainReleasePolicy: "ci-only-approved"`; a missing or different value fails closed. After the helper/config revision is reviewed and installed through the separately authorized host-maintenance procedure, the operator command is:
 
@@ -32,6 +32,20 @@ python3 scripts/rehearsal/staging193.py static-main --operation-id <fresh-id> --
 ```
 
 This command performs a static activation on staging194; it does not deploy the helper or config. Do not run it until the owner authorizes the deployment and the installed helper/config are confirmed to match the reviewed revision. For a crash during activation, use `static-main-recover --operation-id <same-id>`; it can restore only this operation's old static pointer and refuses to overwrite a newer foreign pointer.
+
+### Reuse a sealed staging194 capture
+
+For a front-only refresh with unchanged CMS inputs and schema/mapping, select the operation that originally created the capture. In the current static release's `release.json`, use `reusedCapture.operationId` when present, otherwise `operationId`. Do not select the newer build operation that merely reused that capture. The selected origin must have durable preparation evidence and be terminal as `static-main-committed` or `static-main-recovered`; a recovered operation without preparation evidence is refused.
+
+```sh
+python3 scripts/rehearsal/staging193.py --profile staging194 static-main \
+  --operation-id <fresh-id> --source-sha <current-40-hex-main-sha> \
+  --reuse-capture-operation-id <capture-origin-operation-id>
+```
+
+Use this mode only after confirming that the reviewed helper/config revision supporting it is installed. The operator verifies the selected journal and capture identity, safe paths/ownership, original snapshot/media bytes, current CMS fingerprint and schema/mapping compatibility. It preserves the original snapshot ID and reference date, creates no new SQLite image, backup or capture, and records the origin under `reusedCapture` in the new release. A mismatch stops the operation; there is no implicit fresh-capture fallback. Omit the option for an explicitly selected fresh capture. Current-main CI, browser acceptance, CMS preservation and static rollback checks remain required.
+
+### Static-only rollback
 
 After a committed activation, rollback is a separate explicit action; recovery never undoes an accepted release automatically. The operator must supply an identity and reason:
 
