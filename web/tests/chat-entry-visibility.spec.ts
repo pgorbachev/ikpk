@@ -761,38 +761,77 @@ test.describe('chat entry visibility approved contract', () => {
       await resultDrawer.evaluate((el: HTMLElement) => { el.scrollTop = el.scrollHeight; });
       const lastTitleLink = lastResult.locator('.pagefind-ui__result-link');
       await lastTitleLink.scrollIntoViewIfNeeded();
-      const lastResultBounds = await lastTitleLink.evaluate((el) => {
-        const rect = el.getBoundingClientRect();
-        const card = el.closest<HTMLElement>('.pagefind-ui__result')!.getBoundingClientRect();
+      const inspectTitleLines = async () => lastTitleLink.evaluate((el) => {
         const drawerElement = el.closest<HTMLElement>('.pagefind-ui__drawer')!;
-        const drawer = drawerElement.getBoundingClientRect();
-        const panel = el.closest<HTMLElement>('#header-search')!.getBoundingClientRect();
-        const portElement = document.querySelector<HTMLElement>('[data-page-scrollport]')!;
-        const clip = portElement.getBoundingClientRect();
+        const port = document.querySelector<HTMLElement>('[data-page-scrollport]')!;
+        const pageScrollTop = port.scrollTop;
+        const range = document.createRange();
+        range.selectNodeContents(el);
+        const initialDrawerTop = drawerElement.getBoundingClientRect().top;
+        const initialLines = [...range.getClientRects()].filter((rect) => rect.width > 0 && rect.height > 0)
+          .map((rect) => ({ contentTop: rect.top - initialDrawerTop + drawerElement.scrollTop, height: rect.height }));
+        el.focus();
+        const lines = initialLines.map((line) => {
+          const maxScroll = drawerElement.scrollHeight - drawerElement.clientHeight;
+          drawerElement.scrollTop = Math.max(0, Math.min(maxScroll,
+            line.contentTop - Math.max(0, (drawerElement.clientHeight - line.height) / 2)));
+          const rect = [...range.getClientRects()].filter((candidate) => candidate.width > 0 && candidate.height > 0)
+            .map((candidate) => candidate.toJSON()).find((candidate) => {
+              const drawerTop = drawerElement.getBoundingClientRect().top;
+              return Math.abs(candidate.top - drawerTop + drawerElement.scrollTop - line.contentTop) < 2;
+            });
+          if (!rect) return { ...line, reachable: false, reason: 'line-not-found-after-scroll' };
+          const drawer = drawerElement.getBoundingClientRect();
+          const panel = el.closest<HTMLElement>('#header-search')!.getBoundingClientRect();
+          const clip = port.getBoundingClientRect();
+          const centerX = Math.max(rect.left, Math.min(rect.right, el.getBoundingClientRect().right)) - 1;
+          const centerY = (rect.top + rect.bottom) / 2;
+          const hit = document.elementFromPoint(centerX, centerY);
+          return {
+            ...line,
+            rect,
+            drawerTop: drawer.top,
+            drawerBottom: drawer.bottom,
+            panelTop: panel.top,
+            panelBottom: panel.bottom,
+            clipTop: clip.top,
+            clipBottom: clip.bottom,
+            hitLink: Boolean(hit && (hit === el || el.contains(hit))),
+            reachable: rect.top >= drawer.top && rect.bottom <= drawer.bottom
+              && rect.top >= panel.top && rect.bottom <= panel.bottom
+              && rect.top >= clip.top && rect.bottom <= clip.bottom
+              && Boolean(hit && (hit === el || el.contains(hit))),
+          };
+        });
+        range.detach();
         return {
-          title: rect.toJSON(),
-          card: card.toJSON(),
-          drawer: { rect: drawer.toJSON(), scrollTop: drawerElement.scrollTop, scrollHeight: drawerElement.scrollHeight, clientHeight: drawerElement.clientHeight },
-          panel: panel.toJSON(),
-          clip: clip.toJSON(),
-          pageScrollTop: portElement.scrollTop,
-          titleFullyReachable: rect.top >= drawer.top && rect.bottom <= drawer.bottom
-            && rect.top >= panel.top && rect.bottom <= panel.bottom
-            && rect.top >= clip.top && rect.bottom <= clip.bottom,
+          lineCount: initialLines.length,
+          lines,
+          focused: document.activeElement === el,
+          isKeyboardLink: el instanceof HTMLAnchorElement && el.hasAttribute('href') && el.tabIndex >= 0,
+          pageScrollTopBefore: pageScrollTop,
+          pageScrollTopAfter: port.scrollTop,
+          drawer: { scrollTop: drawerElement.scrollTop, scrollHeight: drawerElement.scrollHeight, clientHeight: drawerElement.clientHeight },
+          title: el.getBoundingClientRect().toJSON(),
         };
       });
+      const lastResultBounds = await inspectTitleLines();
       if (width === 320) console.log(`320px final search control bounds: ${JSON.stringify(lastResultBounds)}`);
-      expect(lastResultBounds.titleFullyReachable,
-        `${width}: the final actionable search title is fully reachable inside the result drawer and every clipping ancestor: ${JSON.stringify(lastResultBounds)}`)
-        .toBe(true);
+      expect(lastResultBounds.lineCount, `${width}: final title contains reachable text lines`).toBeGreaterThan(0);
+      expect(lastResultBounds.lines.every((line) => line.reachable),
+        `${width}: each final title line can be scrolled fully into the drawer and hit-tested: ${JSON.stringify(lastResultBounds)}`).toBe(true);
+      expect(lastResultBounds.focused && lastResultBounds.isKeyboardLink,
+        `${width}: the final search title remains a focusable actionable link`).toBe(true);
+      expect(lastResultBounds.pageScrollTopAfter,
+        `${width}: revealing search title lines changes only the nested result drawer`).toBe(lastResultBounds.pageScrollTopBefore);
       const beforeSearchShrinkScroll = await port.evaluate((el: HTMLElement) => el.scrollTop);
       await resultDrawer.evaluate((el: HTMLElement) => { el.scrollTop = 0; });
       await page.evaluate(() => (window as Window & { __setVisualViewportForTest?: (height: number, offsetTop: number) => void })
         .__setVisualViewportForTest?.(340, 0));
       const resultsCanScroll = await resultDrawer.evaluate((el: HTMLElement) => el.scrollHeight > el.clientHeight);
       expect(resultsCanScroll, `${width}: search results remain scrollable after visual viewport shrink`).toBe(true);
-      await resultDrawer.evaluate((el: HTMLElement) => { el.scrollTop = el.scrollHeight; });
-      const resizedSearch = await page.evaluate(() => {
+      const resizedSearch = await inspectTitleLines();
+      const resizedSearchBounds = await page.evaluate(() => {
         const panel = document.querySelector<HTMLElement>('#header-search')!.getBoundingClientRect();
         const close = document.querySelector<HTMLElement>('#header-search-close')!.getBoundingClientRect();
         const lastLink = document.querySelector<HTMLElement>('#header-search-pagefind .pagefind-ui__result:last-child .pagefind-ui__result-link')!;
@@ -802,15 +841,9 @@ test.describe('chat entry visibility approved contract', () => {
         const drawerRect = drawer.getBoundingClientRect();
         const port = document.querySelector<HTMLElement>('[data-page-scrollport]')!;
         const clip = port.getBoundingClientRect();
-        const visibleHeight = Math.max(0, Math.min(last.bottom, drawerRect.bottom, panel.bottom, clip.bottom)
-          - Math.max(last.top, drawerRect.top, panel.top, clip.top));
         return {
           panelBottom: panel.bottom,
           closeVisible: close.top >= panel.top && close.bottom <= panel.bottom && close.bottom <= clip.bottom,
-          lastResultVisible: visibleHeight > 0,
-          lastTitleVisible: last.top >= drawerRect.top && last.bottom <= drawerRect.bottom
-            && last.top >= panel.top && last.bottom <= panel.bottom
-            && last.top >= clip.top && last.bottom <= clip.bottom,
           card: card.toJSON(),
           title: last.toJSON(),
           drawer: { rect: drawerRect.toJSON(), scrollTop: drawer.scrollTop, scrollHeight: drawer.scrollHeight, clientHeight: drawer.clientHeight },
@@ -818,13 +851,13 @@ test.describe('chat entry visibility approved contract', () => {
           portBottom: clip.bottom,
         };
       });
-      expect(resizedSearch.panelBottom, `${width}: open search resizes to reduced visual viewport without manual scrolling`).toBeLessThanOrEqual(resizedSearch.portBottom + 1);
-      expect(resizedSearch.closeVisible, `${width}: close control remains reachable after visual viewport shrink`).toBe(true);
-      expect(resizedSearch.lastResultVisible, `${width}: some of the final result card remains visible in the drawer after shrink`).toBe(true);
-      expect(resizedSearch.lastTitleVisible,
-        `${width}: the final result title remains fully actionable inside the results drawer and every clipping ancestor after shrink: ${JSON.stringify(resizedSearch)}`)
-        .toBe(true);
-      expect(resizedSearch.scrollTop, `${width}: search resize does not move the page scrollport`).toBe(beforeSearchShrinkScroll);
+      expect(resizedSearchBounds.panelBottom, `${width}: open search resizes to reduced visual viewport without manual scrolling`).toBeLessThanOrEqual(resizedSearchBounds.portBottom + 1);
+      expect(resizedSearchBounds.closeVisible, `${width}: close control remains reachable after visual viewport shrink`).toBe(true);
+      expect(resizedSearch.lines.every((line) => line.reachable),
+        `${width}: each title line stays reachable after visual viewport shrink: ${JSON.stringify({ ...resizedSearch, bounds: resizedSearchBounds })}`).toBe(true);
+      expect(resizedSearch.focused && resizedSearch.isKeyboardLink,
+        `${width}: final title remains a focusable actionable link after shrink`).toBe(true);
+      expect(resizedSearch.pageScrollTopAfter, `${width}: search resize and nested reveal do not move the page scrollport`).toBe(beforeSearchShrinkScroll);
     }
   });
 

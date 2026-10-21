@@ -1,0 +1,210 @@
+
+Running 24 tests using 1 worker
+
+(node:6451) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘   1 [desktop] › tests/chat-entry-visibility.spec.ts:359:3 › chat entry visibility approved contract › anchor, history, wheel, touch-like scroll, keyboard scroll, and focus reveal stay in the shared scrollport (10.6s)
+(node:7929) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   2 [desktop] › tests/chat-entry-visibility.spec.ts:498:3 › chat entry visibility approved contract › history restores distinct scroll positions for separate entries with the same URL (800ms)
+  ✓   3 [desktop] › tests/chat-entry-visibility.spec.ts:531:3 › chat entry visibility approved contract › native same-document hash Back and Forward restore the shared scrollport (497ms)
+  ✓   4 [desktop] › tests/chat-entry-visibility.spec.ts:596:3 › chat entry visibility approved contract › desktop dropdown exposes the final navigation link at a short viewport (329ms)
+  ✘   5 [desktop] › tests/chat-entry-visibility.spec.ts:626:3 › chat entry visibility approved contract › short mobile viewport keeps the full menu and search controls inside the shared scrollport (782ms)
+(node:9262) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   6 [desktop] › tests/chat-entry-visibility.spec.ts:803:3 › chat entry visibility approved contract › safe-area inset expands the separate lower zone while preserving the 80px useful area (253ms)
+  ✓   7 [desktop] › tests/chat-entry-visibility.spec.ts:837:3 › chat entry visibility approved contract › shared scrollport drives the header shadow and the no-IntersectionObserver reviews fallback (247ms)
+  ✓   8 [desktop] › tests/chat-entry-visibility.spec.ts:872:3 › chat entry visibility approved contract › layout resize and reduced visualViewport keep the focused field and chat control visible (537ms)
+  ✓   9 [desktop] › tests/chat-entry-visibility.spec.ts:1063:3 › chat entry visibility approved contract › none, unset, demo output, and 404 do not reserve an empty chat slot (46.2s)
+  ✘  10 [desktop] › tests/external-widgets-baseline-repeat.spec.ts:172:3 › визуальные эталоны не зависят от ответа сторонних сервисов › два прогона при одном моменте дают одни снимки (141ms)
+(node:12450) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  -  11 [desktop] › tests/external-widgets-baseline-repeat.spec.ts:210:3 › визуальные эталоны не зависят от ответа сторонних сервисов › chat-enabled scrollport and the visible Reviews frame repeat deterministically
+  ✓  12 [desktop] › tests/external-widgets.spec.ts:151:3 › виджет отзывов не грузится, пока секция не показалась › появление виджета не сдвигает страницу (326ms)
+(node:13330) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  13 [mobile] › tests/chat-entry-visibility.spec.ts:359:3 › chat entry visibility approved contract › anchor, history, wheel, touch-like scroll, keyboard scroll, and focus reveal stay in the shared scrollport (5.8s)
+(node:14981) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  14 [mobile] › tests/chat-entry-visibility.spec.ts:498:3 › chat entry visibility approved contract › history restores distinct scroll positions for separate entries with the same URL (1.0s)
+  ✓  15 [mobile] › tests/chat-entry-visibility.spec.ts:531:3 › chat entry visibility approved contract › native same-document hash Back and Forward restore the shared scrollport (544ms)
+  ✓  16 [mobile] › tests/chat-entry-visibility.spec.ts:596:3 › chat entry visibility approved contract › desktop dropdown exposes the final navigation link at a short viewport (340ms)
+  ✘  17 [mobile] › tests/chat-entry-visibility.spec.ts:626:3 › chat entry visibility approved contract › short mobile viewport keeps the full menu and search controls inside the shared scrollport (824ms)
+(node:17389) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  18 [mobile] › tests/chat-entry-visibility.spec.ts:803:3 › chat entry visibility approved contract › safe-area inset expands the separate lower zone while preserving the 80px useful area (754ms)
+  ✓  19 [mobile] › tests/chat-entry-visibility.spec.ts:837:3 › chat entry visibility approved contract › shared scrollport drives the header shadow and the no-IntersectionObserver reviews fallback (306ms)
+  ✓  20 [mobile] › tests/chat-entry-visibility.spec.ts:872:3 › chat entry visibility approved contract › layout resize and reduced visualViewport keep the focused field and chat control visible (534ms)
+  ✓  21 [mobile] › tests/chat-entry-visibility.spec.ts:1063:3 › chat entry visibility approved contract › none, unset, demo output, and 404 do not reserve an empty chat slot (55.8s)
+  ✘  22 [mobile] › tests/external-widgets-baseline-repeat.spec.ts:172:3 › визуальные эталоны не зависят от ответа сторонних сервисов › два прогона при одном моменте дают одни снимки (131ms)
+(node:20343) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  23 [mobile] › tests/external-widgets-baseline-repeat.spec.ts:210:3 › визуальные эталоны не зависят от ответа сторонних сервисов › chat-enabled scrollport and the visible Reviews frame repeat deterministically (17.5s)
+  ✓  24 [mobile] › tests/external-widgets.spec.ts:151:3 › виджет отзывов не грузится, пока секция не показалась › появление виджета не сдвигает страницу (250ms)
+
+
+  1) [desktop] › tests/chat-entry-visibility.spec.ts:359:3 › chat entry visibility approved contract › anchor, history, wheel, touch-like scroll, keyboard scroll, and focus reveal stay in the shared scrollport 
+
+    Error: PageDown advances by the useful page area below the sticky header
+
+    PageDown advances by the useful page area below the sticky header
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 247.4375
+    Received: 247
+
+    Call Log:
+    - Timeout 5000ms exceeded while waiting on the predicate
+
+      428 |       const usefulPageStep = Math.max(1, pageFocusBeforeKey.port.clientHeight - stickyHeaderHeight - 24);
+      429 |       await expect.poll(() => keyboardScrollport.evaluate((el) => el.scrollTop), 'PageDown advances by the useful page area below the sticky header')
+    > 430 |         .toBe(Math.min(pageFocusBeforeKey.port.maxScroll, beforeKeyboard + usefulPageStep));
+          |          ^
+      431 |       await page.keyboard.press('PageUp');
+      432 |       await expect.poll(() => keyboardScrollport.evaluate((el) => el.scrollTop), 'PageUp returns to the scrollport start').toBe(0);
+      433 |       await page.keyboard.press('End');
+        at /Users/pgorbachev/projects/private/ikpk/.claude/worktrees/chat-entry-impl-20261021/web/tests/chat-entry-visibility.spec.ts:430:10
+
+    Error Context: test-results/chat-entry-visibility-chat-b4971-ay-in-the-shared-scrollport-desktop/error-context.md
+
+    Error Context: test-results/chat-entry-visibility-chat-b4971-ay-in-the-shared-scrollport-desktop/error-context.md
+
+  2) [desktop] › tests/chat-entry-visibility.spec.ts:626:3 › chat entry visibility approved contract › short mobile viewport keeps the full menu and search controls inside the shared scrollport 
+
+    Error: 320: the final local search result remains reachable above the lower-zone clip
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: true
+    Received: false
+
+      767 |           && rect.top >= clip.top && rect.bottom <= clip.bottom;
+      768 |       });
+    > 769 |       expect(lastResultVisible, `${width}: the final local search result remains reachable above the lower-zone clip`).toBe(true);
+          |                                                                                                                        ^
+      770 |       const beforeSearchShrinkScroll = await port.evaluate((el: HTMLElement) => el.scrollTop);
+      771 |       await resultDrawer.evaluate((el: HTMLElement) => { el.scrollTop = 0; });
+      772 |       await page.evaluate(() => (window as Window & { __setVisualViewportForTest?: (height: number, offsetTop: number) => void })
+        at /Users/pgorbachev/projects/private/ikpk/.claude/worktrees/chat-entry-impl-20261021/web/tests/chat-entry-visibility.spec.ts:769:120
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results/chat-entry-visibility-chat-0d135-nside-the-shared-scrollport-desktop/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results/chat-entry-visibility-chat-0d135-nside-the-shared-scrollport-desktop/error-context.md
+
+    Error Context: test-results/chat-entry-visibility-chat-0d135-nside-the-shared-scrollport-desktop/error-context.md
+
+  3) [desktop] › tests/external-widgets-baseline-repeat.spec.ts:172:3 › визуальные эталоны не зависят от ответа сторонних сервисов › два прогона при одном моменте дают одни снимки 
+
+    Error: page.goto: net::ERR_CONNECTION_REFUSED at http://127.0.0.1:4325/
+    Call log:
+      - navigating to "http://127.0.0.1:4325/", waiting until "load"
+
+
+      126 |     await installThirdPartyGuard(page, { chatLoaderSrc: null });
+      127 |     await page.emulateMedia({ reducedMotion: 'reduce' });
+    > 128 |     const response = await page.goto(path);
+          |                                 ^
+      129 |     expect(response?.status(), `${path}: страница не отдалась — снимок был бы снимком ошибки`).toBe(200);
+      130 |     if (chatEnabled) {
+      131 |       await expect(page.locator('body[data-chat-page]'), `${path}: chat layout is active`).toHaveCount(1);
+        at shot (/Users/pgorbachev/projects/private/ikpk/.claude/worktrees/chat-entry-impl-20261021/web/tests/external-widgets-baseline-repeat.spec.ts:128:33)
+        at /Users/pgorbachev/projects/private/ikpk/.claude/worktrees/chat-entry-impl-20261021/web/tests/external-widgets-baseline-repeat.spec.ts:174:19
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results/external-widgets-baseline--68397-ом-моменте-дают-одни-снимки-desktop/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results/external-widgets-baseline--68397-ом-моменте-дают-одни-снимки-desktop/error-context.md
+
+  4) [mobile] › tests/chat-entry-visibility.spec.ts:359:3 › chat entry visibility approved contract › anchor, history, wheel, touch-like scroll, keyboard scroll, and focus reveal stay in the shared scrollport 
+
+    Error: PageDown advances by the useful page area below the sticky header
+
+    PageDown advances by the useful page area below the sticky header
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 247.4375
+    Received: 247
+
+    Call Log:
+    - Timeout 5000ms exceeded while waiting on the predicate
+
+      428 |       const usefulPageStep = Math.max(1, pageFocusBeforeKey.port.clientHeight - stickyHeaderHeight - 24);
+      429 |       await expect.poll(() => keyboardScrollport.evaluate((el) => el.scrollTop), 'PageDown advances by the useful page area below the sticky header')
+    > 430 |         .toBe(Math.min(pageFocusBeforeKey.port.maxScroll, beforeKeyboard + usefulPageStep));
+          |          ^
+      431 |       await page.keyboard.press('PageUp');
+      432 |       await expect.poll(() => keyboardScrollport.evaluate((el) => el.scrollTop), 'PageUp returns to the scrollport start').toBe(0);
+      433 |       await page.keyboard.press('End');
+        at /Users/pgorbachev/projects/private/ikpk/.claude/worktrees/chat-entry-impl-20261021/web/tests/chat-entry-visibility.spec.ts:430:10
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results/chat-entry-visibility-chat-b4971-ay-in-the-shared-scrollport-mobile/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results/chat-entry-visibility-chat-b4971-ay-in-the-shared-scrollport-mobile/error-context.md
+
+    Error Context: test-results/chat-entry-visibility-chat-b4971-ay-in-the-shared-scrollport-mobile/error-context.md
+
+  5) [mobile] › tests/chat-entry-visibility.spec.ts:626:3 › chat entry visibility approved contract › short mobile viewport keeps the full menu and search controls inside the shared scrollport 
+
+    Error: 320: the final local search result remains reachable above the lower-zone clip
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: true
+    Received: false
+
+      767 |           && rect.top >= clip.top && rect.bottom <= clip.bottom;
+      768 |       });
+    > 769 |       expect(lastResultVisible, `${width}: the final local search result remains reachable above the lower-zone clip`).toBe(true);
+          |                                                                                                                        ^
+      770 |       const beforeSearchShrinkScroll = await port.evaluate((el: HTMLElement) => el.scrollTop);
+      771 |       await resultDrawer.evaluate((el: HTMLElement) => { el.scrollTop = 0; });
+      772 |       await page.evaluate(() => (window as Window & { __setVisualViewportForTest?: (height: number, offsetTop: number) => void })
+        at /Users/pgorbachev/projects/private/ikpk/.claude/worktrees/chat-entry-impl-20261021/web/tests/chat-entry-visibility.spec.ts:769:120
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results/chat-entry-visibility-chat-0d135-nside-the-shared-scrollport-mobile/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results/chat-entry-visibility-chat-0d135-nside-the-shared-scrollport-mobile/error-context.md
+
+    Error Context: test-results/chat-entry-visibility-chat-0d135-nside-the-shared-scrollport-mobile/error-context.md
+
+  6) [mobile] › tests/external-widgets-baseline-repeat.spec.ts:172:3 › визуальные эталоны не зависят от ответа сторонних сервисов › два прогона при одном моменте дают одни снимки 
+
+    Error: page.goto: net::ERR_CONNECTION_REFUSED at http://127.0.0.1:4325/
+    Call log:
+      - navigating to "http://127.0.0.1:4325/", waiting until "load"
+
+
+      126 |     await installThirdPartyGuard(page, { chatLoaderSrc: null });
+      127 |     await page.emulateMedia({ reducedMotion: 'reduce' });
+    > 128 |     const response = await page.goto(path);
+          |                                 ^
+      129 |     expect(response?.status(), `${path}: страница не отдалась — снимок был бы снимком ошибки`).toBe(200);
+      130 |     if (chatEnabled) {
+      131 |       await expect(page.locator('body[data-chat-page]'), `${path}: chat layout is active`).toHaveCount(1);
+        at shot (/Users/pgorbachev/projects/private/ikpk/.claude/worktrees/chat-entry-impl-20261021/web/tests/external-widgets-baseline-repeat.spec.ts:128:33)
+        at /Users/pgorbachev/projects/private/ikpk/.claude/worktrees/chat-entry-impl-20261021/web/tests/external-widgets-baseline-repeat.spec.ts:174:19
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results/external-widgets-baseline--68397-ом-моменте-дают-одни-снимки-mobile/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results/external-widgets-baseline--68397-ом-моменте-дают-одни-снимки-mobile/error-context.md
+
+  6 failed
+    [desktop] › tests/chat-entry-visibility.spec.ts:359:3 › chat entry visibility approved contract › anchor, history, wheel, touch-like scroll, keyboard scroll, and focus reveal stay in the shared scrollport 
+    [desktop] › tests/chat-entry-visibility.spec.ts:626:3 › chat entry visibility approved contract › short mobile viewport keeps the full menu and search controls inside the shared scrollport 
+    [desktop] › tests/external-widgets-baseline-repeat.spec.ts:172:3 › визуальные эталоны не зависят от ответа сторонних сервисов › два прогона при одном моменте дают одни снимки 
+    [mobile] › tests/chat-entry-visibility.spec.ts:359:3 › chat entry visibility approved contract › anchor, history, wheel, touch-like scroll, keyboard scroll, and focus reveal stay in the shared scrollport 
+    [mobile] › tests/chat-entry-visibility.spec.ts:626:3 › chat entry visibility approved contract › short mobile viewport keeps the full menu and search controls inside the shared scrollport 
+    [mobile] › tests/external-widgets-baseline-repeat.spec.ts:172:3 › визуальные эталоны не зависят от ответа сторонних сервисов › два прогона при одном моменте дают одни снимки 
+  1 skipped
+  17 passed (7.7m)

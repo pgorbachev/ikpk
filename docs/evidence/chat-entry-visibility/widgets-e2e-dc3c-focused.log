@@ -1,0 +1,107 @@
+
+Running 6 tests using 1 worker
+
+(node:31383) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  1 [desktop] › tests/chat-entry-visibility.spec.ts:359:3 › chat entry visibility approved contract › anchor, history, wheel, touch-like scroll, keyboard scroll, and focus reveal stay in the shared scrollport (7.8s)
+(node:32343) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  2 [desktop] › tests/chat-entry-visibility.spec.ts:567:3 › chat entry visibility approved contract › history keeps a forward fragment position after its document is left and reloaded (535ms)
+320px final search control bounds: {"title":{"x":35.390625,"y":80.25,"width":178.734375,"height":106.640625,"top":80.25,"right":214.125,"bottom":186.890625,"left":35.390625},"card":{"x":35.390625,"y":42.25,"width":229.5,"height":252.828125,"top":42.25,"right":264.890625,"bottom":295.078125,"left":35.390625},"drawer":{"rect":{"x":20,"y":87.8125,"width":260.28125,"height":90.71875,"top":87.8125,"right":280.28125,"bottom":178.53125,"left":20},"scrollTop":1338,"scrollHeight":1619,"clientHeight":89},"panel":{"x":0,"y":22.234375,"width":320,"height":168.484375,"top":22.234375,"right":320,"bottom":190.71875,"left":0},"clip":{"x":0,"y":0,"width":320,"height":340,"top":0,"right":320,"bottom":340,"left":0},"pageScrollTop":0,"titleFullyReachable":false}
+  ✘  3 [desktop] › tests/chat-entry-visibility.spec.ts:628:3 › chat entry visibility approved contract › short mobile viewport keeps the full menu and search controls inside the shared scrollport (798ms)
+(node:32611) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  4 [mobile] › tests/chat-entry-visibility.spec.ts:359:3 › chat entry visibility approved contract › anchor, history, wheel, touch-like scroll, keyboard scroll, and focus reveal stay in the shared scrollport (4.5s)
+  ✓  5 [mobile] › tests/chat-entry-visibility.spec.ts:567:3 › chat entry visibility approved contract › history keeps a forward fragment position after its document is left and reloaded (449ms)
+320px final search control bounds: {"title":{"x":35.390625,"y":80.25,"width":178.734375,"height":106.640625,"top":80.25,"right":214.125,"bottom":186.890625,"left":35.390625},"card":{"x":35.390625,"y":42.25,"width":229.5,"height":252.828125,"top":42.25,"right":264.890625,"bottom":295.078125,"left":35.390625},"drawer":{"rect":{"x":20,"y":87.8125,"width":260.28125,"height":90.71875,"top":87.8125,"right":280.28125,"bottom":178.53125,"left":20},"scrollTop":1338,"scrollHeight":1619,"clientHeight":89},"panel":{"x":0,"y":22.234375,"width":320,"height":168.484375,"top":22.234375,"right":320,"bottom":190.71875,"left":0},"clip":{"x":0,"y":0,"width":320,"height":340,"top":0,"right":320,"bottom":340,"left":0},"pageScrollTop":0,"titleFullyReachable":false}
+  ✘  6 [mobile] › tests/chat-entry-visibility.spec.ts:628:3 › chat entry visibility approved contract › short mobile viewport keeps the full menu and search controls inside the shared scrollport (792ms)
+
+
+  1) [desktop] › tests/chat-entry-visibility.spec.ts:359:3 › chat entry visibility approved contract › anchor, history, wheel, touch-like scroll, keyboard scroll, and focus reveal stay in the shared scrollport 
+
+    Error: back restores the schedule scrollport position
+
+    back restores the schedule scrollport position
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 22299
+    Received: 21795
+
+    Call Log:
+    - Timeout 5000ms exceeded while waiting on the predicate
+
+      477 |       await expect(page).toHaveURL(scheduleUrl);
+      478 |       await expect.poll(async () => (await snapshotLayout(page)).scrollportScrollTop,
+    > 479 |         'back restores the schedule scrollport position').toBe(schedulePosition.scrollportScrollTop);
+          |                                                           ^
+      480 |       await page.goForward();
+      481 |       await expect(page).toHaveURL(/kontakty/);
+      482 |       await expect.poll(async () => (await snapshotLayout(page)).scrollportScrollTop,
+        at /Users/pgorbachev/projects/private/ikpk/.claude/worktrees/chat-entry-impl-20261021/web/tests/chat-entry-visibility.spec.ts:479:59
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results/chat-entry-visibility-chat-b4971-ay-in-the-shared-scrollport-desktop/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results/chat-entry-visibility-chat-b4971-ay-in-the-shared-scrollport-desktop/error-context.md
+
+    Error Context: test-results/chat-entry-visibility-chat-b4971-ay-in-the-shared-scrollport-desktop/error-context.md
+
+  2) [desktop] › tests/chat-entry-visibility.spec.ts:628:3 › chat entry visibility approved contract › short mobile viewport keeps the full menu and search controls inside the shared scrollport 
+
+    Error: 320: the final actionable search title is fully reachable inside the result drawer and every clipping ancestor: {"title":{"x":35.390625,"y":80.25,"width":178.734375,"height":106.640625,"top":80.25,"right":214.125,"bottom":186.890625,"left":35.390625},"card":{"x":35.390625,"y":42.25,"width":229.5,"height":252.828125,"top":42.25,"right":264.890625,"bottom":295.078125,"left":35.390625},"drawer":{"rect":{"x":20,"y":87.8125,"width":260.28125,"height":90.71875,"top":87.8125,"right":280.28125,"bottom":178.53125,"left":20},"scrollTop":1338,"scrollHeight":1619,"clientHeight":89},"panel":{"x":0,"y":22.234375,"width":320,"height":168.484375,"top":22.234375,"right":320,"bottom":190.71875,"left":0},"clip":{"x":0,"y":0,"width":320,"height":340,"top":0,"right":320,"bottom":340,"left":0},"pageScrollTop":0,"titleFullyReachable":false}
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: true
+    Received: false
+
+      785 |       expect(lastResultBounds.titleFullyReachable,
+      786 |         `${width}: the final actionable search title is fully reachable inside the result drawer and every clipping ancestor: ${JSON.stringify(lastResultBounds)}`)
+    > 787 |         .toBe(true);
+          |          ^
+      788 |       const beforeSearchShrinkScroll = await port.evaluate((el: HTMLElement) => el.scrollTop);
+      789 |       await resultDrawer.evaluate((el: HTMLElement) => { el.scrollTop = 0; });
+      790 |       await page.evaluate(() => (window as Window & { __setVisualViewportForTest?: (height: number, offsetTop: number) => void })
+        at /Users/pgorbachev/projects/private/ikpk/.claude/worktrees/chat-entry-impl-20261021/web/tests/chat-entry-visibility.spec.ts:787:10
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results/chat-entry-visibility-chat-0d135-nside-the-shared-scrollport-desktop/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results/chat-entry-visibility-chat-0d135-nside-the-shared-scrollport-desktop/error-context.md
+
+    Error Context: test-results/chat-entry-visibility-chat-0d135-nside-the-shared-scrollport-desktop/error-context.md
+
+  3) [mobile] › tests/chat-entry-visibility.spec.ts:628:3 › chat entry visibility approved contract › short mobile viewport keeps the full menu and search controls inside the shared scrollport 
+
+    Error: 320: the final actionable search title is fully reachable inside the result drawer and every clipping ancestor: {"title":{"x":35.390625,"y":80.25,"width":178.734375,"height":106.640625,"top":80.25,"right":214.125,"bottom":186.890625,"left":35.390625},"card":{"x":35.390625,"y":42.25,"width":229.5,"height":252.828125,"top":42.25,"right":264.890625,"bottom":295.078125,"left":35.390625},"drawer":{"rect":{"x":20,"y":87.8125,"width":260.28125,"height":90.71875,"top":87.8125,"right":280.28125,"bottom":178.53125,"left":20},"scrollTop":1338,"scrollHeight":1619,"clientHeight":89},"panel":{"x":0,"y":22.234375,"width":320,"height":168.484375,"top":22.234375,"right":320,"bottom":190.71875,"left":0},"clip":{"x":0,"y":0,"width":320,"height":340,"top":0,"right":320,"bottom":340,"left":0},"pageScrollTop":0,"titleFullyReachable":false}
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: true
+    Received: false
+
+      785 |       expect(lastResultBounds.titleFullyReachable,
+      786 |         `${width}: the final actionable search title is fully reachable inside the result drawer and every clipping ancestor: ${JSON.stringify(lastResultBounds)}`)
+    > 787 |         .toBe(true);
+          |          ^
+      788 |       const beforeSearchShrinkScroll = await port.evaluate((el: HTMLElement) => el.scrollTop);
+      789 |       await resultDrawer.evaluate((el: HTMLElement) => { el.scrollTop = 0; });
+      790 |       await page.evaluate(() => (window as Window & { __setVisualViewportForTest?: (height: number, offsetTop: number) => void })
+        at /Users/pgorbachev/projects/private/ikpk/.claude/worktrees/chat-entry-impl-20261021/web/tests/chat-entry-visibility.spec.ts:787:10
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results/chat-entry-visibility-chat-0d135-nside-the-shared-scrollport-mobile/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results/chat-entry-visibility-chat-0d135-nside-the-shared-scrollport-mobile/error-context.md
+
+    Error Context: test-results/chat-entry-visibility-chat-0d135-nside-the-shared-scrollport-mobile/error-context.md
+
+  3 failed
+    [desktop] › tests/chat-entry-visibility.spec.ts:359:3 › chat entry visibility approved contract › anchor, history, wheel, touch-like scroll, keyboard scroll, and focus reveal stay in the shared scrollport 
+    [desktop] › tests/chat-entry-visibility.spec.ts:628:3 › chat entry visibility approved contract › short mobile viewport keeps the full menu and search controls inside the shared scrollport 
+    [mobile] › tests/chat-entry-visibility.spec.ts:628:3 › chat entry visibility approved contract › short mobile viewport keeps the full menu and search controls inside the shared scrollport 
+  3 passed (58.5s)
