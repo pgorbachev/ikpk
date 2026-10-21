@@ -95,11 +95,6 @@ const hasForm = role !== 'ci';
                 <p id="payment-err-amount" class="payment-error" hidden></p>
               </div>
             </div>
-            <div class="payment-field">
-              <label for="payment-venue">Место проведения</label>
-              <input id="payment-venue" name="venue" type="text" maxlength="300" />
-              <p id="payment-err-venue" class="payment-error" hidden></p>
-            </div>
           </div>
 
           <div class="payment-footer">
@@ -349,9 +344,8 @@ const hasForm = role !== 'ci';
    *
    * `bottom` отсчитывается от низа СОДЕРЖИМОГО панели, а не от её нижнего края:
    * при `bottom: 0` полоса замирала на 20 px выше края (замерено в Chrome: низ
-   * футера 769 при низе панели 789), и в этой щели ехало содержимое формы —
-   * подпись и текст ошибки поля «Место проведения» были видны под кнопкой
-   * «Оплатить». Отрицательное смещение на нижний паддинг панели убирает щель. */
+   * футера 769 при низе панели 789), и в этой щели ехало содержимое формы.
+   * Отрицательное смещение на нижний паддинг панели убирает щель. */
   .payment-footer {
     position: sticky;
     bottom: calc(-1 * var(--payment-panel-pad-y));
