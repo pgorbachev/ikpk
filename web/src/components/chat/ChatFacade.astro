@@ -96,13 +96,13 @@ const showFacade = config.state === 'address' && !isDemoOutput;
       const updateViewport = function () {
         const height = viewport ? viewport.height : window.innerHeight;
         const offset = viewport ? viewport.offsetTop : 0;
-        const portRect = pageScrollport.getBoundingClientRect();
         const setPixel = function (name, value) {
           const next = Math.max(0, value) + 'px';
           if (document.body.style.getPropertyValue(name) !== next) document.body.style.setProperty(name, next);
         };
         setPixel('--chat-viewport-height', height);
         setPixel('--chat-viewport-offset', offset);
+        const portRect = pageScrollport.getBoundingClientRect();
 
         // Popups are children of the sticky header, but the page scrollport clips
         // them. Measure their actual anchors against that clip so a demo banner,

@@ -1,4 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
+import { execFileSync } from 'node:child_process';
+import { join } from 'node:path';
 import { serveStatic, type StaticSite } from './helpers/static-serve';
 import { PROBE_CHAT_LOADER_SRC, buildProbe, type ProbeBuild } from './helpers/widget-probe-build';
 import { TEMPLATES } from './helpers/templates';
@@ -30,6 +32,12 @@ test.beforeAll(async () => {
     DEMO_OUTPUT: undefined,
   }, { keepOnDisk: true });
   if (activeBuild.pages.size === 0) throw new Error('non-demo probe has no HTML pages');
+  if (!activeBuild.root) throw new Error('preview probe output was not retained for local Pagefind indexing');
+  execFileSync(join(process.cwd(), 'node_modules/.bin/pagefind'), ['--site', activeBuild.root], {
+    cwd: process.cwd(),
+    stdio: 'pipe',
+    encoding: 'utf8',
+  });
   activeSite = await serveStatic(activeBuild.root!);
 
 });
@@ -435,6 +443,19 @@ test.describe('chat entry visibility approved contract', () => {
 
   test('short mobile viewport keeps the full menu and search controls inside the shared scrollport', async ({ page }) => {
     await protectThirdParties(page);
+    await page.addInitScript(() => {
+      const viewport = window.visualViewport;
+      if (!viewport) return;
+      const state = { height: viewport.height, offsetTop: viewport.offsetTop };
+      Object.defineProperty(viewport, 'height', { configurable: true, get: () => state.height });
+      Object.defineProperty(viewport, 'offsetTop', { configurable: true, get: () => state.offsetTop });
+      (window as Window & { __setVisualViewportForTest?: (height: number, offsetTop: number) => void })
+        .__setVisualViewportForTest = (height, offsetTop) => {
+          state.height = height;
+          state.offsetTop = offsetTop;
+          viewport.dispatchEvent(new Event('resize'));
+        };
+    });
     for (const width of [320, 375]) {
       await page.setViewportSize({ width, height: 420 });
       await page.goto(activeUrl('/'));
@@ -443,6 +464,16 @@ test.describe('chat entry visibility approved contract', () => {
       await page.locator('details.topnav-mobile > summary').click();
       const drawer = page.locator('.topnav-drawer');
       await expect(drawer).toBeVisible();
+      const beforeShrinkScroll = await port.evaluate((el: HTMLElement) => el.scrollTop);
+      await page.evaluate(() => (window as Window & { __setVisualViewportForTest?: (height: number, offsetTop: number) => void })
+        .__setVisualViewportForTest?.(300, 0));
+      const shrunkDrawer = await page.evaluate(() => ({
+        drawerBottom: document.querySelector<HTMLElement>('.topnav-drawer')!.getBoundingClientRect().bottom,
+        portBottom: document.querySelector<HTMLElement>('[data-page-scrollport]')!.getBoundingClientRect().bottom,
+        scrollTop: document.querySelector<HTMLElement>('[data-page-scrollport]')!.scrollTop,
+      }));
+      expect(shrunkDrawer.drawerBottom, `${width}: open menu resizes to reduced visual viewport without manual scrolling`).toBeLessThanOrEqual(shrunkDrawer.portBottom + 1);
+      expect(shrunkDrawer.scrollTop, `${width}: popup resize does not move the page scrollport`).toBe(beforeShrinkScroll);
       const initial = await page.evaluate(() => ({
         drawer: document.querySelector<HTMLElement>('.topnav-drawer')!.getBoundingClientRect().toJSON(),
         port: document.querySelector<HTMLElement>('[data-page-scrollport]')!.getBoundingClientRect().toJSON(),
@@ -501,6 +532,28 @@ test.describe('chat entry visibility approved contract', () => {
           && rect.top >= clip.top && rect.bottom <= clip.bottom;
       });
       expect(lastResultVisible, `${width}: the final local search result remains reachable above the lower-zone clip`).toBe(true);
+      const beforeSearchShrinkScroll = await port.evaluate((el: HTMLElement) => el.scrollTop);
+      await page.evaluate(() => (window as Window & { __setVisualViewportForTest?: (height: number, offsetTop: number) => void })
+        .__setVisualViewportForTest?.(340, 0));
+      const resizedSearch = await page.evaluate(() => {
+        const panel = document.querySelector<HTMLElement>('#header-search')!.getBoundingClientRect();
+        const close = document.querySelector<HTMLElement>('#header-search-close')!.getBoundingClientRect();
+        const results = [...document.querySelectorAll<HTMLElement>('#header-search-pagefind .pagefind-ui__result')];
+        const last = results[results.length - 1]!.getBoundingClientRect();
+        const port = document.querySelector<HTMLElement>('[data-page-scrollport]')!;
+        const clip = port.getBoundingClientRect();
+        return {
+          panelBottom: panel.bottom,
+          closeVisible: close.top >= panel.top && close.bottom <= panel.bottom && close.bottom <= clip.bottom,
+          lastResultVisible: last.top >= clip.top && last.bottom <= clip.bottom,
+          scrollTop: port.scrollTop,
+          portBottom: clip.bottom,
+        };
+      });
+      expect(resizedSearch.panelBottom, `${width}: open search resizes to reduced visual viewport without manual scrolling`).toBeLessThanOrEqual(resizedSearch.portBottom + 1);
+      expect(resizedSearch.closeVisible, `${width}: close control remains reachable after visual viewport shrink`).toBe(true);
+      expect(resizedSearch.lastResultVisible, `${width}: last search result remains reachable after visual viewport shrink`).toBe(true);
+      expect(resizedSearch.scrollTop, `${width}: search resize does not move the page scrollport`).toBe(beforeSearchShrinkScroll);
     }
   });
 

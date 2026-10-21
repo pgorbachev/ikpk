@@ -770,8 +770,8 @@ test.describe('кнопка чата не перекрывает содержи�
     await page.goto(url('/'));
     await expect(page.locator(`[${SEL_CHAT_FACADE}]`), 'фасада чата нет — предмета нет').toHaveCount(1);
 
-    const landed = await page.evaluate((facadeAttr) => {
-      const facade = document.querySelector(`[${facadeAttr}]`);
+    const landed = await page.evaluate((selectors) => {
+      const facade = document.querySelector(`[${selectors.facade}]`);
       const step = 20;
       const interactive = 'a, button, summary, input, select, textarea, label, [role="button"]';
       for (let y = innerHeight - step; y > 0; y -= step)
@@ -782,12 +782,12 @@ test.describe('кнопка чата не перекрывает содержи�
           return {
             x, y,
             inFacade: facade !== null && facade.contains(el),
-            inTrigger: Boolean(el.closest(`[${SEL_CHAT_TRIGGER}]`)),
+            inTrigger: Boolean(el.closest(`[${selectors.trigger}]`)),
             tag: el.tagName.toLowerCase(),
           };
         }
       return null;
-    }, SEL_CHAT_FACADE);
+    }, { facade: SEL_CHAT_FACADE, trigger: SEL_CHAT_TRIGGER });
 
     expect(landed, 'ни одной неинтерактивной точки не нашлось — перебор проверить нечем').not.toBeNull();
     expect(
