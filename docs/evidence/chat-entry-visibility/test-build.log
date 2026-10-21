@@ -1,0 +1,691 @@
+
+> web@0.0.1 test:build
+> npm run build && vitest run --config vitest.build.config.ts
+
+
+> web@0.0.1 prebuild
+> tsx scripts/prepare-snapshot.ts && tsx scripts/make-derivatives.ts && tsx scripts/check-media-output.ts
+
+prepare-snapshot: /Users/pgorbachev/projects/private/ikpk/.claude/worktrees/chat-entry-red-20261021/fixtures/content-snapshot → web/.snapshot, web/dist-snapshot
+базовых собрано: 387, адаптивных вариантов: 739, скопировано как есть: 58, актуальны: 0, ошибок: 0
+манифест: 445 записей, ширины 480/768/1200/1600/2400
+медиа-гейт: проверено 7 записей снимка
+
+> web@0.0.1 build
+> astro build && pagefind --site dist
+
+09:46:31 [vite] [optimizer] bundling dependencies...
+09:46:33 [types] Generated 4.45s
+09:46:33 [build] output: "static"
+09:46:33 [build] mode: "static"
+09:46:33 [build] directory: /Users/pgorbachev/projects/private/ikpk/.claude/worktrees/chat-entry-red-20261021/web/dist/
+09:46:33 [build] Collecting build info...
+09:46:33 [build] ✓ Completed in 14.38s.
+09:46:33 [build] Building static entrypoints...
+09:46:40 [vite] ✓ built in 6.68s
+09:47:50 [vite] ✓ built in 1m 9s
+09:47:50 [build] Rearranging server assets...
+
+ generating static routes 
+09:47:52   ├─ /404.html (+237ms) 
+09:47:52   ├─ /aktsii-i-skidki/index.html (+113ms) 
+09:47:52   ├─ /instituty/institut-klinicheskoy-prikladnoy-kineziologii/index.html (+161ms) 
+09:47:52   ├─ /instituty/institut-apledzhera/index.html (+125ms) 
+09:47:52   ├─ /instituty/institut-barralya/index.html (+99ms) 
+09:47:53   ├─ /instituty/index.html (+92ms) 
+09:47:53   ├─ /kontakty/index.html (+84ms) 
+09:47:53   ├─ /oplata/index.html (+132ms) 
+09:47:53   ├─ /politika-konfidencialnosti/index.html (+103ms) 
+09:47:53   ├─ /programmy/kraniosakralnaya-terapiya/index.html (+67ms) 
+09:47:53   ├─ /programmy/prikladnaya-kineziologiya/index.html (+101ms) 
+09:47:53   ├─ /programmy/visceralnye-tehniki/index.html (+108ms) 
+09:47:53   ├─ /programmy/prodvinutye-visceralnye-tehniki/index.html (+84ms) 
+09:47:53   ├─ /programmy/nevralnye-tehniki/index.html (+100ms) 
+09:47:53   ├─ /programmy/tehniki-vyslushivaniya/index.html (+70ms) 
+09:47:53   ├─ /programmy/novyj-manualnyj-podhod-k-sustavam/index.html (+52ms) 
+09:47:54   ├─ /programmy/postdiplomnye-programmy-po-prikladnoj-kineziologii/index.html (+154ms) 
+09:47:54   ├─ /programmy/primenenie-principov-akupunktury/index.html (+44ms) 
+09:47:54   ├─ /programmy/pereprogrammirovanie-nejroreceptornyh-zon-v-pk/index.html (+54ms) 
+09:47:54   ├─ /programmy/kurs-po-kitajskoj-medicine-s-pozicij-prikladnoj-kineziologii/index.html (+117ms) 
+09:47:54   ├─ /programmy/imunnyj-otvet/index.html (+44ms) 
+09:47:54   ├─ /programmy/prikladnaya-kineziologiya-dlya-fitnesa/index.html (+51ms) 
+09:47:54   ├─ /programmy/specializirovannye-programmy/index.html (+52ms) 
+09:47:54   ├─ /programmy/dolgoletie/index.html (+69ms) 
+09:47:54   ├─ /programmy/psihokineziologiya/index.html (+53ms) 
+09:47:54   ├─ /programmy/avtorskie-seminary-zharovoj-ls/index.html (+56ms) 
+09:47:54   ├─ /programmy/pediatriya-akusherstvo-i-novorozhdennye/index.html (+58ms) 
+09:47:54   ├─ /programmy/mozg/index.html (+60ms) 
+09:47:54   ├─ /programmy/kraniosakralnaya-terapiya-specializirovannye/index.html (+56ms) 
+09:47:54   ├─ /programmy/massazh/index.html (+44ms) 
+09:47:54   ├─ /programmy/korrekciya-strukturnyh-narushenij-osteoprakticheskimi-i-myshechno-energeticheskimi-tehnikami/index.html (+57ms) 
+09:47:54   ├─ /programmy/specializirovannye/index.html (+70ms) 
+09:47:55   ├─ /programmy/vibracionnaya-medicina/index.html (+56ms) 
+09:47:55   ├─ /programmy/vebinary-i-mezhseminarskie-vstrechi/index.html (+56ms) 
+09:47:55   ├─ /programmy/vebinary-i-mezhseminarskie-vstrechi-ikpk/index.html (+63ms) 
+09:47:55   ├─ /programmy/index.html (+49ms) 
+09:47:55   ├─ /raspisanie-i-tseny/index.html (+152ms) 
+09:47:55   ├─ /rich-content-canary/index.html (+128ms) 
+09:47:55   ├─ /robots.txt (+25ms) 
+09:47:55   ├─ /seminary/antistressovaya-kineziologiya-vvedenie-1/index.html (+45ms) 
+09:47:55   ├─ /seminary/bryushnaya-polost-1/index.html (+56ms) 
+09:47:55   ├─ /seminary/infekcii-i-psevdoinfekcii-vvedenie-v-gelmintologiyu-nematody/index.html (+45ms) 
+09:47:55   ├─ /seminary/ispolzovanie-meridianov-v-kranio-sakralnoj-terapii-1/index.html (+63ms) 
+09:47:55   ├─ /seminary/korrekciya-strukturnyh-narushenij-tazovogo-regiona-i-nizhnih-konechnostej/index.html (+67ms) 
+09:47:55   ├─ /seminary/kraniosakralnaya-terapiya-1/index.html (+53ms) 
+09:47:55   ├─ /seminary/kraniosakralnaya-terapiya-dlya-omolozheniya-i-dolgoletiya/index.html (+60ms) 
+09:47:55   ├─ /seminary/kraniosakralnaya-terapiya-i-immunnyj-otvet/index.html (+64ms) 
+09:47:56   ├─ /seminary/kraniosakralnaya-terapiya-i-zhiznennyj-cikl/index.html (+44ms) 
+09:47:56   ├─ /seminary/kraniosakralnaya-terapiya-v-pediatrii-1/index.html (+47ms) 
+09:47:56   ├─ /seminary/meridiany-kitajskaya-klassicheskaya-medicina-s-pozicii-prikladnoj-kineziologii-i-nevrologii-nejro-tkm-1/index.html (+53ms) 
+09:47:56   ├─ /seminary/miofascialnyj-i-bukkalnyj-massazh-lica/index.html (+55ms) 
+09:47:56   ├─ /seminary/myshechnoe-testirovanie-mmt-podhody-k-diagnostike-i-algoritmy-raboty-s-myshcami/index.html (+59ms) 
+09:47:56   ├─ /seminary/osnovy-manualnogo-myshechnogo-testirovaniya/index.html (+45ms) 
+09:47:56   ├─ /seminary/seminar-1/index.html (+55ms) 
+09:47:56   ├─ /seminary/stimulyaciya-zhiznennoj-sily-kletki-1/index.html (+61ms) 
+09:47:56   ├─ /seminary/strukturnaya-sostavlyayushaya-treugolnika-zdorovya/index.html (+40ms) 
+09:47:56   ├─ /seminary/yadra-mozga-nevrologicheskij-podhod-k-diagnostike-i-funkcionalnoj-korrekcii/index.html (+40ms) 
+09:47:56   ├─ /seminary/antistressovaya-kineziologiya-2/index.html (+32ms) 
+09:47:56   ├─ /seminary/diagnostika-prichin-oslableniya-myshc-i-algoritm-raboty-so-slabymi-myshcami/index.html (+32ms) 
+09:47:56   ├─ /seminary/disfunkcii-yader-cherepno-mozgovyh-nervov/index.html (+35ms) 
+09:47:56   ├─ /seminary/ispolzovanie-meridianov-v-kranio-sakralnoj-terapii-2/index.html (+29ms) 
+09:47:56   ├─ /seminary/korrekciya-strukturnyh-narushenij-poyasnichnogo-grudnogo-otdelov-pozvonochnika-i-grudnoj-kletki/index.html (+40ms) 
+09:47:56   ├─ /seminary/kraniosakralnaya-terapiya-2/index.html (+31ms) 
+09:47:56   ├─ /seminary/meridiany-kitajskaya-klassicheskaya-medicina-s-pozicii-prikladnoj-kineziologii-i-nevrologii-nejro-tkm-2/index.html (+24ms) 
+09:47:56   ├─ /seminary/miofascialnyj-massazh-tela-armoplastika/index.html (+49ms) 
+09:47:56   ├─ /seminary/seminar-2-srednij-uroven/index.html (+45ms) 
+09:47:56   ├─ /seminary/strukturnaya-sostavlyayushaya-treugolnika-zdorovya-obshie-diagnosticheskie-i-lechebnye-procedury-2/index.html (+36ms) 
+09:47:56   ├─ /seminary/bolevye-sindromy-i-rabota-s-nimi/index.html (+41ms) 
+09:47:56   ├─ /seminary/csp-2-kraniosakralnaya-terapiya-v-pediatrii-2/index.html (+44ms) 
+09:47:56   ├─ /seminary/disfunkciya-visochno-nizhnechelyustnogo-sustava-vnchs/index.html (+40ms) 
+09:47:57   ├─ /seminary/gelmintozy-nematodozy-cestodozy-trematodozy/index.html (+59ms) 
+09:47:57   ├─ /seminary/ispolzovanie-meridianov-v-kranio-sakralnoj-terapii-3/index.html (+38ms) 
+09:47:57   ├─ /seminary/korrekciya-strukturnyh-narushenij-shejnogo-otdela-pozvonochnika-pleche-lopatochnogo-regiona-i-verhnih-konechnostej/index.html (+47ms) 
+09:47:57   ├─ /seminary/meridiany-kitajskaya-klassicheskaya-medicina-s-pozicii-prikladnoj-kineziologii-i-nevrologii-nejro-tkm-3/index.html (+51ms) 
+09:47:57   ├─ /seminary/miofascialnyj-massazh-tela-zhenskij-massazh/index.html (+32ms) 
+09:47:57   ├─ /seminary/pereprogrammirovanie-nejroreceptornyh-polej-p-dtr/index.html (+62ms) 
+09:47:57   ├─ /seminary/seminar-1-prodvinutyj-uroven/index.html (+84ms) 
+09:47:57   ├─ /seminary/somato-emocionalnoe-osvobozhdenie-1/index.html (+31ms) 
+09:47:57   ├─ /seminary/strukturnaya-sostavlyayushaya-treugolnika-zdorovya-obshie-diagnosticheskie-i-lechebnye-procedury/index.html (+40ms) 
+09:47:57   ├─ /seminary/ispolzovanie-meridianov-v-kranio-sakralnoj-terapii-4/index.html (+68ms) 
+09:47:57   ├─ /seminary/karta-patologij/index.html (+46ms) 
+09:47:57   ├─ /seminary/korrekciya-shramov/index.html (+41ms) 
+09:47:57   ├─ /seminary/kraniosakralnaya-terapiya-za-predelami-osnovaniya-cherepa/index.html (+48ms) 
+09:47:57   ├─ /seminary/seminar-4-nejropatii-s-pozicii-nejroreceptornyh-polej/index.html (+56ms) 
+09:47:57   ├─ /seminary/somato-emocionalnoe-osvobozhdenie-2/index.html (+56ms) 
+09:47:57   ├─ /seminary/vebinar-endokrinotoksichnost-vneshnej-sredy/index.html (+54ms) 
+09:47:57   ├─ /seminary/visceralnaya-terapiya-s-osnovami-prikladnoj-kineziologii-organov-grudnoj-i-bryushnoj-polostej-i-malogo-taza/index.html (+98ms) 
+09:47:57   ├─ /seminary/vnutrennie-organy-i-ih-vliyanie-na-myshcy/index.html (+74ms) 
+09:47:58   ├─ /seminary/bryushnaya-polost-2/index.html (+125ms) 
+09:47:58   ├─ /seminary/individualnye-osobennosti-cheloveka-1/index.html (+62ms) 
+09:47:58   ├─ /seminary/ispolzovanie-meridianov-v-kranio-sakralnoj-terapii-5/index.html (+74ms) 
+09:47:58   ├─ /seminary/kineziotejpirovanie-lica-i-tela/index.html (+76ms) 
+09:47:58   ├─ /seminary/korrekciya-patologicheskoj-aktivnosti-primitivnyh-refleksov-2/index.html (+53ms) 
+09:47:58   ├─ /seminary/korrekciya-patologicheskoj-aktivnosti-primitivnyh-refleksov-s-pozicii-prikladnoj-kineziologii/index.html (+66ms) 
+09:47:58   ├─ /seminary/kraniosakralnaya-sistema/index.html (+63ms) 
+09:47:58   ├─ /seminary/kraniosakralnaya-terapiya-edvans-1/index.html (+83ms) 
+09:47:58   ├─ /seminary/kst-v-akusherstve-uroven-1/index.html (+87ms) 
+09:47:58   ├─ /seminary/mezhseminarskaya-vstrecha-praktikum-dlya-specialistov-kst/index.html (+75ms) 
+09:47:58   ├─ /seminary/mozg-govorit-1/index.html (+95ms) 
+09:47:58   ├─ /seminary/myshechnoe-testirovanie-vizualnoe-vyyavlenie-narushenij-oporno-dvigatelnoj-sistemy/index.html (+84ms) 
+09:47:58   ├─ /seminary/seminar-praktikum-znakomstvo-s-prikladnoj-kineziologiej/index.html (+79ms) 
+09:47:59   ├─ /seminary/funkcionalnye-narusheniya-emocionalnoj-sfery/index.html (+103ms) 
+09:47:59   ├─ /seminary/individualnye-osobennosti-cheloveka-2/index.html (+94ms) 
+09:47:59   ├─ /seminary/kraniosakralnaya-terapiya-edvans-2/index.html (+107ms) 
+09:47:59   ├─ /seminary/kraniosakralnaya-terapiya-i-somato-emocionalnoe-osvobozhdenie/index.html (+62ms) 
+09:47:59   ├─ /seminary/rabota-s-chakrami-v-terapevticheskoj-telesnoj-praktike/index.html (+83ms) 
+09:47:59   ├─ /seminary/raskruchivanie-meridianov-primenenie-principov-akupunktury-v-kraniosakralnoj-terapii/index.html (+115ms) 
+09:47:59   ├─ /seminary/sistemnoe-primenenie-kineziologicheskogo-tejpirovaniya-lica-i-tela/index.html (+80ms) 
+09:47:59   ├─ /seminary/bezopasnost-kak-bazovaya-potrebnost-cheloveka/index.html (+123ms) 
+09:47:59   ├─ /seminary/endokrinotoksichnost/index.html (+156ms) 
+09:47:59   ├─ /seminary/funkcionalnye-narusheniya-biohimicheskih-processov/index.html (+78ms) 
+09:48:00   ├─ /seminary/nejropsihokineziologiya-1/index.html (+35ms) 
+09:48:00   ├─ /seminary/travma-i-energeticheskoe-telo/index.html (+89ms) 
+09:48:00   ├─ /seminary/funkcionalnye-narusheniya-elektromagnitnyh-processov/index.html (+44ms) 
+09:48:00   ├─ /seminary/telo-v-trevoge-put-k-vosstanovleniyu/index.html (+73ms) 
+09:48:00   ├─ /seminary/vebinar-nejro-tkm-diagnostika-meridianov-s-pozicii-sovremennoj-nevrologii/index.html (+61ms) 
+09:48:00   ├─ /seminary/csstr-kraniosakralnaya-terapiya-i-reakciya-na-stressovuyu-travmu/index.html (+53ms) 
+09:48:00   ├─ /seminary/osnovy-energeticheskoj-kineziologii-1/index.html (+128ms) 
+09:48:00   ├─ /seminary/kineziologiya-zdorovya-1/index.html (+57ms) 
+09:48:00   ├─ /seminary/mozg-govorit-2/index.html (+68ms) 
+09:48:00   ├─ /seminary/nejropsihokineziologiya-2/index.html (+60ms) 
+09:48:00   ├─ /seminary/seminar-praktikum-dlya-specialistov-kraniosakralnoj-terapii/index.html (+78ms) 
+09:48:00   ├─ /seminary/stimulyaciya-zhiznennoj-sily-kletki-prodvinutyj-uroven/index.html (+46ms) 
+09:48:00   ├─ /seminary/taz/index.html (+77ms) 
+09:48:00   ├─ /seminary/intensiv-dlya-prikladnyh-kineziologov/index.html (+68ms) 
+09:48:00   ├─ /seminary/kineziologiya-zdorovya-2/index.html (+63ms) 
+09:48:01   ├─ /seminary/strahi-i-fobii-fap/index.html (+38ms) 
+09:48:01   ├─ /seminary/formirovanie-muzhskogo-i-zhenskogo-povedeniya/index.html (+42ms) 
+09:48:01   ├─ /seminary/integraciya-protokolov-kst-energeticheskaya-kista-globalnaya-diagnostika-tela/index.html (+43ms) 
+09:48:01   ├─ /seminary/korrekciya-lozhnyh-ubezhdenij-dajmond-psihokineziologiya/index.html (+34ms) 
+09:48:01   ├─ /seminary/nejropsihokineziologiya-3/index.html (+59ms) 
+09:48:01   ├─ /seminary/tendinopatiya-zdorove-ruk-massazhista-i-ne-tolko/index.html (+52ms) 
+09:48:01   ├─ /seminary/semejnye-otnosheniya/index.html (+50ms) 
+09:48:01   ├─ /seminary/energeticheskaya-sistema-cheloveka/index.html (+74ms) 
+09:48:01   ├─ /seminary/grudnaya-kletka/index.html (+49ms) 
+09:48:01   ├─ /seminary/infekcii-i-psevdoinfekcii/index.html (+40ms) 
+09:48:01   ├─ /seminary/kst-pogovorim-o-sluchayah-iz-praktiki-voprosy-i-otvety/index.html (+51ms) 
+09:48:01   ├─ /seminary/miofascialnye-cepi-i-ih-znachenie-v-rabote-kineziologa/index.html (+32ms) 
+09:48:01   ├─ /seminary/opredelenie-tipov-doshi-po-kristoferu-smitu/index.html (+39ms) 
+09:48:01   ├─ /seminary/vebinar-s-chego-nachinaetsya-kst/index.html (+47ms) 
+09:48:01   ├─ /seminary/kak-dostich-izobiliya/index.html (+36ms) 
+09:48:01   ├─ /seminary/kineziologiya-uglevodnyj-obmen-1/index.html (+43ms) 
+09:48:01   ├─ /seminary/manualnaya-termoocenka-i-vvedenie-v-viscero-emocionalnuyu-sferu/index.html (+41ms) 
+09:48:01   ├─ /seminary/sabotazh-eto-chashe-chem-vy-dumaete/index.html (+37ms) 
+09:48:01   ├─ /seminary/vebinar-kst-tehniki-lyogkogo-prikosnoveniya/index.html (+30ms) 
+09:48:01   ├─ /seminary/funkcionalnyj-podhod-ot-nejtralnosti-k-zdorovyu/index.html (+35ms) 
+09:48:01   ├─ /seminary/integrativnyj-podhod-k-travme/index.html (+31ms) 
+09:48:01   ├─ /seminary/slozhnye-formy-povedeniya/index.html (+37ms) 
+09:48:01   ├─ /seminary/revnost-zavist-otricanie-sebya/index.html (+66ms) 
+09:48:02   ├─ /seminary/tehniki-raboty-na-perifericheskih-nervah-verhnyaya-chast-tela/index.html (+62ms) 
+09:48:02   ├─ /seminary/viscerotoksichnost-i-osnovy-detoksikacii/index.html (+105ms) 
+09:48:02   ├─ /seminary/proshenie/index.html (+90ms) 
+09:48:02   ├─ /seminary/tehniki-raboty-na-perifericheskih-nervah-nizhnyaya-chast-tela/index.html (+44ms) 
+09:48:02   ├─ /seminary/manipulyacii-na-kranialnyh-nervah/index.html (+41ms) 
+09:48:02   ├─ /seminary/centralnye-i-perifericheskie-svyazi/index.html (+45ms) 
+09:48:02   ├─ /seminary/viscero-sosudistye-tehniki-nizhnyaya-chast-tela/index.html (+37ms) 
+09:48:02   ├─ /seminary/visceralnye-komponenty-shei-i-grudnoj-kletki/index.html (+34ms) 
+09:48:02   ├─ /seminary/integrativnyj-podhod-k-ocenke-1/index.html (+40ms) 
+09:48:02   ├─ /seminary/verhnie-konechnosti/index.html (+49ms) 
+09:48:02   ├─ /seminary/nizhnie-konechnosti/index.html (+31ms) 
+09:48:02   ├─ /seminary/pozvonochnik-i-taz/index.html (+97ms) 
+09:48:02   ├─ /seminary/bluzhdayushij-nerv-i-vegetativnaya-nervnaya-sistema/index.html (+32ms) 
+09:48:02   ├─ /seminary/klinicheskij-razbor-pacientov/index.html (+47ms) 
+09:48:02   ├─ /seminary/rasshirennye-visceralnye-manipulyacii-nejroendokrinnyj-podhod-k-bryushnoj-polosti/index.html (+39ms) 
+09:48:02   ├─ /seminary/voprosy-funkcionalnoj-biohimii-v-prikladnoj-kineziologii/index.html (+36ms) 
+09:48:02   ├─ /seminary/index.html (+40ms) 
+09:48:02   ├─ /sitemap/index.html (+43ms) 
+09:48:02   ├─ /sotrudnichestvo-s-nami/index.html (+79ms) 
+09:48:03   ├─ /specialisty/54/index.html (+55ms) 
+09:48:03   ├─ /specialisty/63/index.html (+32ms) 
+09:48:03   ├─ /specialisty/69/index.html (+39ms) 
+09:48:03   ├─ /specialisty/58/index.html (+46ms) 
+09:48:03   ├─ /specialisty/64/index.html (+41ms) 
+09:48:03   ├─ /specialisty/70/index.html (+33ms) 
+09:48:03   ├─ /specialisty/53/index.html (+39ms) 
+09:48:03   ├─ /specialisty/65/index.html (+32ms) 
+09:48:03   ├─ /specialisty/71/index.html (+52ms) 
+09:48:03   ├─ /specialisty/56/index.html (+41ms) 
+09:48:03   ├─ /specialisty/66/index.html (+81ms) 
+09:48:03   ├─ /specialisty/60/index.html (+74ms) 
+09:48:03   ├─ /specialisty/67/index.html (+71ms) 
+09:48:03   ├─ /specialisty/55/index.html (+63ms) 
+09:48:03   ├─ /specialisty/68/index.html (+72ms) 
+09:48:03   ├─ /specialisty/57/index.html (+37ms) 
+09:48:03   ├─ /specialisty/74/index.html (+68ms) 
+09:48:03   ├─ /specialisty/61/index.html (+60ms) 
+09:48:03   ├─ /specialisty/77/index.html (+39ms) 
+09:48:04   ├─ /specialisty/79/index.html (+78ms) 
+09:48:04   ├─ /specialisty/73/index.html (+48ms) 
+09:48:04   ├─ /specialisty/76/index.html (+84ms) 
+09:48:04   ├─ /specialisty/78/index.html (+67ms) 
+09:48:04   ├─ /specialisty/80/index.html (+66ms) 
+09:48:04   ├─ /specialisty/81/index.html (+68ms) 
+09:48:04   ├─ /specialisty/82/index.html (+100ms) 
+09:48:04   ├─ /specialisty/84/index.html (+70ms) 
+09:48:04   ├─ /specialisty/85/index.html (+50ms) 
+09:48:04   ├─ /specialisty/83/index.html (+50ms) 
+09:48:04   ├─ /specialisty/index.html (+126ms) 
+09:48:04   ├─ /statyi/90percent-narushenij-v-skeletno-myshechnoj-sisteme/index.html (+100ms) 
+09:48:04   ├─ /statyi/beremennost-rody-i-vozmozhnosti-osteopatii/index.html (+107ms) 
+09:48:05   ├─ /statyi/diagnostika-helikobakterioza-metodom-prikladnoj-kineziologii/index.html (+51ms) 
+09:48:05   ├─ /statyi/diagnostika-i-lechenie-trematodnyh-invazij-u-vzroslyh/index.html (+64ms) 
+09:48:05   ├─ /statyi/gipertenziya/index.html (+57ms) 
+09:48:05   ├─ /statyi/giperventilyaciya-i-kraniosakralnyj-mehanizm/index.html (+69ms) 
+09:48:05   ├─ /statyi/gryzha-pishevodnogo-otverstiya-diafragmy/index.html (+52ms) 
+09:48:05   ├─ /statyi/institut-barralya-chem-unikalny-ego-programmy-obucheniya-dlya-specialistov-v-oblasti-zdorovya/index.html (+68ms) 
+09:48:05   ├─ /statyi/institut-barralya-kak-obuchenie-visceralnym-tehnikam-pomogaet-stat-professionalom/index.html (+90ms) 
+09:48:05   ├─ /statyi/ipolzovanie-kraniosakralnoj-terapii-dlya-snyatiya-ogranichenij-i-balansa-tela-pacienta-pri-ispolzovanii-massazhnyh-tehnik/index.html (+91ms) 
+09:48:05   ├─ /statyi/ispolzovanie-meridianov-pri-kraniosakralnoj-terapii/index.html (+61ms) 
+09:48:05   ├─ /statyi/istoriya-instituta-barralya-kak-vsyo-nachalos-i-chto-delaet-programmu-unikalnoj/index.html (+47ms) 
+09:48:05   ├─ /statyi/izmeneniya-v-hiropraktike-v-svete-protomorfologii/index.html (+74ms) 
+09:48:05   ├─ /statyi/izuchenie-ritmicheskih-dvizhenij-golovy-pozvolyayushih-opredelit-tretij-ritm/index.html (+78ms) 
+09:48:05   ├─ /statyi/kislotno-shelochnoj-balans-i-lechenie-pacienta/index.html (+79ms) 
+09:48:05   ├─ /statyi/klinicheskij-sluchaj-visceralnyh-manipulyacij-pri-podrostkovom-idiopaticheskom-skolioze/index.html (+80ms) 
+09:48:05   ├─ /statyi/kraniosakralnaya-terapiya-chto-eto-za-metod-i-kak-on-rabotaet/index.html (+76ms) 
+09:48:06   ├─ /statyi/kraniosakralnaya-terapiya-i-visceralnye-manipulyacii/index.html (+156ms) 
+09:48:06   ├─ /statyi/krestcovo-podvzdoshnye-i-podvzdoshno-krestcovye-narusheniya/index.html (+88ms) 
+09:48:06   ├─ /statyi/lechenie-allergij-v-hiropraktike/index.html (+96ms) 
+09:48:06   ├─ /statyi/lechenie-bronhialnoj-astmy/index.html (+222ms) 
+09:48:06   ├─ /statyi/metody-issledovaniya-mochi/index.html (+149ms) 
+09:48:06   ├─ /statyi/mikrobiota-hronicheskaya-obstruktivnaya-bolezn-legkih/index.html (+272ms) 
+09:48:07   ├─ /statyi/mikrobiota-vzaimodejstvie-mezhdu-mikrobiotoj-kishechnika-i-legkimi/index.html (+154ms) 
+09:48:07   ├─ /statyi/narusheniya-polovoj-funkcii-u-muzhchin-predstavlenie-ob-andropauze-1/index.html (+87ms) 
+09:48:07   ├─ /statyi/narusheniya-polovoj-funkcii-u-muzhchin-predstavlenie-ob-andropauze-2/index.html (+71ms) 
+09:48:07   ├─ /statyi/narusheniya-polovoj-funkcii-u-muzhchin-predstavlenie-ob-andropauze-3/index.html (+81ms) 
+09:48:07   ├─ /statyi/novyj-podhod-k-mozgu-strukturnyj-disbalans-i-usvoenie-pitatelnyh-veshestv/index.html (+27ms) 
+09:48:07   ├─ /statyi/osnovnye-principy-osteopatii/index.html (+56ms) 
+09:48:07   ├─ /statyi/otnoshenie-meridionalnoj-rnk-k-prikladnoj-kineziologii/index.html (+155ms) 
+09:48:07   ├─ /statyi/pattern-perekrestnogo-polzaniya-i-myshechnyj-spazm/index.html (+54ms) 
+09:48:07   ├─ /statyi/pishevoj-faktor-v-hiropraktike/index.html (+108ms) 
+09:48:07   ├─ /statyi/povrezhdenie-perifericheskih-nervov-i-sindrom-zapyastnogo-tunnelya/index.html (+96ms) 
+09:48:07   ├─ /statyi/predmet-prikladnoj-kineziologii/index.html (+78ms) 
+09:48:08   ├─ /statyi/prezentaciya-novogo-podhoda-k-lecheniyu-povrezhdeniya-diskov/index.html (+67ms) 
+09:48:08   ├─ /statyi/prikladnaya-kineziologiya-chto-eto-takoe-prostymi-slovami/index.html (+114ms) 
+09:48:08   ├─ /statyi/prikladnaya-kineziologiya-i-myshechnoe-testirovanie/index.html (+63ms) 
+09:48:08   ├─ /statyi/principy-balansirovaniya-myshc/index.html (+111ms) 
+09:48:08   ├─ /statyi/problemy-kolennogo-sustava/index.html (+53ms) 
+09:48:08   ├─ /statyi/provokaciya-shejnyh-pozvonkov/index.html (+60ms) 
+09:48:08   ├─ /statyi/raskruchivanie-meridianov-dlya-invertirovaniya-techeniya-anemii/index.html (+61ms) 
+09:48:08   ├─ /statyi/raskruchivanie-meridianov-pri-kontrakture-depyuitrena/index.html (+54ms) 
+09:48:08   ├─ /statyi/respiratornye-funkcii-cherepa/index.html (+84ms) 
+09:48:08   ├─ /statyi/sakroiliokalnye-i-iliosakralnye-narusheniya/index.html (+99ms) 
+09:48:08   ├─ /statyi/seminar-po-kraniosakralnoj-terapii-1-otzyv/index.html (+105ms) 
+09:48:08   ├─ /statyi/seminar-po-kraniosakralnoj-terapii-2-otzyv/index.html (+73ms) 
+09:48:08   ├─ /statyi/shizofreniya/index.html (+109ms) 
+09:48:09   ├─ /statyi/sindrom-tarzalnogo-tunnelya/index.html (+85ms) 
+09:48:09   ├─ /statyi/sluchaj-lecheniya-enureza/index.html (+111ms) 
+09:48:09   ├─ /statyi/terapevticheskoe-znachenie-visceralnoj-manipulyacii/index.html (+93ms) 
+09:48:09   ├─ /statyi/upravlyat-vospaleniem-v-organizme-s-pomoshyu-kraniosakralnoj-terapii/index.html (+84ms) 
+09:48:09   ├─ /statyi/uroki-kitajskogo-dlya-sovremennoj-hiropraktiki/index.html (+138ms) 
+09:48:09   ├─ /statyi/ustalost-i-borba-s-neyu/index.html (+221ms) 
+09:48:09   ├─ /statyi/visceralnaya-manipulyaciya/index.html (+79ms) 
+09:48:09   ├─ /statyi/visceralnaya-manipulyaciya-pri-hronicheskih-bolyah/index.html (+69ms) 
+09:48:09   ├─ /statyi/visceralnye-manipulyacii-i-tehniki-na-tkanyah-v-pediatricheskoj-praktike/index.html (+48ms) 
+09:48:09   ├─ /statyi/visceralnye-tehniki-chto-eto-takoe-i-kak-oni-mogut-uluchshit-zdorove/index.html (+56ms) 
+09:48:10   ├─ /statyi/vstrecha-pravoslavnoj-obshestvennosti-s-vrachom-osteopatom-pilyavskim-sergeem-orestovichem/index.html (+50ms) 
+09:48:10   ├─ /statyi/vstuplenie-k-kraniosakralnoj-paradigme-apledzhera/index.html (+80ms) 
+09:48:10   ├─ /statyi/vyhod-iz-dramaticheskogo-treugolnika-s-pozicii-psihoterapevticheskoj-kineziologii/index.html (+57ms) 
+09:48:10   ├─ /statyi/vzglyad-na-hiropraktiku-s-tochki-zreniya-protomorfologii/index.html (+67ms) 
+09:48:10   ├─ /statyi/zabolevaniya-zheludochno-kishechnogo-trakta-1/index.html (+44ms) 
+09:48:10   ├─ /statyi/zabolevaniya-zheludochno-kishechnogo-trakta-2/index.html (+81ms) 
+09:48:10   ├─ /statyi/zabolevaniya-zheludochno-kishechnogo-trakta-3/index.html (+69ms) 
+09:48:10   ├─ /statyi/zabolevaniya-zheludochno-kishechnogo-trakta-4/index.html (+26ms) 
+09:48:10   ├─ /statyi/zadnij-ilium-i-nejrolimfaticheskij-refleks/index.html (+91ms) 
+09:48:10   ├─ /statyi/zhir-i-ego-utilizaciya-pod-kontrolem-holesterina/index.html (+142ms) 
+09:48:10   ├─ /statyi/znachenie-tyazhelyh-metallov-v-razvitii-sindroma-hronicheskoj-ustalosti/index.html (+84ms) 
+09:48:10   ├─ /statyi/index.html (+159ms) 
+09:48:11   ├─ /svedeniya-ob-obrazovatelnoy-organizatsii/index.html (+239ms) 
+09:48:11   ├─ /video/31/index.html (+136ms) 
+09:48:11   ├─ /video/32/index.html (+93ms) 
+09:48:11   ├─ /video/33/index.html (+49ms) 
+09:48:11   ├─ /video/34/index.html (+44ms) 
+09:48:11   ├─ /video/36/index.html (+65ms) 
+09:48:11   ├─ /video/37/index.html (+79ms) 
+09:48:11   ├─ /video/index.html (+140ms) 
+09:48:11   ├─ /institut-klinicheskoy-prikladnoy-kineziologii/prepodavatel/54/index.html (+159ms) 
+09:48:12   ├─ /institut-apledzhera/prepodavatel/63/index.html (+157ms) 
+09:48:12   ├─ /institut-barralya/prepodavatel/69/index.html (+277ms) 
+09:48:12   ├─ /institut-klinicheskoy-prikladnoy-kineziologii/prepodavatel/58/index.html (+385ms) 
+09:48:12   ├─ /institut-apledzhera/prepodavatel/64/index.html (+186ms) 
+09:48:13   ├─ /institut-barralya/prepodavatel/70/index.html (+304ms) 
+09:48:13   ├─ /institut-klinicheskoy-prikladnoy-kineziologii/prepodavatel/53/index.html (+151ms) 
+09:48:13   ├─ /institut-apledzhera/prepodavatel/65/index.html (+189ms) 
+09:48:13   ├─ /institut-barralya/prepodavatel/71/index.html (+63ms) 
+09:48:13   ├─ /institut-klinicheskoy-prikladnoy-kineziologii/prepodavatel/56/index.html (+71ms) 
+09:48:13   ├─ /institut-apledzhera/prepodavatel/66/index.html (+50ms) 
+09:48:13   ├─ /institut-klinicheskoy-prikladnoy-kineziologii/prepodavatel/60/index.html (+131ms) 
+09:48:13   ├─ /institut-apledzhera/prepodavatel/67/index.html (+85ms) 
+09:48:14   ├─ /institut-klinicheskoy-prikladnoy-kineziologii/prepodavatel/55/index.html (+99ms) 
+09:48:14   ├─ /institut-apledzhera/prepodavatel/68/index.html (+77ms) 
+09:48:14   ├─ /institut-klinicheskoy-prikladnoy-kineziologii/prepodavatel/57/index.html (+72ms) 
+09:48:14   ├─ /institut-apledzhera/prepodavatel/74/index.html (+71ms) 
+09:48:14   ├─ /institut-klinicheskoy-prikladnoy-kineziologii/prepodavatel/61/index.html (+93ms) 
+09:48:14   ├─ /institut-apledzhera/prepodavatel/77/index.html (+58ms) 
+09:48:14   ├─ /institut-apledzhera/prepodavatel/79/index.html (+68ms) 
+09:48:14   ├─ /institut-klinicheskoy-prikladnoy-kineziologii/prepodavatel/73/index.html (+83ms) 
+09:48:14   ├─ /institut-klinicheskoy-prikladnoy-kineziologii/prepodavatel/76/index.html (+119ms) 
+09:48:14   ├─ /institut-klinicheskoy-prikladnoy-kineziologii/prepodavatel/78/index.html (+92ms) 
+09:48:14   ├─ /institut-klinicheskoy-prikladnoy-kineziologii/prepodavatel/80/index.html (+87ms) 
+09:48:14   ├─ /institut-klinicheskoy-prikladnoy-kineziologii/prepodavatel/81/index.html (+105ms) 
+09:48:15   ├─ /institut-klinicheskoy-prikladnoy-kineziologii/prepodavatel/82/index.html (+27ms) 
+09:48:15   ├─ /institut-klinicheskoy-prikladnoy-kineziologii/prepodavatel/84/index.html (+146ms) 
+09:48:15   ├─ /institut-klinicheskoy-prikladnoy-kineziologii/prepodavatel/85/index.html (+120ms) 
+09:48:15   ├─ /institut-klinicheskoy-prikladnoy-kineziologii/prepodavatel/83/index.html (+70ms) 
+09:48:15   ├─ /institut-klinicheskoy-prikladnoy-kineziologii/psihokineziologiya/antistressovaya-kineziologiya-vvedenie-1/index.html (+46ms) 
+09:48:15   ├─ /institut-barralya/visceralnye-tehniki/bryushnaya-polost-1/index.html (+96ms) 
+09:48:15   ├─ /institut-klinicheskoy-prikladnoy-kineziologii/specializirovannye/infekcii-i-psevdoinfekcii-vvedenie-v-gelmintologiyu-nematody/index.html (+100ms) 
+09:48:15   ├─ /institut-apledzhera/primenenie-principov-akupunktury/ispolzovanie-meridianov-v-kranio-sakralnoj-terapii-1/index.html (+104ms) 
+09:48:15   ├─ /institut-klinicheskoy-prikladnoy-kineziologii/korrekciya-strukturnyh-narushenij-osteoprakticheskimi-i-myshechno-energeticheskimi-tehnikami/korrekciya-strukturnyh-narushenij-tazovogo-regiona-i-nizhnih-konechnostej/index.html (+101ms) 
+09:48:15   ├─ /institut-apledzhera/kraniosakralnaya-terapiya/kraniosakralnaya-terapiya-1/index.html (+72ms) 
+09:48:15   ├─ /institut-apledzhera/dolgoletie/kraniosakralnaya-terapiya-dlya-omolozheniya-i-dolgoletiya/index.html (+59ms) 
+09:48:16   ├─ /institut-apledzhera/imunnyj-otvet/kraniosakralnaya-terapiya-i-immunnyj-otvet/index.html (+53ms) 
+09:48:16   ├─ /institut-apledzhera/kraniosakralnaya-terapiya-specializirovannye/kraniosakralnaya-terapiya-i-zhiznennyj-cikl/index.html (+82ms) 
+09:48:16   ├─ /institut-apledzhera/pediatriya-akusherstvo-i-novorozhdennye/kraniosakralnaya-terapiya-v-pediatrii-1/index.html (+72ms) 
+09:48:16   ├─ /institut-klinicheskoy-prikladnoy-kineziologii/kurs-po-kitajskoj-medicine-s-pozicij-prikladnoj-kineziologii/meridiany-kitajskaya-klassicheskaya-medicina-s-pozicii-prikladnoj-kineziologii-i-nevrologii-nejro-tkm-1/index.html (+80ms) 
+09:48:16   ├─ /institut-klinicheskoy-prikladnoy-kineziologii/massazh/miofascialnyj-i-bukkalnyj-massazh-lica/index.html (+73ms) 
+09:48:16   ├─ /institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya-dlya-fitnesa/myshechnoe-testirovanie-mmt-podhody-k-diagnostike-i-algoritmy-raboty-s-myshcami/index.html (+87ms) 
+09:48:16   ├─ /institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya/osnovy-manualnogo-myshechnogo-testirovaniya/index.html (+57ms) 
+09:48:16   ├─ /institut-klinicheskoy-prikladnoy-kineziologii/pereprogrammirovanie-nejroreceptornyh-zon-v-pk/seminar-1/index.html (+40ms) 
+09:48:16   ├─ /institut-klinicheskoy-prikladnoy-kineziologii/vibracionnaya-medicina/stimulyaciya-zhiznennoj-sily-kletki-1/index.html (+57ms) 
+09:48:16   ├─ /institut-klinicheskoy-prikladnoy-kineziologii/postdiplomnye-programmy-po-prikladnoj-kineziologii/strukturnaya-sostavlyayushaya-treugolnika-zdorovya/index.html (+57ms) 
+09:48:16   ├─ /institut-klinicheskoy-prikladnoy-kineziologii/vebinary-i-mezhseminarskie-vstrechi-ikpk/yadra-mozga-nevrologicheskij-podhod-k-diagnostike-i-funkcionalnoj-korrekcii/index.html (+55ms) 
+09:48:16   ├─ /institut-klinicheskoy-prikladnoy-kineziologii/psihokineziologiya/antistressovaya-kineziologiya-2/index.html (+59ms) 
+09:48:16   ├─ /institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya-dlya-fitnesa/diagnostika-prichin-oslableniya-myshc-i-algoritm-raboty-so-slabymi-myshcami/index.html (+32ms) 
+09:48:16   ├─ /institut-klinicheskoy-prikladnoy-kineziologii/specializirovannye/disfunkcii-yader-cherepno-mozgovyh-nervov/index.html (+41ms) 
+09:48:16   ├─ /institut-apledzhera/primenenie-principov-akupunktury/ispolzovanie-meridianov-v-kranio-sakralnoj-terapii-2/index.html (+84ms) 
+09:48:16   ├─ /institut-klinicheskoy-prikladnoy-kineziologii/korrekciya-strukturnyh-narushenij-osteoprakticheskimi-i-myshechno-energeticheskimi-tehnikami/korrekciya-strukturnyh-narushenij-poyasnichnogo-grudnogo-otdelov-pozvonochnika-i-grudnoj-kletki/index.html (+70ms) 
+09:48:17   ├─ /institut-apledzhera/kraniosakralnaya-terapiya/kraniosakralnaya-terapiya-2/index.html (+280ms) 
+09:48:17   ├─ /institut-klinicheskoy-prikladnoy-kineziologii/kurs-po-kitajskoj-medicine-s-pozicij-prikladnoj-kineziologii/meridiany-kitajskaya-klassicheskaya-medicina-s-pozicii-prikladnoj-kineziologii-i-nevrologii-nejro-tkm-2/index.html (+192ms) 
+09:48:17   ├─ /institut-klinicheskoy-prikladnoy-kineziologii/massazh/miofascialnyj-massazh-tela-armoplastika/index.html (+571ms) 
+09:48:18   ├─ /institut-klinicheskoy-prikladnoy-kineziologii/pereprogrammirovanie-nejroreceptornyh-zon-v-pk/seminar-2-srednij-uroven/index.html (+222ms) 
+09:48:18   ├─ /institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya/strukturnaya-sostavlyayushaya-treugolnika-zdorovya-obshie-diagnosticheskie-i-lechebnye-procedury-2/index.html (+200ms) 
+09:48:18   ├─ /institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya-dlya-fitnesa/bolevye-sindromy-i-rabota-s-nimi/index.html (+95ms) 
+09:48:18   ├─ /institut-apledzhera/pediatriya-akusherstvo-i-novorozhdennye/csp-2-kraniosakralnaya-terapiya-v-pediatrii-2/index.html (+137ms) 
+09:48:18   ├─ /institut-klinicheskoy-prikladnoy-kineziologii/postdiplomnye-programmy-po-prikladnoj-kineziologii/disfunkciya-visochno-nizhnechelyustnogo-sustava-vnchs/index.html (+124ms) 
+09:48:18   ├─ /institut-klinicheskoy-prikladnoy-kineziologii/specializirovannye/gelmintozy-nematodozy-cestodozy-trematodozy/index.html (+149ms) 
+09:48:19   ├─ /institut-apledzhera/primenenie-principov-akupunktury/ispolzovanie-meridianov-v-kranio-sakralnoj-terapii-3/index.html (+197ms) 
+09:48:19   ├─ /institut-klinicheskoy-prikladnoy-kineziologii/korrekciya-strukturnyh-narushenij-osteoprakticheskimi-i-myshechno-energeticheskimi-tehnikami/korrekciya-strukturnyh-narushenij-shejnogo-otdela-pozvonochnika-pleche-lopatochnogo-regiona-i-verhnih-konechnostej/index.html (+107ms) 
+09:48:19   ├─ /institut-klinicheskoy-prikladnoy-kineziologii/kurs-po-kitajskoj-medicine-s-pozicij-prikladnoj-kineziologii/meridiany-kitajskaya-klassicheskaya-medicina-s-pozicii-prikladnoj-kineziologii-i-nevrologii-nejro-tkm-3/index.html (+80ms) 
+09:48:19   ├─ /institut-klinicheskoy-prikladnoy-kineziologii/massazh/miofascialnyj-massazh-tela-zhenskij-massazh/index.html (+111ms) 
+09:48:19   ├─ /institut-klinicheskoy-prikladnoy-kineziologii/vebinary-i-mezhseminarskie-vstrechi-ikpk/pereprogrammirovanie-nejroreceptornyh-polej-p-dtr/index.html (+74ms) 
+09:48:19   ├─ /institut-klinicheskoy-prikladnoy-kineziologii/pereprogrammirovanie-nejroreceptornyh-zon-v-pk/seminar-1-prodvinutyj-uroven/index.html (+97ms) 
+09:48:19   ├─ /institut-apledzhera/kraniosakralnaya-terapiya/somato-emocionalnoe-osvobozhdenie-1/index.html (+64ms) 
+09:48:19   ├─ /institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya/strukturnaya-sostavlyayushaya-treugolnika-zdorovya-obshie-diagnosticheskie-i-lechebnye-procedury/index.html (+35ms) 
+09:48:19   ├─ /institut-apledzhera/primenenie-principov-akupunktury/ispolzovanie-meridianov-v-kranio-sakralnoj-terapii-4/index.html (+57ms) 
+09:48:19   ├─ /institut-klinicheskoy-prikladnoy-kineziologii/massazh/karta-patologij/index.html (+53ms) 
+09:48:19   ├─ /institut-klinicheskoy-prikladnoy-kineziologii/specializirovannye/korrekciya-shramov/index.html (+98ms) 
+09:48:19   ├─ /institut-apledzhera/kraniosakralnaya-terapiya-specializirovannye/kraniosakralnaya-terapiya-za-predelami-osnovaniya-cherepa/index.html (+167ms) 
+09:48:20   ├─ /institut-klinicheskoy-prikladnoy-kineziologii/pereprogrammirovanie-nejroreceptornyh-zon-v-pk/seminar-4-nejropatii-s-pozicii-nejroreceptornyh-polej/index.html (+45ms) 
+09:48:20   ├─ /institut-apledzhera/kraniosakralnaya-terapiya/somato-emocionalnoe-osvobozhdenie-2/index.html (+159ms) 
+09:48:20   ├─ /institut-klinicheskoy-prikladnoy-kineziologii/vebinary-i-mezhseminarskie-vstrechi-ikpk/vebinar-endokrinotoksichnost-vneshnej-sredy/index.html (+90ms) 
+09:48:20   ├─ /institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya/visceralnaya-terapiya-s-osnovami-prikladnoj-kineziologii-organov-grudnoj-i-bryushnoj-polostej-i-malogo-taza/index.html (+79ms) 
+09:48:20   ├─ /institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya-dlya-fitnesa/vnutrennie-organy-i-ih-vliyanie-na-myshcy/index.html (+79ms) 
+09:48:20   ├─ /institut-barralya/visceralnye-tehniki/bryushnaya-polost-2/index.html (+114ms) 
+09:48:20   ├─ /institut-klinicheskoy-prikladnoy-kineziologii/psihokineziologiya/individualnye-osobennosti-cheloveka-1/index.html (+138ms) 
+09:48:20   ├─ /institut-apledzhera/primenenie-principov-akupunktury/ispolzovanie-meridianov-v-kranio-sakralnoj-terapii-5/index.html (+69ms) 
+09:48:20   ├─ /institut-klinicheskoy-prikladnoy-kineziologii/massazh/kineziotejpirovanie-lica-i-tela/index.html (+77ms) 
+09:48:20   ├─ /institut-klinicheskoy-prikladnoy-kineziologii/avtorskie-seminary-zharovoj-ls/korrekciya-patologicheskoj-aktivnosti-primitivnyh-refleksov-2/index.html (+80ms) 
+09:48:21   ├─ /institut-klinicheskoy-prikladnoy-kineziologii/avtorskie-seminary-zharovoj-ls/korrekciya-patologicheskoj-aktivnosti-primitivnyh-refleksov-s-pozicii-prikladnoj-kineziologii/index.html (+66ms) 
+09:48:21   ├─ /institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya/kraniosakralnaya-sistema/index.html (+44ms) 
+09:48:21   ├─ /institut-apledzhera/kraniosakralnaya-terapiya/kraniosakralnaya-terapiya-edvans-1/index.html (+61ms) 
+09:48:21   ├─ /institut-apledzhera/pediatriya-akusherstvo-i-novorozhdennye/kst-v-akusherstve-uroven-1/index.html (+46ms) 
+09:48:21   ├─ /institut-apledzhera/vebinary-i-mezhseminarskie-vstrechi/mezhseminarskaya-vstrecha-praktikum-dlya-specialistov-kst/index.html (+53ms) 
+09:48:21   ├─ /institut-apledzhera/mozg/mozg-govorit-1/index.html (+63ms) 
+09:48:21   ├─ /institut-klinicheskoy-prikladnoy-kineziologii/postdiplomnye-programmy-po-prikladnoj-kineziologii/myshechnoe-testirovanie-vizualnoe-vyyavlenie-narushenij-oporno-dvigatelnoj-sistemy/index.html (+95ms) 
+09:48:21   ├─ /institut-klinicheskoy-prikladnoy-kineziologii/specializirovannye/seminar-praktikum-znakomstvo-s-prikladnoj-kineziologiej/index.html (+97ms) 
+09:48:21   ├─ /institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya/funkcionalnye-narusheniya-emocionalnoj-sfery/index.html (+61ms) 
+09:48:21   ├─ /institut-klinicheskoy-prikladnoy-kineziologii/psihokineziologiya/individualnye-osobennosti-cheloveka-2/index.html (+60ms) 
+09:48:21   ├─ /institut-apledzhera/kraniosakralnaya-terapiya/kraniosakralnaya-terapiya-edvans-2/index.html (+73ms) 
+09:48:21   ├─ /institut-apledzhera/kraniosakralnaya-terapiya-specializirovannye/kraniosakralnaya-terapiya-i-somato-emocionalnoe-osvobozhdenie/index.html (+91ms) 
+09:48:21   ├─ /institut-klinicheskoy-prikladnoy-kineziologii/specializirovannye/rabota-s-chakrami-v-terapevticheskoj-telesnoj-praktike/index.html (+143ms) 
+09:48:22   ├─ /institut-apledzhera/primenenie-principov-akupunktury/raskruchivanie-meridianov-primenenie-principov-akupunktury-v-kraniosakralnoj-terapii/index.html (+78ms) 
+09:48:22   ├─ /institut-klinicheskoy-prikladnoy-kineziologii/massazh/sistemnoe-primenenie-kineziologicheskogo-tejpirovaniya-lica-i-tela/index.html (+68ms) 
+09:48:22   ├─ /institut-klinicheskoy-prikladnoy-kineziologii/avtorskie-seminary-zharovoj-ls/bezopasnost-kak-bazovaya-potrebnost-cheloveka/index.html (+70ms) 
+09:48:22   ├─ /institut-klinicheskoy-prikladnoy-kineziologii/specializirovannye/endokrinotoksichnost/index.html (+41ms) 
+09:48:22   ├─ /institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya/funkcionalnye-narusheniya-biohimicheskih-processov/index.html (+54ms) 
+09:48:22   ├─ /institut-klinicheskoy-prikladnoy-kineziologii/postdiplomnye-programmy-po-prikladnoj-kineziologii/nejropsihokineziologiya-1/index.html (+27ms) 
+09:48:22   ├─ /institut-apledzhera/primenenie-principov-akupunktury/travma-i-energeticheskoe-telo/index.html (+26ms) 
+09:48:22   ├─ /institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya/funkcionalnye-narusheniya-elektromagnitnyh-processov/index.html (+41ms) 
+09:48:22   ├─ /institut-klinicheskoy-prikladnoy-kineziologii/specializirovannye/telo-v-trevoge-put-k-vosstanovleniyu/index.html (+81ms) 
+09:48:22   ├─ /institut-klinicheskoy-prikladnoy-kineziologii/vebinary-i-mezhseminarskie-vstrechi-ikpk/vebinar-nejro-tkm-diagnostika-meridianov-s-pozicii-sovremennoj-nevrologii/index.html (+129ms) 
+09:48:22   ├─ /institut-apledzhera/kraniosakralnaya-terapiya-specializirovannye/csstr-kraniosakralnaya-terapiya-i-reakciya-na-stressovuyu-travmu/index.html (+94ms) 
+09:48:22   ├─ /institut-klinicheskoy-prikladnoy-kineziologii/specializirovannye/osnovy-energeticheskoj-kineziologii-1/index.html (+56ms) 
+09:48:22   ├─ /institut-klinicheskoy-prikladnoy-kineziologii/psihokineziologiya/kineziologiya-zdorovya-1/index.html (+101ms) 
+09:48:22   ├─ /institut-apledzhera/mozg/mozg-govorit-2/index.html (+64ms) 
+09:48:22   ├─ /institut-klinicheskoy-prikladnoy-kineziologii/postdiplomnye-programmy-po-prikladnoj-kineziologii/nejropsihokineziologiya-2/index.html (+56ms) 
+09:48:23   ├─ /institut-apledzhera/vebinary-i-mezhseminarskie-vstrechi/seminar-praktikum-dlya-specialistov-kraniosakralnoj-terapii/index.html (+50ms) 
+09:48:23   ├─ /institut-klinicheskoy-prikladnoy-kineziologii/vibracionnaya-medicina/stimulyaciya-zhiznennoj-sily-kletki-prodvinutyj-uroven/index.html (+63ms) 
+09:48:23   ├─ /institut-barralya/visceralnye-tehniki/taz/index.html (+76ms) 
+09:48:23   ├─ /institut-klinicheskoy-prikladnoy-kineziologii/specializirovannye/intensiv-dlya-prikladnyh-kineziologov/index.html (+56ms) 
+09:48:23   ├─ /institut-klinicheskoy-prikladnoy-kineziologii/psihokineziologiya/kineziologiya-zdorovya-2/index.html (+50ms) 
+09:48:23   ├─ /institut-klinicheskoy-prikladnoy-kineziologii/avtorskie-seminary-zharovoj-ls/strahi-i-fobii-fap/index.html (+43ms) 
+09:48:23   ├─ /institut-klinicheskoy-prikladnoy-kineziologii/psihokineziologiya/formirovanie-muzhskogo-i-zhenskogo-povedeniya/index.html (+89ms) 
+09:48:23   ├─ /institut-apledzhera/vebinary-i-mezhseminarskie-vstrechi/integraciya-protokolov-kst-energeticheskaya-kista-globalnaya-diagnostika-tela/index.html (+53ms) 
+09:48:23   ├─ /institut-klinicheskoy-prikladnoy-kineziologii/avtorskie-seminary-zharovoj-ls/korrekciya-lozhnyh-ubezhdenij-dajmond-psihokineziologiya/index.html (+71ms) 
+09:48:23   ├─ /institut-klinicheskoy-prikladnoy-kineziologii/postdiplomnye-programmy-po-prikladnoj-kineziologii/nejropsihokineziologiya-3/index.html (+71ms) 
+09:48:23   ├─ /institut-klinicheskoy-prikladnoy-kineziologii/vebinary-i-mezhseminarskie-vstrechi-ikpk/tendinopatiya-zdorove-ruk-massazhista-i-ne-tolko/index.html (+86ms) 
+09:48:23   ├─ /institut-klinicheskoy-prikladnoy-kineziologii/psihokineziologiya/semejnye-otnosheniya/index.html (+117ms) 
+09:48:23   ├─ /institut-klinicheskoy-prikladnoy-kineziologii/psihokineziologiya/energeticheskaya-sistema-cheloveka/index.html (+100ms) 
+09:48:23   ├─ /institut-barralya/visceralnye-tehniki/grudnaya-kletka/index.html (+70ms) 
+09:48:24   ├─ /institut-klinicheskoy-prikladnoy-kineziologii/specializirovannye/infekcii-i-psevdoinfekcii/index.html (+60ms) 
+09:48:24   ├─ /institut-apledzhera/vebinary-i-mezhseminarskie-vstrechi/kst-pogovorim-o-sluchayah-iz-praktiki-voprosy-i-otvety/index.html (+81ms) 
+09:48:24   ├─ /institut-klinicheskoy-prikladnoy-kineziologii/postdiplomnye-programmy-po-prikladnoj-kineziologii/miofascialnye-cepi-i-ih-znachenie-v-rabote-kineziologa/index.html (+67ms) 
+09:48:24   ├─ /institut-klinicheskoy-prikladnoy-kineziologii/avtorskie-seminary-zharovoj-ls/opredelenie-tipov-doshi-po-kristoferu-smitu/index.html (+60ms) 
+09:48:24   ├─ /institut-apledzhera/vebinary-i-mezhseminarskie-vstrechi/vebinar-s-chego-nachinaetsya-kst/index.html (+60ms) 
+09:48:24   ├─ /institut-klinicheskoy-prikladnoy-kineziologii/psihokineziologiya/kak-dostich-izobiliya/index.html (+99ms) 
+09:48:24   ├─ /institut-klinicheskoy-prikladnoy-kineziologii/postdiplomnye-programmy-po-prikladnoj-kineziologii/kineziologiya-uglevodnyj-obmen-1/index.html (+114ms) 
+09:48:24   ├─ /institut-barralya/visceralnye-tehniki/manualnaya-termoocenka-i-vvedenie-v-viscero-emocionalnuyu-sferu/index.html (+48ms) 
+09:48:24   ├─ /institut-klinicheskoy-prikladnoy-kineziologii/avtorskie-seminary-zharovoj-ls/sabotazh-eto-chashe-chem-vy-dumaete/index.html (+221ms) 
+09:48:24   ├─ /institut-apledzhera/vebinary-i-mezhseminarskie-vstrechi/vebinar-kst-tehniki-lyogkogo-prikosnoveniya/index.html (+80ms) 
+09:48:24   ├─ /institut-klinicheskoy-prikladnoy-kineziologii/specializirovannye/funkcionalnyj-podhod-ot-nejtralnosti-k-zdorovyu/index.html (+87ms) 
+09:48:24   ├─ /institut-barralya/nevralnye-tehniki/integrativnyj-podhod-k-travme/index.html (+118ms) 
+09:48:25   ├─ /institut-klinicheskoy-prikladnoy-kineziologii/psihokineziologiya/slozhnye-formy-povedeniya/index.html (+97ms) 
+09:48:25   ├─ /institut-klinicheskoy-prikladnoy-kineziologii/psihokineziologiya/revnost-zavist-otricanie-sebya/index.html (+136ms) 
+09:48:25   ├─ /institut-barralya/nevralnye-tehniki/tehniki-raboty-na-perifericheskih-nervah-verhnyaya-chast-tela/index.html (+76ms) 
+09:48:25   ├─ /institut-klinicheskoy-prikladnoy-kineziologii/specializirovannye/viscerotoksichnost-i-osnovy-detoksikacii/index.html (+85ms) 
+09:48:25   ├─ /institut-klinicheskoy-prikladnoy-kineziologii/psihokineziologiya/proshenie/index.html (+97ms) 
+09:48:25   ├─ /institut-barralya/nevralnye-tehniki/tehniki-raboty-na-perifericheskih-nervah-nizhnyaya-chast-tela/index.html (+69ms) 
+09:48:25   ├─ /institut-barralya/nevralnye-tehniki/manipulyacii-na-kranialnyh-nervah/index.html (+111ms) 
+09:48:25   ├─ /institut-barralya/nevralnye-tehniki/centralnye-i-perifericheskie-svyazi/index.html (+97ms) 
+09:48:25   ├─ /institut-barralya/prodvinutye-visceralnye-tehniki/viscero-sosudistye-tehniki-nizhnyaya-chast-tela/index.html (+76ms) 
+09:48:25   ├─ /institut-barralya/prodvinutye-visceralnye-tehniki/visceralnye-komponenty-shei-i-grudnoj-kletki/index.html (+173ms) 
+09:48:26   ├─ /institut-barralya/tehniki-vyslushivaniya/integrativnyj-podhod-k-ocenke-1/index.html (+135ms) 
+09:48:26   ├─ /institut-barralya/novyj-manualnyj-podhod-k-sustavam/verhnie-konechnosti/index.html (+63ms) 
+09:48:26   ├─ /institut-barralya/novyj-manualnyj-podhod-k-sustavam/nizhnie-konechnosti/index.html (+225ms) 
+09:48:26   ├─ /institut-barralya/novyj-manualnyj-podhod-k-sustavam/pozvonochnik-i-taz/index.html (+59ms) 
+09:48:26   ├─ /institut-barralya/visceralnye-tehniki/bluzhdayushij-nerv-i-vegetativnaya-nervnaya-sistema/index.html (+52ms) 
+09:48:26   ├─ /institut-barralya/specializirovannye-programmy/klinicheskij-razbor-pacientov/index.html (+90ms) 
+09:48:26   ├─ /institut-barralya/visceralnye-tehniki/rasshirennye-visceralnye-manipulyacii-nejroendokrinnyj-podhod-k-bryushnoj-polosti/index.html (+45ms) 
+09:48:26   ├─ /institut-klinicheskoy-prikladnoy-kineziologii/specializirovannye/voprosy-funkcionalnoj-biohimii-v-prikladnoj-kineziologii/index.html (+50ms) 
+09:48:26   ├─ /institut-apledzhera/kraniosakralnaya-terapiya/index.html (+115ms) 
+09:48:26   ├─ /institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya/index.html (+227ms) 
+09:48:27   ├─ /institut-barralya/visceralnye-tehniki/index.html (+59ms) 
+09:48:27   ├─ /institut-barralya/prodvinutye-visceralnye-tehniki/index.html (+127ms) 
+09:48:27   ├─ /institut-barralya/nevralnye-tehniki/index.html (+97ms) 
+09:48:27   ├─ /institut-barralya/tehniki-vyslushivaniya/index.html (+89ms) 
+09:48:27   ├─ /institut-barralya/novyj-manualnyj-podhod-k-sustavam/index.html (+43ms) 
+09:48:27   ├─ /institut-klinicheskoy-prikladnoy-kineziologii/postdiplomnye-programmy-po-prikladnoj-kineziologii/index.html (+525ms) 
+09:48:28   ├─ /institut-apledzhera/primenenie-principov-akupunktury/index.html (+510ms) 
+09:48:28   ├─ /institut-klinicheskoy-prikladnoy-kineziologii/pereprogrammirovanie-nejroreceptornyh-zon-v-pk/index.html (+334ms) 
+09:48:28   ├─ /institut-klinicheskoy-prikladnoy-kineziologii/kurs-po-kitajskoj-medicine-s-pozicij-prikladnoj-kineziologii/index.html (+227ms) 
+09:48:29   ├─ /institut-apledzhera/imunnyj-otvet/index.html (+404ms) 
+09:48:29   ├─ /institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya-dlya-fitnesa/index.html (+253ms) 
+09:48:29   ├─ /institut-barralya/specializirovannye-programmy/index.html (+250ms) 
+09:48:30   ├─ /institut-apledzhera/dolgoletie/index.html (+407ms) 
+09:48:30   ├─ /institut-klinicheskoy-prikladnoy-kineziologii/psihokineziologiya/index.html (+552ms) 
+09:48:31   ├─ /institut-klinicheskoy-prikladnoy-kineziologii/avtorskie-seminary-zharovoj-ls/index.html (+177ms) 
+09:48:31   ├─ /institut-apledzhera/pediatriya-akusherstvo-i-novorozhdennye/index.html (+147ms) 
+09:48:31   ├─ /institut-apledzhera/mozg/index.html (+201ms) 
+09:48:31   ├─ /institut-apledzhera/kraniosakralnaya-terapiya-specializirovannye/index.html (+503ms) 
+09:48:32   ├─ /institut-klinicheskoy-prikladnoy-kineziologii/massazh/index.html (+200ms) 
+09:48:32   ├─ /institut-klinicheskoy-prikladnoy-kineziologii/korrekciya-strukturnyh-narushenij-osteoprakticheskimi-i-myshechno-energeticheskimi-tehnikami/index.html (+279ms) 
+09:48:32   ├─ /institut-klinicheskoy-prikladnoy-kineziologii/specializirovannye/index.html (+244ms) 
+09:48:32   ├─ /institut-klinicheskoy-prikladnoy-kineziologii/vibracionnaya-medicina/index.html (+167ms) 
+09:48:32   ├─ /institut-apledzhera/vebinary-i-mezhseminarskie-vstrechi/index.html (+315ms) 
+09:48:33   ├─ /institut-klinicheskoy-prikladnoy-kineziologii/vebinary-i-mezhseminarskie-vstrechi-ikpk/index.html (+162ms) 
+09:48:33   ├─ /institut-klinicheskoy-prikladnoy-kineziologii/index.html (+106ms) 
+09:48:33   ├─ /institut-apledzhera/index.html (+88ms) 
+09:48:33   ├─ /institut-barralya/index.html (+90ms) 
+09:48:33   ├─ /index.html (+88ms) 
+09:48:33 ✓ Completed in 43.64s.
+
+09:48:33 [build] ✓ Completed in 2m 0s.
+09:48:34 [@astrojs/sitemap] `sitemap-index.xml` created at `dist`
+09:48:34 [build] 459 page(s) built in 2m 14s
+09:48:34 [build] Complete!
+
+Running Pagefind v1.5.2 (Extended)
+Running from: "/Users/pgorbachev/projects/private/ikpk/.claude/worktrees/chat-entry-red-20261021/web"
+Source:       "dist"
+Output:       "dist/pagefind"
+
+[Walking source directory]
+Found 459 files matching **/*.{html}
+
+[Parsing files]
+Found a data-pagefind-body element on the site.
+↳ Ignoring pages without this tag.
+
+[Reading languages]
+Discovered 1 language: ru
+
+[Building search indexes]
+Total: 
+  Indexed 1 language
+  Indexed 272 pages
+  Indexed 15498 words
+  Indexed 0 filters
+  Indexed 0 sorts
+
+Finished in 4.073 seconds
+
+ RUN  v4.1.11 /Users/pgorbachev/projects/private/ikpk/.claude/worktrees/chat-entry-red-20261021/web
+
+ ❯ tests/external-widgets-dist.test.ts (40 tests | 1 failed) 14125ms
+     × объявленная конфигурация боевой сборки согласна с её выводом 1520ms
+ ❯ tests/cms-article-catalog-snapshot.build.test.ts (0 test)
+ ❯ tests/external-widgets-privacy-doc.test.ts (0 test)
+ ❯ tests/rich-content-hazard.build.test.ts (0 test)
+ ❯ tests/social-accounts-ci-dist.test.ts (0 test)
+ ❯ tests/article-page-date.build.test.ts (0 test)
+ ❯ tests/content-quality.test.ts (18 tests | 1 failed) 54853ms
+     × canonical, og:url and sitemap have no trailing slash 17929ms
+ ❯ tests/seminar-dates.fixture-build.test.ts (1 test | 1 failed) 83906ms
+     × selects the nearest active event, keeps all active rows, and uses the shared manager contact only when empty 83872ms
+ ❯ tests/external-widgets-config-probe.test.ts (19 tests | 19 skipped) 104616ms
+
+⎯⎯⎯⎯⎯⎯ Failed Suites 6 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/article-page-date.build.test.ts [ tests/article-page-date.build.test.ts ]
+Error: ENOSPC: no space left on device, open '/private/tmp/VZIV9t3BN1597bBxqbTqV/ssr/.tmp-1792565368040-d9kbdp6nkng'
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/9]⎯
+
+ FAIL  tests/cms-article-catalog-snapshot.build.test.ts [ tests/cms-article-catalog-snapshot.build.test.ts ]
+Error: ENOSPC: no space left on device, open '/private/tmp/VZIV9t3BN1597bBxqbTqV/ssr/.tmp-1792565350745-gpvpiook7o5'
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/9]⎯
+
+ FAIL  tests/external-widgets-config-probe.test.ts [ tests/external-widgets-config-probe.test.ts ]
+Error: пробная сборка «CHAT_LOADER_SRC=<адрес>» не собралась — это «измерить не удалось», а не «нарушений нет».
+09:50:32 [ERROR] [vite] ✗ Build failed in 3.26s
+[UNHANDLEABLE_ERROR] Something went wrong inside rolldown, please report this problem at https://github.com/rolldown/rolldown/issues.
+Could not create directory for output chunks: /Users/pgorbachev/projects/private/ikpk/.claude/worktrees/chat-entry-red-20261021/web/.astro/.prerender
+
+Caused by:
+    No space left on device (os error 28)
+
+
+09:50:28 [vite] Re-optimizing dependencies because vite config has changed
+09:50:29 [types] Generated 342ms
+09:50:29 [build] output: "static"
+09:50:29 [build] mode: "static"
+09:50:29 [build] directory: /private/tmp/ikpk-widget-probe-9nenrq/
+09:50:29 [build] Collecting build info...
+09:50:29 [build] ✓ Completed in 431ms.
+09:50:29 [build] Building static entrypoints...
+
+Command failed: npx astro build --outDir /private/tmp/ikpk-widget-probe-9nenrq
+09:50:32 [ERROR] [vite] ✗ Build failed in 3.26s
+[UNHANDLEABLE_ERROR] Something went wrong inside rolldown, please report this problem at https://github.com/rolldown/rolldown/issues.
+Could not create directory for output chunks: /Users/pgorbachev/projects/private/ikpk/.claude/worktrees/chat-entry-red-20261021/web/.astro/.prerender
+
+Caused by:
+    No space left on device (os error 28)
+
+
+ ❯ buildProbe tests/helpers/widget-probe-build.ts:113:11
+    111|   } catch (error) {
+    112|     const e = error as { stdout?: string; stderr?: string; message?: s…
+    113|     throw new Error(
+       |           ^
+    114|       `пробная сборка «${label}» не собралась — это «измерить не удало…
+    115|         `«нарушений нет».\n${e.stderr ?? ''}\n${e.stdout ?? ''}\n${e.m…
+ ❯ tests/external-widgets-config-probe.test.ts:57:12
+
+Caused by: Error: Command failed: npx astro build --outDir /private/tmp/ikpk-widget-probe-9nenrq
+09:50:32 [ERROR] [vite] ✗ Build failed in 3.26s
+[UNHANDLEABLE_ERROR] Something went wrong inside rolldown, please report this problem at https://github.com/rolldown/rolldown/issues.
+Could not create directory for output chunks: /Users/pgorbachev/projects/private/ikpk/.claude/worktrees/chat-entry-red-20261021/web/.astro/.prerender
+
+Caused by:
+    No space left on device (os error 28)
+
+
+ ❯ buildProbe tests/helpers/widget-probe-build.ts:104:5
+ ❯ tests/external-widgets-config-probe.test.ts:57:12
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+Serialized Error: { status: 1, signal: null, output: [ null, '09:50:28 [vite] Re-optimizing dependencies because vite config has changed\n09:50:29 [types] Generated 342ms\n09:50:29 [build] output: "static"\n09:50:29 [build] mode: "static"\n09:50:29 [build] directory: /private/tmp/ikpk-widget-probe-9nenrq/\n09:50:29 [build] Collecting build info...\n09:50:29 [build] ✓ Completed in 431ms.\n09:50:29 [build] Building static entrypoints...\n', '09:50:32 [ERROR] [vite] ✗ Build failed in 3.26s\n[UNHANDLEABLE_ERROR] Something went wrong inside rolldown, please report this problem at https://github.com/rolldown/rolldown/issues.\nCould not create directory for output chunks: /Users/pgorbachev/projects/private/ikpk/.claude/worktrees/chat-entry-red-20261021/web/.astro/.prerender\n\nCaused by:\n    No space left on device (os error 28)\n\n' ], pid: 87502, stdout: '09:50:28 [vite] Re-optimizing dependencies because vite config has changed\n09:50:29 [types] Generated 342ms\n09:50:29 [build] output: "static"\n09:50:29 [build] mode: "static"\n09:50:29 [build] directory: /private/tmp/ikpk-widget-probe-9nenrq/\n09:50:29 [build] Collecting build info...\n09:50:29 [build] ✓ Completed in 431ms.\n09:50:29 [build] Building static entrypoints...\n', stderr: '09:50:32 [ERROR] [vite] ✗ Build failed in 3.26s\n[UNHANDLEABLE_ERROR] Something went wrong inside rolldown, please report this problem at https://github.com/rolldown/rolldown/issues.\nCould not create directory for output chunks: /Users/pgorbachev/projects/private/ikpk/.claude/worktrees/chat-entry-red-20261021/web/.astro/.prerender\n\nCaused by:\n    No space left on device (os error 28)\n\n' }
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/9]⎯
+
+ FAIL  tests/external-widgets-privacy-doc.test.ts [ tests/external-widgets-privacy-doc.test.ts ]
+Error: ENOSPC: no space left on device, open '/private/tmp/VZIV9t3BN1597bBxqbTqV/ssr/.tmp-1792565351514-5f6imy0b8h5'
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/9]⎯
+
+ FAIL  tests/rich-content-hazard.build.test.ts [ tests/rich-content-hazard.build.test.ts ]
+Error: ENOSPC: no space left on device, open '/private/tmp/VZIV9t3BN1597bBxqbTqV/ssr/.tmp-1792565355609-scpv449vi8i'
+ ❯ tests/rich-content-hazard.build.test.ts:13:1
+     11| import { validateClosedMatrixHtml } from './helpers/rich-content-safet…
+     12| import { loadFixture } from './helpers/rich-content-safety/load-fixtur…
+     13| import { openOracleHarness, type OracleHarness } from './helpers/rich-…
+       | ^
+     14| import type { ExecutableSlot } from './helpers/rich-content-safety/ast…
+     15| import { publicationOccurrences } from './publication/occurrences.js';
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/9]⎯
+
+ FAIL  tests/social-accounts-ci-dist.test.ts [ tests/social-accounts-ci-dist.test.ts ]
+Error: ENOSPC: no space left on device, open '/private/tmp/VZIV9t3BN1597bBxqbTqV/ssr/.tmp-1792565367007-0wpsud79pie'
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/9]⎯
+
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/content-quality.test.ts > rendered content quality > canonical, og:url and sitemap have no trailing slash
+Error: Test timed out in 15000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ tests/content-quality.test.ts:63:3
+     61|   // переиндексировал бы сайт целиком. Решение владельца (2026-07-26):…
+     62|   // к виду старого сайта.
+     63|   it('canonical, og:url and sitemap have no trailing slash', () => {
+       |   ^
+     64|     const offenders: string[] = [];
+     65|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/9]⎯
+
+ FAIL  tests/external-widgets-dist.test.ts > симметричная проверка боевого вывода различает три состояния конфигурации > объявленная конфигурация боевой сборки согласна с её выводом
+AssertionError: состояние конфигурации: не объявлено ничего (состояние 3); страниц с встраиванием 0. конфигурация не несёт ни адреса загрузчика, ни явного объявления его отсутствия: измерить не удалось. Отсутствие предмета — непройденная проверка, а не разрешение её пропустить: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ tests/external-widgets-dist.test.ts:563:7
+    561|       `состояние конфигурации: ${CHAT_STATE_NAMES[config.state]}; стра…
+    562|         `${carrying.length}. ${verdict.ok === false ? verdict.reason :…
+    563|     ).toBe(true);
+       |       ^
+    564|   });
+    565| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/9]⎯
+
+ FAIL  tests/seminar-dates.fixture-build.test.ts > controlled schedule fixture is reflected in built program and seminar pages > selects the nearest active event, keeps all active rows, and uses the shared manager contact only when empty
+Error: Controlled Astro build failed (1):
+
+09:50:28 [vite] Re-optimizing dependencies because vite config has changed
+09:50:29 [types] Generated 295ms
+09:50:29 [build] output: "static"
+09:50:29 [build] mode: "static"
+09:50:29 [build] directory: /Users/pgorbachev/projects/private/ikpk/.claude/worktrees/chat-entry-red-20261021/web/.astro/ikpk-seminar-date-build-5xCRqO/dist/
+09:50:29 [build] Collecting build info...
+09:50:29 [build] ✓ Completed in 384ms.
+09:50:29 [build] Building static entrypoints...
+
+09:50:32 [ERROR] [vite] ✗ Build failed in 3.39s
+[UNHANDLEABLE_ERROR] Something went wrong inside rolldown, please report this problem at https://github.com/rolldown/rolldown/issues.
+Could not create directory for output chunks: /Users/pgorbachev/projects/private/ikpk/.claude/worktrees/chat-entry-red-20261021/web/.astro/ikpk-seminar-date-build-5xCRqO/dist/.prerender
+
+Caused by:
+    No space left on device (os error 28)
+
+
+ ❯ renderedFixture tests/seminar-dates.fixture-build.test.ts:139:11
+    137|   });
+    138|   if (result.error || result.status !== 0) {
+    139|     throw new Error(
+       |           ^
+    140|       `Controlled Astro build failed (${result.status ?? 'no exit stat…
+    141|     );
+ ❯ tests/seminar-dates.fixture-build.test.ts:163:33
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/9]⎯
+
+
+ Test Files  9 failed | 16 passed (25)
+      Tests  3 failed | 238 passed | 25 skipped (266)
+   Start at  09:48:50
+   Duration  107.71s (transform 7.45s, setup 0ms, import 25.45s, tests 478.90s, environment 2ms)
+

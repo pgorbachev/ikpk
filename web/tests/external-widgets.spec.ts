@@ -659,30 +659,8 @@ test.describe('сторонний iframe не отменяет доступно�
 test.describe('кнопка чата не перекрывает содержимое страницы', () => {
   test.describe.configure({ timeout: 60_000 });
 
-  // TD-52 (docs/tech-debt.md): на ширине 375px кнопка реально перекрывает нижний контент
-  // этих шаблонов (карточка семинара, ссылка tel:, карточки статей, `<select>` города,
-  // карточка модуля программы) — не тестовый дефект и не сторонний баг, замерено
-  // `getBoundingClientRect`. Признано известным отклонением владельцем: точечного фикса
-  // нет (сдвиг кнопки требует поведения на скролле, которого нет в спеке; правка чужой
-  // вёрстки — редизайн, а не фикс кнопки). Список — по факту двух прогонов CI, а не по
-  // старой таблице в docs/handoff (та писалась до расширения TEMPLATES и называла 5 из
-  // прежних 11, не семь из текущих). Desktop эта проверка по-прежнему покрывает —
-  // пропускается только mobile-проект и только эти шаблоны.
-  const KNOWN_MOBILE_OVERLAP = new Set([
-    'home',
-    'course',
-    'seminar',
-    'seminar-dated',
-    'kontakty',
-    'statyi',
-    'raspisanie',
-  ]);
-
   for (const { name, path } of TEMPLATES) {
-    test(`${name}: закрытая кнопка не накрывает интерактивные элементы и текст`, async ({ page }, testInfo) => {
-      if (testInfo.project.name === 'mobile' && KNOWN_MOBILE_OVERLAP.has(name))
-        test.skip(true, `TD-52: известное отклонение — кнопка чата перекрывает контент шаблона '${name}' на 375px`);
-
+    test(`${name}: закрытая кнопка не накрывает интерактивные элементы и текст`, async ({ page }) => {
       await guard(page);
       const response = await page.goto(url(path));
       if (name.startsWith('preview-') && response?.status() === 404)
@@ -699,8 +677,23 @@ test.describe('кнопка чата не перекрывает содержи�
         const button = document.querySelector(`[${triggerAttr}]`) as HTMLElement | null;
         if (button === null) return { interactive: ['кнопки нет'], text: [] as string[] };
         const box = button.getBoundingClientRect();
-        const hit = (r: DOMRect): boolean =>
-          r.width > 0 && r.height > 0 &&
+        const header = document.querySelector('header');
+        const main = document.querySelector('main');
+        const footer = document.querySelector('footer');
+        const scrollport = [...document.querySelectorAll<HTMLElement>('body *')].find((el) => {
+          const style = getComputedStyle(el);
+          return Boolean(header && main && footer && el.contains(header) && el.contains(main) && el.contains(footer))
+            && /(auto|scroll)/.test(style.overflowY) && el.scrollHeight > el.clientHeight + 1;
+        }) ?? null;
+        const clip = scrollport?.getBoundingClientRect() ?? new DOMRect(0, 0, innerWidth, innerHeight);
+        const visible = (r: DOMRect) => {
+          const left = Math.max(r.left, clip.left, 0);
+          const top = Math.max(r.top, clip.top, 0);
+          const right = Math.min(r.right, clip.right, innerWidth);
+          const bottom = Math.min(r.bottom, clip.bottom, innerHeight);
+          return right > left && bottom > top ? { left, top, right, bottom } : null;
+        };
+        const hit = (r: { left: number; top: number; right: number; bottom: number }): boolean =>
           r.left < box.right && r.right > box.left && r.top < box.bottom && r.bottom > box.top;
 
         // Закрытый `<details>` не прячет содержимое через display/visibility САМОГО
@@ -726,7 +719,8 @@ test.describe('кнопка чата не перекрывает содержи�
           if (insideClosedDetails(el)) continue;
           const style = getComputedStyle(el);
           if (style.visibility === 'hidden' || style.display === 'none') continue;
-          if (hit(el.getBoundingClientRect()))
+          const shown = visible(el.getBoundingClientRect());
+          if (shown && hit(shown))
             interactive.push(`${el.tagName.toLowerCase()}: ${(el.textContent ?? '').trim().slice(0, 40)}`);
         }
 
@@ -740,15 +734,22 @@ test.describe('кнопка чата не перекрывает содержи�
           if (style.visibility === 'hidden' || style.display === 'none') continue;
           const range = document.createRange();
           range.selectNodeContents(p);
-          for (const rect of range.getClientRects())
-            if (hit(rect)) {
+          for (const rect of range.getClientRects()) {
+            const shown = visible(rect);
+            if (shown && hit(shown)) {
               text.push(`${p.tagName.toLowerCase()}: ${(p.textContent ?? '').trim().slice(0, 40)}`);
               break;
             }
+          }
           range.detach();
         }
-        return { interactive, text };
+        return { interactive, text, scrollportFound: scrollport !== null };
       }, SEL_CHAT_TRIGGER);
+
+      expect(
+        overlaps.scrollportFound,
+        `${path}: header, main, newsletter and footer share a real scrollport`,
+      ).toBe(true);
 
       expect(
         overlaps.interactive.slice(0, 5),
