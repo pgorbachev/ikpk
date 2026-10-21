@@ -1,0 +1,11 @@
+# Chat-entry history diagnostic — 2026-10-21
+
+This note records the focused Back/Forward investigation for product source `5764f89b4c058d5681592bc8127c4127e926bb85` (worktree HEAD `f8d29ae56698eeaa9b670d92590eab16af14bb5c`). No product source was changed.
+
+The isolated direct/direct near-footer control stayed exact for five seconds at 320, 375, and 1280 CSS pixels. The instant-position control and the combined interaction flow exposed a mismatch before restore could be blamed. In the combined mobile trace, the schedule scrollport reached `top=23083` at `height=23603`, `clientHeight=340`, and `maxScroll=23263`; by `pagehide`, its actual top was `21889` at `height=22409` and `maxScroll=22069`. The product pagehide handler then stored `21889`. The scroll ring records the intended `23083`, and the dimensions changed by 1194 pixels before departure. This establishes a geometry change during the outgoing document; it does not establish which asset or browser event caused it.
+
+The likely source is late image/layout completion, but that remains a hypothesis. The test now makes fixture images eager, waits for completion and stable scrollport dimensions over animation frames, then uses instant placement and verifies exact Back/Forward top and geometry. It also waits for `scrollend` after wheel and CDP touch gestures, and for the reset to finish before starting another gesture. A minimal test-only pagehide snapshot compares URL, top, height, client height, frame bounds, and max scroll at departure with the pre-navigation and returned snapshots.
+
+The combined original interaction-to-history scenario passed on desktop and mobile after image and gesture readiness were added. The focused desktop/mobile set also passed all six selected tests before the minimal observer; the observer-specific run passed both platforms. The raw comparison artifacts are `widgets-e2e-20261021-history-poll-direct-direct.json`, `widgets-e2e-20261021-history-poll-instant-control.json`, `widgets-e2e-20261021-combined-history-pagehide-trace.json`, and `widgets-e2e-20261021-history-observer.log`.
+
+These are local Chromium fixture results. They do not prove behavior on physical mobile browsers or with live Bitrix chat loading.

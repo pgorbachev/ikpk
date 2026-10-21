@@ -358,9 +358,89 @@ test.describe('chat entry visibility approved contract', () => {
 
   test('anchor, history, wheel, touch-like scroll, keyboard scroll, and focus reveal stay in the shared scrollport', async ({ page }) => {
     await protectThirdParties(page);
+    const pageShowKey = '__chatEntryTestPageShowCount';
+    const departureKey = '__chatEntryTestDepartingScrollSnapshotV1';
+    await page.addInitScript((key) => {
+      window.addEventListener('pageshow', () => {
+        const count = Number(sessionStorage.getItem(key) ?? '0') + 1;
+        sessionStorage.setItem(key, String(count));
+      });
+    }, pageShowKey);
+    await page.addInitScript((key) => {
+      document.addEventListener('DOMContentLoaded', () => {
+        window.addEventListener('pagehide', () => {
+          const port = document.querySelector<HTMLElement>('[data-page-scrollport]');
+          if (!port) return;
+          const frame = port.getBoundingClientRect();
+          const snapshot = { url: location.href, top: port.scrollTop, height: port.scrollHeight,
+            clientHeight: port.clientHeight, frameTop: frame.top, frameHeight: frame.height,
+            maxScroll: port.scrollHeight - port.clientHeight };
+          let entries: Record<string, typeof snapshot> = {};
+          try { entries = JSON.parse(sessionStorage.getItem(key) ?? '{}') as Record<string, typeof snapshot>; } catch { /* test-only observation */ }
+          entries[snapshot.url] = snapshot;
+          sessionStorage.setItem(key, JSON.stringify(entries));
+        });
+      });
+    }, departureKey);
+    let pageShows = 0;
+    const waitForPresentedPage = async (minimumCount: number) => {
+      await page.waitForFunction(({ key, count }) => Number(sessionStorage.getItem(key) ?? '0') >= count,
+        { key: pageShowKey, count: minimumCount });
+      await page.evaluate(() => { for (const image of document.images) image.loading = 'eager'; });
+      await page.waitForFunction(() => [...document.images].every((image) => image.complete));
+      await page.evaluate(async () => {
+        await document.fonts.ready;
+        const port = document.querySelector<HTMLElement>('[data-page-scrollport]');
+        const dimensions = () => port ? [port.scrollHeight, port.clientHeight] : [];
+        let previous = '';
+        let stableFrames = 0;
+        for (let frame = 0; frame < 12 && stableFrames < 2; frame += 1) {
+          await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+          const current = JSON.stringify(dimensions());
+          stableFrames = current === previous ? stableFrames + 1 : 0;
+          previous = current;
+        }
+        if (stableFrames < 2) throw new Error('page scrollport geometry did not settle over animation frames');
+      });
+      pageShows = Math.max(pageShows, minimumCount);
+    };
+    const navigateTo = async (url: string) => {
+      const nextPageShow = pageShows + 1;
+      await page.goto(url);
+      await waitForPresentedPage(nextPageShow);
+    };
+    const readPort = () => page.evaluate(() => {
+      const port = document.querySelector<HTMLElement>('[data-page-scrollport]')!;
+      const bounds = port.getBoundingClientRect();
+      return { top: port.scrollTop, height: port.scrollHeight, clientHeight: port.clientHeight,
+        maxScroll: port.scrollHeight - port.clientHeight, frameTop: bounds.top, frameHeight: bounds.height };
+    });
+    const readDeparture = (url: string) => page.evaluate(({ key, target }) => {
+      let entries: Record<string, unknown> = {};
+      try { entries = JSON.parse(sessionStorage.getItem(key) ?? '{}') as Record<string, unknown>; } catch { /* test-only observation */ }
+      return entries[target] ?? null;
+    }, { key: departureKey, target: url });
+    const armGestureScrollEnd = (before: number) => page.evaluate((startTop) => {
+      const port = document.querySelector<HTMLElement>('[data-page-scrollport]');
+      if (!port) throw new Error('shared scrollport is missing before gesture');
+      const scope = window as Window & { __chatEntryScrollEnd?: { top: number; time: number } | null };
+      scope.__chatEntryScrollEnd = null;
+      const onEnd = () => {
+        if (port.scrollTop <= startTop) return;
+        scope.__chatEntryScrollEnd = { top: port.scrollTop, time: performance.now() };
+        port.removeEventListener('scrollend', onEnd);
+      };
+      port.addEventListener('scrollend', onEnd);
+    }, before);
+    const waitForGestureScrollEnd = async (before: number, label: string) => {
+      await expect.poll(() => page.evaluate(() => (window as Window & { __chatEntryScrollEnd?: { top: number; time: number } | null }).__chatEntryScrollEnd ?? null), label)
+        .toMatchObject({ top: expect.any(Number) });
+      const settled = await page.evaluate(() => (window as Window & { __chatEntryScrollEnd?: { top: number; time: number } | null }).__chatEntryScrollEnd ?? null);
+      expect(settled?.top, label).toBeGreaterThan(before);
+    };
     for (const width of WIDTHS) {
       await page.setViewportSize({ width, height: 420 });
-      await page.goto(activeUrl('/institut-apledzhera#programs'));
+      await navigateTo(activeUrl('/institut-apledzhera#programs'));
       const hasTarget = await page.locator('#programs').count();
       expect(hasTarget, 'anchor target is present on the selected page').toBe(1);
       const scroll = await snapshotLayout(page);
@@ -372,7 +452,7 @@ test.describe('chat entry visibility approved contract', () => {
       });
       expect.soft(targetVisible, '#programs is revealed below the sticky header').toBe(true);
 
-      await page.goto(activeUrl('/raspisanie-i-tseny'));
+      await navigateTo(activeUrl('/raspisanie-i-tseny'));
       const keyboardScrollport = page.locator('[data-page-scrollport]');
       await page.keyboard.press('Tab');
       await expect(keyboardScrollport, 'the shared page scrollport is reachable by keyboard before its contents').toBeFocused();
@@ -398,10 +478,25 @@ test.describe('chat entry visibility approved contract', () => {
         document.addEventListener('keyup', record('keyup-capture'), true);
         document.addEventListener('keyup', record('keyup-bubble'));
       });
-      const resetPort = async () => page.evaluate(() => {
-        const port = document.querySelector<HTMLElement>('[data-page-scrollport]');
-        if (port) port.scrollTop = 0;
-      });
+      const resetPort = async () => {
+        await page.evaluate(() => {
+          const port = document.querySelector<HTMLElement>('[data-page-scrollport]');
+          if (!port) throw new Error('shared scrollport is missing before reset');
+          const scope = window as Window & { __chatEntryResetScrollComplete?: boolean };
+          scope.__chatEntryResetScrollComplete = port.scrollTop === 0;
+          if (scope.__chatEntryResetScrollComplete) return;
+          const onEnd = () => {
+            if (port.scrollTop !== 0) return;
+            scope.__chatEntryResetScrollComplete = true;
+            port.removeEventListener('scrollend', onEnd);
+          };
+          port.addEventListener('scrollend', onEnd);
+          port.scrollTo({ top: 0, behavior: 'instant' });
+        });
+        await expect.poll(() => page.evaluate(() =>
+          (window as Window & { __chatEntryResetScrollComplete?: boolean }).__chatEntryResetScrollComplete === true),
+        'programmatic scrollport reset settles before the next gesture').toBe(true);
+      };
       const beforeKeyboard = await keyboardScrollport.evaluate((el) => el.scrollTop);
       const pageFocusBeforeKey = await page.evaluate(() => ({
         documentHasFocus: document.hasFocus(),
@@ -440,47 +535,54 @@ test.describe('chat entry visibility approved contract', () => {
 
       await resetPort();
       const beforeWheel = (await snapshotLayout(page)).scrollportScrollTop;
+      await armGestureScrollEnd(beforeWheel);
       await page.mouse.wheel(0, 480);
       await expect.poll(async () => (await snapshotLayout(page)).scrollportScrollTop,
         'wheel advances the shared scrollport').toBeGreaterThan(beforeWheel);
+      await waitForGestureScrollEnd(beforeWheel, 'wheel gesture settles on the shared scrollport');
 
       await resetPort();
       const session = await page.context().newCDPSession(page);
       const beforeTouch = (await snapshotLayout(page)).scrollportScrollTop;
+      await armGestureScrollEnd(beforeTouch);
       await session.send('Input.synthesizeScrollGesture', { x: 180, y: 300, yDistance: -420, speed: 650, gestureSourceType: 'touch' });
       await session.detach();
       await expect.poll(async () => (await snapshotLayout(page)).scrollportScrollTop,
         'Chromium touch-like scroll gesture advances the shared scrollport').toBeGreaterThan(beforeTouch);
+      await waitForGestureScrollEnd(beforeTouch, 'touch-like gesture settles on the shared scrollport');
 
-      await page.goto(activeUrl('/raspisanie-i-tseny'));
-      await page.evaluate(() => {
-        const port = [...document.querySelectorAll<HTMLElement>('body *')].find((el) => {
-          const style = getComputedStyle(el);
-          return /(auto|scroll)/.test(style.overflowY) && el.hasAttribute('data-page-scrollport');
-        });
-        if (port) port.scrollTop = Math.max(0, port.scrollHeight - port.clientHeight - 180);
-        else window.scrollTo(0, document.documentElement.scrollHeight - innerHeight - 180);
-      });
-      const schedulePosition = await snapshotLayout(page);
+      await navigateTo(activeUrl('/raspisanie-i-tseny'));
+      const schedulePort = page.locator('[data-page-scrollport]');
+      await expect(schedulePort, `${width}: schedule has one shared scrollport after a fresh Document`).toHaveCount(1);
+      const scheduleTarget = await schedulePort.evaluate((el: HTMLElement) => el.scrollHeight - el.clientHeight - 180);
+      await schedulePort.evaluate((el: HTMLElement, top) => el.scrollTo({ top, behavior: 'instant' }), scheduleTarget);
+      await expect.poll(() => schedulePort.evaluate((el: HTMLElement) => el.scrollTop),
+        `${width}: instant near-footer schedule position is reached before navigation`).toBe(scheduleTarget);
+      const schedulePosition = await readPort();
       const scheduleUrl = page.url();
-      await page.goto(activeUrl('/kontakty'));
-      await page.evaluate(() => {
-        const port = [...document.querySelectorAll<HTMLElement>('body *')].find((el) => {
-          const style = getComputedStyle(el);
-          return /(auto|scroll)/.test(style.overflowY) && el.hasAttribute('data-page-scrollport');
-        });
-        if (port) port.scrollTop = Math.max(0, port.scrollHeight - port.clientHeight - 120);
-        else window.scrollTo(0, document.documentElement.scrollHeight - innerHeight - 120);
-      });
-      const contactsPosition = await snapshotLayout(page);
+
+      await navigateTo(activeUrl('/kontakty'));
+      const contactsPort = page.locator('[data-page-scrollport]');
+      await expect(contactsPort, `${width}: contacts has one shared scrollport`).toHaveCount(1);
+      const contactsTarget = await contactsPort.evaluate((el: HTMLElement) => el.scrollHeight - el.clientHeight - 120);
+      await contactsPort.evaluate((el: HTMLElement, top) => el.scrollTo({ top, behavior: 'instant' }), contactsTarget);
+      await expect.poll(() => contactsPort.evaluate((el: HTMLElement) => el.scrollTop),
+        `${width}: instant near-footer contacts position is reached before navigation`).toBe(contactsTarget);
+      const contactsPosition = await readPort();
+      const contactsUrl = page.url();
+
       await page.goBack();
       await expect(page).toHaveURL(scheduleUrl);
-      await expect.poll(async () => (await snapshotLayout(page)).scrollportScrollTop,
-        'back restores the schedule scrollport position').toBe(schedulePosition.scrollportScrollTop);
+      await waitForPresentedPage(pageShows + 1);
+      await expect.poll(() => readDeparture(scheduleUrl), `${width}: outgoing schedule snapshot matches the verified position and geometry`)
+        .toEqual({ url: scheduleUrl, ...schedulePosition });
+      await expect.poll(readPort, `${width}: Back restores schedule top and geometry`).toEqual(schedulePosition);
       await page.goForward();
       await expect(page).toHaveURL(/kontakty/);
-      await expect.poll(async () => (await snapshotLayout(page)).scrollportScrollTop,
-        'forward restores the contacts scrollport position').toBe(contactsPosition.scrollportScrollTop);
+      await waitForPresentedPage(pageShows + 1);
+      await expect.poll(() => readDeparture(contactsUrl), `${width}: outgoing contacts snapshot matches the verified position and geometry`)
+        .toEqual({ url: contactsUrl, ...contactsPosition });
+      await expect.poll(readPort, `${width}: Forward restores contacts top and geometry`).toEqual(contactsPosition);
 
       const focusable = page.locator('footer a[href]').first();
       await focusable.focus();

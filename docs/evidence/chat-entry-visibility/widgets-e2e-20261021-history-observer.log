@@ -1,0 +1,11 @@
+
+Running 2 tests using 1 worker
+
+(node:77438) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  1 [desktop] › tests/chat-entry-visibility.spec.ts:359:3 › chat entry visibility approved contract › anchor, history, wheel, touch-like scroll, keyboard scroll, and focus reveal stay in the shared scrollport (7.2s)
+(node:78037) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  2 [mobile] › tests/chat-entry-visibility.spec.ts:359:3 › chat entry visibility approved contract › anchor, history, wheel, touch-like scroll, keyboard scroll, and focus reveal stay in the shared scrollport (6.7s)
+
+  2 passed (59.5s)
