@@ -152,14 +152,14 @@ const showFacade = config.state === 'address' && !isDemoOutput;
         const current = history.state && history.state[scrollHistoryKey];
         return current && typeof current.id === 'string' ? current : null;
       };
-      const writeScrollEntry = function (top, renewId) {
+      const writeScrollEntry = function (top, renewId, known) {
         const state = historyState();
         const current = state[scrollHistoryKey];
         const id = !renewId && current && typeof current.id === 'string' ? current.id : entryId();
         const position = Number.isFinite(top) ? Math.max(0, top) : pageScrollport.scrollTop;
-        state[scrollHistoryKey] = { id: id, top: position };
+        state[scrollHistoryKey] = { id: id, top: position, known: known !== false };
         history.replaceState(state, '');
-        scrollPositions.set(id, position);
+        if (known !== false) scrollPositions.set(id, position);
         return id;
       };
       const loadScrollPositions = function () {
@@ -181,35 +181,37 @@ const showFacade = config.state === 'address' && !isDemoOutput;
         const current = activeScrollEntry();
         if (current) scrollPositions.set(current.id, pageScrollport.scrollTop);
       };
+      const rememberCurrentHistoryPosition = function () {
+        writeScrollEntry(pageScrollport.scrollTop, false, true);
+      };
       const saveHistoryPosition = function () {
-        writeScrollEntry(pageScrollport.scrollTop, false);
+        rememberCurrentHistoryPosition();
         try {
           sessionStorage.setItem(scrollHistoryStorageKey, JSON.stringify(Array.from(scrollPositions.entries())));
         } catch {
           // Keep chat scrolling usable when browser storage is unavailable or full.
         }
       };
-      const restoreHistoryPosition = function () {
-        const current = activeScrollEntry();
-        if (!current) return;
-        const saved = scrollPositions.has(current.id) ? scrollPositions.get(current.id) : current.top;
-        if (typeof saved === 'number' && Number.isFinite(saved)) {
-          pageScrollport.scrollTo({ top: saved, behavior: 'instant' });
-          scrollPositions.set(current.id, pageScrollport.scrollTop);
-        }
+      const scrollEntryPosition = function (entry) {
+        if (!entry || typeof entry.id !== 'string') return null;
+        if (scrollPositions.has(entry.id)) return scrollPositions.get(entry.id);
+        return entry.known === true && typeof entry.top === 'number' && Number.isFinite(entry.top) ? entry.top : null;
       };
       const ensureScrollEntry = function () {
         const current = activeScrollEntry();
-        if (!current) writeScrollEntry(pageScrollport.scrollTop, false);
-        else if (!scrollPositions.has(current.id) && typeof current.top === 'number' && Number.isFinite(current.top)) {
+        if (!current) writeScrollEntry(pageScrollport.scrollTop, false, false);
+        else if (current.known === true && !scrollPositions.has(current.id)
+          && typeof current.top === 'number' && Number.isFinite(current.top)) {
           scrollPositions.set(current.id, current.top);
         }
       };
       loadScrollPositions();
       ensureScrollEntry();
-      restoreHistoryPosition();
       let traversingHistory = false;
-      let pendingNativeHash = false;
+      let transitionGeneration = 0;
+      let suppressedScrollTop = null;
+      let pendingNativeHash = '';
+      let freshHashPush = false;
       document.addEventListener('click', function (event) {
         if (event.defaultPrevented || event.button !== 0 || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
         const target = event.target;
@@ -220,31 +222,58 @@ const showFacade = config.state === 'address' && !isDemoOutput;
           && destination.pathname === window.location.pathname
           && destination.search === window.location.search
           && destination.hash !== window.location.hash) {
-          saveHistoryPosition();
-          pendingNativeHash = true;
+          transitionGeneration += 1;
+          traversingHistory = false;
+          rememberCurrentHistoryPosition();
+          pendingNativeHash = destination.hash;
         }
       }, true);
       window.addEventListener('hashchange', function () {
-        if (traversingHistory) {
-          pendingNativeHash = false;
+        if (pendingNativeHash && pendingNativeHash === window.location.hash) {
+          transitionGeneration += 1;
+          traversingHistory = false;
+          pendingNativeHash = '';
+          freshHashPush = true;
+          writeScrollEntry(pageScrollport.scrollTop, true, true);
+          window.setTimeout(function () { freshHashPush = false; }, 0);
           return;
         }
-        pendingNativeHash = false;
-        writeScrollEntry(pageScrollport.scrollTop, true);
+        if (!traversingHistory) {
+          transitionGeneration += 1;
+          writeScrollEntry(pageScrollport.scrollTop, true, true);
+        }
       });
       window.addEventListener('popstate', function () {
+        if (freshHashPush) return;
+        if (pendingNativeHash && pendingNativeHash === window.location.hash) {
+          freshHashPush = true;
+          return;
+        }
+        pendingNativeHash = '';
         traversingHistory = true;
+        const generation = ++transitionGeneration;
         const targetEntry = activeScrollEntry();
+        const targetPosition = scrollEntryPosition(targetEntry);
         window.setTimeout(function () {
+          if (generation !== transitionGeneration) return;
           traversingHistory = false;
           const currentEntry = activeScrollEntry();
-          if (targetEntry && currentEntry && targetEntry.id === currentEntry.id) restoreHistoryPosition();
+          if (targetEntry && currentEntry && targetEntry.id === currentEntry.id && targetPosition !== null) {
+            pageScrollport.scrollTo({ top: targetPosition, behavior: 'instant' });
+            suppressedScrollTop = pageScrollport.scrollTop;
+          }
         }, 0);
       });
       pageScrollport.addEventListener('keydown', function (event) {
         if (event.target !== pageScrollport || event.defaultPrevented
           || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
-        const pageStep = pageScrollport.clientHeight;
+        const portRect = pageScrollport.getBoundingClientRect();
+        const header = document.querySelector('header.topnav');
+        const headerRect = header && header.getBoundingClientRect();
+        const stickyHeaderHeight = headerRect
+          ? Math.max(0, Math.min(portRect.bottom, headerRect.bottom) - Math.max(portRect.top, headerRect.top))
+          : 0;
+        const pageStep = Math.max(1, pageScrollport.clientHeight - stickyHeaderHeight - 24);
         let top;
         switch (event.key) {
           case 'PageDown':
@@ -290,17 +319,30 @@ const showFacade = config.state === 'address' && !isDemoOutput;
         }
       };
       updateViewport();
+      window.addEventListener('pageshow', function () {
+        transitionGeneration += 1;
+        traversingHistory = false;
+        loadScrollPositions();
+        updateViewport();
+        const current = activeScrollEntry();
+        const saved = scrollEntryPosition(current);
+        if (saved !== null) {
+          pageScrollport.scrollTo({ top: saved, behavior: 'instant' });
+          suppressedScrollTop = pageScrollport.scrollTop;
+        }
+      });
       window.addEventListener('resize', function () { updateViewport(); revealFocusedField(); }, { passive: true });
       pageScrollport.addEventListener('scroll', function () {
         updateViewport();
-        if (!pendingNativeHash) rememberScrollPosition();
+        if (traversingHistory || pendingNativeHash) return;
+        if (suppressedScrollTop !== null && pageScrollport.scrollTop === suppressedScrollTop) {
+          suppressedScrollTop = null;
+          return;
+        }
+        suppressedScrollTop = null;
+        rememberScrollPosition();
       }, { passive: true });
       window.addEventListener('pagehide', saveHistoryPosition);
-      window.addEventListener('pageshow', function (event) {
-        if (!event.persisted) return;
-        loadScrollPositions();
-        restoreHistoryPosition();
-      });
       if (viewport) {
         viewport.addEventListener('resize', function () { updateViewport(); revealFocusedField(); }, { passive: true });
         viewport.addEventListener('scroll', updateViewport, { passive: true });

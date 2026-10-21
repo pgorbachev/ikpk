@@ -406,7 +406,8 @@ test.describe('chat entry visibility approved contract', () => {
       const pageFocusBeforeKey = await page.evaluate(() => ({
         documentHasFocus: document.hasFocus(),
         active: document.activeElement instanceof HTMLElement ? `${document.activeElement.tagName}.${document.activeElement.className}` : String(document.activeElement),
-        port: (() => { const el = document.querySelector<HTMLElement>('[data-page-scrollport]')!; return { clientHeight: el.clientHeight, scrollHeight: el.scrollHeight, scrollTop: el.scrollTop, maxScroll: el.scrollHeight - el.clientHeight }; })(),
+        port: (() => { const el = document.querySelector<HTMLElement>('[data-page-scrollport]')!; return { clientHeight: el.clientHeight, scrollHeight: el.scrollHeight, scrollTop: el.scrollTop, maxScroll: el.scrollHeight - el.clientHeight, rect: el.getBoundingClientRect().toJSON() }; })(),
+        header: document.querySelector<HTMLElement>('header.topnav')?.getBoundingClientRect().toJSON() ?? null,
       }));
       await page.keyboard.press('PageDown');
       const pageDownState = await page.evaluate(() => ({
@@ -419,8 +420,14 @@ test.describe('chat entry visibility approved contract', () => {
         `PageDown advances the shared scrollport from its start on a fresh page: ${JSON.stringify({ before: keyboardFocusBefore, immediatelyBefore: pageFocusBeforeKey, after: pageDownState })}`).toBeGreaterThan(beforeKeyboard);
       const pageDownBubble = (pageDownState.events as Array<{ phase: string; defaultPrevented: boolean }>).find((event) => event.phase === 'keydown-bubble');
       expect(pageDownBubble?.defaultPrevented, 'the focused scrollport owns PageDown and prevents duplicate browser scrolling').toBe(true);
-      await expect.poll(() => keyboardScrollport.evaluate((el) => el.scrollTop), 'PageDown advances by exactly one scrollport page')
-        .toBe(Math.min(pageFocusBeforeKey.port.maxScroll, beforeKeyboard + pageFocusBeforeKey.port.clientHeight));
+      const headerRect = pageFocusBeforeKey.header as { top: number; bottom: number } | null;
+      const portRect = pageFocusBeforeKey.port.rect as { top: number; bottom: number };
+      const stickyHeaderHeight = headerRect
+        ? Math.max(0, Math.min(portRect.bottom, headerRect.bottom) - Math.max(portRect.top, headerRect.top))
+        : 0;
+      const usefulPageStep = Math.max(1, pageFocusBeforeKey.port.clientHeight - stickyHeaderHeight - 24);
+      await expect.poll(() => keyboardScrollport.evaluate((el) => el.scrollTop), 'PageDown advances by the useful page area below the sticky header')
+        .toBe(Math.min(pageFocusBeforeKey.port.maxScroll, beforeKeyboard + usefulPageStep));
       await page.keyboard.press('PageUp');
       await expect.poll(() => keyboardScrollport.evaluate((el) => el.scrollTop), 'PageUp returns to the scrollport start').toBe(0);
       await page.keyboard.press('End');
@@ -560,6 +567,8 @@ test.describe('chat entry visibility approved contract', () => {
     await page.setViewportSize({ width: 375, height: 812 });
     await page.goto(activeUrl('/kontakty'));
     await page.goto(activeUrl('/'));
+    const originalDocumentTime = await page.evaluate(() => performance.timeOrigin);
+    await page.evaluate(() => window.addEventListener('unload', () => undefined));
     const port = page.locator('[data-page-scrollport]');
     await expect(port).toHaveCount(1);
     await port.evaluate((el: HTMLElement) => el.scrollTo({ top: 500, behavior: 'instant' }));
@@ -578,6 +587,8 @@ test.describe('chat entry visibility approved contract', () => {
     await expect(page).toHaveURL(/kontakty/);
     await page.evaluate(() => history.go(2));
     await expect(page).toHaveURL(/#upcoming$/);
+    expect(await page.evaluate(() => performance.timeOrigin), 'the original A document was destroyed before restoring its forward fragment entry')
+      .not.toBe(originalDocumentTime);
     await expect.poll(() => port.evaluate((el: HTMLElement) => el.scrollTop),
       'session entry positions restore the now-forward fragment after its original document is gone').toBe(fragmentEntryPosition);
   });
