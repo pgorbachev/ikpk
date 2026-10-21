@@ -217,7 +217,7 @@ const showFacade = config.state === 'address' && !isDemoOutput;
         const target = event.target;
         const anchor = target instanceof Element ? target.closest('a[href]') : null;
         if (!anchor || anchor.hasAttribute('download') || (anchor.target && anchor.target !== '_self')) return;
-        const destination = new URL(anchor.href, window.location.href);
+        const destination = anchor;
         if (destination.origin === window.location.origin
           && destination.pathname === window.location.pathname
           && destination.search === window.location.search
