@@ -417,6 +417,17 @@ test.describe('chat entry visibility approved contract', () => {
       }));
       await expect.poll(() => keyboardScrollport.evaluate((el) => el.scrollTop),
         `PageDown advances the shared scrollport from its start on a fresh page: ${JSON.stringify({ before: keyboardFocusBefore, immediatelyBefore: pageFocusBeforeKey, after: pageDownState })}`).toBeGreaterThan(beforeKeyboard);
+      const pageDownBubble = (pageDownState.events as Array<{ phase: string; defaultPrevented: boolean }>).find((event) => event.phase === 'keydown-bubble');
+      expect(pageDownBubble?.defaultPrevented, 'the focused scrollport owns PageDown and prevents duplicate browser scrolling').toBe(true);
+      await expect.poll(() => keyboardScrollport.evaluate((el) => el.scrollTop), 'PageDown advances by exactly one scrollport page')
+        .toBe(Math.min(pageFocusBeforeKey.port.maxScroll, beforeKeyboard + pageFocusBeforeKey.port.clientHeight));
+      await page.keyboard.press('PageUp');
+      await expect.poll(() => keyboardScrollport.evaluate((el) => el.scrollTop), 'PageUp returns to the scrollport start').toBe(0);
+      await page.keyboard.press('End');
+      await expect.poll(() => keyboardScrollport.evaluate((el) => el.scrollTop), 'End reaches the scrollport bottom')
+        .toBe(pageFocusBeforeKey.port.maxScroll);
+      await page.keyboard.press('Home');
+      await expect.poll(() => keyboardScrollport.evaluate((el) => el.scrollTop), 'Home returns to the scrollport start').toBe(0);
 
       await resetPort();
       const beforeWheel = (await snapshotLayout(page)).scrollportScrollTop;
@@ -513,6 +524,7 @@ test.describe('chat entry visibility approved contract', () => {
   test('native same-document hash Back and Forward restore the shared scrollport', async ({ page }) => {
     await protectThirdParties(page);
     await page.setViewportSize({ width: 375, height: 812 });
+    await page.goto(activeUrl('/kontakty'));
     await page.goto(activeUrl('/'));
     const port = page.locator('[data-page-scrollport]');
     await expect(port).toHaveCount(1);
@@ -524,7 +536,13 @@ test.describe('chat entry visibility approved contract', () => {
     await anchor.click();
     await expect(page).toHaveURL(/#upcoming$/);
     await expect.poll(() => port.evaluate((el: HTMLElement) => el.scrollTop)).toBeGreaterThan(initialPosition);
+    await port.evaluate((el: HTMLElement) => el.scrollTo({ top: 900, behavior: 'instant' }));
     const hashPosition = await port.evaluate((el: HTMLElement) => el.scrollTop);
+    await page.goto(activeUrl('/kontakty'));
+    await page.goBack();
+    await expect(page).toHaveURL(/#upcoming$/);
+    await expect.poll(() => port.evaluate((el: HTMLElement) => el.scrollTop),
+      'full-page Back restores the hash entry position after a document change').toBe(hashPosition);
     await page.goBack();
     await expect(page).not.toHaveURL(/#upcoming$/);
     await expect.poll(() => port.evaluate((el: HTMLElement) => el.scrollTop),
@@ -533,6 +551,35 @@ test.describe('chat entry visibility approved contract', () => {
     await expect(page).toHaveURL(/#upcoming$/);
     await expect.poll(() => port.evaluate((el: HTMLElement) => el.scrollTop),
       'native same-document Forward restores the measured hash-entry position').toBe(hashPosition);
+    await page.goForward();
+    await expect(page).toHaveURL(/kontakty/);
+  });
+
+  test('history keeps a forward fragment position after its document is left and reloaded', async ({ page }) => {
+    await protectThirdParties(page);
+    await page.setViewportSize({ width: 375, height: 812 });
+    await page.goto(activeUrl('/kontakty'));
+    await page.goto(activeUrl('/'));
+    const port = page.locator('[data-page-scrollport]');
+    await expect(port).toHaveCount(1);
+    await port.evaluate((el: HTMLElement) => el.scrollTo({ top: 500, behavior: 'instant' }));
+    const anchor = page.locator('a[href="#upcoming"]').first();
+    await anchor.scrollIntoViewIfNeeded();
+    const firstEntryPosition = await port.evaluate((el: HTMLElement) => el.scrollTop);
+    await anchor.click();
+    await expect(page).toHaveURL(/#upcoming$/);
+    await port.evaluate((el: HTMLElement) => el.scrollTo({ top: 900, behavior: 'instant' }));
+    const fragmentEntryPosition = await port.evaluate((el: HTMLElement) => el.scrollTop);
+
+    await page.goBack();
+    await expect(page).not.toHaveURL(/#upcoming$/);
+    await expect.poll(() => port.evaluate((el: HTMLElement) => el.scrollTop)).toBe(firstEntryPosition);
+    await page.goBack();
+    await expect(page).toHaveURL(/kontakty/);
+    await page.evaluate(() => history.go(2));
+    await expect(page).toHaveURL(/#upcoming$/);
+    await expect.poll(() => port.evaluate((el: HTMLElement) => el.scrollTop),
+      'session entry positions restore the now-forward fragment after its original document is gone').toBe(fragmentEntryPosition);
   });
 
   test('desktop dropdown exposes the final navigation link at a short viewport', async ({ page }) => {
@@ -691,7 +738,7 @@ test.describe('chat entry visibility approved contract', () => {
       expect(searchBounds.panelBottom, `${width}: search popup fits under the reduced visual viewport`).toBeLessThanOrEqual(searchBounds.portBottom + 1);
       expect(searchBounds.closeInside, `${width}: search has a reachable close control in its clipped region`).toBe(true);
 
-      const query = page.locator('#header-search-pagefind input[type="search"]');
+      const query = page.locator('#header-search-pagefind .pagefind-ui__search-input');
       await expect(query, `${width}: search input is available in the popup`).toBeVisible();
       await query.fill('семинар');
       const results = page.locator('#header-search-pagefind .pagefind-ui__result');

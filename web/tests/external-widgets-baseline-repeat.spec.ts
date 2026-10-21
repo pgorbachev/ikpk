@@ -1,7 +1,11 @@
 import { test, expect, type Browser, type ViewportSize } from '@playwright/test';
 import { writeFile } from 'node:fs/promises';
+import { execFileSync } from 'node:child_process';
+import { join } from 'node:path';
 import { installThirdPartyGuard } from './helpers/third-party-guard';
 import { SEL_AWARD_ROW } from './helpers/external-widgets';
+import { buildProbe, PROBE_CHAT_LOADER_SRC } from './helpers/widget-probe-build';
+import { serveStatic } from './helpers/static-serve';
 
 /**
  * Тесты по спеке change `external-widgets` — ПОВТОРЯЕМОСТЬ снимков при одном моменте.
@@ -111,7 +115,7 @@ async function settle(page: import('@playwright/test').Page): Promise<void> {
   await page.evaluate(() => Promise.all([...document.images].map((img) => img.decode().catch(() => undefined))));
 }
 
-async function shot(browser: Browser, path: string, viewport: ViewportSize): Promise<Shot> {
+async function shot(browser: Browser, path: string, viewport: ViewportSize, chatEnabled = false): Promise<Shot> {
   // Своя страница на каждый прогон: `page.clock.install` ставится на страницу один раз, и
   // два снимка одной и той же страницы совпали бы тривиально — предметом стала бы
   // способность браузера дважды отдать один кадр, а не детерминированность вывода.
@@ -123,6 +127,11 @@ async function shot(browser: Browser, path: string, viewport: ViewportSize): Pro
     await page.emulateMedia({ reducedMotion: 'reduce' });
     const response = await page.goto(path);
     expect(response?.status(), `${path}: страница не отдалась — снимок был бы снимком ошибки`).toBe(200);
+    if (chatEnabled) {
+      await expect(page.locator('body[data-chat-page]'), `${path}: chat layout is active`).toHaveCount(1);
+      await expect(page.locator('[data-page-scrollport]'), `${path}: chat fixture has the shared scrollport`).toHaveCount(1);
+      await expect(page.locator('[data-chat-trigger]'), `${path}: chat entry is rendered in the repeated view`).toBeVisible();
+    }
     await settle(page);
     const marker = page.locator(TEMPLATE_MARKER.selector).first();
     await expect(marker, `${path}: маркера шаблона нет — страница не отрендерена`).toBeVisible();
@@ -196,5 +205,46 @@ test.describe('визуальные эталоны не зависят от от
         'сервисов различаются на неизменном дереве: значит облик зависит от чего-то, что ' +
         'проверка не привела к известному состоянию; отдельно сверяются первый экран и видимая область Reviews iframe',
     ).toBe(true);
+  });
+
+  test('chat-enabled scrollport and the visible Reviews frame repeat deterministically', async ({ browser }, testInfo) => {
+    test.skip(testInfo.project.name !== 'mobile', 'one mobile viewport proves the layout-specific scrollport and lower chat row');
+    const viewport = { width: 375, height: 812 };
+    const build = buildProbe('non-demo preview payment plus chat baseline repeat', {
+      CHAT_LOADER_SRC: PROBE_CHAT_LOADER_SRC,
+      PAYMENT_ROLE: 'preview',
+      DEMO_FORMS: 'stub',
+      DEMO_OUTPUT: undefined,
+    }, { keepOnDisk: true });
+    let site: Awaited<ReturnType<typeof serveStatic>> | undefined;
+    try {
+      if (!build.root) throw new Error('chat-enabled repeat probe has no retained output for Pagefind');
+      execFileSync(join(process.cwd(), 'node_modules/.bin/pagefind'), ['--site', build.root], {
+        cwd: process.cwd(),
+        stdio: 'pipe',
+        encoding: 'utf8',
+      });
+      site = await serveStatic(build.root);
+      const first = await shot(browser, `${site.origin}/`, viewport, true);
+      const second = await shot(browser, `${site.origin}/`, viewport, true);
+      expect(first.markerText.length, 'chat-enabled page has the home template marker').toBeGreaterThan(0);
+      expect(first.markerText).toBe(second.markerText);
+      expect(first.fullHeight).toBeGreaterThan(viewport.height);
+      expect(first.fullHeight).toBe(second.fullHeight);
+      const same = first.firstViewport.equals(second.firstViewport)
+        && first.reviewsViewport.equals(second.reviewsViewport);
+      if (!same) {
+        await Promise.all([
+          writeFile(testInfo.outputPath('chat-first-run-viewport.png'), first.firstViewport),
+          writeFile(testInfo.outputPath('chat-second-run-viewport.png'), second.firstViewport),
+          writeFile(testInfo.outputPath('chat-first-run-reviews.png'), first.reviewsViewport),
+          writeFile(testInfo.outputPath('chat-second-run-reviews.png'), second.reviewsViewport),
+        ]);
+      }
+      expect(same, 'chat-enabled page first viewport and the actually loaded Reviews frame are repeatable').toBe(true);
+    } finally {
+      await site?.close();
+      build.dispose();
+    }
   });
 });
