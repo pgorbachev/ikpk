@@ -10,30 +10,60 @@
   },
   "currentBuilds": {
     "production": {
-      "command": "npm run build",
+      "command": "env -u DEMO_OUTPUT CHAT_LOADER_SRC=https://chat-loader.invalid/probe/loader_probe.js npm --prefix web run build",
       "exitCode": 0,
       "pages": 459,
       "distRoot": "web/dist",
-      "log": "docs/evidence/chat-entry-visibility/build-production-2026-10-21.log",
-      "sourceFreeze": "5764f89b4c058d5681592bc8127c4127e926bb85"
+      "log": "docs/evidence/chat-entry-visibility/build-production-da95-probe-2026-10-21.log.gz",
+      "sourceFreeze": "da95fdf0a05359d82b5ebe483b53d7f08436bdb6",
+      "chatLoaderSrc": "https://chat-loader.invalid/probe/loader_probe.js",
+      "demoOutput": "unset",
+      "buildInputHead": "aaddbb51d541d83d01143eaabc36dba9a3dba32a"
     },
     "demo": {
-      "command": "npm run build:demo",
+      "command": "env -u DEMO_OUTPUT CHAT_LOADER_SRC=https://chat-loader.invalid/probe/loader_probe.js npm --prefix web run build:demo",
       "exitCode": 0,
       "pages": 476,
       "distRoot": "web/dist-demo",
-      "log": "docs/evidence/chat-entry-visibility/build-demo-2026-10-21.log",
-      "sourceFreeze": "5764f89b4c058d5681592bc8127c4127e926bb85"
+      "log": "docs/evidence/chat-entry-visibility/build-demo-da95-probe-2026-10-21.log.gz",
+      "sourceFreeze": "da95fdf0a05359d82b5ebe483b53d7f08436bdb6",
+      "chatLoaderSrc": "https://chat-loader.invalid/probe/loader_probe.js",
+      "demoOutput": "build script sets DEMO_OUTPUT=1",
+      "buildInputHead": "aaddbb51d541d83d01143eaabc36dba9a3dba32a"
     },
     "standardOccurrenceGenerator": {
       "command": "npx tsx tests/helpers/rich-content-safety/generate-occurrences.ts",
       "exitCode": 0,
       "standardRulesBeforeRetention": 11052,
-      "generatedFromSha": "908fcb27b385f8a4e2fcebede25dd28e0c4c2f1d",
+      "generatedFromSha": "e7c6e23f9d24829273a8d0456db301d92b1896d1",
       "distRoots": [
         "web/dist",
         "web/dist-demo"
-      ]
+      ],
+      "log": "docs/evidence/chat-entry-visibility/generate-occurrences-da95-2026-10-21.log.gz",
+      "generatorHead": "e7c6e23f9d24829273a8d0456db301d92b1896d1"
+    },
+    "testBuild": {
+      "command": "env -u DEMO_OUTPUT CHAT_LOADER_SRC=https://chat-loader.invalid/probe/loader_probe.js npm --prefix web run test:build -- --maxWorkers=1",
+      "exitCode": 0,
+      "productSourceFreeze": "da95fdf0a05359d82b5ebe483b53d7f08436bdb6",
+      "testOracleRevision": "99759d359499a00d9b088fb3b5d30c9287c9f608",
+      "productionPages": 459,
+      "pagefindIndexed": 272,
+      "files": {
+        "passed": 25,
+        "failed": 0,
+        "total": 25
+      },
+      "tests": {
+        "passed": 282,
+        "failed": 0,
+        "skipped": 6,
+        "total": 288
+      },
+      "log": "docs/evidence/chat-entry-visibility/test-build-final-oracles-green-2026-10-21.log.gz",
+      "chatLoaderSrc": "https://chat-loader.invalid/probe/loader_probe.js",
+      "demoOutput": "unset"
     }
   },
   "priorEvidence": {
@@ -14152,39 +14182,6 @@
       "historicalReportEvidenceCategory": "current_css_identity_in_459_production_routes_and_each_a01_route"
     }
   ],
-  "builds": {
-    "production": {
-      "command": "env -u DEMO_OUTPUT CHAT_LOADER_SRC=https://chat-loader.invalid/probe/loader_probe.js npm --prefix web run build",
-      "exitCode": 0,
-      "pages": 459,
-      "distRoot": "web/dist",
-      "log": "docs/evidence/chat-entry-visibility/build-production-da95-probe-2026-10-21.log.gz",
-      "sourceFreeze": "da95fdf0a05359d82b5ebe483b53d7f08436bdb6",
-      "chatLoaderSrc": "https://chat-loader.invalid/probe/loader_probe.js",
-      "demoOutput": "unset"
-    },
-    "demo": {
-      "command": "env -u DEMO_OUTPUT CHAT_LOADER_SRC=https://chat-loader.invalid/probe/loader_probe.js npm --prefix web run build:demo",
-      "exitCode": 0,
-      "pages": 476,
-      "distRoot": "web/dist-demo",
-      "log": "docs/evidence/chat-entry-visibility/build-demo-da95-probe-2026-10-21.log.gz",
-      "sourceFreeze": "da95fdf0a05359d82b5ebe483b53d7f08436bdb6",
-      "chatLoaderSrc": "https://chat-loader.invalid/probe/loader_probe.js",
-      "demoOutput": "build script sets DEMO_OUTPUT=1"
-    },
-    "standardOccurrenceGenerator": {
-      "command": "npx tsx tests/helpers/rich-content-safety/generate-occurrences.ts",
-      "exitCode": 0,
-      "standardRulesBeforeRetention": 11052,
-      "generatedFromSha": "e7c6e23f9d24829273a8d0456db301d92b1896d1",
-      "distRoots": [
-        "web/dist",
-        "web/dist-demo"
-      ],
-      "log": "docs/evidence/chat-entry-visibility/generate-occurrences-da95-2026-10-21.log.gz"
-    }
-  },
   "currentSourceInventory": {
     "sha256": "9f20afe86cf5f1023548511cdc9327a54c4f45e45e547d3b1011df3780d905dd",
     "slots": 146
@@ -14221,7 +14218,7 @@
           "cause": "the broad url( scan treated new URL(anchor.href, window.location.href) from ChatFacade inline JavaScript as an image URL on 458 pages; source fix da95 removes only that unnecessary constructor"
         }
       ],
-      "supersededBy": "reviewed ChatFacade source fix da95fdf0a05359d82b5ebe483b53d7f08436bdb6 and explicit inert invalid loader builds; not a green result"
+      "supersededBy": "reviewed source fix da95 plus the final address-config test:build passed at test-oracle revision 99759d359499a00d9b088fb3b5d30c9287c9f608; diagnostic remains recorded as failed."
     },
     {
       "command": "CHAT_LOADER_SRC=none npm --prefix web run test:build -- --maxWorkers=1",
@@ -14244,7 +14241,37 @@
         "cause": "expected stale occurrence output identity body:a59f01870ce1fdc4 differed from refreshed live source identity body:c976432be2a11bf4; registry was refreshed afterward against probe-config roots"
       },
       "log": "docs/evidence/chat-entry-visibility/test-build-none-stale-registry-2026-10-21.log.gz",
-      "supersededBy": "fresh standard generator and retention mapping were subsequently refreshed at occurrence generation HEAD e7c6e23f9d24829273a8d0456db301d92b1896d1; final address-config test:build still required"
+      "supersededBy": "fresh standard generator and retention mapping were refreshed, then the final address-config test:build passed at test-oracle revision 99759d359499a00d9b088fb3b5d30c9287c9f608; diagnostic remains recorded as failed."
+    },
+    {
+      "command": "env -u DEMO_OUTPUT CHAT_LOADER_SRC=https://chat-loader.invalid/probe/loader_probe.js npm --prefix web run test:build -- --maxWorkers=1",
+      "environment": "inert invalid loader explicitly configured; production build, DEMO_OUTPUT unset",
+      "productSourceFreeze": "da95fdf0a05359d82b5ebe483b53d7f08436bdb6",
+      "testOracleRevision": "23cf8e293eec4911fa4cbf6ccc0447fc9169dd29",
+      "exitCode": 1,
+      "files": {
+        "passed": 23,
+        "failed": 2,
+        "total": 25
+      },
+      "tests": {
+        "passed": 276,
+        "failed": 2,
+        "skipped": 6,
+        "total": 284
+      },
+      "failures": [
+        {
+          "test": "content-quality.test.ts: no raw content-derived buttons in the build",
+          "cause": "the broad raw-button classifier treated the intentional app-owned data-chat-trigger button as CMS content"
+        },
+        {
+          "test": "external-widgets-dist.test.ts: declared production config agrees with output",
+          "cause": "the configured invalid loader address on data-chat-loader-src was not recognized by the vendor-host-only output detector"
+        }
+      ],
+      "log": "docs/evidence/chat-entry-visibility/test-build-probe-oracle-red-2026-10-21.log.gz",
+      "supersededBy": "narrow test-only classifier and configured-address carrier fixes at 99759d359499a00d9b088fb3b5d30c9287c9f608; subsequent full testBuild passed. No production source, inventory, registry, generator, or matcher changed."
     }
   ],
   "compressedEvidenceLogs": [
@@ -14267,6 +14294,74 @@
       "path": "docs/evidence/chat-entry-visibility/test-build-none-stale-registry-2026-10-21.log.gz",
       "uncompressedBytes": 52103,
       "uncompressedSha256": "7ef9e7f5e70f0b986c8023612e6ebb1ac6d6fe0f414c737ca94c3ff9abba0c64"
+    },
+    {
+      "path": "docs/evidence/chat-entry-visibility/test-build-probe-oracle-red-2026-10-21.log.gz",
+      "uncompressedBytes": 55368,
+      "uncompressedSha256": "0d90a2d26bfea0ce30323b310947b59cbb31773fe8ff5fe2271e38d68afcc898"
+    },
+    {
+      "path": "docs/evidence/chat-entry-visibility/test-build-final-oracles-green-2026-10-21.log.gz",
+      "uncompressedBytes": 50433,
+      "uncompressedSha256": "298245fee9e950aab80a9444f9d63e8537f0f19aeeba2d6964906f3669b8b2c1"
+    },
+    {
+      "path": "docs/evidence/chat-entry-visibility/oracle-fixtures-red-2026-10-21.log.gz",
+      "uncompressedBytes": 2460,
+      "uncompressedSha256": "2db044e40c266d54911954b6d2e003e0c5705652f08ecebed50d4cb3e8900ec1"
+    },
+    {
+      "path": "docs/evidence/chat-entry-visibility/oracle-integration-filtered-green-2026-10-21.log.gz",
+      "uncompressedBytes": 285,
+      "uncompressedSha256": "c05c46692acb3f1a8c22b6212c8a43e4836690054bbd11dd0d34c772dad8930a"
     }
-  ]
+  ],
+  "standardOccurrencePreservation": {
+    "candidateHead": "23cf8e293eec4911fa4cbf6ccc0447fc9169dd29",
+    "command": "./node_modules/.bin/tsx tests/helpers/rich-content-safety/generate-occurrences.ts (from web/)",
+    "exitCode": 0,
+    "generatedFromSha": "23cf8e293eec4911fa4cbf6ccc0447fc9169dd29",
+    "candidateRegistrySha256": "4fa12c7a78b1ed2b0b766ca6c9449ef069a48079aee67791aece74c665eff0e7",
+    "restoredRegistrySha256": "4fa12c7a78b1ed2b0b766ca6c9449ef069a48079aee67791aece74c665eff0e7",
+    "candidateRows": 11272,
+    "excludedRetainedProductionRows": 220,
+    "expectedStandardRows": 11052,
+    "generatedRows": 11052,
+    "rowsByteEquivalentAfterExcludingRetainedRules": true,
+    "metadataCompared": [
+      "status",
+      "generatedFrom",
+      "distRoots",
+      "ciMustNotRegenerate",
+      "slotIds"
+    ],
+    "metadataIdenticalExceptGeneratedFromSha": true,
+    "result": "pass"
+  },
+  "oracleFixtureRuns": {
+    "red": {
+      "command": "./node_modules/.bin/vitest run --config vitest.build.config.ts tests/content-quality.test.ts tests/external-widgets-dist.test.ts --maxWorkers=1 -t 'raw button ownership boundary fixtures|configured-address fixtures'",
+      "exitCode": 1,
+      "selectedTests": {
+        "failed": 2,
+        "passed": 0
+      },
+      "log": "docs/evidence/chat-entry-visibility/oracle-fixtures-red-2026-10-21.log.gz",
+      "uncompressedBytes": 2460,
+      "uncompressedSha256": "2db044e40c266d54911954b6d2e003e0c5705652f08ecebed50d4cb3e8900ec1"
+    },
+    "filteredGreen": {
+      "command": "CHAT_LOADER_SRC=https://chat-loader.invalid/probe/loader_probe.js ./node_modules/.bin/vitest run --config vitest.build.config.ts tests/content-quality.test.ts tests/external-widgets-dist.test.ts --maxWorkers=1 --hookTimeout=30000 -t 'raw button ownership boundary fixtures|configured-address fixtures|no raw content-derived buttons in the build|объявленная конфигурация боевой сборки согласна'",
+      "exitCode": 0,
+      "selectedTests": {
+        "passed": 6,
+        "failed": 0
+      },
+      "filteredOut": 56,
+      "filteredOutAreNotSkips": true,
+      "log": "docs/evidence/chat-entry-visibility/oracle-integration-filtered-green-2026-10-21.log.gz",
+      "uncompressedBytes": 285,
+      "uncompressedSha256": "c05c46692acb3f1a8c22b6212c8a43e4836690054bbd11dd0d34c772dad8930a"
+    }
+  }
 }
