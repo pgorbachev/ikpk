@@ -135,7 +135,8 @@ const hasForm = role !== 'ci';
 <style>
   .payment-dialog {
     position: fixed;
-    inset: 0;
+    inset: var(--payment-visual-viewport-offset, 0px) 0 0;
+    height: var(--payment-visual-viewport-height, 100vh);
     /* Выше залипающей шапки (`header.topnav`, z-index 100) и её выпадающих панелей
        (`HeaderTools`, 90). При 80 голова диалога — заголовок и «Закрыть» — уходила под
        шапку, как только форма оказывалась выше окна: панель прижимается к `top: 16`, а
@@ -157,7 +158,7 @@ const hasForm = role !== 'ci';
     color: var(--color-dark-700);
     max-width: 32rem;
     width: min(100%, 32rem);
-    max-height: calc(100vh - 2rem);
+    max-height: calc(var(--payment-visual-viewport-height, 100vh) - 2rem);
     overflow: auto;
     border-radius: var(--radius-m);
     /* Названы переменными, потому что липкий футер ниже обязан знать эти два

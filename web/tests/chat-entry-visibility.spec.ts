@@ -56,7 +56,7 @@ async function snapshotLayout(page: Page) {
       const style = getComputedStyle(el);
       return Boolean(header && main && footer && el.contains(header) && el.contains(main) && el.contains(footer))
         && /(auto|scroll)/.test(style.overflowY)
-        && el.scrollHeight > el.clientHeight + 1;
+        && el.hasAttribute('data-page-scrollport');
     }) ?? null;
     const frame = scrollport?.parentElement ?? null;
     const lowerZone = frame && button
@@ -286,7 +286,7 @@ test.describe('chat entry visibility approved contract', () => {
             const candidate = [...document.querySelectorAll<HTMLElement>('body *')].find((el) => {
               const s = getComputedStyle(el);
               return Boolean(header && main && footer && el.contains(header) && el.contains(main) && el.contains(footer))
-                && /(auto|scroll)/.test(s.overflowY) && el.scrollHeight > el.clientHeight + 1;
+                && /(auto|scroll)/.test(s.overflowY) && el.hasAttribute('data-page-scrollport');
             });
             if (candidate) candidate.scrollTop = 0;
             window.scrollTo(0, 0);
@@ -298,7 +298,7 @@ test.describe('chat entry visibility approved contract', () => {
             const candidate = [...document.querySelectorAll<HTMLElement>('body *')].find((el) => {
               const s = getComputedStyle(el);
               return Boolean(header && main && footer && el.contains(header) && el.contains(main) && el.contains(footer))
-                && /(auto|scroll)/.test(s.overflowY) && el.scrollHeight > el.clientHeight + 1;
+                && /(auto|scroll)/.test(s.overflowY) && el.hasAttribute('data-page-scrollport');
             });
             if (candidate) candidate.scrollTop = (candidate.scrollHeight - candidate.clientHeight) / 2;
             else window.scrollTo(0, (document.documentElement.scrollHeight - innerHeight) / 2);
@@ -310,7 +310,7 @@ test.describe('chat entry visibility approved contract', () => {
             const candidate = [...document.querySelectorAll<HTMLElement>('body *')].find((el) => {
               const s = getComputedStyle(el);
               return Boolean(header && main && footer && el.contains(header) && el.contains(main) && el.contains(footer))
-                && /(auto|scroll)/.test(s.overflowY) && el.scrollHeight > el.clientHeight + 1;
+                && /(auto|scroll)/.test(s.overflowY) && el.hasAttribute('data-page-scrollport');
             });
             if (candidate) candidate.scrollTop = candidate.scrollHeight;
             else window.scrollTo(0, document.documentElement.scrollHeight);
@@ -321,8 +321,9 @@ test.describe('chat entry visibility approved contract', () => {
           expect.soft(measured.overlap, `${name} ${width} ${position}: no visible clipped text/control intersects the trigger`).toEqual([]);
           expect.soft(measured.documentScrollTop, `${name} ${width} ${position}: document has no competing scroll position`).toBe(0);
           if (position === 'start') expect.soft(measured.scrollportScrollTop, `${name} ${width}: start position resets the shared scrollport`).toBe(0);
-          if (position === 'middle') expect.soft(measured.scrollportScrollTop, `${name} ${width}: middle position scrolls the shared scrollport`).toBeGreaterThan(0);
-          if (position === 'footer') expect.soft(measured.scrollportScrollTop, `${name} ${width}: footer position scrolls the shared scrollport`).toBeGreaterThan(0);
+          if (position !== 'start' && measured.scrollportScrollHeight > measured.scrollportClientHeight + 1) {
+            expect.soft(measured.scrollportScrollTop, `${name} ${width}: ${position} position scrolls a long shared scrollport`).toBeGreaterThan(0);
+          }
         }
       }
     }
@@ -364,7 +365,7 @@ test.describe('chat entry visibility approved contract', () => {
     await page.evaluate(() => {
       const port = [...document.querySelectorAll<HTMLElement>('body *')].find((el) => {
         const style = getComputedStyle(el);
-        return /(auto|scroll)/.test(style.overflowY) && el.scrollHeight > el.clientHeight + 1;
+        return /(auto|scroll)/.test(style.overflowY) && el.hasAttribute('data-page-scrollport');
       });
       if (port) port.scrollTop = Math.max(0, port.scrollHeight - port.clientHeight - 180);
       else window.scrollTo(0, document.documentElement.scrollHeight - innerHeight - 180);
@@ -375,7 +376,7 @@ test.describe('chat entry visibility approved contract', () => {
     await page.evaluate(() => {
       const port = [...document.querySelectorAll<HTMLElement>('body *')].find((el) => {
         const style = getComputedStyle(el);
-        return /(auto|scroll)/.test(style.overflowY) && el.scrollHeight > el.clientHeight + 1;
+        return /(auto|scroll)/.test(style.overflowY) && el.hasAttribute('data-page-scrollport');
       });
       if (port) port.scrollTop = Math.max(0, port.scrollHeight - port.clientHeight - 120);
       else window.scrollTo(0, document.documentElement.scrollHeight - innerHeight - 120);
@@ -396,12 +397,47 @@ test.describe('chat entry visibility approved contract', () => {
       const rect = el.getBoundingClientRect();
       const host = [...document.querySelectorAll<HTMLElement>('body *')].find((candidate) => {
         const style = getComputedStyle(candidate);
-        return /(auto|scroll)/.test(style.overflowY) && candidate.scrollHeight > candidate.clientHeight + 1 && candidate.contains(el);
+        return /(auto|scroll)/.test(style.overflowY) && candidate.hasAttribute('data-page-scrollport') && candidate.contains(el);
       });
       const box = host?.getBoundingClientRect();
       return Boolean(box && rect.top >= box.top && rect.bottom <= box.bottom);
     });
     expect.soft(focused, 'keyboard focus reveal keeps the full footer control inside the shared scrollport').toBe(true);
+  });
+
+  test('shared scrollport drives the header shadow and the no-IntersectionObserver reviews fallback', async ({ page }) => {
+    await page.addInitScript(() => {
+      Object.defineProperty(window, 'IntersectionObserver', { configurable: true, value: undefined });
+    });
+    await protectThirdParties(page);
+    await page.setViewportSize({ width: 375, height: 420 });
+    await page.goto(activeUrl('/'));
+    const port = page.locator('[data-page-scrollport]');
+    await expect(port).toHaveCount(1);
+    const reviews = page.locator('[data-reviews-embed]').first();
+    await expect(reviews).toHaveCount(1);
+    const initial = await page.evaluate(() => {
+      const port = document.querySelector<HTMLElement>('[data-page-scrollport]')!;
+      const box = document.querySelector<HTMLElement>('[data-reviews-embed]')!;
+      return {
+        port: port.getBoundingClientRect().toJSON(),
+        box: box.getBoundingClientRect().toJSON(),
+        hasFrame: Boolean(box.querySelector('iframe')),
+      };
+    });
+    expect(initial.box.top, 'reviews start below the clipped visible region').toBeGreaterThanOrEqual(initial.port.bottom);
+    expect(initial.hasFrame, 'fallback does not load the review iframe before the page scrollport reveals it').toBe(false);
+
+    await port.evaluate((el: HTMLElement) => { el.scrollTop = 20; });
+    await expect(page.locator('header.topnav')).toHaveAttribute('data-scrolled', '');
+    await port.evaluate((el: HTMLElement) => { el.scrollTop = 0; });
+    await expect(page.locator('header.topnav')).not.toHaveAttribute('data-scrolled', '');
+
+    await port.evaluate((el: HTMLElement) => {
+      const box = document.querySelector<HTMLElement>('[data-reviews-embed]')!;
+      el.scrollTop = Math.max(0, box.offsetTop - el.offsetTop);
+    });
+    await expect(reviews.locator('iframe')).toHaveCount(1);
   });
 
   test('layout resize and reduced visualViewport keep the focused field and chat control visible', async ({ page }) => {
@@ -442,7 +478,10 @@ test.describe('chat entry visibility approved contract', () => {
     const fieldVisible = await email.evaluate((el) => {
       const r = el.getBoundingClientRect();
       const p = document.querySelector('.payment-dialog-panel')!.getBoundingClientRect();
-      return r.top >= p.top && r.bottom <= Math.min(p.bottom, innerHeight);
+      const vv = visualViewport;
+      const visibleTop = Math.max(p.top, vv?.offsetTop ?? 0);
+      const visibleBottom = Math.min(p.bottom, (vv?.offsetTop ?? 0) + (vv?.height ?? innerHeight));
+      return r.top >= visibleTop && r.bottom <= visibleBottom;
     });
     expect.soft(fieldVisible, 'focused payment field remains visible after viewport/visualViewport resize').toBe(true);
     const viewportMetrics = await page.evaluate(() => ({
@@ -469,7 +508,7 @@ test.describe('chat entry visibility approved contract', () => {
       const button = document.querySelector<HTMLElement>(triggerSelector)!.getBoundingClientRect();
       const port = [...document.querySelectorAll<HTMLElement>('body *')].find((el) => {
         const style = getComputedStyle(el);
-        return el.contains(document.querySelector('main')) && /(auto|scroll)/.test(style.overflowY) && el.scrollHeight > el.clientHeight + 1;
+        return el.hasAttribute('data-page-scrollport') && el.contains(document.querySelector('main')) && /(auto|scroll)/.test(style.overflowY);
       });
       return { buttonBottom: button.bottom, visibleBottom: vv.offsetTop + vv.height, portBottom: port?.getBoundingClientRect().bottom ?? null };
     }, TRIGGER);
@@ -504,7 +543,7 @@ test.describe('chat entry visibility approved contract', () => {
       const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
       const scrollport = [...document.querySelectorAll<HTMLElement>('body *')].find((el) => {
         const style = getComputedStyle(el);
-        return el.contains(document.querySelector('main')) && /(auto|scroll)/.test(style.overflowY) && el.scrollHeight > el.clientHeight + 1;
+        return el.hasAttribute('data-page-scrollport') && el.contains(document.querySelector('main')) && /(auto|scroll)/.test(style.overflowY);
       });
       return {
         paymentRootBodyChild: paymentRoot.parentElement === document.body,
@@ -560,7 +599,7 @@ test.describe('chat entry visibility approved contract', () => {
       let site: StaticSite | undefined;
       const { name } = entry;
       try {
-        if ('env' in entry) {
+        if ('env' in entry && entry.env) {
           build = buildProbe(name, entry.env, { keepOnDisk: true });
           site = await serveStatic(build.root!);
         } else {
@@ -574,7 +613,7 @@ test.describe('chat entry visibility approved contract', () => {
         await page.evaluate(() => {
         const port = [...document.querySelectorAll<HTMLElement>('body *')].find((el) => {
           const style = getComputedStyle(el);
-          return /(auto|scroll)/.test(style.overflowY) && el.scrollHeight > el.clientHeight + 1
+          return /(auto|scroll)/.test(style.overflowY) && el.hasAttribute('data-page-scrollport')
             && el.contains(document.querySelector('main'));
         });
         if (port) port.scrollTop = port.scrollHeight;
@@ -587,7 +626,7 @@ test.describe('chat entry visibility approved contract', () => {
         const port = [...document.querySelectorAll<HTMLElement>('body *')].find((el) => {
           const style = getComputedStyle(el);
           return Boolean(header && main && footer && el.contains(header) && el.contains(main) && el.contains(footer))
-            && /(auto|scroll)/.test(style.overflowY) && el.scrollHeight > el.clientHeight + 1;
+            && /(auto|scroll)/.test(style.overflowY) && el.hasAttribute('data-page-scrollport');
         });
         const siblings = port?.parentElement ? [...port.parentElement.children].filter((el) => el !== port) : [];
         const visibleContent = (el: Element) => {

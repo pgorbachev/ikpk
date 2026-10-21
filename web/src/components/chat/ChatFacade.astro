@@ -36,9 +36,10 @@ const showFacade = config.state === 'address' && !isDemoOutput;
         data-chat-trigger
         data-chat-loader-src={config.src}
         class="chat-trigger"
-        aria-label="Открыть чат с центром"
+        aria-label="Написать нам"
       >
         <span aria-hidden="true">💬</span>
+        <span>Написать нам</span>
       </button>
       <div data-chat-mount class="chat-mount" />
     </div>
@@ -89,6 +90,21 @@ const showFacade = config.state === 'address' && !isDemoOutput;
   // порталу (клиент ещё не передал ключи Bitrix24 — docs/client-requests.md, п. 8);
   // проверить точное соответствие макету портала можно только на живом стенде.
   (function () {
+    const pageScrollport = document.querySelector('[data-page-scrollport]');
+    if (pageScrollport && document.body.hasAttribute('data-chat-page')) {
+      const viewport = window.visualViewport;
+      const updateViewport = function () {
+        document.body.style.setProperty('--chat-viewport-height', (viewport ? viewport.height : window.innerHeight) + 'px');
+        document.body.style.setProperty('--chat-viewport-offset', (viewport ? viewport.offsetTop : 0) + 'px');
+      };
+      updateViewport();
+      window.addEventListener('resize', updateViewport, { passive: true });
+      if (viewport) {
+        viewport.addEventListener('resize', updateViewport, { passive: true });
+        viewport.addEventListener('scroll', updateViewport, { passive: true });
+      }
+    }
+
     const trigger = document.querySelector('[data-chat-trigger]');
     const mount = document.querySelector('[data-chat-mount]');
     if (!trigger || !mount) return;

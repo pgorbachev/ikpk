@@ -71,6 +71,11 @@ function generateRequestId(): string {
   return [hex.slice(0, 4).join(''), hex.slice(4, 6).join(''), hex.slice(6, 8).join(''), hex.slice(8, 10).join(''), hex.slice(10, 16).join('')].join('-');
 }
 
+// Keep the modal outside the page scrollport so the existing body-child inert
+// boundary can block the complete page while leaving the dialog interactive.
+const paymentRoot = document.getElementById('payment-dialog-root');
+if (paymentRoot && paymentRoot.parentElement !== document.body) document.body.append(paymentRoot);
+
 const form = document.querySelector<HTMLFormElement>('[data-payment-form]');
 if (form) boot(form);
 
@@ -133,11 +138,15 @@ function boot(formEl: HTMLFormElement) {
     bandPending = true;
     requestAnimationFrame(() => {
       bandPending = false;
-      if (!dialog.hidden) syncFooterBand();
+      if (!dialog.hidden) {
+        syncDialogViewport();
+        syncFooterBand();
+      }
     });
   };
   window.addEventListener('resize', recomputeFooterBand);
   window.visualViewport?.addEventListener('resize', recomputeFooterBand);
+  window.visualViewport?.addEventListener('scroll', recomputeFooterBand);
   document.addEventListener('keydown', (event) => {
     if (event.key === 'Escape' && !dialog.hidden) {
       event.preventDefault();
@@ -181,9 +190,16 @@ function boot(formEl: HTMLFormElement) {
     setBackgroundInert(true);
     // До первой валидации ошибок нет, но путь Tab между полями работает уже сейчас, и
     // полоса футера должна быть известна браузеру с самого открытия.
+    syncDialogViewport();
     syncFooterBand();
     const focusable = dialog.querySelector<HTMLElement>('input, button, [href], textarea, select');
     focusable?.focus();
+  }
+
+  function syncDialogViewport() {
+    const viewport = window.visualViewport;
+    root.style.setProperty('--payment-visual-viewport-height', `${viewport?.height ?? window.innerHeight}px`);
+    root.style.setProperty('--payment-visual-viewport-offset', `${viewport?.offsetTop ?? 0}px`);
   }
 
   function closeDialog() {
