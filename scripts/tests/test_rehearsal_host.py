@@ -1109,5 +1109,446 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
             operator.verify_backup_tar(archive + b"tampered", sha(archive))
 
 
+class StaticMainAdmissionTests(unittest.TestCase):
+    def _committed_static_main_fixture(self, root: Path, current_name="candidate"):
+        releases = root / "releases"
+        releases.mkdir()
+        old = releases / "old"
+        candidate = releases / f"{'a' * 40}-main-op"
+        foreign = releases / "foreign"
+        for directory, body in ((old, "old"), (candidate, "candidate"), (foreign, "foreign")):
+            directory.mkdir()
+            (directory / "index.html").write_text(body, encoding="utf-8")
+        pointer = root / "current"
+        pointer.symlink_to({"candidate": candidate, "foreign": foreign, "old": old}[current_name])
+        cms_release = root / "cms-release"
+        cms_release.mkdir()
+        (cms_release / "payload.json").write_text("cms unchanged", encoding="utf-8")
+        current_cms = root / "current-cms"
+        current_cms.symlink_to(cms_release)
+        state_dir = root / "state"
+        state_dir.mkdir()
+        state = RehearsalState(state_dir)
+        old_digest = rehearsal_host._tree_sha256(old)
+        candidate_digest = rehearsal_host._tree_sha256(candidate)
+        state._append({"version": 1, "record": "static-main-start", "operationKind": "static-main",
+            "operationId": "main-op", "sourceSha": "a" * 40, "oldStaticPath": str(old),
+            "oldStaticTreeSha256": old_digest, "provenance": {}})
+        state._append({"version": 1, "record": "static-main-prepared", "operationKind": "static-main",
+            "operationId": "main-op", "sourceSha": "a" * 40, "staticTreeSha256": candidate_digest,
+            "snapshotId": "snapshot-main"})
+        state._append({"version": 1, "record": "static-main-committed", "operationKind": "static-main",
+            "operationId": "main-op", "sourceSha": "a" * 40, "staticTreeSha256": candidate_digest,
+            "snapshotId": "snapshot-main"})
+        return {"currentStatic": str(pointer), "staticReleaseRoot": str(releases),
+                "currentCms": str(current_cms)}, state, pointer, old, candidate, foreign
+
+    def test_static_main_fails_closed_until_release_policy_is_explicit(self):
+        with self.assertRaisesRegex(rehearsal_host.HostFailure, "ci-only-approved"):
+            rehearsal_host._static_main_release_policy({"profile": "staging194"})
+        with self.assertRaisesRegex(rehearsal_host.HostFailure, "ci-only-approved"):
+            rehearsal_host._static_main_release_policy({"profile": "staging194",
+                                                         "staticMainReleasePolicy": "published-release-required"})
+
+    def test_static_main_admission_requires_exact_main_tests_push(self):
+        config = {"profile": "staging194", "staticMainReleasePolicy": "ci-only-approved"}
+        provenance = {"repository": "pgorbachev/ikpk", "ref": "refs/heads/main",
+                      "sourceSha": "a" * 40, "workflow": "Tests", "workflowName": "Tests",
+                      "event": "push", "headBranch": "main", "runId": 39670066783,
+                      "attempt": 2, "status": "completed", "conclusion": "success",
+                      "requiredJobs": sorted(rehearsal_host.STATIC_MAIN_REQUIRED_JOBS),
+                      "runUrl": "https://github.com/pgorbachev/ikpk/actions/runs/39670066783",
+                      "additionalWorkflows": [{"workflow": workflow, "headSha": "a" * 40,
+                          "event": "push", "headBranch": "main", "runId": index + 100,
+                          "attempt": 1, "status": "completed", "conclusion": "success",
+                          "requiredJobs": ["required job"],
+                          "runUrl": f"https://github.com/pgorbachev/ikpk/actions/runs/{index + 100}"}
+                          for index, workflow in enumerate(rehearsal_host.STATIC_MAIN_ADDITIONAL_WORKFLOWS)]}
+        rehearsal_host._validate_static_main_admission(config, "a" * 40, provenance)
+        for changed in ({**provenance, "ref": "refs/heads/dev", "headBranch": "dev"},
+                        {**provenance, "sourceSha": "b" * 40},
+                        {**provenance, "event": "pull_request"},
+                        {**provenance, "attempt": 0}):
+            with self.subTest(changed=changed), self.assertRaises(rehearsal_host.HostFailure):
+                rehearsal_host._validate_static_main_admission(config, "a" * 40, changed)
+
+
+    def test_static_main_preparation_is_static_only_and_does_not_move_current(self):
+        import types
+        with tempfile.TemporaryDirectory(prefix="ikpk-static-main-prepare-") as temporary:
+            root = Path(temporary)
+            release_root = root / "releases"
+            static_root = root / "static"
+            release_root.mkdir()
+            static_root.mkdir()
+            old = static_root / "old"
+            old.mkdir()
+            (old / "index.html").write_text("old", encoding="utf-8")
+            pointer = root / "current"
+            pointer.symlink_to(old)
+            candidate = release_root / f"{'a' * 40}-main-op"
+            candidate.mkdir()
+            provenance = {"repository": "pgorbachev/ikpk", "ref": "refs/heads/main",
+                "sourceSha": "a" * 40, "workflow": "Tests", "workflowName": "Tests",
+                "event": "push", "headBranch": "main", "runId": 39670066783, "attempt": 2,
+                "status": "completed", "conclusion": "success",
+                "requiredJobs": sorted(rehearsal_host.STATIC_MAIN_REQUIRED_JOBS),
+                "runUrl": "https://github.com/pgorbachev/ikpk/actions/runs/39670066783",
+                "additionalWorkflows": [{"workflow": workflow, "headSha": "a" * 40,
+                    "event": "push", "headBranch": "main", "runId": index + 100,
+                    "attempt": 1, "status": "completed", "conclusion": "success",
+                    "requiredJobs": ["required job"],
+                    "runUrl": f"https://github.com/pgorbachev/ikpk/actions/runs/{index + 100}"}
+                    for index, workflow in enumerate(rehearsal_host.STATIC_MAIN_ADDITIONAL_WORKFLOWS)]}
+            (candidate / ".ikpk-rehearsal-ci.json").write_text(json.dumps(provenance), encoding="utf-8")
+            state_dir = root / "state"
+            state_dir.mkdir()
+            live_db = root / "live.sqlite"
+            live_db.write_bytes(b"live")
+            media_root = root / "uploads"
+            media_root.mkdir()
+            config = {"profile": "staging194", "staticMainReleasePolicy": "ci-only-approved",
+                "releaseRoot": str(release_root), "staticReleaseRoot": str(static_root),
+                "currentStatic": str(pointer), "stateDir": str(state_dir), "cmsUser": "cms",
+                "cmsDatabase": str(live_db), "mediaRoots": [{"prefix": "/uploads/", "path": str(media_root)}]}
+            capture = candidate / ".staging193-rehearsal/main-op/capture"
+            def make_snapshot(_config, operation_root):
+                snapshot = operation_root / "db.sqlite"
+                snapshot.write_bytes(b"snapshot")
+                return snapshot
+            def make_capture(_config, operation_id, source_sha, source_root, _database, **_kwargs):
+                capture.mkdir(parents=True)
+                (capture / "manifest.json").write_text(json.dumps({"sourceSha": source_sha,
+                    "operationId": operation_id}), encoding="utf-8")
+                return capture
+            built = root / "built"
+            built.mkdir()
+            release = static_root / f"{'a' * 40}-main-op"
+            release.mkdir()
+            (release / "index.html").write_text("new", encoding="utf-8")
+            (release / "release.json").write_text(json.dumps({"commit": "a" * 40,
+                "operationId": "main-op", "snapshotId": "snap:test"}), encoding="utf-8")
+            state = RehearsalState(state_dir)
+            with patch.object(rehearsal_host, "_static_main_cms_fingerprint", return_value={"cms": "same"}), \
+                 patch.object(rehearsal_host, "_static_main_protected_paths", return_value=[root]) as protected_paths, \
+                 patch.object(rehearsal_host.pwd, "getpwnam", return_value=types.SimpleNamespace(
+                     pw_uid=__import__("os").getuid(), pw_gid=__import__("os").getgid())), \
+                 patch.object(rehearsal_host, "_readonly_database_snapshot", side_effect=make_snapshot), \
+                 patch.object(rehearsal_host, "_create_capture_bundle", side_effect=make_capture) as create_capture, \
+                 patch.object(rehearsal_host, "_prepare_static_web_dependencies") as prepare_web, \
+                 patch.object(rehearsal_host, "_build_static", return_value=(built, "b" * 64)) as build_static, \
+                 patch.object(rehearsal_host, "_store_static", return_value=release), \
+                 patch.object(rehearsal_host, "_switch_pointer") as switch, \
+                 patch.object(rehearsal_host, "_stop_writers") as stop_writers, \
+                 patch.object(rehearsal_host, "_activate_cms") as activate:
+                result = rehearsal_host._static_main_prepare(config, state, "main-op", "a" * 40, provenance)
+            self.assertEqual(result["phase"], "browser-check-required")
+            self.assertEqual(pointer.resolve(strict=True), old.resolve(strict=True))
+            with self.assertRaisesRegex(Exception, "unfinished operation"):
+                state.assert_new_operation_allowed("other-op", "b" * 40)
+            self.assertFalse(state.marker_path.exists())
+            state._append({"version": 1, "record": "static-main-recovered", "operationKind": "static-main",
+                           "operationId": "main-op", "sourceSha": "a" * 40})
+            state.assert_new_operation_allowed("other-op", "b" * 40)
+            switch.assert_not_called()
+            stop_writers.assert_not_called()
+            activate.assert_not_called()
+            create_capture.assert_called_once()
+            self.assertEqual(create_capture.call_args.kwargs["read_only_paths"], [root])
+            prepare_web.assert_called_once_with(config, candidate.resolve(), [root])
+            build_static.assert_called_once_with(config, candidate.resolve(), capture, read_only_paths=[root])
+
+    def test_static_main_cms_fingerprint_does_not_follow_current_static_media_symlink(self):
+        with tempfile.TemporaryDirectory(prefix="ikpk-static-main-fingerprint-") as temporary:
+            root = Path(temporary)
+            cms = root / "cms"
+            cms.mkdir()
+            (cms / "entry.js").write_text("unchanged")
+            current_cms = root / "current-cms"
+            current_cms.symlink_to(cms)
+            static = root / "static"
+            old, new = static / "old", static / "new"
+            for release, content in ((old, "old media"), (new, "new media")):
+                (release / "media").mkdir(parents=True)
+                (release / "media/asset.bin").write_text(content)
+            current_static = root / "current-static"
+            current_static.symlink_to(old)
+            uploads = root / "uploads"
+            uploads.mkdir()
+            (uploads / "asset.bin").write_text("CMS upload")
+            database = root / "cms.sqlite"
+            database.write_bytes(b"database")
+            config = {"currentCms": str(current_cms), "currentStatic": str(current_static),
+                "cmsDatabase": str(database), "cmsUnit": "cms.service",
+                "mediaRoots": [{"prefix": "/uploads/", "path": str(uploads)},
+                               {"prefix": "/media/", "path": str(current_static / "media")}]
+            }
+            completed = subprocess.CompletedProcess(["systemctl"], 0, "Environment=stable\n", "")
+            with patch.object(rehearsal_host, "_service_pid", return_value=123), \
+                 patch.object(rehearsal_host, "_database_process_proof", return_value={"pid": 123}), \
+                 patch.object(rehearsal_host, "_cms_payload_sha256", return_value="payload"), \
+                 patch.object(rehearsal_host, "run", return_value=completed):
+                before = rehearsal_host._static_main_cms_fingerprint(config)
+                rehearsal_host._switch_pointer(current_static, new, static)
+                after = rehearsal_host._static_main_cms_fingerprint(config)
+            self.assertEqual(before, after)
+
+    def test_static_main_protected_paths_cover_live_cms_inputs(self):
+        with tempfile.TemporaryDirectory(prefix="ikpk-static-main-readonly-") as temporary:
+            root = Path(temporary)
+            cms, data, uploads = root / "cms", root / "data", root / "uploads"
+            cms.mkdir(); data.mkdir(); uploads.mkdir()
+            (data / "cms.sqlite").write_bytes(b"db")
+            env_file = root / "cms.env"
+            unit_file = root / "cms.service"
+            dropin = root / "cms.conf"
+            for path in (env_file, unit_file, dropin):
+                path.write_text("protected")
+            current_cms = root / "current-cms"
+            current_cms.symlink_to(cms)
+            config = {"currentCms": str(current_cms), "cmsDatabase": str(data / "cms.sqlite"),
+                      "mediaRoots": [{"prefix": "/uploads/", "path": str(uploads)}], "cmsUnit": "cms.service"}
+            output = (f"EnvironmentFiles=-{env_file} (ignore_errors=no)\n"
+                      f"FragmentPath={unit_file}\nDropInPaths={dropin}\n")
+            with patch.object(rehearsal_host, "run", return_value=subprocess.CompletedProcess(
+                    ["systemctl"], 0, output, "")):
+                protected = set(rehearsal_host._static_main_protected_paths(config))
+            self.assertTrue({path.resolve() for path in (cms, data, uploads, env_file, unit_file, dropin)}
+                            .issubset(protected))
+
+    def test_static_main_rollback_refuses_to_clobber_a_newer_static_pointer(self):
+        with tempfile.TemporaryDirectory(prefix="ikpk-static-main-cas-") as temporary:
+            root = Path(temporary)
+            releases = root / "releases"
+            releases.mkdir()
+            old, candidate, newer = (releases / name for name in ("old", "candidate", "newer"))
+            for directory in (old, candidate, newer):
+                directory.mkdir()
+                (directory / "index.html").write_text(directory.name, encoding="utf-8")
+            pointer = root / "current"
+            pointer.symlink_to(newer)
+            start = {"operationId": "main-op", "sourceSha": "a" * 40,
+                     "oldStaticPath": str(old), "oldStaticTreeSha256": rehearsal_host._tree_sha256(old)}
+            state_dir = root / "state"
+            state_dir.mkdir()
+            state = RehearsalState(state_dir)
+            with self.assertRaisesRegex(rehearsal_host.HostFailure, "no longer points to this candidate"):
+                rehearsal_host._static_main_rollback(
+                    {"currentStatic": str(pointer), "staticReleaseRoot": str(releases)}, state, start, candidate)
+            self.assertEqual(pointer.resolve(strict=True), newer.resolve(strict=True))
+
+    def test_static_main_explicit_committed_rollback_records_operator_and_reason_and_is_idempotent(self):
+        with tempfile.TemporaryDirectory(prefix="ikpk-static-main-committed-rollback-") as temporary:
+            config, state, pointer, old, _candidate, _foreign = self._committed_static_main_fixture(Path(temporary))
+            current_cms = Path(config["currentCms"])
+            cms_target = current_cms.resolve(strict=True)
+            cms_digest = rehearsal_host._tree_sha256(cms_target)
+            result = rehearsal_host._static_main_recover(
+                config, state, "main-op", rollback_committed=True,
+                operator_name="release-operator", reason="Post-activation route smoke failed")
+            self.assertEqual(result["phase"], "rolled-back")
+            self.assertEqual(pointer.resolve(strict=True), old.resolve(strict=True))
+            self.assertEqual(current_cms.resolve(strict=True), cms_target)
+            self.assertEqual(rehearsal_host._tree_sha256(cms_target), cms_digest)
+            records = state._operation_rows("main-op")
+            intent = next(row for row in records if row.get("record") == "static-main-rollback-intent")
+            completed = next(row for row in records if row.get("record") == "static-main-rollback-completed")
+            self.assertEqual(intent["operator"], "release-operator")
+            self.assertEqual(intent["reason"], "Post-activation route smoke failed")
+            self.assertEqual(completed["candidateStaticTreeSha256"], completed["committedStaticTreeSha256"])
+            count = len(records)
+            repeated = rehearsal_host._static_main_recover(
+                config, state, "main-op", rollback_committed=True,
+                operator_name="release-operator", reason="Post-activation route smoke failed")
+            self.assertEqual(repeated["phase"], "rolled-back")
+            self.assertEqual(len(state._operation_rows("main-op")), count)
+            with self.assertRaisesRegex(rehearsal_host.HostFailure, "already completed with different"):
+                rehearsal_host._static_main_recover(
+                    config, state, "main-op", rollback_committed=True,
+                    operator_name="release-operator", reason="Different rollback reason")
+
+    def test_static_main_commit_retry_is_refused_after_committed_rollback(self):
+        with tempfile.TemporaryDirectory(prefix="ikpk-static-main-commit-after-rollback-") as temporary:
+            config, state, pointer, old, candidate, _foreign = self._committed_static_main_fixture(Path(temporary))
+            rehearsal_host._static_main_recover(
+                config, state, "main-op", rollback_committed=True,
+                operator_name="release-operator", reason="Post-activation route smoke failed")
+            digest = rehearsal_host._tree_sha256(candidate)
+            with patch.object(rehearsal_host, "_validate_static_main_admission"):
+                with self.assertRaisesRegex(rehearsal_host.HostFailure, "cannot be committed after rollback"):
+                    rehearsal_host._static_main_commit(config, state, "main-op", "a" * 40, {}, digest)
+            self.assertEqual(pointer.resolve(strict=True), old.resolve(strict=True))
+
+    def test_static_main_committed_rollback_refuses_foreign_pointer_and_changed_old_tree(self):
+        with tempfile.TemporaryDirectory(prefix="ikpk-static-main-rollback-foreign-") as temporary:
+            config, state, pointer, _old, _candidate, foreign = self._committed_static_main_fixture(
+                Path(temporary), current_name="foreign")
+            with self.assertRaisesRegex(rehearsal_host.HostFailure, "no longer points to this candidate"):
+                rehearsal_host._static_main_recover(
+                    config, state, "main-op", rollback_committed=True,
+                    operator_name="release-operator", reason="Post-activation route smoke failed")
+            self.assertEqual(pointer.resolve(strict=True), foreign.resolve(strict=True))
+            self.assertFalse(any(row.get("record") == "static-main-rollback-intent"
+                                 for row in state._operation_rows("main-op")))
+
+        with tempfile.TemporaryDirectory(prefix="ikpk-static-main-rollback-old-tree-") as temporary:
+            config, state, pointer, old, _candidate, _foreign = self._committed_static_main_fixture(Path(temporary))
+            (old / "index.html").write_text("changed old tree", encoding="utf-8")
+            with self.assertRaisesRegex(rehearsal_host.HostFailure, "exact old static tree"):
+                rehearsal_host._static_main_recover(
+                    config, state, "main-op", rollback_committed=True,
+                    operator_name="release-operator", reason="Post-activation route smoke failed")
+            self.assertNotEqual(pointer.resolve(strict=True), old.resolve(strict=True))
+            self.assertFalse(any(row.get("record") == "static-main-rollback-intent"
+                                 for row in state._operation_rows("main-op")))
+
+    def test_static_main_committed_rollback_finishes_journal_after_switch_crash(self):
+        with tempfile.TemporaryDirectory(prefix="ikpk-static-main-rollback-crash-") as temporary:
+            config, state, pointer, old, _candidate, _foreign = self._committed_static_main_fixture(Path(temporary))
+
+            def switch_then_crash(config, _state, start, _candidate, **_kwargs):
+                rehearsal_host._switch_pointer(Path(config["currentStatic"]), old,
+                                               Path(config["staticReleaseRoot"]))
+                raise rehearsal_host.HostFailure("simulated crash after pointer switch")
+
+            with patch.object(rehearsal_host, "_static_main_rollback", side_effect=switch_then_crash):
+                with self.assertRaisesRegex(rehearsal_host.HostFailure, "simulated crash"):
+                    rehearsal_host._static_main_recover(
+                        config, state, "main-op", rollback_committed=True,
+                        operator_name="release-operator", reason="Post-activation route smoke failed")
+            self.assertEqual(pointer.resolve(strict=True), old.resolve(strict=True))
+            self.assertFalse(any(row.get("record") == "static-main-rollback-completed"
+                                 for row in state._operation_rows("main-op")))
+            result = rehearsal_host._static_main_recover(
+                config, state, "main-op", rollback_committed=True,
+                operator_name="release-operator", reason="Post-activation route smoke failed")
+            self.assertEqual(result["phase"], "rolled-back")
+            self.assertTrue(any(row.get("record") == "static-main-rollback-completed"
+                                for row in state._operation_rows("main-op")))
+
+    def test_static_main_crash_recovery_restores_old_tree_only_after_durable_switch_intent(self):
+        with tempfile.TemporaryDirectory(prefix="ikpk-static-main-recover-") as temporary:
+            root = Path(temporary)
+            releases = root / "releases"
+            releases.mkdir()
+            old, candidate = releases / "old", releases / f"{'a' * 40}-main-op"
+            old.mkdir()
+            candidate.mkdir()
+            (old / "index.html").write_text("old")
+            (candidate / "index.html").write_text("candidate")
+            pointer = root / "current"
+            pointer.symlink_to(candidate)
+            state_dir = root / "state"
+            state_dir.mkdir()
+            state = RehearsalState(state_dir)
+            old_sha = rehearsal_host._tree_sha256(old)
+            digest = rehearsal_host._tree_sha256(candidate)
+            state._append({"version": 1, "record": "static-main-start", "operationKind": "static-main",
+                "operationId": "main-op", "sourceSha": "a" * 40, "oldStaticPath": str(old),
+                "oldStaticTreeSha256": old_sha})
+            state._append({"version": 1, "record": "static-main-switch-intent", "operationKind": "static-main",
+                "operationId": "main-op", "sourceSha": "a" * 40, "oldStaticPath": str(old),
+                "candidateStaticPath": str(candidate), "staticTreeSha256": digest})
+            result = rehearsal_host._static_main_recover(
+                {"currentStatic": str(pointer), "staticReleaseRoot": str(releases)}, state, "main-op")
+            self.assertEqual(result["phase"], "recovered")
+            self.assertEqual(pointer.resolve(strict=True), old.resolve(strict=True))
+            self.assertTrue(any(row.get("record") == "static-main-recovered"
+                                for row in state._operation_rows("main-op")))
+
+
+    def test_readonly_sqlite_snapshot_includes_wal_without_changing_live_bytes(self):
+        with tempfile.TemporaryDirectory(prefix="ikpk-static-main-sqlite-") as temporary:
+            root = Path(temporary)
+            database = root / "live.sqlite"
+            connection = sqlite3.connect(database)
+            connection.execute("PRAGMA journal_mode=WAL")
+            connection.execute("CREATE TABLE content (body TEXT NOT NULL)")
+            connection.execute("INSERT INTO content VALUES ('current CMS content')")
+            connection.commit()
+            wal = Path(str(database) + "-wal")
+            before = (database.read_bytes(), wal.read_bytes() if wal.exists() else None)
+            operation = root / "operation"
+            operation.mkdir()
+            snapshot = rehearsal_host._readonly_database_snapshot(
+                {"cmsDatabase": str(database)}, operation)
+            check = sqlite3.connect(f"file:{snapshot}?mode=ro", uri=True)
+            try:
+                self.assertEqual(check.execute("SELECT body FROM content").fetchone()[0],
+                                 "current CMS content")
+            finally:
+                check.close()
+            after = (database.read_bytes(), wal.read_bytes() if wal.exists() else None)
+            self.assertEqual(after, before)
+            connection.close()
+
+    def test_static_main_probe_failure_restores_exact_old_static_tree(self):
+        with tempfile.TemporaryDirectory(prefix="ikpk-static-main-rollback-") as temporary:
+            root = Path(temporary)
+            releases = root / "releases"
+            releases.mkdir()
+            old, candidate = releases / "old", releases / f"{'a' * 40}-main-op"
+            old.mkdir()
+            candidate.mkdir()
+            (old / "index.html").write_text("old bytes", encoding="utf-8")
+            (candidate / "index.html").write_text("candidate bytes", encoding="utf-8")
+            digest = rehearsal_host._tree_sha256(candidate)
+            (candidate / "release.json").write_text(json.dumps({"commit": "a" * 40,
+                "operationId": "main-op", "snapshotId": "snap:test"}), encoding="utf-8")
+            pointer = root / "current"
+            pointer.symlink_to(old)
+            state_dir = root / "state"
+            state_dir.mkdir()
+            state = RehearsalState(state_dir)
+            config = {"profile": "staging194", "staticMainReleasePolicy": "ci-only-approved",
+                "staticReleaseRoot": str(releases), "currentStatic": str(pointer),
+                "siteHealthUrl": "https://194.226.99.10/", "siteProbeUrls": []}
+            provenance = {"repository": "pgorbachev/ikpk", "ref": "refs/heads/main",
+                "sourceSha": "a" * 40, "workflow": "Tests", "workflowName": "Tests",
+                "event": "push", "headBranch": "main", "runId": 39670066783, "attempt": 2,
+                "status": "completed", "conclusion": "success",
+                "requiredJobs": sorted(rehearsal_host.STATIC_MAIN_REQUIRED_JOBS),
+                "runUrl": "https://github.com/pgorbachev/ikpk/actions/runs/39670066783",
+                "additionalWorkflows": [{"workflow": workflow, "headSha": "a" * 40,
+                    "event": "push", "headBranch": "main", "runId": index + 100,
+                    "attempt": 1, "status": "completed", "conclusion": "success",
+                    "requiredJobs": ["required job"],
+                    "runUrl": f"https://github.com/pgorbachev/ikpk/actions/runs/{index + 100}"}
+                    for index, workflow in enumerate(rehearsal_host.STATIC_MAIN_ADDITIONAL_WORKFLOWS)]}
+            start = {"version": 1, "record": "static-main-start", "operationKind": "static-main",
+                "operationId": "main-op", "sourceSha": "a" * 40, "provenance": provenance,
+                "oldStaticPath": str(old.resolve()), "oldStaticTreeSha256": rehearsal_host._tree_sha256(old),
+                "cmsFingerprint": {"cms": "same"}, "configSha256": rehearsal_host._config_sha256(config)}
+            prepared = {"version": 1, "record": "static-main-prepared", "operationKind": "static-main",
+                "operationId": "main-op", "sourceSha": "a" * 40, "staticTreeSha256": digest,
+                "snapshotId": "snap:test"}
+            state._append(start)
+            state._append(prepared)
+            with patch.object(rehearsal_host, "_static_main_cms_fingerprint", return_value={"cms": "same"}), \
+                 patch.object(rehearsal_host, "_wait_health"), \
+                 patch.object(rehearsal_host, "_served_release_matches",
+                               side_effect=rehearsal_host.HostFailure("served release probe failed")), \
+                 patch.object(rehearsal_host, "_activate_cms") as activate, \
+                 patch.object(rehearsal_host, "_stop_writers") as stop_writers:
+                with self.assertRaisesRegex(rehearsal_host.HostFailure, "old static tree was restored"):
+                    rehearsal_host._static_main_commit(config, state, "main-op", "a" * 40,
+                                                       provenance, digest)
+            self.assertEqual(pointer.resolve(strict=True), old.resolve(strict=True))
+            activate.assert_not_called()
+            stop_writers.assert_not_called()
+            self.assertTrue(any(row.get("record") == "static-main-rolled-back"
+                                for row in state._operation_rows("main-op")))
+
+    def test_generic_recovery_refuses_static_main_operation_kind(self):
+        with tempfile.TemporaryDirectory(prefix="ikpk-static-main-kind-") as temporary:
+            state_dir = Path(temporary)
+            state = RehearsalState(state_dir)
+            state._append({"version": 1, "record": "static-main-start",
+                           "operationKind": "static-main", "operationId": "main-op",
+                           "sourceSha": "a" * 40})
+            with self.assertRaisesRegex(rehearsal_host.HostFailure, "cannot enter CMS/database recovery"):
+                rehearsal_host._recover({}, state, "main-op")
+
+
 if __name__ == "__main__":
     unittest.main()

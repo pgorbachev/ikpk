@@ -210,6 +210,32 @@ class RehearsalState:
     def _operation_rows(self, operation_id: str) -> list[dict]:
         return [row for row in self._journal() if row.get("operationId") == operation_id]
 
+    @staticmethod
+    def _unfinished_operation_ids(history: list[dict]) -> set[str]:
+        starts = {row["operationId"] for row in history
+                  if row.get("record") == "start" and isinstance(row.get("operationId"), str)}
+        terminal = {row["operationId"] for row in history
+                    if row.get("record") in ("committed", "recovered")
+                    and isinstance(row.get("operationId"), str)}
+        static_starts = {row["operationId"] for row in history
+                         if row.get("record") == "static-main-start" and row.get("operationKind") == "static-main"
+                         and isinstance(row.get("operationId"), str)}
+        static_terminal = {row["operationId"] for row in history
+                           if row.get("operationKind") == "static-main"
+                           and row.get("record") in ("static-main-committed", "static-main-recovered",
+                                                     "static-main-rolled-back")
+                           and isinstance(row.get("operationId"), str)}
+        static_rollback_intents = {row["operationId"] for row in history
+                                   if row.get("operationKind") == "static-main"
+                                   and row.get("record") == "static-main-rollback-intent"
+                                   and isinstance(row.get("operationId"), str)}
+        static_rollback_completed = {row["operationId"] for row in history
+                                     if row.get("operationKind") == "static-main"
+                                     and row.get("record") == "static-main-rollback-completed"
+                                     and isinstance(row.get("operationId"), str)}
+        return ((starts - terminal) | (static_starts - static_terminal)
+                | (static_rollback_intents - static_rollback_completed))
+
     def assert_new_operation_allowed(self, operation_id: str, source_sha: str) -> None:
         """Refuse prefence preparation when durable state already belongs to an operation."""
         self._validate_identity(operation_id, source_sha)
@@ -217,9 +243,7 @@ class RehearsalState:
             if self._read_marker() is not None:
                 raise RehearsalRefusal("maintenance marker already belongs to an operation")
             history = self._journal()
-            starts = {row["operationId"] for row in history if row.get("record") == "start"}
-            terminal = {row["operationId"] for row in history if row.get("record") in ("committed", "recovered")}
-            if starts - terminal:
+            if self._unfinished_operation_ids(history):
                 raise RehearsalRefusal("append-only journal has an unfinished operation requiring recovery")
             if any(row.get("operationId") == operation_id for row in history):
                 raise RehearsalRefusal("operation ID already exists in append-only journal")
@@ -247,9 +271,7 @@ class RehearsalState:
                 self._owned(operation_id)
                 return
             history = self._journal()
-            starts = {row["operationId"] for row in history if row.get("record") == "start"}
-            terminal = {row["operationId"] for row in history if row.get("record") in ("committed", "recovered")}
-            if starts - terminal:
+            if self._unfinished_operation_ids(history):
                 raise RehearsalRefusal("another unfinished operation owns recovery")
 
     def begin(self, operation_id: str, source_sha: str, old_pair: dict) -> dict:
@@ -269,9 +291,7 @@ class RehearsalState:
                     raise RehearsalRefusal("maintenance marker has no matching journal start record")
                 return current
             history = self._journal()
-            starts = {row["operationId"] for row in history if row.get("record") == "start"}
-            terminal = {row["operationId"] for row in history if row.get("record") in ("committed", "recovered")}
-            unfinished = starts - terminal
+            unfinished = self._unfinished_operation_ids(history)
             if operation_id in unfinished:
                 start = next(row for row in history if row.get("record") == "start" and row.get("operationId") == operation_id)
                 if start.get("sourceSha") != source_sha or start.get("oldPair") != old_pair:

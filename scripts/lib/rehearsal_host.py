@@ -594,12 +594,13 @@ def _candidate_root(config: dict[str, Any], source_sha: str, operation_id: str) 
 
 def _extract_source_archive(config: dict[str, Any], source_sha: str, operation_id: str,
                             payload: bytes, expected_sha256: str,
-                            provenance: dict[str, Any]) -> Path:
+                            provenance: dict[str, Any], expected_ref: Optional[str] = None) -> Path:
     if sha256_file_bytes(payload) != expected_sha256:
         raise HostFailure("source archive digest does not match the admitted manifest")
-    if provenance.get("sourceSha") != source_sha or provenance.get("ref") != config["allowedSourceRef"]:
+    admitted_ref = expected_ref or config["allowedSourceRef"]
+    if provenance.get("sourceSha") != source_sha or provenance.get("ref") != admitted_ref:
         raise HostFailure("source archive provenance does not match the operation")
-    expected_branch = config["allowedSourceRef"].removeprefix("refs/heads/")
+    expected_branch = admitted_ref.removeprefix("refs/heads/")
     if (provenance.get("workflow") != "Tests" or provenance.get("workflowName") != "Tests"
             or provenance.get("headBranch") != expected_branch or provenance.get("event") != "push"):
         raise HostFailure("source archive lacks canonical Tests push provenance for the selected fixed profile")
@@ -678,20 +679,23 @@ def sha256_file_bytes(payload: bytes) -> str:
 
 def _run_as_cms(config: dict[str, Any], cwd: Path, argv: list[str], timeout: int = 1800,
                 environment: Optional[dict[str, str]] = None,
-                read_only_path: Optional[Path] = None) -> str:
+                read_only_path: Optional[Path | list[Path]] = None) -> str:
     user = pwd.getpwnam(config["cmsUser"])
     runtime_max = max(1, timeout - 30)
     command = ["/usr/bin/systemd-run", "--wait", "--collect", "--pipe", f"--uid={user.pw_name}",
                f"--working-directory={cwd}", f"--property=RuntimeMaxSec={runtime_max}s",
                "--property=TimeoutStopSec=15s"]
     if read_only_path is not None:
-        read_only = Path(read_only_path)
-        if not read_only.is_absolute() or read_only.is_symlink() or not read_only.is_dir():
-            raise HostFailure("transient read-only path must be a real absolute directory")
-        resolved = read_only.resolve(strict=True)
-        if resolved != read_only:
-            raise HostFailure("transient read-only path must be canonical")
-        command.append(f"--property=ReadOnlyPaths={resolved}")
+        read_only_paths = read_only_path if isinstance(read_only_path, list) else [read_only_path]
+        resolved_paths = []
+        for read_only in map(Path, read_only_paths):
+            if not read_only.is_absolute() or read_only.is_symlink() or not (read_only.is_dir() or read_only.is_file()):
+                raise HostFailure("transient read-only path must be a real absolute file or directory")
+            resolved = read_only.resolve(strict=True)
+            if resolved != read_only:
+                raise HostFailure("transient read-only path must be canonical")
+            resolved_paths.append(str(resolved))
+        command.append(f"--property=ReadOnlyPaths={' '.join(resolved_paths)}")
     for key, value in (environment or {}).items():
         if not re.fullmatch(r"[A-Z0-9_]+", key) or "\x00" in value:
             raise HostFailure("invalid unprivileged command environment")
@@ -944,7 +948,8 @@ def _verify_fence(config: dict[str, Any]) -> None:
 
 
 def _create_capture_bundle(config: dict[str, Any], operation_id: str, source_sha: str,
-                           source_root: Path, database: Path) -> Path:
+                           source_root: Path, database: Path,
+                           read_only_paths: Optional[list[Path]] = None) -> Path:
     operation_root = source_root / ".staging193-rehearsal" / operation_id
     operation_root.mkdir(mode=0o700, parents=True, exist_ok=True)
     if operation_root.is_symlink() or operation_root.parent.is_symlink():
@@ -966,7 +971,7 @@ def _create_capture_bundle(config: dict[str, Any], operation_id: str, source_sha
         provenance = json.loads((source_root / ".ikpk-rehearsal-ci.json").read_text(encoding="utf-8"))
         seal_args.append(str(provenance["runId"]))
         seal_args.append(str(provenance["attempt"]))
-    _run_as_cms(config, source_root / "web", seal_args, timeout=300)
+    _run_as_cms(config, source_root / "web", seal_args, timeout=300, read_only_path=read_only_paths)
     return capture
 
 
@@ -1118,7 +1123,8 @@ def _activate_cms(config: dict[str, Any], cms_release: Path, candidate_db: Path,
     return proof
 
 
-def _build_static(config: dict[str, Any], source_root: Path, capture: Path) -> tuple[Path, str]:
+def _build_static(config: dict[str, Any], source_root: Path, capture: Path,
+                  read_only_paths: Optional[list[Path]] = None) -> tuple[Path, str]:
     web = source_root / "web"
     _validate_prepared_web_dependencies(source_root)
     initial_prod = config.get("profile") == "initial-prod"
@@ -1139,9 +1145,9 @@ def _build_static(config: dict[str, Any], source_root: Path, capture: Path) -> t
         dist_name = "dist-demo193"
     _run_as_cms(config, web, [str(web / "node_modules/.bin/tsx"),
         str(web / "scripts/capture-content-snapshot.ts"), *capture_args], timeout=1800,
-        environment=capture_environment)
+        environment=capture_environment, read_only_path=read_only_paths)
     _run_as_cms(config, web, ["/usr/bin/npm", "run", build_script], timeout=1800,
-                environment=capture_environment)
+                environment=capture_environment, read_only_path=read_only_paths)
     dist = web / dist_name
     if not dist.is_dir() or dist.is_symlink():
         raise HostFailure(f"static build did not produce a real {dist_name} directory")
@@ -1477,6 +1483,474 @@ def _store_static(config: dict[str, Any], source_sha: str, operation_id: str, bu
     return destination
 
 
+
+STATIC_MAIN_REQUIRED_JOBS = {
+    "Capture content snapshot", "Unit and build tests", "Dependency update invariants",
+    "Scripts unit tests", "Playwright smoke (desktop + mobile)",
+}
+STATIC_MAIN_ADDITIONAL_WORKFLOWS = ("Lint and Typecheck", "Security", "Lighthouse CI")
+
+
+def _static_main_release_policy(config: dict[str, Any]) -> str:
+    policy = config.get("staticMainReleasePolicy")
+    if policy != "ci-only-approved":
+        raise HostFailure("staging194 static-main requires the owner's explicit ci-only-approved policy")
+    return policy
+
+
+def _validate_static_main_admission(config: dict[str, Any], source_sha: str,
+                                    provenance: dict[str, Any]) -> None:
+    if config.get("profile", "staging194") != "staging194":
+        raise HostFailure("static-main is bound to the staging194 host profile")
+    policy = _static_main_release_policy(config)
+    if (not SHA_RE.fullmatch(source_sha) or provenance.get("repository") != "pgorbachev/ikpk"
+            or provenance.get("ref") != "refs/heads/main" or provenance.get("sourceSha") != source_sha
+            or provenance.get("workflow") != "Tests" or provenance.get("workflowName") != "Tests"
+            or provenance.get("event") != "push" or provenance.get("headBranch") != "main"
+            or provenance.get("status") != "completed" or provenance.get("conclusion") != "success"
+            or type(provenance.get("runId")) is not int or provenance["runId"] <= 0
+            or type(provenance.get("attempt")) is not int or provenance["attempt"] <= 0
+            or provenance.get("requiredJobs") != sorted(STATIC_MAIN_REQUIRED_JOBS)):
+        raise HostFailure("static-main provenance must bind current canonical main and every successful Tests job")
+    expected_url = f"https://github.com/pgorbachev/ikpk/actions/runs/{provenance['runId']}"
+    if provenance.get("runUrl") != expected_url:
+        raise HostFailure("static-main Tests run URL does not match its exact run ID")
+    additional = provenance.get("additionalWorkflows")
+    if not isinstance(additional, list) or len(additional) != len(STATIC_MAIN_ADDITIONAL_WORKFLOWS):
+        raise HostFailure("static-main provenance must include Lint and Typecheck, Security, and Lighthouse CI")
+    by_name = {proof.get("workflow"): proof for proof in additional if isinstance(proof, dict)}
+    if set(by_name) != set(STATIC_MAIN_ADDITIONAL_WORKFLOWS):
+        raise HostFailure("static-main provenance is missing an exact main CI workflow proof")
+    for workflow in STATIC_MAIN_ADDITIONAL_WORKFLOWS:
+        proof = by_name[workflow]
+        jobs = proof.get("requiredJobs")
+        if (proof.get("headSha") != source_sha or proof.get("event") != "push"
+                or proof.get("headBranch") != "main" or proof.get("status") != "completed"
+                or proof.get("conclusion") != "success" or type(proof.get("runId")) is not int
+                or proof["runId"] <= 0 or type(proof.get("attempt")) is not int or proof["attempt"] <= 0
+                or not isinstance(jobs, list) or not jobs
+                or any(not isinstance(job, str) or not job for job in jobs)
+                or jobs != sorted(set(jobs))
+                or proof.get("runUrl") != f"https://github.com/pgorbachev/ikpk/actions/runs/{proof['runId']}"):
+            raise HostFailure(f"static-main {workflow} proof does not bind successful exact-main jobs")
+
+
+def _static_main_cms_fingerprint(config: dict[str, Any]) -> dict[str, Any]:
+    cms = _current_target(Path(config["currentCms"]))
+    database = Path(config["cmsDatabase"]).resolve(strict=True)
+    pid = _service_pid(config["cmsUnit"])
+    process = _database_process_proof(pid, database)
+    uploads = next(Path(item["path"]).resolve(strict=True) for item in config["mediaRoots"]
+                   if item["prefix"] == "/uploads/")
+    service = run(["/usr/bin/systemctl", "show", "--property=ActiveState", "--property=SubState",
+                   "--property=MainPID", "--property=Environment", "--property=EnvironmentFiles",
+                   "--property=FragmentPath", config["cmsUnit"]]).stdout
+    env_paths = set(re.findall(r"(?:^|[=\s])(-?/[^\s]+) \(ignore_errors=(?:yes|no)\)", service))
+    env_files = []
+    for env_path in sorted(env_paths):
+        path = Path(env_path.removeprefix("-"))
+        try:
+            env_files.append({"path": str(path.resolve(strict=True)), "sha256": sha256_file(path)})
+        except OSError as error:
+            raise HostFailure("CMS environment file disappeared during static-main fingerprinting") from error
+    database_files = {}
+    for suffix in ("", "-wal"):
+        path = Path(str(database) + suffix)
+        database_files[suffix or "database"] = sha256_file(path) if path.is_file() else None
+    return {
+        "cmsPath": str(cms),
+        "cmsPayloadSha256": _cms_payload_sha256(cms, uploads),
+        "cmsUnit": config["cmsUnit"],
+        "cmsMainPid": pid,
+        "cmsEnvironmentSha256": hashlib.sha256(service.encode()).hexdigest(),
+        "cmsEnvironmentFiles": env_files,
+        "databasePath": str(database),
+        "databaseProcess": process,
+        "databaseFiles": database_files,
+        "uploadsRoot": str(uploads),
+        "uploadsTreeSha256": _tree_sha256(uploads),
+    }
+
+
+def _static_main_protected_paths(config: dict[str, Any]) -> list[Path]:
+    """Protect live CMS inputs from every unprivileged process in static-main."""
+    current_cms = _current_target(Path(config["currentCms"]))
+    database = Path(config["cmsDatabase"]).resolve(strict=True)
+    uploads = next(Path(item["path"]).resolve(strict=True) for item in config["mediaRoots"]
+                   if item["prefix"] == "/uploads/")
+    service = run(["/usr/bin/systemctl", "show", "--property=EnvironmentFiles", "--property=FragmentPath",
+                   "--property=DropInPaths", config["cmsUnit"]]).stdout
+    paths = {current_cms, database.parent, uploads}
+    paths.update(Path(item.removeprefix("-")).resolve(strict=True)
+                 for item in re.findall(r"(?:^|[=\s])(-?/[^\s]+) \(ignore_errors=(?:yes|no)\)", service))
+    values = {}
+    for line in service.splitlines():
+        key, separator, value = line.partition("=")
+        if separator:
+            values[key] = value
+    fragment = values.get("FragmentPath", "")
+    if fragment.startswith("/"):
+        paths.add(Path(fragment).resolve(strict=True))
+    for item in values.get("DropInPaths", "").split():
+        if item.startswith("/"):
+            paths.add(Path(item).resolve(strict=True))
+    protected = []
+    for path in sorted(paths, key=str):
+        if not path.is_absolute() or any(char.isspace() for char in str(path)):
+            raise HostFailure("static-main protected path is not a safe absolute path")
+        if path.is_symlink() or not (path.is_dir() or path.is_file()):
+            raise HostFailure("static-main protected path is unavailable or unsafe")
+        resolved = path.resolve(strict=True)
+        if resolved != path:
+            raise HostFailure("static-main protected path is not canonical")
+        protected.append(path)
+    return protected
+
+
+def _readonly_database_snapshot(config: dict[str, Any], operation_root: Path) -> Path:
+    import sqlite3
+    live = Path(config["cmsDatabase"]).resolve(strict=True)
+    target = operation_root / "static-main-source.sqlite"
+    if target.exists() or target.is_symlink():
+        raise HostFailure("static-main read-only database snapshot already exists")
+    source = sqlite3.connect(f"file:{live}?mode=ro", uri=True, timeout=10)
+    destination = sqlite3.connect(str(target), timeout=10)
+    try:
+        before = source.execute("PRAGMA data_version").fetchone()[0]
+        source.backup(destination)
+        destination.commit()
+        mode = destination.execute("PRAGMA journal_mode=DELETE").fetchone()[0]
+        if str(mode).lower() != "delete":
+            raise HostFailure("static-main private SQLite snapshot could not leave WAL mode")
+        after = source.execute("PRAGMA data_version").fetchone()[0]
+    finally:
+        destination.close()
+        source.close()
+    if before != after:
+        target.unlink(missing_ok=True)
+        raise HostFailure("CMS database changed during the read-only SQLite snapshot")
+    checked = sqlite3.connect(f"file:{target}?mode=ro", uri=True)
+    try:
+        if checked.execute("PRAGMA integrity_check").fetchone()[0] != "ok":
+            raise HostFailure("static-main SQLite snapshot failed integrity_check")
+    finally:
+        checked.close()
+    os.chmod(target, 0o440)
+    return target
+
+
+def _prepare_static_web_dependencies(config: dict[str, Any], source_root: Path,
+                                     protected_paths: list[Path]) -> Path:
+    web = source_root / "web"
+    lockfile = web / "package-lock.json"
+    if lockfile.is_symlink() or not lockfile.is_file():
+        raise HostFailure("static-main web package lock is missing or unsafe")
+    lock_sha = sha256_file(lockfile)
+    dependencies = web / "node_modules"
+    if os.path.lexists(dependencies):
+        raise HostFailure("static-main web dependency path is already occupied")
+    _run_as_cms(config, web, ["/usr/bin/npm", "ci", "--no-audit", "--no-fund"], timeout=1800,
+                read_only_path=protected_paths)
+    if sha256_file(lockfile) != lock_sha:
+        raise HostFailure("static-main npm ci changed the admitted web lockfile")
+    return _validate_prepared_web_dependencies(source_root)
+
+
+def _static_main_rows(state: RehearsalState, operation_id: str) -> list[dict[str, Any]]:
+    return [row for row in state._operation_rows(operation_id)
+            if row.get("operationKind") == "static-main"]
+
+
+def _static_main_start(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    return next((row for row in rows if row.get("record") == "static-main-start"), {})
+
+
+def _static_main_prepared(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    return next((row for row in rows if row.get("record") == "static-main-prepared"), {})
+
+
+def _static_main_prepare(config: dict[str, Any], state: RehearsalState, operation_id: str,
+                         source_sha: str, provenance: dict[str, Any]) -> dict[str, Any]:
+    _validate_static_main_admission(config, source_sha, provenance)
+    if state._read_marker() is not None:
+        raise HostFailure("static-main refuses to run while a CMS maintenance marker exists")
+    rows = _static_main_rows(state, operation_id)
+    if rows:
+        if _static_main_prepared(rows):
+            prepared = _static_main_prepared(rows)
+            return {"operationId": operation_id, "sourceSha": source_sha, "phase": "browser-check-required",
+                    "staticTreeSha256": prepared["staticTreeSha256"], "snapshotId": prepared["snapshotId"]}
+        raise HostFailure("static-main operation has incomplete durable state; use static-main-recover")
+    state.assert_new_operation_allowed(operation_id, source_sha)
+    source_root = _candidate_root(config, source_sha, operation_id)
+    if source_root.is_symlink() or not source_root.is_dir():
+        raise HostFailure("static-main source candidate is missing")
+    marker = source_root / ".ikpk-rehearsal-ci.json"
+    try:
+        embedded = json.loads(marker.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as error:
+        raise HostFailure("static-main source candidate lacks admitted provenance") from error
+    if embedded != provenance:
+        raise HostFailure("static-main source archive provenance differs from current admission")
+    old_static = _current_target(Path(config["currentStatic"]))
+    old_tree = _tree_sha256(old_static)
+    cms_fingerprint = _static_main_cms_fingerprint(config)
+    start = {"version": 1, "record": "static-main-start", "operationKind": "static-main",
+             "operationId": operation_id, "sourceSha": source_sha, "provenance": provenance,
+             "oldStaticPath": str(old_static), "oldStaticTreeSha256": old_tree,
+             "cmsFingerprint": cms_fingerprint, "configSha256": _config_sha256(config)}
+    state._append(start)
+    operation_root = source_root / ".staging193-rehearsal" / operation_id
+    operation_root.mkdir(mode=0o700, parents=True, exist_ok=False)
+    user = pwd.getpwnam(config["cmsUser"])
+    os.chown(operation_root, user.pw_uid, user.pw_gid)
+    os.chmod(operation_root, 0o700)
+    protected_paths = _static_main_protected_paths(config)
+    database_snapshot = _readonly_database_snapshot(config, operation_root)
+    os.chown(database_snapshot, user.pw_uid, user.pw_gid)
+    capture = _create_capture_bundle(config, operation_id, source_sha, source_root, database_snapshot,
+                                     read_only_paths=protected_paths)
+    manifest = json.loads((capture / "manifest.json").read_text(encoding="utf-8"))
+    if manifest.get("sourceSha") != source_sha or manifest.get("operationId") != operation_id:
+        raise HostFailure("static-main sealed CMS capture is not bound to this main source")
+    _prepare_static_web_dependencies(config, source_root, protected_paths)
+    built, digest = _build_static(config, source_root, capture, read_only_paths=protected_paths)
+    if (_current_target(Path(config["currentStatic"])) != old_static
+            or _tree_sha256(old_static) != old_tree):
+        raise HostFailure("static-main old static release changed during candidate preparation")
+    release = _store_static(config, source_sha, operation_id, built, digest)
+    release_info = json.loads((release / "release.json").read_text(encoding="utf-8"))
+    if release_info.get("commit") != source_sha or release_info.get("operationId") != operation_id:
+        raise HostFailure("static-main release declaration differs from the admitted main source")
+    state._append({"version": 1, "record": "static-main-prepared", "operationKind": "static-main",
+                   "operationId": operation_id, "sourceSha": source_sha, "staticTreeSha256": digest,
+                   "snapshotId": release_info.get("snapshotId"), "cmsFingerprint": cms_fingerprint})
+    return {"operationId": operation_id, "sourceSha": source_sha, "phase": "browser-check-required",
+            "staticTreeSha256": digest, "snapshotId": release_info.get("snapshotId")}
+
+
+def _static_main_rollback(config: dict[str, Any], state: RehearsalState, start: dict[str, Any],
+                          candidate: Path, *, terminal_record: str = "static-main-rolled-back",
+                          details: Optional[dict[str, Any]] = None) -> None:
+    pointer = Path(config["currentStatic"])
+    if _current_target(pointer) != candidate.resolve(strict=True):
+        raise HostFailure("static-main rollback refused because currentStatic no longer points to this candidate")
+    old = Path(start["oldStaticPath"]).resolve(strict=True)
+    if _tree_sha256(old) != start.get("oldStaticTreeSha256"):
+        raise HostFailure("static-main rollback target differs from the exact old static tree")
+    _switch_pointer(pointer, old, Path(config["staticReleaseRoot"]))
+    if _current_target(pointer) != old:
+        raise HostFailure("static-main rollback did not restore the old static tree")
+    record = {"version": 1, "record": terminal_record, "operationKind": "static-main",
+              "operationId": start["operationId"], "sourceSha": start["sourceSha"],
+              "restoredStaticPath": str(old)}
+    if details:
+        record.update(details)
+    state._append(record)
+
+
+def _static_main_rollback_committed(config: dict[str, Any], state: RehearsalState, operation_id: str,
+                                   operator_name: Optional[str], reason: Optional[str]) -> dict[str, Any]:
+    if (not isinstance(operator_name, str) or not operator_name.strip() or len(operator_name) > 120
+            or any(ord(char) < 32 or ord(char) == 127 for char in operator_name)):
+        raise HostFailure("committed static rollback requires a valid operator name")
+    if (not isinstance(reason, str) or not reason.strip() or len(reason) > 1000
+            or any(ord(char) < 32 or ord(char) == 127 for char in reason)):
+        raise HostFailure("committed static rollback requires a valid reason")
+    rows = _static_main_rows(state, operation_id)
+    start = _static_main_start(rows)
+    committed = next((row for row in rows if row.get("record") == "static-main-committed"), None)
+    if not start or not committed or committed.get("sourceSha") != start.get("sourceSha"):
+        raise HostFailure("committed static rollback requires a matching durable release record")
+    source_sha = start["sourceSha"]
+    candidate = Path(config["staticReleaseRoot"]) / f"{source_sha}-{operation_id}"
+    old = Path(start["oldStaticPath"]).resolve(strict=True)
+    if candidate.is_symlink() or not candidate.is_dir():
+        raise HostFailure("committed static rollback candidate is missing or unsafe")
+    candidate_digest = _tree_sha256(candidate)
+    committed_digest = committed.get("staticTreeSha256")
+    prepared = _static_main_prepared(rows)
+    if (not isinstance(committed_digest, str) or candidate_digest != committed_digest
+            or prepared.get("staticTreeSha256") != committed_digest):
+        raise HostFailure("committed static rollback candidate differs from its release evidence")
+    old_digest = _tree_sha256(old)
+    if old_digest != start.get("oldStaticTreeSha256"):
+        raise HostFailure("committed static rollback target differs from the exact old static tree")
+    details = {"operator": operator_name.strip(), "reason": reason.strip(),
+               "candidateStaticPath": str(candidate.resolve(strict=True)),
+               "candidateStaticTreeSha256": candidate_digest,
+               "committedStaticTreeSha256": committed_digest,
+               "oldStaticPath": str(old), "oldStaticTreeSha256": old_digest,
+               "snapshotId": committed.get("snapshotId")}
+    completed = next((row for row in rows if row.get("record") == "static-main-rollback-completed"), None)
+    if completed:
+        if any(completed.get(key) != value for key, value in details.items()):
+            raise HostFailure("committed static rollback was already completed with different evidence")
+        return {"operationId": operation_id, "phase": "rolled-back", "restoredStaticPath": str(old)}
+    intent = next((row for row in rows if row.get("record") == "static-main-rollback-intent"), None)
+    if intent and any(intent.get(key) != value for key, value in details.items()):
+        raise HostFailure("committed static rollback intent has different operator or release evidence")
+    pointer = Path(config["currentStatic"])
+    current = _current_target(pointer)
+    if not intent:
+        if current != candidate.resolve(strict=True):
+            raise HostFailure("static-main rollback refused because currentStatic no longer points to this candidate")
+        state._append({"version": 1, "record": "static-main-rollback-intent", "operationKind": "static-main",
+                       "operationId": operation_id, "sourceSha": source_sha, **details})
+    if current == candidate.resolve(strict=True):
+        _static_main_rollback(config, state, start, candidate,
+                              terminal_record="static-main-rollback-completed", details=details)
+    elif current == old:
+        # A prior invocation may have switched the pointer and crashed before recording completion.
+        if _current_target(pointer) != old or _tree_sha256(old) != old_digest:
+            raise HostFailure("committed static rollback target changed before durable completion")
+        state._append({"version": 1, "record": "static-main-rollback-completed", "operationKind": "static-main",
+                       "operationId": operation_id, "sourceSha": source_sha,
+                       "restoredStaticPath": str(old), **details})
+    else:
+        raise HostFailure("static-main recovery refused to replace a newer foreign static pointer")
+    return {"operationId": operation_id, "phase": "rolled-back", "restoredStaticPath": str(old)}
+
+
+def _static_main_commit(config: dict[str, Any], state: RehearsalState, operation_id: str,
+                        source_sha: str, provenance: dict[str, Any], browser_digest: str) -> dict[str, Any]:
+    _validate_static_main_admission(config, source_sha, provenance)
+    rows = _static_main_rows(state, operation_id)
+    start = _static_main_start(rows)
+    prepared = _static_main_prepared(rows)
+    if not start or not prepared or start.get("sourceSha") != source_sha or start.get("provenance") != provenance:
+        raise HostFailure("static-main browser acceptance has no matching durable prepared operation")
+    if any(row.get("record") in ("static-main-rollback-intent", "static-main-rollback-completed")
+           for row in rows):
+        raise HostFailure("static-main operation cannot be committed after rollback has started")
+    if any(row.get("record") == "static-main-committed" for row in rows):
+        return {"operationId": operation_id, "sourceSha": source_sha, "phase": "committed"}
+    if any(row.get("record") in ("static-main-recovered", "static-main-rolled-back") for row in rows):
+        raise HostFailure("static-main operation is terminal after recovery or rollback")
+    candidate = Path(config["staticReleaseRoot"]) / f"{source_sha}-{operation_id}"
+    if candidate.is_symlink() or not candidate.is_dir():
+        raise HostFailure("static-main retained candidate is missing")
+    digest = _tree_sha256(candidate)
+    if browser_digest != digest or prepared.get("staticTreeSha256") != digest:
+        raise HostFailure("static-main browser digest differs from the durable candidate")
+    if _config_sha256(config) != start.get("configSha256"):
+        raise HostFailure("staging configuration changed during static-main acceptance")
+    if _static_main_cms_fingerprint(config) != start.get("cmsFingerprint"):
+        raise HostFailure("CMS fingerprint changed during static-main acceptance")
+    pointer = Path(config["currentStatic"])
+    old_static = Path(start["oldStaticPath"]).resolve(strict=True)
+    if (_current_target(pointer) != old_static
+            or _tree_sha256(old_static) != start.get("oldStaticTreeSha256")):
+        raise HostFailure("static-main old-pointer compare-and-swap failed")
+    state._append({"version": 1, "record": "static-main-switch-intent", "operationKind": "static-main",
+                   "operationId": operation_id, "sourceSha": source_sha,
+                   "oldStaticPath": start["oldStaticPath"], "candidateStaticPath": str(candidate),
+                   "staticTreeSha256": digest})
+    _switch_pointer(pointer, candidate, Path(config["staticReleaseRoot"]))
+    if _current_target(pointer) != candidate.resolve(strict=True):
+        raise HostFailure("static-main candidate did not become currentStatic")
+    state._append({"version": 1, "record": "static-main-switched", "operationKind": "static-main",
+                   "operationId": operation_id, "sourceSha": source_sha, "staticTreeSha256": digest})
+    try:
+        _wait_health(config["siteHealthUrl"], 120)
+        served = _served_release_matches(config, source_sha, operation_id, digest)
+        if served.get("snapshotId") != prepared.get("snapshotId"):
+            raise HostFailure("served static-main snapshot ID differs from the accepted candidate")
+        for url in config.get("siteProbeUrls", []):
+            response = run(["/usr/bin/curl", "--silent", "--output", "/dev/null", "--write-out", "%{http_code}",
+                            "--max-time", "15", url], timeout=20)
+            if response.stdout.strip() != "200":
+                raise HostFailure(f"static-main served route probe failed: {url}")
+        capture_root = _candidate_root(config, source_sha, operation_id) / ".staging193-rehearsal" / operation_id / "capture"
+        media_doc = json.loads((capture_root / "media-manifest.json").read_text(encoding="utf-8"))
+        media_inventory = media_doc.get("media") if isinstance(media_doc, dict) else None
+        if not isinstance(media_inventory, list) or not media_inventory:
+            raise HostFailure("static-main sealed capture has no media inventory for serving probes")
+        for item in media_inventory:
+            media_url = item.get("url") if isinstance(item, dict) else None
+            if not isinstance(media_url, str) or not media_url.startswith(("/uploads/", "/media/")):
+                raise HostFailure("static-main sealed media inventory has an invalid public URL")
+            response = run(["/usr/bin/curl", "--fail", "--silent", "--show-error", "--output", "/dev/null",
+                            "--max-time", "15", config["siteBaseUrl"].rstrip("/") + quote(media_url, safe="/%")], timeout=20)
+            if response.returncode:
+                raise HostFailure(f"static-main captured media is not served after activation: {media_url}")
+        if _static_main_cms_fingerprint(config) != start.get("cmsFingerprint"):
+            raise HostFailure("CMS fingerprint changed during static-main activation")
+        if _current_target(pointer) != candidate.resolve(strict=True):
+            raise HostFailure("static-main currentStatic changed during served-release probes")
+        _verify_retained_hashed_assets(config)
+    except Exception as error:
+        _static_main_rollback(config, state, start, candidate)
+        raise HostFailure(f"static-main activation failed and the old static tree was restored: {error}") from error
+    state._append({"version": 1, "record": "static-main-committed", "operationKind": "static-main",
+                   "operationId": operation_id, "sourceSha": source_sha, "staticTreeSha256": digest,
+                   "snapshotId": prepared.get("snapshotId")})
+    return {"operationId": operation_id, "sourceSha": source_sha, "phase": "committed",
+            "staticTreeSha256": digest, "snapshotId": prepared.get("snapshotId")}
+
+
+def _static_main_export(config: dict[str, Any], state: RehearsalState, operation_id: str,
+                        source_sha: str) -> bytes:
+    rows = _static_main_rows(state, operation_id)
+    prepared = _static_main_prepared(rows)
+    if not prepared or prepared.get("sourceSha") != source_sha:
+        raise HostFailure("static-main export requires its exact prepared candidate")
+    release = Path(config["staticReleaseRoot"]) / f"{source_sha}-{operation_id}"
+    candidate = _candidate_root(config, source_sha, operation_id)
+    snapshot = candidate / "web/.snapshot/snapshot.json"
+    capture_manifest = candidate / ".staging193-rehearsal" / operation_id / "capture/manifest.json"
+    for required in (snapshot, capture_manifest):
+        if required.is_symlink() or not required.is_file():
+            raise HostFailure("static-main sealed snapshot proof is unavailable")
+    buffer = io.BytesIO()
+    with tarfile.open(fileobj=buffer, mode="w:") as archive:
+        for path in sorted(release.rglob("*")):
+            info = path.lstat()
+            if stat.S_ISDIR(info.st_mode):
+                continue
+            if not stat.S_ISREG(info.st_mode):
+                raise HostFailure("static-main release contains a non-regular object")
+            archive.add(path, arcname="static/" + path.relative_to(release).as_posix(), recursive=False)
+        archive.add(snapshot, arcname="snapshot/snapshot.json", recursive=False)
+        archive.add(capture_manifest, arcname="snapshot/capture-manifest.json", recursive=False)
+    return buffer.getvalue()
+
+
+def _static_main_recover(config: dict[str, Any], state: RehearsalState, operation_id: str, *,
+                         rollback_committed: bool = False, operator_name: Optional[str] = None,
+                         reason: Optional[str] = None) -> dict[str, Any]:
+    rows = _static_main_rows(state, operation_id)
+    start = _static_main_start(rows)
+    if not start:
+        raise HostFailure("static-main recovery has no matching durable operation")
+    if any(row.get("record") == "static-main-committed" for row in rows):
+        if rollback_committed:
+            return _static_main_rollback_committed(config, state, operation_id, operator_name, reason)
+        if any(row.get("record") == "static-main-rollback-completed" for row in rows):
+            return {"operationId": operation_id, "phase": "rolled-back"}
+        return {"operationId": operation_id, "phase": "committed"}
+    if rollback_committed:
+        raise HostFailure("committed static rollback requires a matching durable release record")
+    if any(row.get("record") in ("static-main-recovered", "static-main-rolled-back") for row in rows):
+        return {"operationId": operation_id, "phase": "recovered"}
+    intent = next((row for row in rows if row.get("record") == "static-main-switch-intent"), None)
+    pointer = Path(config["currentStatic"])
+    current = _current_target(pointer)
+    old = Path(start["oldStaticPath"]).resolve(strict=True)
+    if intent:
+        candidate = Path(intent["candidateStaticPath"]).resolve(strict=True)
+        if current == candidate:
+            _static_main_rollback(config, state, start, candidate)
+        elif current != old:
+            raise HostFailure("static-main recovery refused to replace a newer foreign static pointer")
+    elif current != old:
+        raise HostFailure("static-main recovery found an unjournaled currentStatic change")
+    state._append({"version": 1, "record": "static-main-recovered", "operationKind": "static-main",
+                   "operationId": operation_id, "sourceSha": start["sourceSha"],
+                   "restoredStaticPath": str(old)})
+    return {"operationId": operation_id, "phase": "recovered"}
+
+
 def _static_publish(config: dict[str, Any], state: RehearsalState, args: argparse.Namespace) -> dict[str, Any]:
     op, sha = args.operation_id, args.source_sha
     phase = state.phase(op)
@@ -1637,6 +2111,8 @@ def _restore_media(config: dict[str, Any], backup_dir: Path, manifest: dict[str,
 
 
 def _recover(config: dict[str, Any], state: RehearsalState, operation_id: str) -> dict[str, Any]:
+    if any(row.get("operationKind") == "static-main" for row in state._operation_rows(operation_id)):
+        raise HostFailure("static-main operation cannot enter CMS/database recovery")
     if state._is_committed(operation_id):
         raise HostFailure("recovery is closed after global commit; retry static-publish to finalize")
     start = next((row for row in state._operation_rows(operation_id) if row.get("record") == "start"), None)
@@ -1735,6 +2211,41 @@ def dispatch(args: argparse.Namespace) -> dict[str, Any]:
         raise HostFailure("initial-prod accepts only its fixed single-use operation ID")
     state = RehearsalState(Path(config["stateDir"]))
     with state.lock():
+        rows = state._operation_rows(args.operation_id)
+        static_main_owned = any(row.get("operationKind") == "static-main" for row in rows)
+        if static_main_owned and args.action in ("cms-update", "static-publish", "recover"):
+            raise HostFailure("static-main operations require static-main-recover; CMS recovery is forbidden")
+        if args.action == "static-main":
+            try:
+                provenance = json.loads(base64.b64decode(args.provenance_b64, validate=True))
+            except (ValueError, TypeError) as error:
+                raise HostFailure("static-main source provenance is not valid base64 JSON") from error
+            _validate_static_main_admission(config, args.source_sha, provenance)
+            if args.browser_digest:
+                return _static_main_commit(config, state, args.operation_id, args.source_sha,
+                                           provenance, args.browser_digest)
+            if rows:
+                return _static_main_prepare(config, state, args.operation_id, args.source_sha, provenance)
+            if not SHA256_RE.fullmatch(args.archive_sha256 or ""):
+                raise HostFailure("static-main source archive SHA-256 is required before preparation")
+            archive_bytes = sys.stdin.buffer.read()
+            if not archive_bytes:
+                raise HostFailure("static-main source archive is required before preparation")
+            source_root = _extract_source_archive(config, args.source_sha, args.operation_id, archive_bytes,
+                                                  args.archive_sha256, provenance, "refs/heads/main")
+            del archive_bytes
+            return _static_main_prepare(config, state, args.operation_id, args.source_sha, provenance)
+        if args.action == "export-static-main":
+            return {"_bytes": _static_main_export(config, state, args.operation_id, args.source_sha)}
+        if args.action == "static-main-recover":
+            if args.rollback_committed:
+                if not args.operator or not args.reason:
+                    raise HostFailure("committed static rollback requires --operator and --reason")
+                return _static_main_recover(config, state, args.operation_id, rollback_committed=True,
+                                            operator_name=args.operator, reason=args.reason)
+            if args.operator is not None or args.reason is not None:
+                raise HostFailure("--operator and --reason require --rollback-committed")
+            return _static_main_recover(config, state, args.operation_id)
         if args.action == "export-backup":
             manifest = _backup_manifest(config, args.operation_id)
             return {"_stream": str(Path(config["backupRoot"]) / args.operation_id / "backup.tar"),
@@ -1762,23 +2273,30 @@ def main(argv: Optional[list[str]] = None) -> int:
     parser.add_argument("--profile", choices=("staging194", "initial-prod"), default="staging194")
     sub = parser.add_subparsers(dest="action", required=True)
     sub.add_parser("validate-config")
-    for name in ("cms-update", "static-publish"):
+    for name in ("cms-update", "static-publish", "static-main"):
         command = sub.add_parser(name)
         command.add_argument("--operation-id", required=True)
         command.add_argument("--source-sha", required=True)
-        if name == "cms-update":
+        if name in ("cms-update", "static-main"):
             command.add_argument("--archive-sha256")
             command.add_argument("--provenance-b64", required=True)
-            command.add_argument("--offhost-sha256")
+            if name == "cms-update":
+                command.add_argument("--offhost-sha256")
+            else:
+                command.add_argument("--browser-digest")
         else:
             command.add_argument("--browser-digest")
-    for name in ("export-backup", "export-static", "recover", "status"):
+    for name in ("export-backup", "export-static", "export-static-main", "recover", "static-main-recover", "status"):
         command = sub.add_parser(name)
         command.add_argument("--operation-id", required=True)
-        if name == "export-static":
+        if name in ("export-static", "export-static-main"):
             command.add_argument("--source-sha", required=True)
         if name == "recover":
             command.add_argument("--backup-sha256")
+        if name == "static-main-recover":
+            command.add_argument("--rollback-committed", action="store_true")
+            command.add_argument("--operator")
+            command.add_argument("--reason")
     args = parser.parse_args(argv)
     try:
         if args.action == "validate-config":

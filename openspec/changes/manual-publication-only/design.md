@@ -1,6 +1,6 @@
 ## Context
 
-The staging194 rehearsal retains the existing configured CMS release, SQLite, uploads, and static paths while moving operation state, maintenance flag, and backups into the distinct staging194 directory. The same host engine gains one fixed `initial-prod` config profile for `89.111.184.196` and `https://ikpk.su`, using only read-only-inventoried production paths/units and a separate state/backup namespace. The initial production source is exact current `main` with its own successful canonical `Tests` run. The production profile fixes one protected operation ID and refuses after commit. It does not enable ordinary production publication or establish recovery acceptance.
+The staging194 rehearsal retains the existing configured CMS release, SQLite, uploads, and static paths while moving operation state, maintenance flag, and backups into the distinct staging194 directory. A separate static-only main mode uses exact current canonical `main` after four required CI workflows pass; it captures the current CMS/content/media without changing that state and switches only the static pointer. The existing paired dev rehearsal is unchanged. The same host engine gains one fixed `initial-prod` config profile for `89.111.184.196` and `https://ikpk.su`, using only read-only-inventoried production paths/units and a separate state/backup namespace. The initial production source is exact current `main` with its own successful canonical `Tests` run. The production profile fixes one protected operation ID and refuses after commit. It does not enable ordinary production publication or establish recovery acceptance.
 
 ## Decisions
 
@@ -10,6 +10,7 @@ The staging194 rehearsal retains the existing configured CMS release, SQLite, up
 4. **Bound host work:** CMS migration/audit and static snapshot/build run on the server as the configured unprivileged user. Root is limited to configured gate/unit/release operations. Reuse Nginx locations, validate with `nginx -t`, and restore the previous gate file if validation fails. A closed fence survives process loss and reboot.
 5. **Acceptance and commit:** poll health up to 20 minutes, prove the actual DB via process environment and open FD, and check media. Verify served `/release.json`, routes, and images against the same static candidate. Append `start`, `new-bundle`, and `committed`; write commit after both acceptances and before reopening writers. A pre-commit production fault keeps the fence closed; a forward fix may retry only the same admitted source and operation. DB restore or reopening from unknown/pre-journal state requires separate explicit owner approval. After commit DB restore is forbidden.
 6. **Second release:** capture the current live DB/media and retain a new editor record. Check migration lineage and integrity, not equality with the first immutable backup hash.
+7. **Staging194 main static-only exception:** admit only the exact current canonical `main` SHA with successful `Tests`, `Lint and Typecheck`, `Security`, and `Lighthouse CI` push runs and all required jobs successful. Use the existing read-only sealed CMS/content/media capture and static build checks; do not prepare or activate a CMS candidate, fence CMS writers, or change CMS code, service, environment, DB, uploads, roles, or users. Switch only `currentStatic` atomically, record the exact prior tree for explicit rollback, and keep the paired dev flow and ordinary production policy unchanged.
 
 ## Acceptance scenarios
 
@@ -17,6 +18,7 @@ The staging194 rehearsal retains the existing configured CMS release, SQLite, up
 - **Initial production:** exact current main/run admitted; a truthful production-bound server-DB proof and prod/payment build use one fixed operation ID; offline browser checks and served release/routes/images match the frozen candidate; commit consumes the ID permanently before reopen.
 - **Staging pre-commit recovery:** acquisition interruption changes no data/code; failures after closure leave the fence active; retry under the same operation ID or explicit recovery verifies/restores the old pair; post-commit DB restore refuses. This scenario applies to staging194 only.
 - **Second release:** a new editor record/media remains served and migration ledger is unchanged.
+- **Staging194 main static-only:** exact current `main` SHA and all four CI gates pass; the sealed current CMS capture and static candidate pass local and browser checks; only the static pointer changes, while CMS and its live data remain byte/state-identical; explicit rollback restores the exact old static tree.
 
 ## Risks
 

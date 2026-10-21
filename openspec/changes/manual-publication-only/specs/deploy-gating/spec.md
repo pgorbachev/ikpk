@@ -2,7 +2,7 @@
 
 ### Requirement: Публикация только после успешного прогона тестов
 
-Успешный canonical push `Tests` run является необходимым свидетельством, но SHALL NOT запускать публикацию. Каждая публикация требует явной команды оператора вне GitHub Actions. CI SHALL NOT иметь host credentials. Для ordinary production публикации команда принимает только exact full SHA на canonical `main`, текущую main head и успешный run, где все обязательные jobs завершились успешно без `skipped` или `cancelled`. Отдельный approved `initial-prod` профиль использует тот же gate для exact current `main`, но закреплён за одним protected operation ID и production destination и становится permanently unavailable после commit. Для rehearsal принимается только owner-designated full SHA на canonical `dev` с exact-SHA push run того же canonical `Tests` workflow; этот допуск закреплён за staging194 (`194.226.99.10`) и не даёт ordinary production admission. Run ID и attempt фиксируются. CMS и static outputs для одного назначения SHALL происходить из одного source SHA и иметь отдельные digests. Перед production release CMS/static source tree SHALL совпадать после curated squash в `main`, но новый main SHA требует собственного canonical `Tests` run. GitHub Release создаётся после успешного production deployment.
+Успешный canonical push `Tests` run является необходимым свидетельством, но SHALL NOT запускать публикацию. Каждая публикация требует явной команды оператора вне GitHub Actions. CI SHALL NOT иметь host credentials. Для ordinary production публикации команда принимает только exact full SHA на canonical `main`, текущую main head и успешный run, где все обязательные jobs завершились успешно без `skipped` или `cancelled`. Отдельный approved `initial-prod` профиль использует тот же gate для exact current `main`, но закреплён за одним protected operation ID и production destination и становится permanently unavailable после commit. Для paired rehearsal принимается owner-designated full SHA на canonical `dev` с exact-SHA push run canonical `Tests`; CMS и static outputs используют один source SHA. Отдельный owner-approved static-only main mode разрешён только на staging194 (`194.226.99.10`): он требует exact current canonical `main` full SHA и успешных push runs для `Tests`, `Lint and Typecheck`, `Security` и `Lighthouse CI`, включая успешные required jobs без `skipped` или `cancelled`; он обновляет только static output и не принимает production admission. Run ID и attempt фиксируются. Для всех режимов у назначенной публикации записываются соответствующие SHA, CI evidence и digests. Перед ordinary production release CMS/static source tree SHALL совпадать после curated squash в `main`, но новый main SHA требует собственного canonical `Tests` run. GitHub Release создаётся после успешного production deployment.
 
 #### Scenario: тесты прошли и коммит остаётся вершиной
 
@@ -31,13 +31,15 @@
 
 #### Scenario: только exact source и полный зелёный run допускают команду
 
-- **WHEN** оператор выбирает ordinary production SHA, fixed initial-prod SHA или staging194 rehearsal SHA
+- **WHEN** оператор выбирает ordinary production SHA, fixed initial-prod SHA, staging194 dev rehearsal SHA или staging194 static-only main SHA
 - **THEN** команда подтверждает назначенный canonical ref, exact full SHA, run/attempt и успех всех обязательных jobs без пропусков или отмен
 - **AND** несовпадение отказывает до исполнения candidate code или host mutation
 
 ### Requirement: Ручная публикация остаётся доступной
 
-Публикация доступна только явной локальной команде доверенного оператора. GitHub `workflow_dispatch`, `workflow_run`, CMS webhook и календарное событие SHALL NOT публиковать сайт. Команда SHALL закрепить назначение и source до исполнения candidate code, проверить admission по предыдущему требованию, построить static candidate на сервере из admitted SHA как непривилегированный пользователь, выполнить local candidate checks для sealed snapshot и записать их исход вместе с source, snapshot и digest. Browser checks SHALL use the same sealed static bytes later served; canonical CI run proves the source SHA, а local checks prove the captured content pair. Для rehearsal CMS update и static publication используют один operation ID и fence; global commit разрешён только после приёмки обоих. До commit разрешена только явная recovery; после commit восстановление старой DB запрещено. Существующие production rules для provenance, freshness и подтверждённого rollback сохраняются за пределами scoped staging194 исключений.
+Публикация доступна только явной локальной команде доверенного оператора. GitHub `workflow_dispatch`, `workflow_run`, CMS webhook и календарное событие SHALL NOT публиковать сайт. Команда SHALL закрепить назначение и source до исполнения candidate code, проверить admission по предыдущему требованию, построить static candidate на сервере из admitted SHA как непривилегированный пользователь, выполнить local candidate checks для sealed snapshot и записать их исход вместе с source, snapshot и digest. Browser checks SHALL use the same sealed static bytes later served; canonical CI run proves the source SHA, а local checks prove the captured content pair. Для paired `dev` rehearsal CMS update и static publication используют один operation ID и fence; global commit разрешён только после приёмки обоих. До commit разрешена только явная recovery; после commit восстановление старой DB запрещено. Существующие production rules для provenance, freshness и подтверждённого rollback сохраняются за пределами scoped staging194 исключений.
+
+Для staging194 static-only main mode команда использует сохранённый read-only CMS/content/media capture и выполняет необходимые локальные и browser checks той же static-кандидатуры. Она SHALL switch только `currentStatic`; CMS release/symlink, service, environment, DB/WAL, uploads и CMS identities SHALL оставаться неизменными. Этот режим не требует CMS-кандидата, CMS-миграции, paired CMS/static SHA или writer fence; его durable journal сохраняет старый static tree, а rollback требует явной причины и восстанавливает его только если pointer всё ещё указывает на принятый candidate. Paired dev rehearsal и все production rules остаются без изменений.
 
 #### Scenario: ручной запуск, вершина не сдвинулась
 
@@ -48,6 +50,13 @@
 
 - **WHEN** production provenance показывает более новое состояние контента
 - **THEN** команда отказывает, кроме явно подтверждённого rollback
+
+#### Scenario: staging194 static-only main preserves CMS
+
+- **WHEN** exact current `main` SHA has successful `Tests`, `Lint and Typecheck`, `Security`, and `Lighthouse CI` runs and the read-only CMS/content/media capture plus static candidate checks pass
+- **THEN** the operator command atomically serves the candidate static tree on staging194
+- **AND** the existing CMS code, service, environment, DB/WAL, uploads, roles, and users remain unchanged without a writer fence or paired CMS update
+- **AND** explicit rollback restores the exact prior static tree only while the current pointer still identifies this candidate
 
 #### Scenario: для вершины проверенной пары нет
 
