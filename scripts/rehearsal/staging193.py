@@ -45,6 +45,7 @@ REQUIRED_TEST_JOBS = {
     "Scripts unit tests",
     "Playwright smoke (desktop + mobile)",
 }
+STATIC_MAIN_ADDITIONAL_WORKFLOWS = ("Lint and Typecheck", "Security", "Lighthouse CI")
 
 
 class Refusal(RuntimeError):
@@ -67,7 +68,7 @@ def capture_bytes(argv: list[str]) -> bytes:
 
 
 def validate_sha_and_ci(sha: str, profile: str = "staging194") -> dict:
-    if profile not in ("staging194", "initial-prod"):
+    if profile not in ("staging194", "staging194-main", "initial-prod"):
         raise Refusal("unknown fixed rehearsal profile")
     if not SHA.fullmatch(sha):
         raise Refusal("source SHA must be a full lowercase commit ID")
@@ -76,7 +77,7 @@ def validate_sha_and_ci(sha: str, profile: str = "staging194") -> dict:
                     "--json", "nameWithOwner", "--jq", ".nameWithOwner"])
     if repo != CANONICAL_REPOSITORY:
         raise Refusal("GitHub CLI resolved a repository other than the pinned IKPK repository")
-    branch = "main" if profile == "initial-prod" else "dev"
+    branch = "main" if profile in ("staging194-main", "initial-prod") else "dev"
     canonical_ref = f"refs/heads/{branch}"
     canonical_head = capture(["gh", "api", f"repos/{repo}/git/ref/heads/{branch}", "--jq", ".object.sha"])
     if canonical_head != sha:
@@ -95,7 +96,8 @@ def validate_sha_and_ci(sha: str, profile: str = "staging194") -> dict:
     latest = max(matching, key=lambda item: item.get("createdAt", ""))
     if latest.get("status") != "completed" or latest.get("conclusion") != "success":
         raise Refusal("latest canonical Tests push run for exact SHA is not successful")
-    if not isinstance(latest.get("databaseId"), int) or not isinstance(latest.get("attempt"), int):
+    if (type(latest.get("databaseId")) is not int or latest["databaseId"] <= 0
+            or type(latest.get("attempt")) is not int or latest["attempt"] <= 0):
         raise Refusal("gh omitted canonical run ID or attempt")
     jobs_raw = capture(["gh", "run", "view", str(latest["databaseId"]), "--repo", repo,
                         "--attempt", str(latest["attempt"]), "--json", "jobs"])
@@ -116,7 +118,54 @@ def validate_sha_and_ci(sha: str, profile: str = "staging194") -> dict:
         raise Refusal(f"canonical Tests mandatory jobs are not successful: {', '.join(failed)}")
     return {"repository": repo, "ref": canonical_ref, "sourceSha": sha,
             "workflow": WORKFLOW, "workflowName": WORKFLOW, "event": "push", "headBranch": branch, "runId": latest["databaseId"],
-            "attempt": latest["attempt"], "runUrl": f"https://github.com/{repo}/actions/runs/{latest['databaseId']}"}
+            "attempt": latest["attempt"], "status": latest["status"], "conclusion": latest["conclusion"],
+            "requiredJobs": sorted(REQUIRED_TEST_JOBS),
+            "runUrl": f"https://github.com/{repo}/actions/runs/{latest['databaseId']}"}
+
+
+def validate_static_main_ci(sha: str) -> dict:
+    provenance = validate_sha_and_ci(sha, "staging194-main")
+    workflow_proofs = []
+    for workflow in STATIC_MAIN_ADDITIONAL_WORKFLOWS:
+        raw = capture(["gh", "run", "list", "--repo", CANONICAL_REPOSITORY, "--commit", sha,
+                       "--workflow", workflow, "--limit", "50", "--json",
+                       "databaseId,headSha,event,status,conclusion,attempt,workflowName,headBranch,createdAt"])
+        try:
+            runs = json.loads(raw)
+        except ValueError as error:
+            raise Refusal(f"gh returned malformed {workflow} workflow-run metadata") from error
+        matching = [run for run in runs if run.get("headSha") == sha and run.get("workflowName") == workflow
+                    and run.get("event") == "push" and run.get("headBranch") == "main"]
+        if not matching:
+            raise Refusal(f"no canonical {workflow} push run exists for exact main SHA")
+        latest = max(matching, key=lambda item: item.get("createdAt", ""))
+        if latest.get("status") != "completed" or latest.get("conclusion") != "success":
+            raise Refusal(f"latest canonical {workflow} run for exact main SHA is not successful")
+        if (type(latest.get("databaseId")) is not int or latest["databaseId"] <= 0
+                or type(latest.get("attempt")) is not int or latest["attempt"] <= 0):
+            raise Refusal(f"gh omitted canonical {workflow} run ID or attempt")
+        jobs_raw = capture(["gh", "run", "view", str(latest["databaseId"]), "--repo", CANONICAL_REPOSITORY,
+                            "--attempt", str(latest["attempt"]), "--json", "jobs"])
+        try:
+            jobs = json.loads(jobs_raw).get("jobs")
+        except (ValueError, AttributeError) as error:
+            raise Refusal(f"gh returned malformed {workflow} job metadata") from error
+        if not isinstance(jobs, list) or not jobs:
+            raise Refusal(f"canonical {workflow} run omitted its required jobs")
+        invalid = sorted((job.get("name") if isinstance(job, dict) else "?") for job in jobs
+                         if not isinstance(job, dict) or not isinstance(job.get("name"), str)
+                         or job.get("status") != "completed" or job.get("conclusion") != "success")
+        if invalid:
+            raise Refusal(f"canonical {workflow} jobs are not successful: {', '.join(invalid)}")
+        job_names = [job["name"] for job in jobs]
+        if len(set(job_names)) != len(job_names):
+            raise Refusal(f"canonical {workflow} run contains duplicate job names")
+        workflow_proofs.append({"workflow": workflow, "headSha": sha, "event": "push", "headBranch": "main",
+            "runId": latest["databaseId"], "attempt": latest["attempt"], "status": latest["status"],
+            "conclusion": latest["conclusion"], "requiredJobs": sorted(job_names),
+            "runUrl": f"https://github.com/{CANONICAL_REPOSITORY}/actions/runs/{latest['databaseId']}"})
+    provenance["additionalWorkflows"] = workflow_proofs
+    return provenance
 
 
 def make_archive(sha: str, provenance: dict) -> tuple[bytes, str]:
@@ -368,7 +417,8 @@ def browser_check(source_sha: str, operation_id: str, static_digest: str, archiv
             proof_matches = (isinstance(proof, dict) and snapshot.get("sourcePolicy") == "demo-publication-only"
                 and snapshot.get("sourceAge") == "untracked"
                 and snapshot.get("origin", {}).get("sourceId") == "demo193-cms"
-                and proof.get("captureId") == operation_id and capture.get("sourceId") == "demo193-cms")
+                and proof.get("captureId") == operation_id and capture.get("sourceId") == "demo193-cms"
+                and proof.get("sourceSha") == source_sha and capture.get("sourceSha") == source_sha)
         if (not proof_matches or snapshot.get("snapshotId") != release.get("snapshotId")
                 or snapshot.get("origin", {}).get("kind") != "server-db"
                 or proof.get("captureId") != operation_id or capture.get("operationId") != operation_id
@@ -425,6 +475,8 @@ def browser_check(source_sha: str, operation_id: str, static_digest: str, archiv
 def invoke(args: argparse.Namespace) -> None:
     profile = getattr(args, "profile", "staging194")
     target_host = INITIAL_PROD_HOST if profile == "initial-prod" else TARGET_HOST
+    if args.command in ("static-main", "static-main-recover") and profile != "staging194":
+        raise Refusal("static-main commands are bound to the staging194 profile")
     if args.host is not None and args.host != target_host:
         raise Refusal(f"this command is bound to the authorized {profile} host")
     if profile == "initial-prod" and (args.operation_id != INITIAL_PROD_OPERATION_ID or args.command == "recover"):
@@ -472,6 +524,33 @@ def invoke(args: argparse.Namespace) -> None:
         committed = parse_host_json(ssh_remote(common + ["--browser-digest", digest], profile=profile))
         if committed.get("phase") != "committed":
             raise Refusal(f"static publication did not reach durable commit: {committed.get('phase')}")
+    elif args.command == "static-main":
+        admitted_run = validate_static_main_ci(args.source_sha)
+        provenance_b64 = base64.b64encode(json.dumps(admitted_run, sort_keys=True,
+            separators=(",", ":")).encode()).decode("ascii")
+        common = ["static-main", "--operation-id", args.operation_id, "--source-sha", args.source_sha,
+                  "--provenance-b64", provenance_b64]
+        archive, archive_sha256 = make_archive(args.source_sha, admitted_run)
+        prepared = parse_host_json(ssh_remote(common + ["--archive-sha256", archive_sha256],
+                                              input_bytes=archive))
+        if prepared.get("phase") != "browser-check-required":
+            raise Refusal(f"static-main candidate is not ready for browser acceptance: {prepared.get('phase')}")
+        digest = prepared.get("staticTreeSha256")
+        if not isinstance(digest, str) or not re.fullmatch(r"[a-f0-9]{64}", digest):
+            raise Refusal("host returned an invalid static-main candidate digest")
+        candidate = ssh_remote(["export-static-main", "--operation-id", args.operation_id,
+                                "--source-sha", args.source_sha])
+        browser_check(args.source_sha, args.operation_id, digest, candidate, "staging194", admitted_run)
+        current_run = validate_static_main_ci(args.source_sha)
+        if current_run != admitted_run:
+            raise Refusal("canonical main source, Tests run, or Release proof changed during acceptance")
+        committed = parse_host_json(ssh_remote(common + ["--browser-digest", digest]))
+        if committed.get("phase") != "committed":
+            raise Refusal(f"static-main publication did not reach durable commit: {committed.get('phase')}")
+    elif args.command == "static-main-recover":
+        result = parse_host_json(ssh_remote(["static-main-recover", "--operation-id", args.operation_id]))
+        if result.get("phase") != "recovered":
+            raise Refusal(f"static-main recovery did not reach durable completion: {result.get('phase')}")
     else:
         backup_dir = backup_root(args.backup_dir, profile)
         target = backup_dir / f"{args.operation_id}.tar"
@@ -499,12 +578,12 @@ def main(argv: Optional[list[str]] = None) -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--profile", choices=("staging194", "initial-prod"), default="staging194")
     sub = parser.add_subparsers(dest="command", required=True)
-    for action in ("cms-update", "static-publish", "recover"):
+    for action in ("cms-update", "static-publish", "static-main", "static-main-recover", "recover"):
         command = sub.add_parser(action)
         command.add_argument("--host")
         command.add_argument("--operation-id", required=True)
         command.add_argument("--backup-dir")
-        if action != "recover":
+        if action not in ("recover", "static-main-recover"):
             command.add_argument("--source-sha", required=True)
     args = parser.parse_args(argv)
     try:

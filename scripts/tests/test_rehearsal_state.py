@@ -212,6 +212,18 @@ class RehearsalStateTests(unittest.TestCase):
         with self.assertRaisesRegex(RehearsalRefusal, "another source SHA"):
             self.state.begin("op-1", "b" * 40, OLD_PAIR)
 
+    def test_unfinished_static_main_journal_blocks_cms_and_new_static_operations_until_recovered(self):
+        self.state._append({"version": 1, "record": "static-main-start", "operationKind": "static-main",
+                            "operationId": "static-op", "sourceSha": SOURCE_SHA})
+        with self.assertRaisesRegex(RehearsalRefusal, "unfinished operation"):
+            self.state.assert_new_operation_allowed("cms-op", "b" * 40)
+        with self.assertRaisesRegex(RehearsalRefusal, "unfinished operation"):
+            self.state.begin("cms-op", "b" * 40, OLD_PAIR)
+        self.assertFalse(self.state.marker_path.exists())
+        self.state._append({"version": 1, "record": "static-main-recovered", "operationKind": "static-main",
+                            "operationId": "static-op", "sourceSha": SOURCE_SHA})
+        self.state.assert_new_operation_allowed("cms-op", "b" * 40)
+
     def test_real_sqlite_wal_checkpoint_and_backup_preserve_data(self):
         source_path = self.root / "live.db"
         backup_path = self.root / "backup.db"

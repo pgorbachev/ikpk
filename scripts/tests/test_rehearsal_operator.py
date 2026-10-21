@@ -38,6 +38,27 @@ class OperatorAdmissionTests(unittest.TestCase):
             return json.dumps({"jobs": self.jobs})
         return ""
 
+    def _main_capture(self, argv, skipped_workflow=None):
+        if argv[:2] == ["gh", "repo"]:
+            return staging193.CANONICAL_REPOSITORY
+        if argv[:2] == ["gh", "api"]:
+            return SHA
+        if argv[:3] == ["gh", "run", "list"]:
+            workflow = argv[argv.index("--workflow") + 1]
+            index = (staging193.STATIC_MAIN_ADDITIONAL_WORKFLOWS.index(workflow) + 1
+                     if workflow in staging193.STATIC_MAIN_ADDITIONAL_WORKFLOWS else 0)
+            return json.dumps([{**self.runs[0], "workflowName": workflow, "headBranch": "main",
+                                "databaseId": 123 + index}])
+        if argv[:3] == ["gh", "run", "view"]:
+            run_id = int(argv[argv.index("view") + 1])
+            workflow = (staging193.STATIC_MAIN_ADDITIONAL_WORKFLOWS[run_id - 124]
+                        if run_id >= 124 else None)
+            jobs = self.jobs
+            if skipped_workflow is not None and workflow == skipped_workflow:
+                jobs = [{**jobs[0], "conclusion": "skipped"}, *jobs[1:]]
+            return json.dumps({"jobs": jobs})
+        return ""
+
     def test_admits_only_exact_canonical_tests_push_with_every_mandatory_job(self):
         with patch.object(staging193, "capture", side_effect=self._capture):
             result = staging193.validate_sha_and_ci(SHA)
@@ -80,6 +101,75 @@ class OperatorAdmissionTests(unittest.TestCase):
             with self.assertRaisesRegex(staging193.Refusal, "not successful"):
                 staging193.validate_sha_and_ci(SHA)
 
+    def test_main_admission_uses_exact_main_push_and_returns_all_required_jobs(self):
+        with patch.object(staging193, "capture", side_effect=self._main_capture):
+            result = staging193.validate_static_main_ci(SHA)
+        self.assertEqual(result["ref"], "refs/heads/main")
+        self.assertEqual(result["headBranch"], "main")
+        self.assertEqual(result["requiredJobs"], sorted(JOBS))
+        self.assertEqual({proof["workflow"] for proof in result["additionalWorkflows"]},
+                         set(staging193.STATIC_MAIN_ADDITIONAL_WORKFLOWS))
+        self.assertTrue(all(proof["conclusion"] == "success" for proof in result["additionalWorkflows"]))
+
+    def test_static_main_rejects_skipped_job_in_other_required_workflow(self):
+        with patch.object(staging193, "capture", side_effect=lambda argv: self._main_capture(
+                argv, skipped_workflow="Lighthouse CI")):
+            with self.assertRaisesRegex(staging193.Refusal, "Lighthouse CI jobs are not successful"):
+                staging193.validate_static_main_ci(SHA)
+
+    def test_static_main_revalidates_exact_main_ci_after_browser_acceptance_before_commit(self):
+        provenance = {"repository": staging193.CANONICAL_REPOSITORY, "ref": "refs/heads/main",
+                      "sourceSha": SHA, "workflow": "Tests", "workflowName": "Tests", "event": "push",
+                      "headBranch": "main", "runId": 123, "attempt": 2, "status": "completed",
+                      "conclusion": "success", "requiredJobs": sorted(JOBS),
+                      "runUrl": f"https://github.com/{staging193.CANONICAL_REPOSITORY}/actions/runs/123",
+                      "additionalWorkflows": [{"workflow": workflow, "headSha": SHA, "event": "push",
+                          "headBranch": "main", "runId": index + 200, "attempt": 1,
+                          "status": "completed", "conclusion": "success", "requiredJobs": ["job"],
+                          "runUrl": f"https://github.com/{staging193.CANONICAL_REPOSITORY}/actions/runs/{index + 200}"}
+                          for index, workflow in enumerate(staging193.STATIC_MAIN_ADDITIONAL_WORKFLOWS)]}
+        responses = [json.dumps({"phase": "browser-check-required", "staticTreeSha256": "c" * 64}).encode(),
+                     b"candidate bytes", json.dumps({"phase": "committed"}).encode()]
+        calls = []
+
+        def ssh(arguments, input_bytes=None, **_kwargs):
+            calls.append((arguments, input_bytes))
+            return responses.pop(0)
+
+        with patch.object(staging193, "validate_static_main_ci", side_effect=[provenance, provenance]) as admit, \
+             patch.object(staging193, "make_archive", return_value=(b"source archive", "a" * 64)), \
+             patch.object(staging193, "ssh_remote", side_effect=ssh), \
+             patch.object(staging193, "browser_check") as browser:
+            staging193.invoke(type("Args", (), {"host": staging193.TARGET_HOST, "command": "static-main",
+                "operation_id": "main-static", "source_sha": SHA})())
+
+        self.assertEqual(admit.call_count, 2)
+        self.assertEqual([call[0][0] for call in calls], ["static-main", "export-static-main", "static-main"])
+        self.assertEqual(calls[0][1], b"source archive")
+        self.assertIn("--browser-digest", calls[-1][0])
+        browser.assert_called_once_with(SHA, "main-static", "c" * 64, b"candidate bytes", "staging194", provenance)
+
+    def test_static_main_refuses_changed_main_proof_before_remote_activation(self):
+        admitted = {"sourceSha": SHA, "runId": 123, "attempt": 2}
+        changed = {"sourceSha": SHA, "runId": 124, "attempt": 1}
+        responses = [json.dumps({"phase": "browser-check-required", "staticTreeSha256": "c" * 64}).encode(),
+                     b"candidate bytes"]
+        calls = []
+
+        def ssh(arguments, **_kwargs):
+            calls.append(arguments)
+            return responses.pop(0)
+
+        with patch.object(staging193, "validate_static_main_ci", side_effect=[admitted, changed]), \
+             patch.object(staging193, "make_archive", return_value=(b"source archive", "a" * 64)), \
+             patch.object(staging193, "ssh_remote", side_effect=ssh), \
+             patch.object(staging193, "browser_check"):
+            with self.assertRaisesRegex(staging193.Refusal, "changed during acceptance"):
+                staging193.invoke(type("Args", (), {"host": staging193.TARGET_HOST, "command": "static-main",
+                    "operation_id": "main-static", "source_sha": SHA})())
+        self.assertEqual(responses, [])
+        self.assertEqual(len(calls), 2)
+
     def test_remote_helper_uses_fixed_existing_root_identity_without_sudo(self):
         with tempfile.TemporaryDirectory(prefix="ikpk-operator-identity-") as temporary:
             identity = Path(temporary) / "identity"
@@ -106,6 +196,19 @@ class OperatorAdmissionTests(unittest.TestCase):
                 staging193.invoke(type("Args", (), {"host": "193.124.115.99", "command": "recover",
                     "operation_id": "unknown-host", "backup_dir": None})())
         invoke.assert_not_called()
+
+    def test_static_main_commands_refuse_initial_prod_profile_before_ci_or_ssh(self):
+        for command in ("static-main", "static-main-recover"):
+            with self.subTest(command=command):
+                args = type("Args", (), {"host": staging193.INITIAL_PROD_HOST, "profile": "initial-prod",
+                    "command": command, "operation_id": staging193.INITIAL_PROD_OPERATION_ID,
+                    "source_sha": SHA})()
+                with patch.object(staging193, "validate_static_main_ci") as admit, \
+                     patch.object(staging193, "ssh_remote") as ssh, \
+                     self.assertRaisesRegex(staging193.Refusal, "bound to the staging194 profile"):
+                    staging193.invoke(args)
+                admit.assert_not_called()
+                ssh.assert_not_called()
 
     def test_cms_update_sends_source_archive_before_offhost_backup_confirmation(self):
         with tempfile.TemporaryDirectory(prefix="ikpk-operator-prefence-") as temporary:

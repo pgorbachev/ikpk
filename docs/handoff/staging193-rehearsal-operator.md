@@ -1,6 +1,6 @@
 # staging193 rehearsal operator
 
-The local operator admits one full `dev` SHA through the canonical `Tests` push run, requires every mandatory job to finish successfully, and sends that exact source tree to staging193. `staging193` is the environment name; its current URL is `https://193.124.115.99`. `staging.ikpk.su` currently resolves to a different host and is not used by this rehearsal. It stores the verified database and media archive on the operator machine before any migration or release switch. CMS migration/build runs under the CMS account; the bounded host helper performs systemd, Nginx, database, and pointer operations.
+This legacy-named runbook now describes the custom staging194 operator: its root-owned config and SSH binding target `https://194.226.99.10`. The existing dev `cms-update`/`static-publish` sequence remains unchanged and still admits only exact `dev` plus its successful `Tests` push run. `staging.ikpk.su` resolves to a different host and is not used here. CMS migration/build runs under the CMS account; the bounded host helper performs systemd, Nginx, database, and pointer operations only for that existing dev workflow.
 
 After reviewed code and exact candidate CI are ready, install the bounded helper and prepare the existing CMS unit to use `/opt/ikpk-cms-prototype193/current`:
 
@@ -20,6 +20,18 @@ python3 scripts/rehearsal/staging193.py static-publish --operation-id <id> --sou
 ```
 
 `cms-update` closes and verifies the writer fence, stops writers, checkpoints SQLite, exports and verifies the actual database/media bytes off-host, then builds and migrates the CMS artifact. That package uses the previously active CMS release as migration provenance and links `public/uploads` to the original external media tree. `static-publish` builds the staging193 profile from the operation's sealed CMS capture, retains old hashed assets alongside the candidate, exports those exact bytes for local browser acceptance without deploy credentials, rechecks canonical source CI, then atomically switches static and verifies `release.json`, routes, captured media and retained hashed asset URLs. Only after both acceptances does it commit durably and reopen writers.
+
+## Static-only staging194 main refresh
+
+`static-main` is an independent operation kind for refreshing only the static site on staging194. It requires the exact current canonical `main` commit and successful push runs for `Tests`, `Lint and Typecheck`, `Security`, and `Lighthouse CI`; Tests must have all five mandatory jobs successful, and every job in the other three runs must complete successfully. The host takes a read-only SQLite backup, seals the current CMS/content/media capture with that exact source SHA, installs only the web dependencies, and builds a candidate without stopping or restarting CMS, changing its pointer, applying migrations, or writing the live database/uploads. It fingerprints the CMS unit, environment files, release payload, database/WAL, and media trees before and after capture and activation. After local browser acceptance, it rereads canonical source and CI, then atomically switches only `currentStatic`; the host verifies the served release declaration, routes, captured media and retained hashed assets. The journal records the pre-switch intent; rollback restores the exact previous static tree only while the pointer still names this operation's candidate. Static recovery is a separate command and generic CMS recovery refuses static-main journals.
+
+On 2026-10-22, the owner selected exact canonical `main` SHA plus green `Tests`, `Lint and Typecheck`, `Security`, and `Lighthouse CI` as the staging194 static-site admission rule, with no published Release requirement. This exception applies only to the staging194 static site: the CMS-button decision and production release policy are unchanged. The root-owned rehearsal config must contain `staticMainReleasePolicy: "ci-only-approved"`; a missing or different value fails closed. After the helper/config revision is reviewed and installed through the separately authorized host-maintenance procedure, the operator command is:
+
+```sh
+python3 scripts/rehearsal/staging193.py static-main --operation-id <fresh-id> --source-sha <current-40-hex-main-sha>
+```
+
+This command performs a static activation on staging194; it does not deploy the helper or config. Do not run it until the owner authorizes the deployment and the installed helper/config are confirmed to match the reviewed revision. For a crash during activation, use `static-main-recover --operation-id <same-id>`; it can restore only this operation's old static pointer and refuses to overwrite a newer foreign pointer.
 
 Legacy `/media/` is captured from the selected current static release and restored by returning to the old static pointer; its tree digest is verified before recovery completes and writers reopen. Recovery writes media files only under mutable `/uploads/`.
 
