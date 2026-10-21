@@ -1,22 +1,26 @@
-# Production occurrence rules retained from origin/main on 2026-10-21
+# Production occurrence rules retained from current main on 2026-10-21
 
-The fresh standard generator produced 11,052 rules (10,203 production and 10,133 demo). Current main contains 220 additional production rules on ten routes absent from both fresh local build roots. This report maps rows from the actual current-main registry and source inventory to the frozen current source inventory.
+The fresh standard generator produced 11052 rules (10203 production and 10133 demo). Current main contains 220 additional production rules on ten routes absent from both fresh local build roots. The rows below were rebound from the actual current-main registry and source inventory to the fresh source/output identities.
 
 ## Revisions and outputs
 
 - Current main: `fabaa27f1e2108d82e4a0f3e58864b29d40f5419` (469 production routes; 10423 production rules).
-- Product source freeze: `5764f89b4c058d5681592bc8127c4127e926bb85`; product sources are byte-identical to this revision.
-- Fresh build input commit: `19d3d8c4311420d7e2dbf790146a973342296c31`. Production: `npm run build`, exit 0, 459 pages. Demo: `npm run build:demo`, exit 0, 476 pages.
-- Standard occurrence generator: `npx tsx tests/helpers/rich-content-safety/generate-occurrences.ts`, exit 0 at `908fcb27b385f8a4e2fcebede25dd28e0c4c2f1d`.
+- Product source freeze: `da95fdf0a05359d82b5ebe483b53d7f08436bdb6`; the one-line ChatFacade URL resolution simplification was independently reviewed by two Astra passes and root.
+- Fresh build input: `aaddbb51d541d83d01143eaabc36dba9a3dba32a`; production `npm run build`, exit 0, 459 pages; demo `npm run build:demo`, exit 0, 476 pages. Both used only inert `https://chat-loader.invalid/probe/loader_probe.js`; production `DEMO_OUTPUT` was unset.
+- Standard occurrence generator: `npx tsx tests/helpers/rich-content-safety/generate-occurrences.ts`, exit 0 at `e7c6e23f9d24829273a8d0456db301d92b1896d1`. The candidate registry contains 11272 rules (10423 production, 10133 demo).
 
 ## Mapping
 
-All 220 added rows come directly from `origin/main@fabaa27f1e2108d82e4a0f3e58864b29d40f5419`. They match the prior 2026-10-19 report's `new` rows exactly, while this report records main's actual current source slots as the old side of each mapping. 200 rows keep both slot ID and source identity; 10 rows keep slot ID but have changed source identity; 10 ChatFacade rows map from the old locator to the unique script slot in the same file. Source identity changed only in `components/MotionScript.astro` (10 rows) and `components/chat/ChatFacade.astro` (10 rows). ContactShell and TopNav rows already match current main's source inventory.
+All 220 retained rows come from actual `origin/main@fabaa27f1e2108d82e4a0f3e58864b29d40f5419` and were checked against its 469-route registry and source slots. 200 rows keep slot ID and source identity; 10 keep slot ID with changed source identity; 10 map through a unique same-file slot relocation. Changed source identities are recorded per file in the machine-readable report.
 
-Fresh common production routes provide same-placement output witnesses for 190 rows. 150 retained output identities are present in those current witnesses, including 4 cases where the exact main output remains one of several observed variants. 30 identities are refreshed from current output. 10 canonical rules keep main's route-specific URL because the available witness is another route. The remaining 30 unchanged-source rows have no common-route output witness because their template-specific slots do not appear in the current local production route set.
+Fresh common-production output gives same-placement witnesses for 190 rows. 150 retained identities match those current output witnesses; 30 rows use the fresh output identity; 10 route-specific canonical URLs are kept exactly as main has them. 30 unchanged-source rows have no common-route witness because their template-specific slots do not appear in the current local production route set. The standard generator's 11052 rows are preserved; a separate clean-tree regeneration comparison will verify them against the immutable candidate.
 
-The 220 appended rows are production-only. Final registry counts: 11272 total, 10423 production, 10133 demo. The earlier 2026-10-19 evidence files remain unchanged. The machine-readable per-row old-main/current-source/output-witness mapping is in `production-occurrence-retention-report-2026-10-21.json`.
+The per-row mapping, output witnesses and retained rules are in `production-occurrence-retention-report-2026-10-21.json`. The 2026-10-19 historical report remains unchanged.
 
 ## Evidence boundary
 
-The ten retained routes are not present in either fresh local build root, so their current route-specific HTML is not demonstrated here. A common-route witness establishes a current source/output identity emitted on another route; it does not prove the retained route's current rendered HTML or production state. Earlier A01 evidence remains a staging candidate, not production provenance. No staging canonical is used as production evidence.
+The ten retained routes are absent from both fresh local build roots, so this report does not establish their current route-specific HTML, production state, deployment or acceptance. Common-route witnesses establish only a current source/output identity emitted on another route. Earlier A01 evidence remains a staging candidate only; no staging canonical is used as production evidence.
+
+## Diagnostic build results
+
+Two earlier `test:build` runs are recorded as failures, not successes. The initial run with `CHAT_LOADER_SRC` unset failed the chat configuration assertion and the broad media URL scan; the latter was traced to the redundant `new URL(...)` in ChatFacade and removed by the reviewed one-line source fix. A subsequent `CHAT_LOADER_SRC=none` run passed 277 tests and failed one hazard identity assertion because the occurrence registry still held the pre-fix ChatFacade body hash. The exact second diagnostic is losslessly gzip-compressed at `docs/evidence/chat-entry-visibility/test-build-none-stale-registry-2026-10-21.log.gz` (read with `gzip -dc`). Both outcomes are superseded by the refreshed registry; the final address-config build gate is still pending.
