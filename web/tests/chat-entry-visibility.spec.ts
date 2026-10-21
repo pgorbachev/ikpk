@@ -545,6 +545,7 @@ test.describe('chat entry visibility approved contract', () => {
       const session = await page.context().newCDPSession(page);
       const beforeTouch = (await snapshotLayout(page)).scrollportScrollTop;
       await armGestureScrollEnd(beforeTouch);
+      await session.send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 1 });
       await session.send('Input.synthesizeScrollGesture', { x: 180, y: 300, yDistance: -420, speed: 650, gestureSourceType: 'touch' });
       await session.detach();
       await expect.poll(async () => (await snapshotLayout(page)).scrollportScrollTop,
