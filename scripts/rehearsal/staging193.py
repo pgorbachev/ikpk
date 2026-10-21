@@ -164,6 +164,10 @@ def validate_static_main_ci(sha: str) -> dict:
             "runId": latest["databaseId"], "attempt": latest["attempt"], "status": latest["status"],
             "conclusion": latest["conclusion"], "requiredJobs": sorted(job_names),
             "runUrl": f"https://github.com/{CANONICAL_REPOSITORY}/actions/runs/{latest['databaseId']}"})
+    canonical_head = capture(["gh", "api", f"repos/{CANONICAL_REPOSITORY}/git/ref/heads/main",
+                              "--jq", ".object.sha"])
+    if canonical_head != sha:
+        raise Refusal("canonical main head moved during CI admission")
     provenance["additionalWorkflows"] = workflow_proofs
     return provenance
 

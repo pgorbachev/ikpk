@@ -117,6 +117,24 @@ class OperatorAdmissionTests(unittest.TestCase):
             with self.assertRaisesRegex(staging193.Refusal, "Lighthouse CI jobs are not successful"):
                 staging193.validate_static_main_ci(SHA)
 
+    def test_static_main_rejects_main_ref_moving_during_last_workflow_read(self):
+        moved = False
+
+        def capture(argv):
+            nonlocal moved
+            if argv[:2] == ["gh", "api"]:
+                return "b" * 40 if moved else SHA
+            result = self._main_capture(argv)
+            if (argv[:3] == ["gh", "run", "view"]
+                    and argv[argv.index("view") + 1] == str(123 + len(staging193.STATIC_MAIN_ADDITIONAL_WORKFLOWS))):
+                moved = True
+            return result
+
+        with patch.object(staging193, "capture", side_effect=capture):
+            with self.assertRaisesRegex(staging193.Refusal, "canonical main head moved during CI admission"):
+                staging193.validate_static_main_ci(SHA)
+        self.assertTrue(moved, "the simulated ref movement must happen during the last workflow read")
+
     def test_static_main_revalidates_exact_main_ci_after_browser_acceptance_before_commit(self):
         provenance = {"repository": staging193.CANONICAL_REPOSITORY, "ref": "refs/heads/main",
                       "sourceSha": SHA, "workflow": "Tests", "workflowName": "Tests", "event": "push",
