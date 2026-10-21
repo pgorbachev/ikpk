@@ -509,11 +509,12 @@ test.describe('chat entry visibility approved contract', () => {
         const port = document.querySelector<HTMLElement>('[data-page-scrollport]')!.getBoundingClientRect();
         return {
           panelBottom: panel.bottom,
+          portBottom: port.bottom,
           closeInside: close.top >= panel.top && close.bottom <= panel.bottom
             && close.top >= port.top && close.bottom <= port.bottom,
         };
       });
-      expect(searchBounds.panelBottom, `${width}: search popup fits under the reduced visual viewport`).toBeLessThanOrEqual(initial.port.bottom + 1);
+      expect(searchBounds.panelBottom, `${width}: search popup fits under the reduced visual viewport`).toBeLessThanOrEqual(searchBounds.portBottom + 1);
       expect(searchBounds.closeInside, `${width}: search has a reachable close control in its clipped region`).toBe(true);
 
       const query = page.locator('#header-search-pagefind input[type="search"]');
