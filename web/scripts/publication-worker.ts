@@ -16,7 +16,8 @@ import { artifactFiles, inside, protectedFile, readConfig } from './publication-
 export async function runPublicationWorker({ argv, env, cwd }: WorkerInput) {
   if (env.GITHUB_ACTIONS === 'true' || env.CI === 'true') throw new Error('hosted-publication-forbidden');
   if (argv.length !== 1 || !env.PUBLICATION_CONFIG || !env.PUBLICATION_LAUNCHER ||
-      !env.PUBLICATION_SOURCE_SHA || !/^[a-f0-9]{40}$/.test(env.PUBLICATION_SOURCE_SHA)) throw new Error('missing protected publication context');
+      !env.PUBLICATION_SOURCE_SHA || !/^[a-f0-9]{40}$/.test(env.PUBLICATION_SOURCE_SHA) ||
+      !env.PUBLICATION_RELEASE_TAG || !/^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/.test(env.PUBLICATION_RELEASE_TAG)) throw new Error('missing protected publication context');
   const root = realpathSync(cwd);
   const launcher = protectedFile(env.PUBLICATION_LAUNCHER);
   const configPath = protectedFile(env.PUBLICATION_CONFIG);
@@ -41,10 +42,17 @@ export async function runPublicationWorker({ argv, env, cwd }: WorkerInput) {
     } catch { throw new Error('publication source unavailable'); }
   }
   function readMain(): string {
-    const result = git(root, 'ls-remote', '--exit-code', '--refs', '--', config.canonicalRepository, 'refs/heads/main');
-    const match = /^([a-f0-9]{40})\s+refs\/heads\/main$/.exec(result);
-    if (!match) throw new Error('canonical main unavailable');
-    return match[1];
+    const tagRef = `refs/tags/${env.PUBLICATION_RELEASE_TAG}`;
+    const result = git(root, 'ls-remote', '--exit-code', '--', config.canonicalRepository, 'refs/heads/main', tagRef, `${tagRef}^{}`);
+    const refs = new Map(result.split('\n').map((line) => {
+      const match = /^([a-f0-9]{40})\s+(refs\/\S+)$/.exec(line);
+      if (!match) throw new Error('canonical release unavailable');
+      return [match[2], match[1]];
+    }));
+    if (!refs.has(tagRef) || (refs.get(`${tagRef}^{}`) ?? refs.get(tagRef)) !== env.PUBLICATION_SOURCE_SHA) throw new Error('canonical release changed');
+    const main = refs.get('refs/heads/main');
+    if (!main) throw new Error('canonical main unavailable');
+    return main;
   }
   try {
     {
@@ -105,14 +113,19 @@ export async function runPublicationWorker({ argv, env, cwd }: WorkerInput) {
       return await runNewPublication({ commit, destinationId: config.destinationId, deployMode: config.deployMode,
         paymentRole: config.paymentRole, actor: config.actor, origin: config.siteUrl, publicationId: id, releaseId: id,
         treeDir: join(webRoot, 'dist'), reportPath: join(reportsDir, 'publication.json'), env: checkEnv }, {
-        readCiEvidence: (sha) => readCiEvidence({ commit: sha, token: env.GH_TOKEN }),
+        readCiEvidence: (sha) => readCiEvidence({ commit: sha, releaseTag: env.PUBLICATION_RELEASE_TAG!, token: env.GH_TOKEN }),
         async runChecks(input) {
           await state.readHistory();
           const ports = createPublicationCheckPorts({ webRoot, snapshotDir, reportsDir, ledgerDir: join(workDir, 'ledger'), captureEnv, payment: config.payment }, { paymentReadiness });
           const report = await runPublicationChecks(input, ports);
           return { report, snapshot: readPublicationSnapshot(snapshotDir) };
         },
-        readMain: async () => readMain(), state,
+        async readMain() {
+          // Local build/checks can take a while: revoked releases or a new red CI
+          // attempt must still stop activation after an initially successful admission.
+          await readCiEvidence({ commit, releaseTag: env.PUBLICATION_RELEASE_TAG!, token: env.GH_TOKEN });
+          return readMain();
+        }, state,
         digest: (treeDir) => digestTree(treeDir, artifactFiles(treeDir)),
         createTransport: ({ authorize }) => createSshTransport({ ...transportConfig, authorize }),
         fetch: globalThis.fetch, now: () => new Date().toISOString(),

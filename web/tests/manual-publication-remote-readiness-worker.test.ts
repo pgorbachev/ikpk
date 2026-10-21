@@ -25,7 +25,7 @@ async function fixture() {
   const configPath = join(protectedDir, 'config.json'); const knownHostsFile = join(protectedDir, 'known_hosts');
   write(join(cwd, 'web/package.json'), '{"private":true}'); write(join(cwd, 'web/package-lock.json'), '{}');
   git(cwd, 'init', '--initial-branch=main'); git(cwd, 'add', '.'); git(cwd, 'commit', '-m', 'fixture canonical source');
-  git(temp, 'clone', '--bare', cwd, remote); git(cwd, 'remote', 'add', 'origin', remote);
+  git(temp, 'clone', '--bare', cwd, remote); git(cwd, 'remote', 'add', 'origin', remote); git(cwd, 'tag', 'v1.2.3'); git(cwd, 'push', 'origin', 'refs/tags/v1.2.3');
   const commit = git(cwd, 'rev-parse', 'HEAD');
   mkdirSync(protectedDir); copyFileSync(join(ROOT, 'scripts/publication-launcher.mjs'), launcher); chmodSync(launcher, 0o700);
   write(knownHostsFile, 'fixture-host-key\n');
@@ -35,7 +35,7 @@ async function fixture() {
   function saveConfig() { write(configPath, JSON.stringify(config)); chmodSync(configPath, 0o600); }
   saveConfig();
   const env: Record<string, string> = { PATH: process.env.PATH!, HOME: temp, DEPLOY_MODE: config.deployMode,
-    PUBLICATION_CONFIG: configPath, PUBLICATION_LAUNCHER: launcher, PUBLICATION_SOURCE_SHA: commit, PUBLICATION_DESTINATION_ID: 'stand',
+    PUBLICATION_CONFIG: configPath, PUBLICATION_LAUNCHER: launcher, PUBLICATION_SOURCE_SHA: commit, PUBLICATION_RELEASE_TAG: 'v1.2.3', PUBLICATION_DESTINATION_ID: 'stand',
     GH_TOKEN: CANARY, CMS_TOKEN: CANARY, CMS_URL: 'https://cms.test.invalid', SSH_AUTH_SOCK: join(protectedDir, CANARY),
     SSH_KEY: CANARY, IKPK_SECRET: CANARY, NODE_OPTIONS: '--import=evil.mjs', NPM_CONFIG_USERCONFIG: '/unsafe/npmrc',
     SNAPSHOT_SOURCE: 'pinned', CONTENT_SNAPSHOT_DIR: '/unsafe/snapshot', PUBLICATION_REPORT: '/unsafe/report.json' };
