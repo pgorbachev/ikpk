@@ -11,11 +11,14 @@ import { join } from 'path';
  * `dist-pages.ts` и `demo-dist.ts` склеились бы в один предмет через общий импорт.
  */
 export function* walkFiles(dir: string, exts: string[]): Generator<string> {
-  for (const name of readdirSync(dir)) {
-    const full = join(dir, name);
-    if (statSync(full).isDirectory()) {
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const full = join(dir, entry.name);
+    // Dirents avoid a stat syscall for every ordinary file. statSync is still
+    // needed for symlinks to preserve the previous follow-directory behavior;
+    // broken links continue to fail closed.
+    if (entry.isDirectory() || (entry.isSymbolicLink() && statSync(full).isDirectory())) {
       yield* walkFiles(full, exts);
-    } else if (exts.some((e) => name.endsWith(e))) {
+    } else if (exts.some((e) => entry.name.endsWith(e))) {
       yield full;
     }
   }
