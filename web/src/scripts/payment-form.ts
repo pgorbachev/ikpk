@@ -897,7 +897,7 @@ function boot(formEl: HTMLFormElement) {
     const fromQuery = url.searchParams.get(RETURN_PARAM);
     if (fromQuery) {
       url.searchParams.delete(RETURN_PARAM);
-      history.replaceState({}, '', url.pathname + url.search + url.hash);
+      history.replaceState(history.state ?? {}, '', url.pathname + url.search + url.hash);
       const json = await pollStatus(fromQuery, true);
       if (json) applyStatus(fromQuery, json);
       await refreshSiblingHolds(fromQuery);

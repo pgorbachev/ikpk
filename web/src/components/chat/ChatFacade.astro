@@ -114,6 +114,9 @@ const showFacade = config.state === 'address' && !isDemoOutput;
         const menuAnchor = header && header.querySelector('.topnav-mobile > summary');
         const visibleBottom = Math.min(portRect.bottom, offset + height);
         const visibleTop = Math.max(portRect.top, offset);
+        document.querySelectorAll('.topnav-menu .dropdown').forEach(function (dropdown) {
+          setPixel('--chat-nav-dropdown-max-height', visibleBottom - dropdown.getBoundingClientRect().top);
+        });
         const anchorRect = menuAnchor && menuAnchor.getBoundingClientRect();
         const drawerBelow = anchorRect ? Math.max(0, visibleBottom - anchorRect.bottom - 8) : visibleBottom - visibleTop;
         const drawerAbove = anchorRect ? Math.max(0, anchorRect.top - visibleTop - 8) : 0;
@@ -133,6 +136,21 @@ const showFacade = config.state === 'address' && !isDemoOutput;
         }
 
       };
+      const scrollHistoryKey = '__ikpkChatPageScrollTop';
+      const saveHistoryPosition = function () {
+        const current = history.state;
+        const state = current && typeof current === 'object' ? Object.assign({}, current) : {};
+        state[scrollHistoryKey] = pageScrollport.scrollTop;
+        history.replaceState(state, '');
+      };
+      const restoreHistoryPosition = function () {
+        window.requestAnimationFrame(function () {
+          const saved = history.state && history.state[scrollHistoryKey];
+          if (typeof saved === 'number' && Number.isFinite(saved)) {
+            pageScrollport.scrollTo({ top: saved, behavior: 'instant' });
+          }
+        });
+      };
       const revealFocusedField = function () {
         const focused = document.activeElement;
         if (!(focused instanceof HTMLElement) || !pageScrollport.contains(focused)
@@ -150,8 +168,11 @@ const showFacade = config.state === 'address' && !isDemoOutput;
         }
       };
       updateViewport();
+      restoreHistoryPosition();
       window.addEventListener('resize', function () { updateViewport(); revealFocusedField(); }, { passive: true });
       pageScrollport.addEventListener('scroll', updateViewport, { passive: true });
+      window.addEventListener('pagehide', saveHistoryPosition);
+      window.addEventListener('pageshow', restoreHistoryPosition);
       if (viewport) {
         viewport.addEventListener('resize', function () { updateViewport(); revealFocusedField(); }, { passive: true });
         viewport.addEventListener('scroll', updateViewport, { passive: true });

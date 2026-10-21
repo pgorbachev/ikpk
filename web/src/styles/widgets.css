@@ -101,6 +101,12 @@ body.layout-topnav--chat header.topnav .header-search {
   overflow-y: auto;
 }
 
+body.layout-topnav--chat .topnav-menu .dropdown {
+  box-sizing: border-box;
+  max-height: var(--chat-nav-dropdown-max-height, 80vh);
+  overflow-y: auto;
+}
+
 body.layout-topnav--chat .header-search-pagefind .pagefind-ui__drawer {
   max-height: min(60vh, max(0px, calc(var(--chat-search-max-height, 100vh) - 100px)));
 }

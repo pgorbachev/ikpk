@@ -376,14 +376,47 @@ test.describe('chat entry visibility approved contract', () => {
       const keyboardScrollport = page.locator('[data-page-scrollport]');
       await page.keyboard.press('Tab');
       await expect(keyboardScrollport, 'the shared page scrollport is reachable by keyboard before its contents').toBeFocused();
+      const keyboardFocusBefore = await page.evaluate(() => ({
+        documentHasFocus: document.hasFocus(),
+        active: document.activeElement instanceof HTMLElement ? `${document.activeElement.tagName}.${document.activeElement.className}` : String(document.activeElement),
+      }));
+      await page.evaluate(() => {
+        (window as Window & { __pageDownEvents?: unknown[] }).__pageDownEvents = [];
+        const record = (phase: string) => (event: KeyboardEvent) => {
+          if (event.key !== 'PageDown') return;
+          const port = document.querySelector<HTMLElement>('[data-page-scrollport]');
+          (window as Window & { __pageDownEvents?: unknown[] }).__pageDownEvents?.push({
+            phase,
+            target: event.target instanceof HTMLElement ? `${event.target.tagName}.${event.target.className}` : String(event.target),
+            active: document.activeElement instanceof HTMLElement ? `${document.activeElement.tagName}.${document.activeElement.className}` : String(document.activeElement),
+            defaultPrevented: event.defaultPrevented,
+            port: port && { clientHeight: port.clientHeight, scrollHeight: port.scrollHeight, scrollTop: port.scrollTop, maxScroll: port.scrollHeight - port.clientHeight, tabIndex: port.tabIndex, overflowY: getComputedStyle(port).overflowY },
+          });
+        };
+        document.addEventListener('keydown', record('keydown-capture'), true);
+        document.addEventListener('keydown', record('keydown-bubble'));
+        document.addEventListener('keyup', record('keyup-capture'), true);
+        document.addEventListener('keyup', record('keyup-bubble'));
+      });
       const resetPort = async () => page.evaluate(() => {
         const port = document.querySelector<HTMLElement>('[data-page-scrollport]');
         if (port) port.scrollTop = 0;
       });
-      const beforeKeyboard = (await snapshotLayout(page)).scrollportScrollTop;
+      const beforeKeyboard = await keyboardScrollport.evaluate((el) => el.scrollTop);
+      const pageFocusBeforeKey = await page.evaluate(() => ({
+        documentHasFocus: document.hasFocus(),
+        active: document.activeElement instanceof HTMLElement ? `${document.activeElement.tagName}.${document.activeElement.className}` : String(document.activeElement),
+        port: (() => { const el = document.querySelector<HTMLElement>('[data-page-scrollport]')!; return { clientHeight: el.clientHeight, scrollHeight: el.scrollHeight, scrollTop: el.scrollTop, maxScroll: el.scrollHeight - el.clientHeight }; })(),
+      }));
       await page.keyboard.press('PageDown');
-      await expect.poll(async () => (await snapshotLayout(page)).scrollportScrollTop,
-        'PageDown advances the shared scrollport from its start on a fresh page').toBeGreaterThan(beforeKeyboard);
+      const pageDownState = await page.evaluate(() => ({
+        documentHasFocus: document.hasFocus(),
+        active: document.activeElement instanceof HTMLElement ? `${document.activeElement.tagName}.${document.activeElement.className}` : String(document.activeElement),
+        events: (window as Window & { __pageDownEvents?: unknown[] }).__pageDownEvents ?? [],
+        port: (() => { const el = document.querySelector<HTMLElement>('[data-page-scrollport]')!; return { clientHeight: el.clientHeight, scrollHeight: el.scrollHeight, scrollTop: el.scrollTop, maxScroll: el.scrollHeight - el.clientHeight, tabIndex: el.tabIndex, overflowY: getComputedStyle(el).overflowY }; })(),
+      }));
+      await expect.poll(() => keyboardScrollport.evaluate((el) => el.scrollTop),
+        `PageDown advances the shared scrollport from its start on a fresh page: ${JSON.stringify({ before: keyboardFocusBefore, immediatelyBefore: pageFocusBeforeKey, after: pageDownState })}`).toBeGreaterThan(beforeKeyboard);
 
       await resetPort();
       const beforeWheel = (await snapshotLayout(page)).scrollportScrollTop;
@@ -442,6 +475,94 @@ test.describe('chat entry visibility approved contract', () => {
       });
       expect.soft(focused, 'keyboard focus reveal keeps the full footer control inside the shared scrollport').toBe(true);
     }
+  });
+
+  test('history restores distinct scroll positions for separate entries with the same URL', async ({ page }) => {
+    await protectThirdParties(page);
+    await page.setViewportSize({ width: 375, height: 812 });
+    await page.goto(activeUrl('/raspisanie-i-tseny'));
+    const port = page.locator('[data-page-scrollport]');
+    await expect(port).toHaveCount(1);
+    await port.evaluate((el: HTMLElement) => el.scrollTo({ top: 400, behavior: 'instant' }));
+    const entryUrl = page.url();
+    await page.goto(activeUrl('/kontakty'));
+    const contactsPort = page.locator('[data-page-scrollport]');
+    await contactsPort.evaluate((el: HTMLElement) => el.scrollTo({ top: 700, behavior: 'instant' }));
+    await page.goto(entryUrl);
+    await expect(port).toHaveCount(1);
+    await port.evaluate((el: HTMLElement) => el.scrollTo({ top: 1300, behavior: 'instant' }));
+
+    await page.goBack();
+    await expect(page).toHaveURL(/kontakty/);
+    await expect.poll(() => contactsPort.evaluate((el: HTMLElement) => el.scrollTop),
+      'back restores the intermediary entry position').toBe(700);
+    await page.goBack();
+    await expect(page).toHaveURL(entryUrl);
+    await expect.poll(() => port.evaluate((el: HTMLElement) => el.scrollTop),
+      'back restores the first same-URL entry position').toBe(400);
+    await page.goForward();
+    await expect(page).toHaveURL(/kontakty/);
+    await expect.poll(() => contactsPort.evaluate((el: HTMLElement) => el.scrollTop),
+      'forward restores the intermediary entry position').toBe(700);
+    await page.goForward();
+    await expect(page).toHaveURL(entryUrl);
+    await expect.poll(() => port.evaluate((el: HTMLElement) => el.scrollTop),
+      'forward restores the second same-URL entry position').toBe(1300);
+  });
+
+  test('native same-document hash Back and Forward restore the shared scrollport', async ({ page }) => {
+    await protectThirdParties(page);
+    await page.setViewportSize({ width: 375, height: 812 });
+    await page.goto(activeUrl('/'));
+    const port = page.locator('[data-page-scrollport]');
+    await expect(port).toHaveCount(1);
+    await port.evaluate((el: HTMLElement) => el.scrollTo({ top: 500, behavior: 'instant' }));
+    const anchor = page.locator('a[href="#upcoming"]').first();
+    await expect(anchor).toBeVisible();
+    await anchor.scrollIntoViewIfNeeded();
+    const initialPosition = await port.evaluate((el: HTMLElement) => el.scrollTop);
+    await anchor.click();
+    await expect(page).toHaveURL(/#upcoming$/);
+    await expect.poll(() => port.evaluate((el: HTMLElement) => el.scrollTop)).toBeGreaterThan(initialPosition);
+    const hashPosition = await port.evaluate((el: HTMLElement) => el.scrollTop);
+    await page.goBack();
+    await expect(page).not.toHaveURL(/#upcoming$/);
+    await expect.poll(() => port.evaluate((el: HTMLElement) => el.scrollTop),
+      'native same-document Back restores the measured pre-hash position').toBe(initialPosition);
+    await page.goForward();
+    await expect(page).toHaveURL(/#upcoming$/);
+    await expect.poll(() => port.evaluate((el: HTMLElement) => el.scrollTop),
+      'native same-document Forward restores the measured hash-entry position').toBe(hashPosition);
+  });
+
+  test('desktop dropdown exposes the final navigation link at a short viewport', async ({ page }) => {
+    await protectThirdParties(page);
+    await page.setViewportSize({ width: 1280, height: 280 });
+    await page.goto(activeUrl('/'));
+    const education = page.locator('header.topnav .topnav-menu .has-dropdown').first();
+    await education.hover();
+    const dropdown = education.locator('.dropdown');
+    const lastLink = dropdown.locator('a[href="/oplata"]');
+    await expect(lastLink).toBeVisible();
+    await dropdown.evaluate((el: HTMLElement) => { el.scrollTop = el.scrollHeight; });
+    const geometry = await lastLink.evaluate((el) => {
+      const rect = el.getBoundingClientRect();
+      const dropdown = el.closest<HTMLElement>('.dropdown')!;
+      const port = document.querySelector<HTMLElement>('[data-page-scrollport]')!;
+      const portRect = port.getBoundingClientRect();
+      return {
+        link: rect.toJSON(),
+        dropdown: dropdown.getBoundingClientRect().toJSON(),
+        maxHeight: getComputedStyle(dropdown).maxHeight,
+        overflowY: getComputedStyle(dropdown).overflowY,
+        port: { top: portRect.top, bottom: portRect.bottom, scrollTop: port.scrollTop, scrollHeight: port.scrollHeight },
+      };
+    });
+    expect(geometry.overflowY, `desktop dropdown must provide its own scroll when clipped: ${JSON.stringify(geometry)}`).toMatch(/auto|scroll/);
+    expect(geometry.link.top, `last desktop dropdown link is unreachable at 1280x280: ${JSON.stringify(geometry)}`).toBeGreaterThanOrEqual(geometry.dropdown.top - 1);
+    expect(geometry.link.bottom, `last desktop dropdown link is unreachable at 1280x280: ${JSON.stringify(geometry)}`).toBeLessThanOrEqual(geometry.dropdown.bottom + 1);
+    expect(geometry.link.bottom, `last desktop dropdown link remains below the clipped scrollport: ${JSON.stringify(geometry)}`).toBeLessThanOrEqual(geometry.port.bottom + 1);
+    expect(geometry.port.scrollTop, 'scrolling the desktop dropdown does not scroll the page').toBe(0);
   });
 
   test('short mobile viewport keeps the full menu and search controls inside the shared scrollport', async ({ page }) => {

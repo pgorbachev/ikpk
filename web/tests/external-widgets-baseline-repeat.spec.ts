@@ -147,6 +147,9 @@ async function shot(browser: Browser, path: string, viewport: ViewportSize): Pro
     });
     await expect(reviews, `${path}: reviews iframe region is visible in the repeated viewport`).toBeInViewport();
     await expect(reviews.locator('iframe'), `${path}: reviews content is rendered in its iframe`).toHaveCount(1);
+    await expect(reviews.frameLocator('iframe').locator('#stub'), `${path}: the substituted Reviews document is loaded before capture`)
+      .toHaveText('подставной документ виджета отзывов');
+    await page.waitForLoadState('networkidle');
     const reviewsViewport = await page.screenshot({ fullPage: false, animations: 'disabled', mask });
     return { firstViewport, reviewsViewport, markerText, fullHeight };
   } finally {
