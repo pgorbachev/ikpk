@@ -373,6 +373,9 @@ test.describe('chat entry visibility approved contract', () => {
       expect.soft(targetVisible, '#programs is revealed below the sticky header').toBe(true);
 
       await page.goto(activeUrl('/raspisanie-i-tseny'));
+      const keyboardScrollport = page.locator('[data-page-scrollport]');
+      await page.keyboard.press('Tab');
+      await expect(keyboardScrollport, 'the shared page scrollport is reachable by keyboard before its contents').toBeFocused();
       const resetPort = async () => page.evaluate(() => {
         const port = document.querySelector<HTMLElement>('[data-page-scrollport]');
         if (port) port.scrollTop = 0;
@@ -443,7 +446,17 @@ test.describe('chat entry visibility approved contract', () => {
 
   test('short mobile viewport keeps the full menu and search controls inside the shared scrollport', async ({ page }) => {
     await protectThirdParties(page);
+    const browserDiagnostics: string[] = [];
+    page.on('pageerror', (error) => browserDiagnostics.push(`pageerror: ${error.message}`));
+    page.on('console', (message) => { if (message.type() === 'error') browserDiagnostics.push(`console: ${message.text()}`); });
+    page.on('requestfailed', (request) => browserDiagnostics.push(`requestfailed: ${request.url()} ${request.failure()?.errorText ?? ''}`));
     await page.addInitScript(() => {
+      (window as Window & { __searchButtonClickState?: unknown }).__searchButtonClickState = null;
+      document.addEventListener('click', (event) => {
+        const button = event.target instanceof Element ? event.target.closest('[data-search-open]') : null;
+        if (!button) return;
+        (window as Window & { __searchButtonCapture?: boolean }).__searchButtonCapture = true;
+      }, true);
       const viewport = window.visualViewport;
       if (!viewport) return;
       const state = { height: viewport.height, offsetTop: viewport.offsetTop };
@@ -471,13 +484,33 @@ test.describe('chat entry visibility approved contract', () => {
         drawerBottom: document.querySelector<HTMLElement>('.topnav-drawer')!.getBoundingClientRect().bottom,
         portBottom: document.querySelector<HTMLElement>('[data-page-scrollport]')!.getBoundingClientRect().bottom,
         scrollTop: document.querySelector<HTMLElement>('[data-page-scrollport]')!.scrollTop,
+        drawer: (() => {
+          const drawer = document.querySelector<HTMLElement>('.topnav-drawer')!;
+          const style = getComputedStyle(drawer);
+          const summary = document.querySelector<HTMLElement>('details.topnav-mobile > summary')!;
+          const port = document.querySelector<HTMLElement>('[data-page-scrollport]')!;
+          return {
+            rect: drawer.getBoundingClientRect().toJSON(),
+            maxHeight: style.maxHeight,
+            minHeight: style.minHeight,
+            boxSizing: style.boxSizing,
+            overflowY: style.overflowY,
+            padding: [style.paddingTop, style.paddingBottom],
+            border: [style.borderTopWidth, style.borderBottomWidth],
+            summary: summary.getBoundingClientRect().toJSON(),
+            header: document.querySelector<HTMLElement>('header.topnav')!.getBoundingClientRect().toJSON(),
+            port: port.getBoundingClientRect().toJSON(),
+            cssLimit: getComputedStyle(document.body).getPropertyValue('--chat-drawer-max-height').trim(),
+          };
+        })(),
       }));
-      expect(shrunkDrawer.drawerBottom, `${width}: open menu resizes to reduced visual viewport without manual scrolling`).toBeLessThanOrEqual(shrunkDrawer.portBottom + 1);
+      expect(shrunkDrawer.drawerBottom, `${width}: open menu resizes to reduced visual viewport without manual scrolling ${JSON.stringify(shrunkDrawer.drawer)}`).toBeLessThanOrEqual(shrunkDrawer.portBottom + 1);
       expect(shrunkDrawer.scrollTop, `${width}: popup resize does not move the page scrollport`).toBe(beforeShrinkScroll);
       const initial = await page.evaluate(() => ({
         drawer: document.querySelector<HTMLElement>('.topnav-drawer')!.getBoundingClientRect().toJSON(),
         port: document.querySelector<HTMLElement>('[data-page-scrollport]')!.getBoundingClientRect().toJSON(),
       }));
+      expect(initial.drawer.top, `${width}: mobile menu stays inside the clipped content region`).toBeGreaterThanOrEqual(initial.port.top - 1);
       expect(initial.drawer.bottom, `${width}: mobile menu starts and ends inside the clipped content region`).toBeLessThanOrEqual(initial.port.bottom + 1);
 
       await drawer.evaluate((el: HTMLElement) => { el.scrollTop = el.scrollHeight; });
@@ -498,22 +531,42 @@ test.describe('chat entry visibility approved contract', () => {
         .__setVisualViewportForTest?.(420, 0));
       const openSearch = page.locator('[data-search-open]');
       await openSearch.scrollIntoViewIfNeeded();
+      await openSearch.evaluate((button) => button.addEventListener('click', () => {
+        const search = document.querySelector<HTMLElement>('#header-search');
+        const toggle = document.querySelector<HTMLElement>('#header-search-toggle');
+        const details = button.closest('details');
+        (window as Window & { __searchButtonClickState?: unknown }).__searchButtonClickState = {
+          hidden: search?.hidden,
+          expanded: toggle?.getAttribute('aria-expanded'),
+          detailsOpen: details instanceof HTMLDetailsElement ? details.open : null,
+        };
+      }, { once: true }));
       await openSearch.click();
       const search = page.locator('#header-search');
       const closeSearch = page.locator('#header-search-close');
-      await expect(search).toBeVisible();
+      const searchOpenState = await page.evaluate(() => ({
+        hidden: document.querySelector<HTMLElement>('#header-search')?.hidden,
+        expanded: document.querySelector<HTMLElement>('#header-search-toggle')?.getAttribute('aria-expanded'),
+        captured: (window as Window & { __searchButtonCapture?: boolean }).__searchButtonCapture ?? false,
+        clickState: (window as Window & { __searchButtonClickState?: unknown }).__searchButtonClickState,
+        scripts: [...document.scripts].map((script) => script.src).filter(Boolean),
+      }));
+      await expect(search, `search popup state ${JSON.stringify(searchOpenState)}; ${browserDiagnostics.join(' | ')}`).toBeVisible();
       await closeSearch.scrollIntoViewIfNeeded();
       const searchBounds = await page.evaluate(() => {
         const panel = document.querySelector<HTMLElement>('#header-search')!.getBoundingClientRect();
         const close = document.querySelector<HTMLElement>('#header-search-close')!.getBoundingClientRect();
         const port = document.querySelector<HTMLElement>('[data-page-scrollport]')!.getBoundingClientRect();
         return {
+          panelTop: panel.top,
           panelBottom: panel.bottom,
+          portTop: port.top,
           portBottom: port.bottom,
           closeInside: close.top >= panel.top && close.bottom <= panel.bottom
             && close.top >= port.top && close.bottom <= port.bottom,
         };
       });
+      expect(searchBounds.panelTop, `${width}: search popup starts inside the clipped scrollport`).toBeGreaterThanOrEqual(searchBounds.portTop - 1);
       expect(searchBounds.panelBottom, `${width}: search popup fits under the reduced visual viewport`).toBeLessThanOrEqual(searchBounds.portBottom + 1);
       expect(searchBounds.closeInside, `${width}: search has a reachable close control in its clipped region`).toBe(true);
 
@@ -652,18 +705,39 @@ test.describe('chat entry visibility approved contract', () => {
       };
     });
     await page.setViewportSize({ width: 375, height: 420 });
-    await page.goto(activeUrl('/kontakty'));
-    const pageField = page.locator('.newsletter-signup-input').first();
-    await expect(pageField, 'page contains the existing newsletter input').toHaveCount(1);
+    await page.goto(activeUrl('/raspisanie-i-tseny'));
+    const pageField = page.locator('[data-schedule-search]');
+    await expect(pageField, 'page contains the existing schedule search field').toHaveCount(1);
     await pageField.scrollIntoViewIfNeeded();
+    await pageField.evaluate((field) => {
+      const port = document.querySelector<HTMLElement>('[data-page-scrollport]')!;
+      const fieldRect = field.getBoundingClientRect();
+      const portRect = port.getBoundingClientRect();
+      port.scrollTop += fieldRect.bottom - (portRect.bottom - 20);
+    });
     await pageField.focus();
-    await page.evaluate(() => (window as Window & { __setVisualViewportForTest?: (height: number, offsetTop: number) => void }).__setVisualViewportForTest?.(260, 20));
-    const pageFieldVisible = await pageField.evaluate((el) => {
+    const pageFieldBeforeShrink = await pageField.evaluate((el) => {
       const rect = el.getBoundingClientRect();
       const port = document.querySelector<HTMLElement>('[data-page-scrollport]')!.getBoundingClientRect();
       return rect.top >= port.top && rect.bottom <= port.bottom;
     });
-    expect.soft(pageFieldVisible, 'focused lower page field stays revealed when the visual viewport shrinks').toBe(true);
+    expect(pageFieldBeforeShrink, 'focused schedule search field starts inside the lower edge of the scrollport').toBe(true);
+    await page.evaluate(() => (window as Window & { __setVisualViewportForTest?: (height: number, offsetTop: number) => void }).__setVisualViewportForTest?.(260, 20));
+    await expect.poll(() => pageField.evaluate((el) => {
+      const rect = el.getBoundingClientRect();
+      const port = document.querySelector<HTMLElement>('[data-page-scrollport]')!.getBoundingClientRect();
+      return rect.top >= port.top && rect.bottom <= port.bottom;
+    }), 'focused lower page field stays revealed when the visual viewport shrinks').toBe(true);
+    const focusedBeforeWheel = await page.evaluate(() => ({
+      active: document.activeElement === document.querySelector('[data-schedule-search]'),
+      scrollTop: document.querySelector<HTMLElement>('[data-page-scrollport]')!.scrollTop,
+    }));
+    await page.mouse.move(200, 120);
+    await page.mouse.wheel(0, 300);
+    await expect.poll(() => page.locator('[data-page-scrollport]').evaluate((el) => el.scrollTop),
+      'wheel scrolling can move away from the focused field').toBeGreaterThan(focusedBeforeWheel.scrollTop);
+    expect(await page.evaluate(() => document.activeElement === document.querySelector('[data-schedule-search]')),
+      'ordinary scrolling keeps the field focused without snapping the page back').toBe(focusedBeforeWheel.active);
 
     await page.setViewportSize({ width: 375, height: 812 });
     await page.goto(activeUrl('/oplata'));
@@ -686,15 +760,14 @@ test.describe('chat entry visibility approved contract', () => {
     });
     await page.setViewportSize({ width: 320, height: 640 });
     await page.evaluate(() => (window as Window & { __setVisualViewportForTest?: (height: number, offsetTop: number) => void }).__setVisualViewportForTest?.(360, 0));
-    const fieldVisible = await email.evaluate((el) => {
+    await expect.poll(() => email.evaluate((el) => {
       const r = el.getBoundingClientRect();
       const p = document.querySelector('.payment-dialog-panel')!.getBoundingClientRect();
       const vv = visualViewport;
       const visibleTop = Math.max(p.top, vv?.offsetTop ?? 0);
       const visibleBottom = Math.min(p.bottom, (vv?.offsetTop ?? 0) + (vv?.height ?? innerHeight));
       return r.top >= visibleTop && r.bottom <= visibleBottom;
-    });
-    expect.soft(fieldVisible, 'focused payment field remains visible after viewport/visualViewport resize').toBe(true);
+    }), 'existing payment updater and focused-field reveal keep email visible after resize').toBe(true);
     const viewportMetrics = await page.evaluate(() => ({
       layoutHeight: innerHeight,
       visualHeight: visualViewport?.height ?? null,
@@ -717,15 +790,14 @@ test.describe('chat entry visibility approved contract', () => {
     const lowerPaymentField = page.locator('#payment-consent');
     await lowerPaymentField.focus();
     await page.evaluate(() => (window as Window & { __setVisualViewportForTest?: (height: number, offsetTop: number) => void }).__setVisualViewportForTest?.(300, 0));
-    const lowerPaymentFieldVisible = await lowerPaymentField.evaluate((el) => {
+    await expect.poll(() => lowerPaymentField.evaluate((el) => {
       const rect = el.getBoundingClientRect();
       const panel = document.querySelector<HTMLElement>('.payment-dialog-panel')!.getBoundingClientRect();
       const vv = visualViewport;
       const top = Math.max(panel.top, vv?.offsetTop ?? 0);
       const bottom = Math.min(panel.bottom, (vv?.offsetTop ?? 0) + (vv?.height ?? innerHeight));
       return rect.top >= top && rect.bottom <= bottom;
-    });
-    expect.soft(lowerPaymentFieldVisible, 'focused lower payment field remains visible after a second keyboard viewport resize').toBe(true);
+    }), 'payment consent remains visible after a second keyboard viewport resize').toBe(true);
     const visibleBounds = await page.evaluate((triggerSelector) => {
       const vv = window.visualViewport!;
       const button = document.querySelector<HTMLElement>(triggerSelector)!.getBoundingClientRect();
@@ -839,9 +911,10 @@ test.describe('chat entry visibility approved contract', () => {
           return /(auto|scroll)/.test(style.overflowY) && el.hasAttribute('data-page-scrollport')
             && el.contains(document.querySelector('main'));
         });
-        if (port) port.scrollTop = port.scrollHeight;
-        else window.scrollTo(0, document.documentElement.scrollHeight);
+        if (port) port.scrollTo({ top: port.scrollHeight, behavior: 'instant' });
+        else document.scrollingElement?.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'instant' });
         });
+        await expect.poll(async () => page.locator('footer').evaluate((el) => el.getBoundingClientRect().bottom <= innerHeight + 1), `${name}: scrolling reaches the footer in ordinary document flow`).toBe(true);
         const layout = await page.evaluate(() => {
         const header = document.querySelector('header');
         const main = document.querySelector('main');
@@ -882,6 +955,8 @@ test.describe('chat entry visibility approved contract', () => {
           expect.soft(layout.scrollportBottom ?? -Infinity, `${name}: chatless scrollport reaches the viewport bottom`).toBeGreaterThanOrEqual(layout.viewportHeight - 1);
           expect.soft(layout.documentScrollTop, `${name}: chatless layout has no competing document scroll`).toBe(0);
         } else {
+          expect.soft(layout.documentMaxScroll, `${name}: ordinary page flow remains document-scrollable`).toBeGreaterThan(0);
+          expect.soft(layout.documentScrollTop, `${name}: ordinary document scroll reaches the footer`).toBeGreaterThan(0);
           expect.soft(layout.footerBottom, `${name}: ordinary document scrolling reaches the footer`).toBeLessThanOrEqual(layout.viewportHeight + 1);
         }
       } finally {

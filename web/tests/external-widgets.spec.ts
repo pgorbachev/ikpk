@@ -166,10 +166,12 @@ test.describe('виджет отзывов не грузится, пока се�
       page.evaluate((selector) => {
         const el = document.querySelector(`[${selector}]`)!;
         const next = el.nextElementSibling!;
+        const port = document.querySelector<HTMLElement>('[data-page-scrollport]');
+        const portRect = port?.getBoundingClientRect();
         return {
           height: el.getBoundingClientRect().height,
-          nextTop: next.getBoundingClientRect().top + window.scrollY,
-          scroll: document.documentElement.scrollHeight,
+          nextTop: next.getBoundingClientRect().top - (portRect?.top ?? 0) + (port?.scrollTop ?? window.scrollY),
+          scroll: port?.scrollHeight ?? document.documentElement.scrollHeight,
         };
       }, SEL_REVIEWS_SECTION);
 
@@ -180,7 +182,7 @@ test.describe('виджет отзывов не грузится, пока се�
 
     expect(after.height, 'высота секции изменилась после подстановки виджета').toBeCloseTo(before.height, 0);
     expect(after.nextTop, 'сосед ниже секции сместился').toBeCloseTo(before.nextTop, 0);
-    expect(after.scroll, 'высота документа изменилась').toBeCloseTo(before.scroll, 0);
+    expect(after.scroll, 'высота содержимого scrollport изменилась').toBeCloseTo(before.scroll, 0);
   });
 
   test('результат проверки сдвига не зависит от ответа сервиса', async ({ page }) => {

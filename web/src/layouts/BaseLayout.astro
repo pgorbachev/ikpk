@@ -57,7 +57,14 @@ const chatPage = !hideWidgets && chatLoaderConfig().state === 'address' && !isDe
     <MotionScript />
   </head>
   <body class:list={['layout-topnav', chatPage && 'layout-topnav--chat']} data-chat-page={chatPage ? '' : undefined}>
-    <div class:list={['page-flow', chatPage && 'page-flow--scrollport']} data-page-flow data-page-scrollport={chatPage ? '' : undefined}>
+    <div
+      class:list={['page-flow', chatPage && 'page-flow--scrollport']}
+      data-page-flow
+      data-page-scrollport={chatPage ? '' : undefined}
+      tabindex={chatPage ? 0 : undefined}
+      role={chatPage ? 'region' : undefined}
+      aria-label={chatPage ? 'Содержимое страницы' : undefined}
+    >
     {isDemoForms && (
       <div class="demo-banner" data-demo-banner>
         {import.meta.env.DEMO_PROFILE === 'demo193' ? 'Стейджинг-стенд' : 'Демо-стенд'}: формы заявки отключены, обращения в CRM не создаются

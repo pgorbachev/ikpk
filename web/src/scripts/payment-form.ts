@@ -133,7 +133,9 @@ function boot(formEl: HTMLFormElement) {
   // телефона это одно событие, а на протяжке окна мышью — поток событий, и без склейки
   // раскладка считалась бы на каждом.
   let bandPending = false;
-  const recomputeFooterBand = () => {
+  let revealAfterResize = false;
+  const recomputeFooterBand = (revealFocusedField = false) => {
+    revealAfterResize = revealAfterResize || revealFocusedField;
     if (dialog.hidden || bandPending) return;
     bandPending = true;
     requestAnimationFrame(() => {
@@ -141,12 +143,18 @@ function boot(formEl: HTMLFormElement) {
       if (!dialog.hidden) {
         syncDialogViewport();
         syncFooterBand();
+        if (revealAfterResize) {
+          const active = document.activeElement;
+          if (active instanceof HTMLElement && formEl.contains(active)
+            && active.matches('input, textarea, select, [contenteditable="true"]')) revealField(active);
+        }
       }
+      revealAfterResize = false;
     });
   };
-  window.addEventListener('resize', recomputeFooterBand);
-  window.visualViewport?.addEventListener('resize', recomputeFooterBand);
-  window.visualViewport?.addEventListener('scroll', recomputeFooterBand);
+  window.addEventListener('resize', () => recomputeFooterBand(true));
+  window.visualViewport?.addEventListener('resize', () => recomputeFooterBand(true));
+  window.visualViewport?.addEventListener('scroll', () => recomputeFooterBand());
   document.addEventListener('keydown', (event) => {
     if (event.key === 'Escape' && !dialog.hidden) {
       event.preventDefault();
@@ -515,7 +523,7 @@ function boot(formEl: HTMLFormElement) {
     const footer = syncFooterBand();
     // Согласие живёт в самом футере: закрыть себя футер не может, а прокрутка к нему
     // сдвинула бы панель без причины.
-    if (footer?.contains(el)) return;
+    if (footer?.contains(el) && getComputedStyle(footer).position === 'sticky') return;
     const field = (el.closest('.payment-field') ?? el) as HTMLElement;
     field.scrollIntoView({ block: 'nearest', inline: 'nearest' });
   }

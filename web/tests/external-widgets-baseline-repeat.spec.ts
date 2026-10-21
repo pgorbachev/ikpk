@@ -44,7 +44,8 @@ const ONE_MOMENT = '2026-08-21T11:00:00+03:00';
 const TEMPLATE_MARKER = { path: '/', selector: 'h1' };
 
 interface Shot {
-  readonly image: Buffer;
+  readonly firstViewport: Buffer;
+  readonly reviewsViewport: Buffer;
   readonly markerText: string;
   readonly fullHeight: number;
 }
@@ -67,22 +68,33 @@ interface Shot {
  * (`web/tests/visual-baseline.spec.ts:31`, `waitForLoadState('networkidle')`).
  */
 async function settle(page: import('@playwright/test').Page): Promise<void> {
-  const step = await page.evaluate(() => Math.max(1, Math.floor(window.innerHeight * 0.75)));
+  const step = await page.evaluate(() => {
+    const port = document.querySelector<HTMLElement>('[data-page-scrollport]');
+    return Math.max(1, Math.floor((port?.clientHeight ?? window.innerHeight) * 0.75));
+  });
   while (true) {
     const { height, viewportHeight, currentTop } = await page.evaluate(() => ({
-      height: document.documentElement.scrollHeight,
-      viewportHeight: window.innerHeight,
-      currentTop: window.scrollY,
+      height: document.querySelector<HTMLElement>('[data-page-scrollport]')?.scrollHeight ?? document.documentElement.scrollHeight,
+      viewportHeight: document.querySelector<HTMLElement>('[data-page-scrollport]')?.clientHeight ?? window.innerHeight,
+      currentTop: document.querySelector<HTMLElement>('[data-page-scrollport]')?.scrollTop ?? window.scrollY,
     }));
     const bottom = Math.max(0, height - viewportHeight);
     if (currentTop >= bottom) break;
 
     const nextTop = Math.min(currentTop + step, bottom);
-    await page.evaluate((scrollTop) => window.scrollTo({ top: scrollTop, behavior: 'instant' }), nextTop);
-    if ((await page.evaluate(() => window.scrollY)) <= currentTop) break;
+    await page.evaluate((scrollTop) => {
+      const port = document.querySelector<HTMLElement>('[data-page-scrollport]');
+      if (port) port.scrollTo({ top: scrollTop, behavior: 'instant' });
+      else window.scrollTo({ top: scrollTop, behavior: 'instant' });
+    }, nextTop);
+    if ((await page.evaluate(() => document.querySelector<HTMLElement>('[data-page-scrollport]')?.scrollTop ?? window.scrollY)) <= currentTop) break;
   }
   await page.waitForLoadState('networkidle');
-  await page.evaluate(() => window.scrollTo({ top: 0, behavior: 'instant' }));
+  await page.evaluate(() => {
+    const port = document.querySelector<HTMLElement>('[data-page-scrollport]');
+    if (port) port.scrollTo({ top: 0, behavior: 'instant' });
+    else window.scrollTo({ top: 0, behavior: 'instant' });
+  });
   await page.waitForLoadState('networkidle');
   await page.evaluate(() => document.fonts.ready);
   await page.evaluate(
@@ -115,16 +127,28 @@ async function shot(browser: Browser, path: string, viewport: ViewportSize): Pro
     const marker = page.locator(TEMPLATE_MARKER.selector).first();
     await expect(marker, `${path}: маркера шаблона нет — страница не отрендерена`).toBeVisible();
     const markerText = ((await marker.textContent()) ?? '').trim();
-    const fullHeight = await page.evaluate(() => document.documentElement.scrollHeight);
-    const image = await page.screenshot({
-      fullPage: true,
+    const fullHeight = await page.evaluate(() => document.querySelector<HTMLElement>('[data-page-scrollport]')?.scrollHeight ?? document.documentElement.scrollHeight);
+    const mask = [page.locator(`[${SEL_AWARD_ROW}]`)];
+    const firstViewport = await page.screenshot({
+      fullPage: false,
       animations: 'disabled',
       // Единственный датозависимый фрагмент этой возможности исключается явно и здесь
       // тоже: иначе повторяемость мерилась бы вместе с датозависимостью, а это предмет
       // другого требования.
-      mask: [page.locator(`[${SEL_AWARD_ROW}]`)],
+      mask,
     });
-    return { image, markerText, fullHeight };
+    const reviews = page.locator('[data-reviews-embed]');
+    await expect(reviews, `${path}: reviews embed is part of the rendered home template`).toBeAttached();
+    await page.evaluate(() => {
+      const port = document.querySelector<HTMLElement>('[data-page-scrollport]');
+      const embed = document.querySelector<HTMLElement>('[data-reviews-embed]');
+      if (port && embed) port.scrollTo({ top: Math.max(0, embed.offsetTop - port.offsetTop), behavior: 'instant' });
+      else if (embed) window.scrollTo({ top: embed.getBoundingClientRect().top + window.scrollY, behavior: 'instant' });
+    });
+    await expect(reviews, `${path}: reviews iframe region is visible in the repeated viewport`).toBeInViewport();
+    await expect(reviews.locator('iframe'), `${path}: reviews content is rendered in its iframe`).toHaveCount(1);
+    const reviewsViewport = await page.screenshot({ fullPage: false, animations: 'disabled', mask });
+    return { firstViewport, reviewsViewport, markerText, fullHeight };
   } finally {
     await context.close();
   }
@@ -151,11 +175,15 @@ test.describe('визуальные эталоны не зависят от от
     ).toBeGreaterThan(viewport.height);
     expect(first.fullHeight, 'высота документа разошлась между прогонами').toBe(second.fullHeight);
 
-    const same = second.image.equals(first.image);
+    const firstSame = second.firstViewport.equals(first.firstViewport);
+    const reviewsSame = second.reviewsViewport.equals(first.reviewsViewport);
+    const same = firstSame && reviewsSame;
     if (!same) {
       await Promise.all([
-        writeFile(testInfo.outputPath('first-run.png'), first.image),
-        writeFile(testInfo.outputPath('second-run.png'), second.image),
+        writeFile(testInfo.outputPath('first-run-viewport.png'), first.firstViewport),
+        writeFile(testInfo.outputPath('second-run-viewport.png'), second.firstViewport),
+        writeFile(testInfo.outputPath('first-run-reviews.png'), first.reviewsViewport),
+        writeFile(testInfo.outputPath('second-run-reviews.png'), second.reviewsViewport),
       ]);
     }
 
@@ -163,7 +191,7 @@ test.describe('визуальные эталоны не зависят от от
       same,
       'два снимка при ОДНОМ И ТОМ ЖЕ подставленном моменте и подставных ответах сторонних ' +
         'сервисов различаются на неизменном дереве: значит облик зависит от чего-то, что ' +
-        'проверка не привела к известному состоянию',
+        'проверка не привела к известному состоянию; отдельно сверяются первый экран и видимая область Reviews iframe',
     ).toBe(true);
   });
 });

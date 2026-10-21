@@ -88,11 +88,15 @@ body.layout-topnav--chat {
   scroll-margin-top: 0;
 }
 
-body.layout-topnav--chat .topnav-drawer {
+body.layout-topnav--chat details.topnav-mobile .topnav-drawer {
+  top: var(--chat-drawer-top, calc(100% + 8px));
+  bottom: var(--chat-drawer-bottom, auto);
   max-height: var(--chat-drawer-max-height, max(0px, calc(var(--chat-viewport-height, 100vh) - var(--chat-lower-zone-height) - var(--chat-drawer-top-space, calc(var(--header-height, 60px) + 8px)))));
 }
 
-body.layout-topnav--chat .header-search {
+body.layout-topnav--chat header.topnav .header-search {
+  top: var(--chat-search-top, 100%);
+  bottom: var(--chat-search-bottom, auto);
   max-height: var(--chat-search-max-height, max(0px, calc(var(--chat-viewport-height, 100vh) - var(--chat-lower-zone-height) - var(--chat-search-top-space, var(--header-height, 60px)))));
   overflow-y: auto;
 }

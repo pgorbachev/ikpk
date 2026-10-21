@@ -100,6 +100,9 @@ const showFacade = config.state === 'address' && !isDemoOutput;
           const next = Math.max(0, value) + 'px';
           if (document.body.style.getPropertyValue(name) !== next) document.body.style.setProperty(name, next);
         };
+        const setPosition = function (name, value) {
+          if (document.body.style.getPropertyValue(name) !== value) document.body.style.setProperty(name, value);
+        };
         setPixel('--chat-viewport-height', height);
         setPixel('--chat-viewport-offset', offset);
         const portRect = pageScrollport.getBoundingClientRect();
@@ -109,17 +112,48 @@ const showFacade = config.state === 'address' && !isDemoOutput;
         // sticky header, or reduced visual viewport cannot hide the last controls.
         const header = document.querySelector('header.topnav');
         const menuAnchor = header && header.querySelector('.topnav-mobile > summary');
-        const drawerTop = menuAnchor ? menuAnchor.getBoundingClientRect().bottom + 8 : portRect.top;
-        const searchTop = header ? header.getBoundingClientRect().bottom : portRect.top;
         const visibleBottom = Math.min(portRect.bottom, offset + height);
-        setPixel('--chat-drawer-max-height', visibleBottom - drawerTop);
-        setPixel('--chat-search-max-height', visibleBottom - searchTop);
+        const visibleTop = Math.max(portRect.top, offset);
+        const anchorRect = menuAnchor && menuAnchor.getBoundingClientRect();
+        const drawerBelow = anchorRect ? Math.max(0, visibleBottom - anchorRect.bottom - 8) : visibleBottom - visibleTop;
+        const drawerAbove = anchorRect ? Math.max(0, anchorRect.top - visibleTop - 8) : 0;
+        const placeDrawerAbove = drawerAbove > drawerBelow;
+        setPixel('--chat-drawer-max-height', placeDrawerAbove ? drawerAbove : drawerBelow);
+        setPosition('--chat-drawer-top', placeDrawerAbove ? 'auto' : 'calc(100% + 8px)');
+        setPosition('--chat-drawer-bottom', placeDrawerAbove ? 'calc(100% + 8px)' : 'auto');
+
+        if (header) {
+          const headerRect = header.getBoundingClientRect();
+          const searchBelow = Math.max(0, visibleBottom - headerRect.bottom);
+          const searchAbove = Math.max(0, headerRect.top - visibleTop);
+          const placeSearchAbove = searchAbove > searchBelow;
+          setPixel('--chat-search-max-height', placeSearchAbove ? searchAbove : searchBelow);
+          setPosition('--chat-search-top', placeSearchAbove ? 'auto' : '100%');
+          setPosition('--chat-search-bottom', placeSearchAbove ? '100%' : 'auto');
+        }
+
+      };
+      const revealFocusedField = function () {
+        const focused = document.activeElement;
+        if (!(focused instanceof HTMLElement) || !pageScrollport.contains(focused)
+          || !focused.matches('main input, main textarea, main select, main [contenteditable="true"]')) return;
+        const portRect = pageScrollport.getBoundingClientRect();
+        const fieldRect = focused.getBoundingClientRect();
+        const header = document.querySelector('header.topnav');
+        const headerBottom = header ? header.getBoundingClientRect().bottom : portRect.top;
+        const fieldVisibleTop = Math.max(portRect.top, viewport ? viewport.offsetTop : 0, Math.min(portRect.bottom, headerBottom));
+        const fieldVisibleBottom = Math.min(portRect.bottom, (viewport ? viewport.offsetTop : 0) + (viewport ? viewport.height : window.innerHeight));
+        if (fieldRect.bottom > fieldVisibleBottom) {
+          pageScrollport.scrollBy({ top: fieldRect.bottom - fieldVisibleBottom, behavior: 'instant' });
+        } else if (fieldRect.top < fieldVisibleTop) {
+          pageScrollport.scrollBy({ top: fieldRect.top - fieldVisibleTop, behavior: 'instant' });
+        }
       };
       updateViewport();
-      window.addEventListener('resize', updateViewport, { passive: true });
+      window.addEventListener('resize', function () { updateViewport(); revealFocusedField(); }, { passive: true });
       pageScrollport.addEventListener('scroll', updateViewport, { passive: true });
       if (viewport) {
-        viewport.addEventListener('resize', updateViewport, { passive: true });
+        viewport.addEventListener('resize', function () { updateViewport(); revealFocusedField(); }, { passive: true });
         viewport.addEventListener('scroll', updateViewport, { passive: true });
       }
     }
