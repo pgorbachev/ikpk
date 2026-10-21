@@ -10,7 +10,7 @@ export interface CiArtifact {
   workflow_run?: { id: number; head_sha?: string };
 }
 export interface ReadCiEvidenceOptions {
-  commit: string; token?: string; fetch?: typeof globalThis.fetch;
+  commit: string; releaseTag: string; token?: string; fetch?: typeof globalThis.fetch;
   readReports?: (artifact: CiArtifact, context: { fetch: typeof globalThis.fetch; token?: string }) => Promise<Record<string, unknown>>;
 }
 interface WorkflowRun {
@@ -20,6 +20,12 @@ interface WorkflowRun {
 interface Job { name: string; status: string; conclusion: string }
 const API = `https://api.github.com/repos/${PUBLICATION_CI_POLICY.repository}`;
 const REPORT_NAMES = ['web-unit-head.json', 'web-render-head.json', 'web-build-head.json'];
+export const RELEASE_CI_WORKFLOWS = [
+  { file: 'lint.yml', jobs: ['web checks', 'cms checks', 'scripts checks', 'payments checks', 'OpenSpec integration'] },
+  { file: 'security.yml', jobs: ['Secret scan', 'Runtime dependency audit (web)', 'Runtime dependency audit (scripts)',
+    'Runtime dependency audit (payments)', 'CMS runtime dependency audit (report only)'] },
+  { file: 'lighthouse.yml', jobs: ['Lighthouse budgets (4 templates, median of 5)'] },
+] as const;
 const headers = (token?: string): Record<string, string> => ({ Accept: 'application/vnd.github+json',
   'X-GitHub-Api-Version': '2022-11-28', ...(token ? { Authorization: `Bearer ${token}` } : {}) });
 
@@ -65,6 +71,7 @@ async function downloadReports(artifact: CiArtifact, context: { fetch: typeof gl
 /** Read-only GitHub API. Policy and endpoints are fixed, never selected by an operator report. */
 export async function readCiEvidence(options: ReadCiEvidenceOptions): Promise<CiEvidence> {
   if (!/^[a-f0-9]{40}$/.test(options.commit)) throw new Error('invalid-main-sha');
+  if (!/^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/.test(options.releaseTag)) throw new Error('invalid-release-tag');
   const fetcher = options.fetch ?? globalThis.fetch;
   async function request(url: string): Promise<{ response: Response; data: Record<string, unknown> }> {
     if (!url.startsWith(`${API}/`)) throw new Error('untrusted-ci-endpoint');
@@ -90,6 +97,36 @@ export async function readCiEvidence(options: ReadCiEvidenceOptions): Promise<Ci
   }
   const { data: main } = await request(`${API}/git/ref/heads/main`);
   if (main.ref !== 'refs/heads/main' || (main.object as { sha?: string } | undefined)?.sha !== options.commit) throw new Error('head-moved');
+  const { data: release } = await request(`${API}/releases/tags/${options.releaseTag}`);
+  if (release.tag_name !== options.releaseTag || release.draft !== false || release.prerelease !== false ||
+      !Number.isSafeInteger(release.id) || Number(release.id) <= 0 || typeof release.published_at !== 'string' ||
+      !Number.isFinite(Date.parse(release.published_at))) throw new Error('unpublished-release');
+  const { data: tag } = await request(`${API}/git/ref/tags/${options.releaseTag}`);
+  if (tag.ref !== `refs/tags/${options.releaseTag}`) throw new Error('untrusted-release-tag');
+  let object = tag.object as { type?: string; sha?: string } | undefined;
+  // Annotated tags refer to tag objects; target_commitish is often just "main".
+  for (let depth = 0; object?.type === 'tag' && depth < 8; depth++) {
+    if (!/^[a-f0-9]{40}$/.test(object.sha ?? '')) throw new Error('untrusted-release-tag');
+    const { data: annotated } = await request(`${API}/git/tags/${object.sha}`);
+    if (annotated.sha !== object.sha) throw new Error('untrusted-release-tag');
+    object = annotated.object as typeof object;
+  }
+  if (object?.type !== 'commit' || object.sha !== options.commit) throw new Error('release-sha-mismatch');
+  const workflowEvidence: NonNullable<CiEvidence['workflows']> = [];
+  for (const policy of RELEASE_CI_WORKFLOWS) {
+    const candidates = await list<WorkflowRun>(`${API}/actions/workflows/${policy.file}/runs?branch=main&head_sha=${options.commit}&per_page=100`, 'workflow_runs');
+    const latest = candidates.filter((candidate) => candidate.head_sha === options.commit && candidate.head_branch === 'main' &&
+      candidate.path === `.github/workflows/${policy.file}` && candidate.repository?.full_name === PUBLICATION_CI_POLICY.repository &&
+      candidate.head_repository?.full_name === PUBLICATION_CI_POLICY.repository && ['push', 'schedule'].includes(candidate.event))
+      .sort((a, b) => b.id - a.id)[0];
+    if (!latest || !Number.isSafeInteger(latest.id) || latest.id <= 0 || latest.status !== 'completed' || latest.conclusion !== 'success') throw new Error(`release-ci-workflow:${policy.file}`);
+    const latestJobs = await list<Job>(`${API}/actions/runs/${latest.id}/jobs?filter=latest&per_page=100`, 'jobs');
+    for (const name of policy.jobs) {
+      const matches = latestJobs.filter((job) => job.name === name);
+      if (matches.length !== 1 || matches[0].status !== 'completed' || matches[0].conclusion !== 'success') throw new Error(`release-ci-job:${name}`);
+    }
+    workflowEvidence.push({ workflow: latest.path, runId: latest.id, conclusion: 'success' });
+  }
   const runs = await list<WorkflowRun>(`${API}/actions/workflows/test.yml/runs?branch=main&head_sha=${options.commit}&per_page=100`, 'workflow_runs');
   const run = runs.filter((candidate) => candidate.head_sha === options.commit && candidate.head_branch === 'main' &&
     candidate.path === PUBLICATION_CI_POLICY.workflow && candidate.repository?.full_name === PUBLICATION_CI_POLICY.repository &&
@@ -120,6 +157,7 @@ export async function readCiEvidence(options: ReadCiEvidenceOptions): Promise<Ci
   const evidence: CiEvidence = { repository: PUBLICATION_CI_POLICY.repository, workflow: PUBLICATION_CI_POLICY.workflow,
     branch: 'main', commit: options.commit, runId: run.id, event: run.event, conclusion: 'success', executedTests: count,
     jobs: jobs.filter((job) => PUBLICATION_CI_POLICY.requiredJobs.includes(job.name)).map(({ name }) => ({ name, conclusion: 'success' })),
+    release: { tag: options.releaseTag, id: Number(release.id), publishedAt: release.published_at }, workflows: workflowEvidence,
   };
   const problem = ciEvidenceProblem(evidence, options.commit);
   if (problem) throw new Error(problem);

@@ -59,7 +59,7 @@ writeFileSync(${JSON.stringify(trace)}, JSON.stringify({
 process.stdout.write(JSON.stringify({ env: { IKPK_DEPLOY_CREDENTIAL: ${JSON.stringify(CANARY)} } }));
 `);
   git(repo, 'add', '.'); git(repo, 'commit', '-m', 'trusted fixture');
-  git(repo, 'remote', 'add', 'origin', remote); git(repo, 'push', 'origin', 'main');
+  git(repo, 'remote', 'add', 'origin', remote); git(repo, 'push', 'origin', 'main'); git(repo, 'tag', '-f', 'v1.2.3'); git(repo, 'push', '--force', 'origin', 'refs/tags/v1.2.3');
   const sha = git(repo, 'rev-parse', 'HEAD');
   write(config, JSON.stringify({ canonicalRepository: remote, destinationId: 'isolated-stand',
     deployMode: 'stand', sshTarget: 'deployer@no-network.invalid', credentialBroker: [process.execPath, broker] }));
@@ -68,7 +68,7 @@ process.stdout.write(JSON.stringify({ env: { IKPK_DEPLOY_CREDENTIAL: ${JSON.stri
 }
 function launch(f: Fixture, options: { url?: string; ref?: string; sourceDir?: string; config?: string; cwd?: string } = {}) {
   const args = [f.installed, 'publish', '--config', options.config ?? f.config,
-    '--source-url', options.url ?? f.remote, '--source-ref', options.ref ?? 'main'];
+    '--source-url', options.url ?? f.remote, '--source-ref', options.ref ?? 'main', '--release-tag', 'v1.2.3'];
   if (options.sourceDir) args.push('--source-dir', options.sourceDir);
   return spawnSync(process.execPath, args, { cwd: options.cwd ?? f.root, env: cleanEnv(), encoding: 'utf8', timeout: 15_000 });
 }
@@ -161,7 +161,7 @@ describe('installed launcher confirms fresh canonical main before releasing cred
   it('uses fresh remote main even when the operator checkout is stale', () => {
     const f = fixture(); const publisher = join(f.root, 'publisher'); git(f.root, 'clone', f.remote, publisher);
     write(join(publisher, 'new-main.txt'), 'remote main moved'); git(publisher, 'add', '.'); git(publisher, 'commit', '-m', 'new main');
-    git(publisher, 'push', 'origin', 'main'); f.sha = git(publisher, 'rev-parse', 'HEAD');
+    git(publisher, 'push', 'origin', 'main'); git(publisher, 'tag', '-f', 'v1.2.3'); git(publisher, 'push', '--force', 'origin', 'refs/tags/v1.2.3'); f.sha = git(publisher, 'rev-parse', 'HEAD');
     assertSuccessful(f, launch(f, { cwd: f.repo }));
   });
   it('unavailable canonical source refuses before credential release', () => {
@@ -171,7 +171,7 @@ describe('installed launcher confirms fresh canonical main before releasing cred
   it('a protected config inside the explicitly supplied source is not trusted', () => {
     const f = fixture(); const embedded = join(f.repo, 'publication-config.json');
     copyFileSync(f.config, embedded); chmodSync(embedded, 0o600);
-    git(f.repo, 'add', '.'); git(f.repo, 'commit', '-m', 'embedded config'); git(f.repo, 'push', 'origin', 'main');
+    git(f.repo, 'add', '.'); git(f.repo, 'commit', '-m', 'embedded config'); git(f.repo, 'push', 'origin', 'main'); git(f.repo, 'tag', '-f', 'v1.2.3'); git(f.repo, 'push', '--force', 'origin', 'refs/tags/v1.2.3');
     assertRefused(f, launch(f, { sourceDir: f.repo, config: embedded }), 'untrusted-config');
   });
   it('REVIEW: configuration inside repository Git metadata is not a protected installation', () => {
@@ -272,7 +272,7 @@ describe('review probes at 838eb7b4', () => {
     const f = fixture();
     write(join(f.repo, 'tracked.txt'), 'original\n');
     git(f.repo, 'add', 'tracked.txt'); git(f.repo, 'commit', '-m', 'tracked clean-filter input');
-    git(f.repo, 'push', 'origin', 'main');
+    git(f.repo, 'push', 'origin', 'main'); git(f.repo, 'tag', '-f', 'v1.2.3'); git(f.repo, 'push', '--force', 'origin', 'refs/tags/v1.2.3');
     const probe = join(f.repo, '.git', 'clean-probe.sh');
     write(probe, '#!/bin/sh\ntouch "' + f.malicious + '"\ncat\n');
     git(f.repo, 'config', 'filter.probe.clean', '/bin/sh .git/clean-probe.sh');
@@ -287,7 +287,7 @@ describe('review probes at 838eb7b4', () => {
     write(join(outside, 'deploy-web.sh'), '#!/bin/sh\ntouch "' + f.malicious + '"\nexit 0\n');
     rmSync(join(f.repo, 'scripts'), { recursive: true });
     symlinkSync(outside, join(f.repo, 'scripts'));
-    git(f.repo, 'add', '-A'); git(f.repo, 'commit', '-m', 'symlink scripts'); git(f.repo, 'push', 'origin', 'main');
+    git(f.repo, 'add', '-A'); git(f.repo, 'commit', '-m', 'symlink scripts'); git(f.repo, 'push', 'origin', 'main'); git(f.repo, 'tag', '-f', 'v1.2.3'); git(f.repo, 'push', '--force', 'origin', 'refs/tags/v1.2.3');
     const result = launch(f);
     expect(existsSync(f.malicious), 'worker came from outside the verified tree').toBe(false);
     expect(existsSync(f.trace), 'credentials issued to external worker').toBe(false);
@@ -314,7 +314,7 @@ catch (error) { if (error.code !== 'EBADF' && error.code !== 'EINVAL' && error.c
 console.log(${JSON.stringify(CANARY)}); console.error(${JSON.stringify(CANARY)});
 process.exitCode = ${status};
 `);
-    git(f.repo, 'add', '.'); git(f.repo, 'commit', '-m', 'audit producer fixture'); git(f.repo, 'push', 'origin', 'main');
+    git(f.repo, 'add', '.'); git(f.repo, 'commit', '-m', 'audit producer fixture'); git(f.repo, 'push', 'origin', 'main'); git(f.repo, 'tag', '-f', 'v1.2.3'); git(f.repo, 'push', '--force', 'origin', 'refs/tags/v1.2.3');
     f.sha = git(f.repo, 'rev-parse', 'HEAD');
   }
   function report(result: ReturnType<typeof launch>) {

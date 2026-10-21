@@ -3,6 +3,7 @@ import { mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from
 import { join, relative } from 'node:path';
 import { tmpdir } from 'node:os';
 import type { CiArtifact, ReadCiEvidenceOptions } from '../../scripts/lib/publication-ci.ts';
+import { RELEASE_CI_WORKFLOWS } from '../../scripts/lib/publication-ci.ts';
 import type { CheckResult, PublicationCheckContext, PublicationCheckInput, PublicationCheckPorts } from '../../scripts/lib/publication-checks.ts';
 import { PUBLICATION_CI_POLICY } from '../../scripts/lib/publish-gate.ts';
 
@@ -44,7 +45,18 @@ export function ciFixture() {
     let value: unknown;
     let pageCount = 1;
     if (url.pathname === '/repos/pgorbachev/ikpk/git/ref/heads/main') value = { ref: 'refs/heads/main', object: { sha: state.main } };
-    else if (/\/actions\/workflows\/[^/]+\/runs$/.test(url.pathname)) {
+    else if (url.pathname === '/repos/pgorbachev/ikpk/releases/tags/v1.2.3') value = {
+      id: 701, tag_name: 'v1.2.3', draft: false, prerelease: false, published_at: '2026-10-20T00:00:00Z', target_commitish: 'main',
+    };
+    else if (url.pathname === '/repos/pgorbachev/ikpk/git/ref/tags/v1.2.3') value = { ref: 'refs/tags/v1.2.3', object: { type: 'commit', sha: SHA } };
+    else if (RELEASE_CI_WORKFLOWS.some((policy) => url.pathname.endsWith(`/workflows/${policy.file}/runs`))) {
+      const index = RELEASE_CI_WORKFLOWS.findIndex((policy) => url.pathname.endsWith(`/workflows/${policy.file}/runs`));
+      value = { total_count: 1, workflow_runs: [{ ...run, id: 810 + index, path: `.github/workflows/${RELEASE_CI_WORKFLOWS[index].file}` }] };
+    } else if (/\/actions\/runs\/81[0-2]\/jobs$/.test(url.pathname)) {
+      const index = Number(url.pathname.match(/\/runs\/(\d+)\//)![1]) - 810;
+      const required = RELEASE_CI_WORKFLOWS[index].jobs.map((name) => ({ name, status: 'completed', conclusion: 'success' }));
+      value = { total_count: required.length, jobs: required };
+    } else if (/\/actions\/workflows\/test.yml\/runs$/.test(url.pathname)) {
       value = { total_count: state.runPages.flat().length, workflow_runs: state.runPages[page - 1] ?? [] };
       pageCount = state.runPages.length;
     } else if (url.pathname === '/repos/pgorbachev/ikpk/actions/runs/801/jobs') {
@@ -65,7 +77,7 @@ export function ciFixture() {
     reportReads.push(selected);
     return state.reports;
   };
-  return { state, run, jobs, artifact, reports, calls, reportReads, input: { commit: SHA, token: CANARY, fetch, readReports } };
+  return { state, run, jobs, artifact, reports, calls, reportReads, input: { commit: SHA, releaseTag: 'v1.2.3', token: CANARY, fetch, readReports } };
 }
 
 export function fixtureDigest(root: string): string {

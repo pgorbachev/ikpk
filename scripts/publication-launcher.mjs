@@ -133,7 +133,7 @@ export async function launch(args) {
     const key = args[i];
     const allowed = rollback ? ['--config', '--release-id', '--confirm', '--reason'] :
       accepting ? ['--config', '--observed-entry', '--fingerprint', '--confirm'] : command === 'recover' ? ['--config'] :
-        ['--config', '--source-url', '--source-ref', '--source-dir'];
+        ['--config', '--source-url', '--source-ref', '--source-dir', '--release-tag'];
     if (!allowed.includes(key) || options.has(key)) refuse('invalid-arguments');
     if (key === '--confirm') options.set(key, true);
     else {
@@ -201,6 +201,8 @@ export async function launch(args) {
   checks.push('canonical-repository');
   if (options.get('--source-ref') !== 'main') refuse('untrusted-ref');
   checks.push('main-ref');
+  const releaseTag = options.get('--release-tag');
+  if (typeof releaseTag !== 'string' || !/^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/.test(releaseTag)) refuse('invalid-release-tag');
   const sourceDir = options.get('--source-dir');
   if (sourceDir) {
     const root = realpathSync(sourceDir);
@@ -227,6 +229,12 @@ export async function launch(args) {
       checks.push('operator-source-clean');
     }
     checks.push('fresh-canonical-main');
+    try {
+      // Fetch only the named canonical tag. A branch or a local-only tag is not a release.
+      git(checkout, 'fetch', '--no-tags', '--', source, `refs/tags/${releaseTag}:refs/tags/${releaseTag}`);
+      if (git(checkout, 'rev-parse', '--verify', `refs/tags/${releaseTag}^{commit}`) !== head) refuse('release-sha-mismatch');
+    } catch { refuse('release-sha-mismatch'); }
+    checks.push('canonical-release-tag');
     const worker = join(checkout, 'scripts/deploy-web.sh');
     if (lstatSync(join(checkout, 'scripts')).isSymbolicLink() || lstatSync(worker).isSymbolicLink() ||
         !lstatSync(worker).isFile() || !inside(realpathSync(checkout), realpathSync(worker))) refuse('untrusted-source');
@@ -236,7 +244,7 @@ export async function launch(args) {
     const result = spawnSync('/bin/bash', [worker, config.sshTarget], { cwd: checkout,
       env: { ...cleanEnvironment(), ...credentials, DEPLOY_MODE: config.deployMode,
         PUBLICATION_DESTINATION_ID: config.destinationId, PUBLICATION_CONFIG: configPath,
-        PUBLICATION_SOURCE_SHA: head, PUBLICATION_LAUNCHER: installed },
+        PUBLICATION_SOURCE_SHA: head, PUBLICATION_RELEASE_TAG: releaseTag, PUBLICATION_LAUNCHER: installed },
       encoding: 'utf8', timeout: 3_600_000, maxBuffer: 16 * 1024,
       stdio: ['ignore', 'ignore', 'ignore', 'pipe'] });
     // Repository subprocess output is not an audit log: it may contain credentials.
@@ -244,7 +252,7 @@ export async function launch(args) {
     const audit = workerAudit(result.output[3], head, result.status);
     if (result.status !== 0) throw Object.assign(new Error('publication-worker-failed'), { audit });
     checks.push('publication-worker');
-    return { status: 'success', executedChecks: checks.length, checks, commit: head, destinationId: config.destinationId, audit };
+    return { status: 'success', executedChecks: checks.length, checks, commit: head, releaseTag, destinationId: config.destinationId, audit };
   } finally { rmSync(scratch, { recursive: true, force: true }); }
 }
 
@@ -252,7 +260,7 @@ if (process.argv[1] && realpathSync(process.argv[1]) === realpathSync(fileURLToP
   try { process.stdout.write(`${JSON.stringify(await launch(process.argv.slice(2)))}\n`); }
   catch (error) {
     const reasons = new Set(['hosted-publication-forbidden', 'untrusted-source', 'dirty-source', 'untrusted-ref',
-      'source-unavailable', 'untrusted-config', 'untrusted-runtime', 'invalid-arguments', 'credential-broker-failed', 'publication-worker-failed', 'invalid-worker-audit']);
+      'source-unavailable', 'untrusted-config', 'untrusted-runtime', 'invalid-arguments', 'invalid-release-tag', 'release-sha-mismatch', 'credential-broker-failed', 'publication-worker-failed', 'invalid-worker-audit']);
     process.stderr.write(`${JSON.stringify({ status: 'refused', reason: reasons.has(error.message) ? error.message : 'publication-failed',
       ...(error.audit ? { audit: error.audit } : {}) })}\n`);
     process.exitCode = 1;
