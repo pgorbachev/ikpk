@@ -1,0 +1,6 @@
+{
+  "command": "npm run typecheck (after removing task-owned temporary Playwright config)",
+  "exitCode": 0,
+  "temporaryConfig": "web/playwright.chat-entry-4325.config.ts (removed by exact path)",
+  "log": "docs/evidence/chat-entry-visibility/final-typecheck.log"
+}

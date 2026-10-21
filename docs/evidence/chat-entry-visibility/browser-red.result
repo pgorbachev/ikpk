@@ -1,0 +1,2 @@
+command=TMPDIR=/private/tmp npx playwright test tests/chat-entry-visibility.spec.ts --project=desktop --workers=1 --max-failures=3
+exit_code=1

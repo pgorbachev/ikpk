@@ -1,0 +1,7 @@
+{
+  "command": "OPENSPEC_TELEMETRY=0 node ~/.npm/_npx/833275e9fcb28e00/node_modules/@fission-ai/openspec/bin/openspec.js validate chat-entry-visibility --strict",
+  "version": "1.7.0",
+  "exitCode": 0,
+  "networkFallback": "./bin/openspec could not resolve registry.npmjs.org; ran the same cached package version locally",
+  "log": "docs/evidence/chat-entry-visibility/openspec-strict.log"
+}

@@ -1,0 +1,5 @@
+{
+  "command": "./node_modules/.bin/vitest run --config vitest.demo.config.ts tests/rich-content-canary.demo.test.ts tests/rich-content-hazard.demo.test.ts --maxWorkers=1",
+  "exitCode": 0,
+  "log": "docs/evidence/chat-entry-visibility/fresh-demo-provenance.log"
+}

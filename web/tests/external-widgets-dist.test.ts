@@ -19,6 +19,7 @@ import {
   SEL_REVIEWS_SECTION,
   byDataName,
   chatLoaderSuspects,
+  chatLoaderHits,
   elements,
   hostAndPath,
   hoursStripText,
@@ -181,8 +182,14 @@ async function declaredConfig(): Promise<ChatLoaderConfig> {
  * на боевом выводе, и все 393 суть `a[href]`. Это ровно та ошибка, которой посвящено
  * отдельное требование этой спеки: различать ссылку формы и загрузчик по назначению.
  */
-function pagesCarryingChat(): string[] {
-  return [...pages.entries()].filter(([, html]) => chatLoaderSuspects(html).length > 0).map(([p]) => p);
+function pagesCarryingChat(config: ChatLoaderConfig): string[] {
+  return [...pages.entries()]
+    .filter(([, html]) =>
+      config.state === 'address'
+        ? chatLoaderHits(html, config.src).length > 0
+        : chatLoaderSuspects(html).length > 0,
+    )
+    .map(([p]) => p);
 }
 
 // ─── Секция отзывов: место и охват ───────────────────────────────────────────
@@ -508,8 +515,29 @@ describe('без скриптов секция даёт ссылку, а не в
 
 describe('симметричная проверка боевого вывода различает три состояния конфигурации', () => {
   const ADDR: ChatLoaderConfig = { state: 'address', src: 'https://cdn.example.invalid/loader.js' };
+  const PROBE: ChatLoaderConfig = {
+    state: 'address',
+    src: 'https://chat-loader.invalid/probe/loader_probe.js',
+  };
   const NONE: ChatLoaderConfig = { state: 'declared-absent' };
   const NOTHING: ChatLoaderConfig = { state: 'unspecified' };
+
+  it('configured-address fixtures distinguish loader carriers from navigation', () => {
+    const dataCarrier = `<button data-chat-loader-src="${PROBE.src}">Chat</button>`;
+    const scriptCarrier = `<script src="${PROBE.src}"></script>`;
+    const navigationOnly = `<a href="${PROBE.src}">open</a>`;
+    const routeFor = (html: string) =>
+      chatLoaderHits(html, PROBE.src).length > 0 ? ['/fixture'] : [];
+    expect(chatLoaderHits(dataCarrier, PROBE.src)).toHaveLength(1);
+    expect(chatLoaderHits(scriptCarrier, PROBE.src)).toHaveLength(1);
+    expect(chatLoaderHits(navigationOnly, PROBE.src)).toHaveLength(0);
+    expect(symmetricVerdict(PROBE, routeFor('')).ok).toBe(false);
+    expect(symmetricVerdict(PROBE, routeFor(navigationOnly)).ok).toBe(false);
+    const unexpectedVendor = chatLoaderSuspects('<script src="https://cdn.bitrix24.com/widget.js"></script>');
+    expect(unexpectedVendor).not.toHaveLength(0);
+    expect(symmetricVerdict(NONE, unexpectedVendor.map(() => '/fixture')).ok).toBe(false);
+    expect(symmetricVerdict(NOTHING, unexpectedVendor.map(() => '/fixture')).ok).toBe(false);
+  });
 
   it('адрес задан и вывод несёт — пройдена', () => {
     expect(symmetricVerdict(ADDR, ['/index.html']).ok).toBe(true);
@@ -554,7 +582,7 @@ describe('симметричная проверка боевого вывода 
     // объявлению и настоящему выводу. Фикстуры выше дают красное состояние каждой
     // ветви, этот тест — предмету.
     const config = await declaredConfig();
-    const carrying = pagesCarryingChat();
+    const carrying = pagesCarryingChat(config);
     const verdict = symmetricVerdict(config, carrying);
     expect(
       verdict.ok,

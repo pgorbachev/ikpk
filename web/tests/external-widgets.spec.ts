@@ -166,10 +166,12 @@ test.describe('виджет отзывов не грузится, пока се�
       page.evaluate((selector) => {
         const el = document.querySelector(`[${selector}]`)!;
         const next = el.nextElementSibling!;
+        const port = document.querySelector<HTMLElement>('[data-page-scrollport]');
+        const portRect = port?.getBoundingClientRect();
         return {
           height: el.getBoundingClientRect().height,
-          nextTop: next.getBoundingClientRect().top + window.scrollY,
-          scroll: document.documentElement.scrollHeight,
+          nextTop: next.getBoundingClientRect().top - (portRect?.top ?? 0) + (port?.scrollTop ?? window.scrollY),
+          scroll: port?.scrollHeight ?? document.documentElement.scrollHeight,
         };
       }, SEL_REVIEWS_SECTION);
 
@@ -180,7 +182,7 @@ test.describe('виджет отзывов не грузится, пока се�
 
     expect(after.height, 'высота секции изменилась после подстановки виджета').toBeCloseTo(before.height, 0);
     expect(after.nextTop, 'сосед ниже секции сместился').toBeCloseTo(before.nextTop, 0);
-    expect(after.scroll, 'высота документа изменилась').toBeCloseTo(before.scroll, 0);
+    expect(after.scroll, 'высота содержимого scrollport изменилась').toBeCloseTo(before.scroll, 0);
   });
 
   test('результат проверки сдвига не зависит от ответа сервиса', async ({ page }) => {
@@ -659,30 +661,8 @@ test.describe('сторонний iframe не отменяет доступно�
 test.describe('кнопка чата не перекрывает содержимое страницы', () => {
   test.describe.configure({ timeout: 60_000 });
 
-  // TD-52 (docs/tech-debt.md): на ширине 375px кнопка реально перекрывает нижний контент
-  // этих шаблонов (карточка семинара, ссылка tel:, карточки статей, `<select>` города,
-  // карточка модуля программы) — не тестовый дефект и не сторонний баг, замерено
-  // `getBoundingClientRect`. Признано известным отклонением владельцем: точечного фикса
-  // нет (сдвиг кнопки требует поведения на скролле, которого нет в спеке; правка чужой
-  // вёрстки — редизайн, а не фикс кнопки). Список — по факту двух прогонов CI, а не по
-  // старой таблице в docs/handoff (та писалась до расширения TEMPLATES и называла 5 из
-  // прежних 11, не семь из текущих). Desktop эта проверка по-прежнему покрывает —
-  // пропускается только mobile-проект и только эти шаблоны.
-  const KNOWN_MOBILE_OVERLAP = new Set([
-    'home',
-    'course',
-    'seminar',
-    'seminar-dated',
-    'kontakty',
-    'statyi',
-    'raspisanie',
-  ]);
-
   for (const { name, path } of TEMPLATES) {
-    test(`${name}: закрытая кнопка не накрывает интерактивные элементы и текст`, async ({ page }, testInfo) => {
-      if (testInfo.project.name === 'mobile' && KNOWN_MOBILE_OVERLAP.has(name))
-        test.skip(true, `TD-52: известное отклонение — кнопка чата перекрывает контент шаблона '${name}' на 375px`);
-
+    test(`${name}: закрытая кнопка не накрывает интерактивные элементы и текст`, async ({ page }) => {
       await guard(page);
       const response = await page.goto(url(path));
       if (name.startsWith('preview-') && response?.status() === 404)
@@ -699,8 +679,23 @@ test.describe('кнопка чата не перекрывает содержи�
         const button = document.querySelector(`[${triggerAttr}]`) as HTMLElement | null;
         if (button === null) return { interactive: ['кнопки нет'], text: [] as string[] };
         const box = button.getBoundingClientRect();
-        const hit = (r: DOMRect): boolean =>
-          r.width > 0 && r.height > 0 &&
+        const header = document.querySelector('header');
+        const main = document.querySelector('main');
+        const footer = document.querySelector('footer');
+        const scrollport = [...document.querySelectorAll<HTMLElement>('body *')].find((el) => {
+          const style = getComputedStyle(el);
+          return Boolean(header && main && footer && el.contains(header) && el.contains(main) && el.contains(footer))
+            && /(auto|scroll)/.test(style.overflowY) && el.scrollHeight > el.clientHeight + 1;
+        }) ?? null;
+        const clip = scrollport?.getBoundingClientRect() ?? new DOMRect(0, 0, innerWidth, innerHeight);
+        const visible = (r: DOMRect) => {
+          const left = Math.max(r.left, clip.left, 0);
+          const top = Math.max(r.top, clip.top, 0);
+          const right = Math.min(r.right, clip.right, innerWidth);
+          const bottom = Math.min(r.bottom, clip.bottom, innerHeight);
+          return right > left && bottom > top ? { left, top, right, bottom } : null;
+        };
+        const hit = (r: { left: number; top: number; right: number; bottom: number }): boolean =>
           r.left < box.right && r.right > box.left && r.top < box.bottom && r.bottom > box.top;
 
         // Закрытый `<details>` не прячет содержимое через display/visibility САМОГО
@@ -726,7 +721,8 @@ test.describe('кнопка чата не перекрывает содержи�
           if (insideClosedDetails(el)) continue;
           const style = getComputedStyle(el);
           if (style.visibility === 'hidden' || style.display === 'none') continue;
-          if (hit(el.getBoundingClientRect()))
+          const shown = visible(el.getBoundingClientRect());
+          if (shown && hit(shown))
             interactive.push(`${el.tagName.toLowerCase()}: ${(el.textContent ?? '').trim().slice(0, 40)}`);
         }
 
@@ -740,15 +736,22 @@ test.describe('кнопка чата не перекрывает содержи�
           if (style.visibility === 'hidden' || style.display === 'none') continue;
           const range = document.createRange();
           range.selectNodeContents(p);
-          for (const rect of range.getClientRects())
-            if (hit(rect)) {
+          for (const rect of range.getClientRects()) {
+            const shown = visible(rect);
+            if (shown && hit(shown)) {
               text.push(`${p.tagName.toLowerCase()}: ${(p.textContent ?? '').trim().slice(0, 40)}`);
               break;
             }
+          }
           range.detach();
         }
-        return { interactive, text };
+        return { interactive, text, scrollportFound: scrollport !== null };
       }, SEL_CHAT_TRIGGER);
+
+      expect(
+        overlaps.scrollportFound,
+        `${path}: header, main, newsletter and footer share a real scrollport`,
+      ).toBe(true);
 
       expect(
         overlaps.interactive.slice(0, 5),
@@ -761,17 +764,16 @@ test.describe('кнопка чата не перекрывает содержи�
     });
   }
 
-  test('точка «вне элемента», выбранная существующим перебором, не попадает в кнопку чата', async ({ page }) => {
-    // Существующие переборы идут СНИЗУ вверх и отбрасывают интерактивные узлы, поэтому
-    // сама кнопка будет пропущена — риск обратный: неинтерактивная фиксированная
-    // обёртка вокруг кнопки под признак «интерактивное» не попадёт, и точка окажется
-    // на ней. Прогон тогда упадёт по причине, к его предмету не относящейся.
-    await guard(page);
+  test('точка вне элементов управления в нижней зоне не активирует чат', async ({ page }) => {
+    // Нижняя зона теперь занимает всю ширину строки и может попасть под выбранную
+    // свободную точку. Проверяем поведение этой точки: она не относится к кнопке и
+    // не должна загружать или открывать чат.
+    const seen = await guard(page);
     await page.goto(url('/'));
     await expect(page.locator(`[${SEL_CHAT_FACADE}]`), 'фасада чата нет — предмета нет').toHaveCount(1);
 
-    const landed = await page.evaluate((facadeAttr) => {
-      const facade = document.querySelector(`[${facadeAttr}]`);
+    const landed = await page.evaluate((selectors) => {
+      const facade = document.querySelector(`[${selectors.facade}]`);
       const step = 20;
       const interactive = 'a, button, summary, input, select, textarea, label, [role="button"]';
       for (let y = innerHeight - step; y > 0; y -= step)
@@ -779,16 +781,24 @@ test.describe('кнопка чата не перекрывает содержи�
           const el = document.elementFromPoint(x, y);
           if (el === null) continue;
           if (el.closest(interactive)) continue;
-          return { x, y, inFacade: facade !== null && facade.contains(el), tag: el.tagName.toLowerCase() };
+          return {
+            x, y,
+            inFacade: facade !== null && facade.contains(el),
+            inTrigger: Boolean(el.closest(`[${selectors.trigger}]`)),
+            tag: el.tagName.toLowerCase(),
+          };
         }
       return null;
-    }, SEL_CHAT_FACADE);
+    }, { facade: SEL_CHAT_FACADE, trigger: SEL_CHAT_TRIGGER });
 
     expect(landed, 'ни одной неинтерактивной точки не нашлось — перебор проверить нечем').not.toBeNull();
     expect(
-      landed!.inFacade,
-      `точка «вне элемента» (${landed!.x}, ${landed!.y}) попала внутрь фасада чата ` +
-        `(${landed!.tag}): существующие прогоны начнут падать по чужой причине`,
+      landed!.inTrigger,
+      `точка вне контролов (${landed!.x}, ${landed!.y}) попала в триггер чата (${landed!.tag})`,
     ).toBe(false);
+    const before = seen.toHost(LOADER_HOST);
+    await page.mouse.click(landed!.x, landed!.y);
+    await expect(page.locator('[data-chat-stub-panel]'), 'blank lower-zone click does not open the chat').toHaveCount(0);
+    expect(seen.toHost(LOADER_HOST), 'blank lower-zone click does not load the chat script').toEqual(before);
   });
 });

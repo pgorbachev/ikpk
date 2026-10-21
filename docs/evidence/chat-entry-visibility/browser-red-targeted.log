@@ -1,0 +1,131 @@
+
+Running 2 tests using 1 worker
+
+(node:26911) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  1 [desktop] › tests/chat-entry-visibility.spec.ts:407:3 › chat entry visibility approved contract › layout resize and reduced visualViewport keep the focused field and chat control visible (492ms)
+(node:31335) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  2 [desktop] › tests/chat-entry-visibility.spec.ts:481:3 › chat entry visibility approved contract › payment overlay is a body-level sibling, blocks background input, and restores scroll and focus (1.3s)
+Testing stopped early after 2 maximum allowed failures.
+
+
+  1) [desktop] › tests/chat-entry-visibility.spec.ts:407:3 › chat entry visibility approved contract › layout resize and reduced visualViewport keep the focused field and chat control visible 
+
+    Error: chat button stays inside reduced visual viewport
+
+    expect(received).toBeLessThanOrEqual(expected)
+
+    Expected: <= 361
+    Received:    624
+
+      474 |       return { buttonBottom: button.bottom, visibleBottom: vv.offsetTop + vv.height, portBottom: port?.getBoundingClientRect().bottom ?? null };
+      475 |     }, TRIGGER);
+    > 476 |     expect.soft(visibleBounds.buttonBottom, 'chat button stays inside reduced visual viewport').toBeLessThanOrEqual(visibleBounds.visibleBottom + 1);
+          |                                                                                                 ^
+      477 |     expect.soft(visibleBounds.portBottom, 'scrollport exists after visual viewport reduction').not.toBeNull();
+      478 |     expect.soft(visibleBounds.portBottom ?? Infinity, 'scrollport follows reduced visual viewport').toBeLessThanOrEqual(visibleBounds.visibleBottom + 1);
+      479 |   });
+        at /Users/pgorbachev/projects/private/ikpk/.claude/worktrees/chat-entry-red-20261021/web/tests/chat-entry-visibility.spec.ts:476:97
+
+    Error: scrollport exists after visual viewport reduction
+
+    expect(received).not.toBeNull()
+
+    Received: null
+
+      475 |     }, TRIGGER);
+      476 |     expect.soft(visibleBounds.buttonBottom, 'chat button stays inside reduced visual viewport').toBeLessThanOrEqual(visibleBounds.visibleBottom + 1);
+    > 477 |     expect.soft(visibleBounds.portBottom, 'scrollport exists after visual viewport reduction').not.toBeNull();
+          |                                                                                                    ^
+      478 |     expect.soft(visibleBounds.portBottom ?? Infinity, 'scrollport follows reduced visual viewport').toBeLessThanOrEqual(visibleBounds.visibleBottom + 1);
+      479 |   });
+      480 |
+        at /Users/pgorbachev/projects/private/ikpk/.claude/worktrees/chat-entry-red-20261021/web/tests/chat-entry-visibility.spec.ts:477:100
+
+    Error: scrollport follows reduced visual viewport
+
+    expect(received).toBeLessThanOrEqual(expected)
+
+    Expected: <= 361
+    Received:    Infinity
+
+      476 |     expect.soft(visibleBounds.buttonBottom, 'chat button stays inside reduced visual viewport').toBeLessThanOrEqual(visibleBounds.visibleBottom + 1);
+      477 |     expect.soft(visibleBounds.portBottom, 'scrollport exists after visual viewport reduction').not.toBeNull();
+    > 478 |     expect.soft(visibleBounds.portBottom ?? Infinity, 'scrollport follows reduced visual viewport').toBeLessThanOrEqual(visibleBounds.visibleBottom + 1);
+          |                                                                                                     ^
+      479 |   });
+      480 |
+      481 |   test('payment overlay is a body-level sibling, blocks background input, and restores scroll and focus', async ({ page }) => {
+        at /Users/pgorbachev/projects/private/ikpk/.claude/worktrees/chat-entry-red-20261021/web/tests/chat-entry-visibility.spec.ts:478:101
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results/chat-entry-visibility-chat-376b6-ld-and-chat-control-visible-desktop/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results/chat-entry-visibility-chat-376b6-ld-and-chat-control-visible-desktop/error-context.md
+
+    Error Context: test-results/chat-entry-visibility-chat-376b6-ld-and-chat-control-visible-desktop/error-context.md
+
+  2) [desktop] › tests/chat-entry-visibility.spec.ts:481:3 › chat entry visibility approved contract › payment overlay is a body-level sibling, blocks background input, and restores scroll and focus 
+
+    Error: payment root is a direct body sibling outside the page scrollport
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: true
+    Received: false
+
+      521 |       };
+      522 |     }, { root: PAYMENT_ROOT, dialog: PAYMENT_DIALOG, chat: FACADE });
+    > 523 |     expect.soft(overlay.paymentRootBodyChild, 'payment root is a direct body sibling outside the page scrollport').toBe(true);
+          |                                                                                                                    ^
+      524 |     expect.soft(overlay.chatFacadeBodyChild, 'chat facade remains a direct body sibling for existing inert behavior').toBe(true);
+      525 |     expect.soft(overlay.paymentRootOutsideScrollport, 'payment dialog root stays outside the page scrollport').toBe(true);
+      526 |     expect.soft(overlay.scrollportFound, 'page scrollport exists').toBe(true);
+        at /Users/pgorbachev/projects/private/ikpk/.claude/worktrees/chat-entry-red-20261021/web/tests/chat-entry-visibility.spec.ts:523:116
+
+    Error: page scrollport exists
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: true
+    Received: false
+
+      524 |     expect.soft(overlay.chatFacadeBodyChild, 'chat facade remains a direct body sibling for existing inert behavior').toBe(true);
+      525 |     expect.soft(overlay.paymentRootOutsideScrollport, 'payment dialog root stays outside the page scrollport').toBe(true);
+    > 526 |     expect.soft(overlay.scrollportFound, 'page scrollport exists').toBe(true);
+          |                                                                    ^
+      527 |     expect.soft(overlay.scrollportInert, 'page scrollport is inert while payment is open').toBe(true);
+      528 |     expect.soft(overlay.chatInert, 'chat is inert while payment is open').toBe(true);
+      529 |     expect.soft(overlay.dialogZ > overlay.chatZ, 'payment overlay paints above chat').toBe(true);
+        at /Users/pgorbachev/projects/private/ikpk/.claude/worktrees/chat-entry-red-20261021/web/tests/chat-entry-visibility.spec.ts:526:68
+
+    Error: page scrollport is inert while payment is open
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: true
+    Received: false
+
+      525 |     expect.soft(overlay.paymentRootOutsideScrollport, 'payment dialog root stays outside the page scrollport').toBe(true);
+      526 |     expect.soft(overlay.scrollportFound, 'page scrollport exists').toBe(true);
+    > 527 |     expect.soft(overlay.scrollportInert, 'page scrollport is inert while payment is open').toBe(true);
+          |                                                                                            ^
+      528 |     expect.soft(overlay.chatInert, 'chat is inert while payment is open').toBe(true);
+      529 |     expect.soft(overlay.dialogZ > overlay.chatZ, 'payment overlay paints above chat').toBe(true);
+      530 |     expect.soft(overlay.hitByOverlay, 'click at the covered chat button is intercepted by payment overlay').toBe(true);
+        at /Users/pgorbachev/projects/private/ikpk/.claude/worktrees/chat-entry-red-20261021/web/tests/chat-entry-visibility.spec.ts:527:92
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results/chat-entry-visibility-chat-268ba-d-restores-scroll-and-focus-desktop/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results/chat-entry-visibility-chat-268ba-d-restores-scroll-and-focus-desktop/error-context.md
+
+    Error Context: test-results/chat-entry-visibility-chat-268ba-d-restores-scroll-and-focus-desktop/error-context.md
+
+  2 failed
+    [desktop] › tests/chat-entry-visibility.spec.ts:407:3 › chat entry visibility approved contract › layout resize and reduced visualViewport keep the focused field and chat control visible 
+    [desktop] › tests/chat-entry-visibility.spec.ts:481:3 › chat entry visibility approved contract › payment overlay is a body-level sibling, blocks background input, and restores scroll and focus 
+  1 error was not a part of any test, see above for details

@@ -1,0 +1,9 @@
+
+ RUN  v4.1.11 /Users/pgorbachev/projects/private/ikpk/.claude/worktrees/chat-entry-impl-20261021/web
+
+
+ Test Files  2 passed (2)
+      Tests  4 passed (4)
+   Start at  11:52:18
+   Duration  30.71s (transform 107ms, setup 0ms, import 533ms, tests 29.92s, environment 0ms)
+

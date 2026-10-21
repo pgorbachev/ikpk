@@ -1,0 +1,3 @@
+exit=1
+command=CHAT_LOADER_SRC=none npm run test:build -- --maxWorkers=1
+reason=Astro static generation failed with ENOSPC before test phase

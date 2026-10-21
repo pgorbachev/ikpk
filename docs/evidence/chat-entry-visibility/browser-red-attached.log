@@ -1,0 +1,25 @@
+
+Running 7 tests using 1 worker
+
+(node:5842) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  1 [desktop] › tests/chat-entry-visibility.spec.ts:229:3 › chat entry visibility approved contract › non-demo payment probe has both real product entry points and keeps the loader lazy until one activation (0ms)
+  -  2 [desktop] › tests/chat-entry-visibility.spec.ts:252:3 › chat entry visibility approved contract › label, capsule geometry, keyboard name, and text contrast hold in both themes and all widths
+  -  3 [desktop] › tests/chat-entry-visibility.spec.ts:260:3 › chat entry visibility approved contract › page flow has one real scrollport and an 80px sibling lower zone without clipped visible overlap
+  -  4 [desktop] › tests/chat-entry-visibility.spec.ts:316:3 › chat entry visibility approved contract › anchor, history, wheel, touch-like scroll, keyboard scroll, and focus reveal stay in the shared scrollport
+  -  5 [desktop] › tests/chat-entry-visibility.spec.ts:392:3 › chat entry visibility approved contract › layout resize and reduced visualViewport keep the focused field and chat control visible
+  -  6 [desktop] › tests/chat-entry-visibility.spec.ts:466:3 › chat entry visibility approved contract › payment overlay is a body-level sibling, blocks background input, and restores scroll and focus
+  -  7 [desktop] › tests/chat-entry-visibility.spec.ts:535:3 › chat entry visibility approved contract › none, unset, demo output, and 404 do not reserve an empty chat slot
+
+
+  1) [desktop] › tests/chat-entry-visibility.spec.ts:229:3 › chat entry visibility approved contract › non-demo payment probe has both real product entry points and keeps the loader lazy until one activation 
+
+    Error: listen EPERM: operation not permitted 127.0.0.1
+
+    Error Context: test-results/chat-entry-visibility-chat-7c3be-r-lazy-until-one-activation-desktop/error-context.md
+
+    Error Context: test-results/chat-entry-visibility-chat-7c3be-r-lazy-until-one-activation-desktop/error-context.md
+
+  1 failed
+    [desktop] › tests/chat-entry-visibility.spec.ts:229:3 › chat entry visibility approved contract › non-demo payment probe has both real product entry points and keeps the loader lazy until one activation 
+  6 did not run

@@ -40,12 +40,12 @@
     "identity": "style|body:8ab61f23308a314e"
   },
   {
-    "slotId": "src:components/chat/ChatFacade.astro:L48:C1:script",
+    "slotId": "src:components/chat/ChatFacade.astro:L49:C1:script",
     "file": "components/chat/ChatFacade.astro",
     "nodeKind": "element",
-    "locator": "components/chat/ChatFacade.astro:L48:C1:script",
-    "fingerprint": "202476c5041873031a3a26b00cd9c0d0b25d7519d72572b703e11e4ef13025ce",
-    "identity": "script|is:inline=empty:|body:ff789ce13f2b07ac"
+    "locator": "components/chat/ChatFacade.astro:L49:C1:script",
+    "fingerprint": "c183c5923d87c8f4a03189f3661697a8d89f1203991d24b880e071e805b5f91d",
+    "identity": "script|is:inline=empty:|body:c976432be2a11bf4"
   },
   {
     "slotId": "src:components/contacts/ContactShell.astro:L121:C9:svg",
@@ -408,11 +408,11 @@
     "identity": "style|body:5c1f3e993b04e4bb"
   },
   {
-    "slotId": "src:components/home/sections/Reviews.astro:L131:C1:style",
+    "slotId": "src:components/home/sections/Reviews.astro:L135:C1:style",
     "file": "components/home/sections/Reviews.astro",
     "nodeKind": "element",
-    "locator": "components/home/sections/Reviews.astro:L131:C1:style",
-    "fingerprint": "54cb737bf73cae74020feb93192f46cc28c3c48bf171677b7a8a2632f6b064b6",
+    "locator": "components/home/sections/Reviews.astro:L135:C1:style",
+    "fingerprint": "ea7bfa313fb23e290ff0ccbf4a11736ac91f6c94d60fb931c32e2012653e9e5d",
     "identity": "style|body:9d5043d986febdb1"
   },
   {
@@ -420,8 +420,8 @@
     "file": "components/home/sections/Reviews.astro",
     "nodeKind": "element",
     "locator": "components/home/sections/Reviews.astro:L73:C3:script",
-    "fingerprint": "66da7bcdeb561fe534e261b780db4de0aefabf38b95b3a2b9f0f23fcf1efc9f9",
-    "identity": "script|body:4d4baebf4698c7db"
+    "fingerprint": "e126803ce4afbd449e43b0aa6f2db29aadb33605d70f0068023342955490134a",
+    "identity": "script|body:8bb3339bb56701d8"
   },
   {
     "slotId": "src:components/home/sections/Segments.astro:L52:C1:style",
@@ -548,8 +548,8 @@
     "file": "components/MotionScript.astro",
     "nodeKind": "element",
     "locator": "components/MotionScript.astro:L11:C1:script",
-    "fingerprint": "7c9c53fc5f58d86f180afc238c7554f15997900dcdf852280792ae2eddb57c92",
-    "identity": "script|is:inline=empty:|body:feda24d6d2d8032c"
+    "fingerprint": "445932ca38479445e317b06aa274058ea86d2662b3af8edfb99fded099b5e172",
+    "identity": "script|is:inline=empty:|body:604911d24d954bc7"
   },
   {
     "slotId": "src:components/NewsletterSignup.astro:L44:C1:style",
@@ -572,8 +572,8 @@
     "file": "components/payment/PaymentForm.astro",
     "nodeKind": "element",
     "locator": "components/payment/PaymentForm.astro:L135:C1:style",
-    "fingerprint": "b4ae537d3bf380e801d2892c8a34fdb8fd04e17c97d37a016fe4955c0ca8a27f",
-    "identity": "style|body:fc0afe12c951e56a"
+    "fingerprint": "2167cb12bd618861761419832f848e65e83dd25c77e4e9cd30820230dca67452",
+    "identity": "style|body:08b2947358e9c0fb"
   },
   {
     "slotId": "src:components/schedule/ScheduleControlsScript.astro:L1:C1:script",
@@ -724,8 +724,8 @@
     "file": "components/topnav/TopNav.astro",
     "nodeKind": "element",
     "locator": "components/topnav/TopNav.astro:L141:C1:style",
-    "fingerprint": "785a92041cce22f3a2a1c87ab4ad63b6931ca88455c5e69a5bdc2ca178c2d167",
-    "identity": "style|body:fd07c7b79124aacc"
+    "fingerprint": "b6434293678238a2c11c1d0ffcca85edad3748b9e3247792890842f59c520ed9",
+    "identity": "style|body:b89d07c334cc64e0"
   },
   {
     "slotId": "src:components/topnav/TopNav.astro:L47:C17:svg",
@@ -816,11 +816,11 @@
     "identity": "link|href=quoted:../styles/global.css|rel=quoted:stylesheet"
   },
   {
-    "slotId": "src:layouts/BaseLayout.astro:L91:C1:style",
+    "slotId": "src:layouts/BaseLayout.astro:L102:C1:style",
     "file": "layouts/BaseLayout.astro",
     "nodeKind": "element",
-    "locator": "layouts/BaseLayout.astro:L91:C1:style",
-    "fingerprint": "8d0a10013a1fb3d138b2ef1e899f1057e615eba434a75de7432b36375160e7b8",
+    "locator": "layouts/BaseLayout.astro:L102:C1:style",
+    "fingerprint": "9bcf82684a1843d9082c9dd53f2a29ad5cf486c411cb87035e2c3c6caf4dfb4e",
     "identity": "style|body:c9201fc888e590d9"
   },
   {
@@ -832,11 +832,11 @@
     "identity": "link|href=quoted:../styles/global.css|rel=quoted:stylesheet"
   },
   {
-    "slotId": "src:layouts/TopNavLayout.astro:L70:C1:style",
+    "slotId": "src:layouts/TopNavLayout.astro:L81:C1:style",
     "file": "layouts/TopNavLayout.astro",
     "nodeKind": "element",
-    "locator": "layouts/TopNavLayout.astro:L70:C1:style",
-    "fingerprint": "e4a8d1a97cf7d3cc4aedf3985447b6f68c8e99ee3965e6e8109670687b294fe1",
+    "locator": "layouts/TopNavLayout.astro:L81:C1:style",
+    "fingerprint": "25f2eae91f915776136bc2c339aa5801617decd95de0698b41f61d1da2cffda0",
     "identity": "style|body:309f315b55438bb4"
   },
   {

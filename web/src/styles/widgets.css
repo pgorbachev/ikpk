@@ -11,38 +11,104 @@
  */
 
 .chat-facade {
-  /* z-index СТРОГО ниже `.payment-dialog` (200, PaymentForm.astro) — иначе кнопка
-     остаётся кликабельной поверх затемнения открытого диалога оплаты. */
-  position: fixed;
-  right: 1rem;
-  bottom: 1rem;
+  /* This body-level sibling is the 80px lower row in the chat page frame. */
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  width: 100%;
+  height: calc(80px + env(safe-area-inset-bottom, 0px));
+  padding: 0 1rem env(safe-area-inset-bottom, 0px);
   z-index: 150;
 }
 
 .chat-trigger {
-  /* Размер измерен, не взят на глаз: карточные сетки на нескольких шаблонов
-     (например /statyi, /institut-apledzhera) доходят до правого нижнего угла
-     области просмотра почти вплотную (56px запаса на 1280×720). Кнопка 3.25rem
-     с отступом 1rem (суммарно 68px) накрывала интерактивную карточку —
-     измерено `test:e2e:widgets`, «кнопка вызова чата накрывает интерактивные
-     элементы» на этих двух шаблонах. 2rem + 1rem (48px) даёт запас. */
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 2rem;
-  height: 2rem;
-  padding: 0;
+  gap: 10px;
+  height: 52px;
+  padding: 0 20px;
   border: none;
   border-radius: 999px;
   background: var(--color-accent-500);
   color: #fff;
   box-shadow: var(--shadow-m);
   cursor: pointer;
-  font-size: 1rem;
+  font-size: 0.875rem;
+  white-space: nowrap;
+}
+
+.chat-trigger [aria-hidden='true'] {
+  display: inline-flex;
+  width: 22px;
+  height: 22px;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  line-height: 1;
 }
 
 .chat-trigger:hover {
-  background: var(--color-accent-300);
+  background: var(--color-accent-700);
+}
+
+.chat-trigger:active {
+  background: var(--color-accent-800);
+}
+
+:root[data-theme='dark'] .chat-trigger {
+  color: #0b260c;
+}
+
+body.layout-topnav--chat {
+  --chat-lower-zone-height: calc(80px + env(safe-area-inset-bottom, 0px));
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  height: calc(var(--chat-viewport-offset, 0px) + var(--chat-viewport-height, 100dvh));
+  min-height: 0;
+  overflow: hidden;
+  padding-top: var(--chat-viewport-offset, 0px);
+}
+
+.page-flow {
+  display: contents;
+}
+
+.page-flow--scrollport {
+  display: block;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scroll-padding-top: calc(var(--header-height, 60px) + 1rem);
+}
+
+.page-flow--scrollport :where([id]) {
+  scroll-margin-top: 0;
+}
+
+body.layout-topnav--chat details.topnav-mobile .topnav-drawer {
+  top: var(--chat-drawer-top, calc(100% + 8px));
+  bottom: var(--chat-drawer-bottom, auto);
+  max-height: var(--chat-drawer-max-height, max(0px, calc(var(--chat-viewport-height, 100vh) - var(--chat-lower-zone-height) - var(--chat-drawer-top-space, calc(var(--header-height, 60px) + 8px)))));
+}
+
+body.layout-topnav--chat header.topnav .header-search {
+  top: var(--chat-search-top, 100%);
+  bottom: var(--chat-search-bottom, auto);
+  max-height: var(--chat-search-max-height, max(0px, calc(var(--chat-viewport-height, 100vh) - var(--chat-lower-zone-height) - var(--chat-search-top-space, var(--header-height, 60px)))));
+  overflow-y: auto;
+}
+
+body.layout-topnav--chat .topnav-menu .dropdown {
+  box-sizing: border-box;
+  max-height: var(--chat-nav-dropdown-max-height, 80vh);
+  overflow-y: auto;
+}
+
+body.layout-topnav--chat .header-search-pagefind .pagefind-ui__drawer {
+  max-height: min(60vh, max(0px, calc(var(--chat-search-max-height, 100vh) - 100px)));
 }
 
 .chat-mount {

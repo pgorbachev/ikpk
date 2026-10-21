@@ -1,0 +1,5 @@
+lastCompletedExit=0
+command=npm run typecheck
+completedOnEarlierCheckpoint=498 files; 0 errors; 0 warnings; 9 hints
+latestRerunExit=130
+latestRerun=interrupted by the explicit checkpoint request before a final diagnostic summary

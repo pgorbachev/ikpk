@@ -1,0 +1,2 @@
+command=TMPDIR=/private/tmp npx playwright test tests/chat-entry-visibility.spec.ts --config=playwright.attached.config.ts --project=desktop --workers=1 --max-failures=2 --grep regex visualViewport|payment-overlay (approved local listener escalation)
+exit_code=1

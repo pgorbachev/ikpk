@@ -49,16 +49,17 @@
       // Тень шапки при скролле (геометрию не меняем — без layout shift).
       const topnav = document.querySelector('.topnav');
       if (topnav) {
+        const pageScrollport = document.querySelector('[data-page-scrollport]');
         let scrolled = false;
         const onScroll = function () {
-          const next = window.scrollY > 8;
+          const next = (pageScrollport ? pageScrollport.scrollTop : window.scrollY) > 8;
           if (next === scrolled) return; // мутируем DOM только на смене порога
           scrolled = next;
           if (next) topnav.setAttribute('data-scrolled', '');
           else topnav.removeAttribute('data-scrolled');
         };
         onScroll();
-        window.addEventListener('scroll', onScroll, { passive: true });
+        (pageScrollport ?? window).addEventListener('scroll', onScroll, { passive: true });
       }
     });
   })();

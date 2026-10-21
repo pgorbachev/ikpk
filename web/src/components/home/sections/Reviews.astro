@@ -107,20 +107,24 @@ const badges = isDemoOutput ? [] : visibleAwardBadges(DECLARED_AWARD_BADGES);
       });
       io.observe(box);
     } else {
+      const pageScrollport = document.querySelector<HTMLElement>('[data-page-scrollport]');
       const isVisible = (): boolean => {
         const rect = box.getBoundingClientRect();
-        return rect.bottom > 0 && rect.top < window.innerHeight;
+        const clip = pageScrollport?.getBoundingClientRect();
+        const top = Math.max(0, clip?.top ?? 0);
+        const bottom = Math.min(window.innerHeight, clip?.bottom ?? window.innerHeight);
+        return rect.bottom > top && rect.top < bottom;
       };
       const check = (): void => {
         if (!isVisible()) return;
         load();
-        window.removeEventListener('scroll', check);
+        (pageScrollport ?? window).removeEventListener('scroll', check);
         window.removeEventListener('resize', check);
       };
       if (isVisible()) {
         load();
       } else {
-        window.addEventListener('scroll', check, { passive: true });
+        (pageScrollport ?? window).addEventListener('scroll', check, { passive: true });
         window.addEventListener('resize', check);
       }
     }

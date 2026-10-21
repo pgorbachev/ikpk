@@ -363,6 +363,7 @@ const target = (link: { external?: boolean }) => (link.external ? '_blank' : und
      CTA и бургер приоритетнее — кнопку поиска убираем, чтобы бар не
      переполнялся по горизонтали. Поиск остаётся доступен на ≥ 361px. */
   @media (max-width: 360px) {
-    .topnav-tools { display: none; }
+    .topnav-tools { display: contents; }
+    .topnav-tools :global(.header-tools) { display: none; }
   }
 </style>

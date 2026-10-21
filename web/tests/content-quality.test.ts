@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync, existsSync, statSync } from 'fs';
 import { join } from 'path';
 import { dist, walkHtml, walkFiles } from './helpers/dist-pages';
+import { attr, parseDocument, type Element, walk } from './helpers/dom';
 import { LEGACY_CTA_ATTR, LEGACY_CTA_UNRESOLVED_ATTR } from '../src/lib/html-cleaner.js';
 
 // ─── Качество отрендеренного контента ───────────────────────────────────────
@@ -32,6 +33,58 @@ function targetOf(html: string, id: string): { openTag: string; text: string } |
   }
   return { openTag: m[0], text: '' };
 }
+
+/** Only the app-owned trigger directly inside a top-level page facade is exempt. */
+function isDirectBodyFacadeChatTrigger(button: Element): boolean {
+  if (button.tagName !== 'button' || attr(button, 'data-chat-trigger') === null) return false;
+  const parent = button.parentNode;
+  if (!parent || !('tagName' in parent)) return false;
+  const facade = parent as Element;
+  return attr(facade, 'data-chat-facade') !== null && facade.parentNode?.nodeName === 'body';
+}
+
+function rawButtonsWithoutAstroOwnership(html: string): Element[] {
+  const document = parseDocument(html);
+  return [...walk(document)].filter((element) => {
+    if (element.tagName !== 'button' || element.attrs.some((item) => item.name.startsWith('data-astro-cid-'))) return false;
+    return !isDirectBodyFacadeChatTrigger(element);
+  });
+}
+
+describe('raw button ownership boundary fixtures', () => {
+  function button(html: string): Element {
+    const document = parseDocument(html);
+    const element = [...walk(document)].find((item) => item.tagName === 'button');
+    if (!element) throw new Error('fixture has no button');
+    return element;
+  }
+
+  it('accepts only the marked button directly in a direct body child facade', () => {
+    const fixture = button('<body><div data-chat-facade><button data-chat-trigger>Chat</button></div></body>');
+    expect(isDirectBodyFacadeChatTrigger(fixture)).toBe(true);
+  });
+
+  it('rejects raw, spoofed, nested-facade, and unmarked buttons', () => {
+    for (const html of [
+      '<body><button class="raw">Raw</button></body>',
+      '<body><button data-chat-trigger>Marker only</button></body>',
+      '<body><main class="rich-content"><div data-chat-facade><button data-chat-trigger>Nested</button></div></main></body>',
+      '<body><div data-chat-facade><button>Unmarked</button></div></body>',
+    ]) {
+      const fixture = button(html);
+      expect(isDirectBodyFacadeChatTrigger(fixture), html).toBe(false);
+    }
+  });
+
+  it('the output classifier rejects CMS lookalikes while retaining component ownership', () => {
+    expect(rawButtonsWithoutAstroOwnership('<body><div data-chat-facade><button data-chat-trigger>Chat</button></div></body>')).toHaveLength(0);
+    expect(rawButtonsWithoutAstroOwnership('<body><button class="raw">Raw</button></body>')).toHaveLength(1);
+    expect(rawButtonsWithoutAstroOwnership('<body><button data-chat-trigger>Marker only</button></body>')).toHaveLength(1);
+    expect(rawButtonsWithoutAstroOwnership('<body><main class="rich-content"><div data-chat-facade><button data-chat-trigger>Nested</button></div></main></body>')).toHaveLength(1);
+    expect(rawButtonsWithoutAstroOwnership('<body><div data-chat-facade><button>Unmarked</button></div></body>')).toHaveLength(1);
+    expect(rawButtonsWithoutAstroOwnership('<body><button data-astro-cid-a1>Astro component</button></body>')).toHaveLength(0);
+  });
+});
 
 describe('rendered content quality', () => {
   // Astro 7 сменил дефолт compressHTML на 'jsx': пробелы на границах строк
@@ -545,10 +598,8 @@ describe('rendered content quality', () => {
     const offenders: string[] = [];
     for (const file of walkHtml()) {
       const html = readFileSync(file, 'utf-8');
-      for (const m of html.matchAll(/<button\s([^>]*)>/gi)) {
-        if (/data-astro-cid-/i.test(m[1])) continue;
-        offenders.push(`${file.replace(dist, '')}: ${m[0]}`);
-      }
+      for (const button of rawButtonsWithoutAstroOwnership(html))
+        offenders.push(`${file.replace(dist, '')}: <button ${button.attrs.map((item) => `${item.name}="${item.value}"`).join(' ')}>`);
     }
     expect(
       offenders.slice(0, 6),

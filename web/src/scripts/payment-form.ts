@@ -71,6 +71,11 @@ function generateRequestId(): string {
   return [hex.slice(0, 4).join(''), hex.slice(4, 6).join(''), hex.slice(6, 8).join(''), hex.slice(8, 10).join(''), hex.slice(10, 16).join('')].join('-');
 }
 
+// Keep the modal outside the page scrollport so the existing body-child inert
+// boundary can block the complete page while leaving the dialog interactive.
+const paymentRoot = document.getElementById('payment-dialog-root');
+if (paymentRoot && paymentRoot.parentElement !== document.body) document.body.append(paymentRoot);
+
 const form = document.querySelector<HTMLFormElement>('[data-payment-form]');
 if (form) boot(form);
 
@@ -128,16 +133,28 @@ function boot(formEl: HTMLFormElement) {
   // телефона это одно событие, а на протяжке окна мышью — поток событий, и без склейки
   // раскладка считалась бы на каждом.
   let bandPending = false;
-  const recomputeFooterBand = () => {
+  let revealAfterResize = false;
+  const recomputeFooterBand = (revealFocusedField = false) => {
+    revealAfterResize = revealAfterResize || revealFocusedField;
     if (dialog.hidden || bandPending) return;
     bandPending = true;
     requestAnimationFrame(() => {
       bandPending = false;
-      if (!dialog.hidden) syncFooterBand();
+      if (!dialog.hidden) {
+        syncDialogViewport();
+        syncFooterBand();
+        if (revealAfterResize) {
+          const active = document.activeElement;
+          if (active instanceof HTMLElement && formEl.contains(active)
+            && active.matches('input, textarea, select, [contenteditable="true"]')) revealField(active);
+        }
+      }
+      revealAfterResize = false;
     });
   };
-  window.addEventListener('resize', recomputeFooterBand);
-  window.visualViewport?.addEventListener('resize', recomputeFooterBand);
+  window.addEventListener('resize', () => recomputeFooterBand(true));
+  window.visualViewport?.addEventListener('resize', () => recomputeFooterBand(true));
+  window.visualViewport?.addEventListener('scroll', () => recomputeFooterBand());
   document.addEventListener('keydown', (event) => {
     if (event.key === 'Escape' && !dialog.hidden) {
       event.preventDefault();
@@ -181,9 +198,16 @@ function boot(formEl: HTMLFormElement) {
     setBackgroundInert(true);
     // До первой валидации ошибок нет, но путь Tab между полями работает уже сейчас, и
     // полоса футера должна быть известна браузеру с самого открытия.
+    syncDialogViewport();
     syncFooterBand();
     const focusable = dialog.querySelector<HTMLElement>('input, button, [href], textarea, select');
     focusable?.focus();
+  }
+
+  function syncDialogViewport() {
+    const viewport = window.visualViewport;
+    root.style.setProperty('--payment-visual-viewport-height', `${viewport?.height ?? window.innerHeight}px`);
+    root.style.setProperty('--payment-visual-viewport-offset', `${viewport?.offsetTop ?? 0}px`);
   }
 
   function closeDialog() {
@@ -499,7 +523,7 @@ function boot(formEl: HTMLFormElement) {
     const footer = syncFooterBand();
     // Согласие живёт в самом футере: закрыть себя футер не может, а прокрутка к нему
     // сдвинула бы панель без причины.
-    if (footer?.contains(el)) return;
+    if (footer?.contains(el) && getComputedStyle(footer).position === 'sticky') return;
     const field = (el.closest('.payment-field') ?? el) as HTMLElement;
     field.scrollIntoView({ block: 'nearest', inline: 'nearest' });
   }
@@ -873,7 +897,7 @@ function boot(formEl: HTMLFormElement) {
     const fromQuery = url.searchParams.get(RETURN_PARAM);
     if (fromQuery) {
       url.searchParams.delete(RETURN_PARAM);
-      history.replaceState({}, '', url.pathname + url.search + url.hash);
+      history.replaceState(history.state ?? {}, '', url.pathname + url.search + url.hash);
       const json = await pollStatus(fromQuery, true);
       if (json) applyStatus(fromQuery, json);
       await refreshSiblingHolds(fromQuery);

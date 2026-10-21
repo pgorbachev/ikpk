@@ -1,0 +1,5599 @@
+[
+  {
+    "kind": "image-load",
+    "detail": {
+      "src": "http://127.0.0.1:60861/logo-wordmark.svg",
+      "width": 300,
+      "height": 82
+    },
+    "timeOrigin": 1792583317865.7,
+    "now": 42.5,
+    "url": "http://127.0.0.1:60861/raspisanie-i-tseny",
+    "port": {
+      "scrollTop": 0,
+      "scrollHeight": 45868,
+      "clientHeight": 45868,
+      "maxScroll": 0
+    },
+    "history": null,
+    "saved": null,
+    "fonts": "loaded",
+    "pendingImages": 65
+  },
+  {
+    "kind": "replaceState",
+    "detail": {
+      "id": "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+      "top": 0,
+      "known": false
+    },
+    "timeOrigin": 1792583317865.7,
+    "now": 128.60000014305115,
+    "url": "http://127.0.0.1:60861/raspisanie-i-tseny",
+    "port": {
+      "scrollTop": 0,
+      "scrollHeight": 23603,
+      "clientHeight": 340,
+      "maxScroll": 23263
+    },
+    "history": {
+      "id": "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+      "top": 0,
+      "known": false
+    },
+    "saved": null,
+    "fonts": "loading",
+    "pendingImages": 65
+  },
+  {
+    "kind": "image-load",
+    "detail": {
+      "src": "http://127.0.0.1:60861/logo-icon.svg",
+      "width": 33,
+      "height": 34
+    },
+    "timeOrigin": 1792583317865.7,
+    "now": 138.10000014305115,
+    "url": "http://127.0.0.1:60861/raspisanie-i-tseny",
+    "port": {
+      "scrollTop": 0,
+      "scrollHeight": 23603,
+      "clientHeight": 340,
+      "maxScroll": 23263
+    },
+    "history": {
+      "id": "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+      "top": 0,
+      "known": false
+    },
+    "saved": null,
+    "fonts": "loading",
+    "pendingImages": 62
+  },
+  {
+    "kind": "image-load",
+    "detail": {
+      "src": "http://127.0.0.1:60861/media/_w/480/users/1/images/1-1775479215632.webp",
+      "width": 320,
+      "height": 320
+    },
+    "timeOrigin": 1792583317865.7,
+    "now": 138.29999995231628,
+    "url": "http://127.0.0.1:60861/raspisanie-i-tseny",
+    "port": {
+      "scrollTop": 0,
+      "scrollHeight": 23603,
+      "clientHeight": 340,
+      "maxScroll": 23263
+    },
+    "history": {
+      "id": "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+      "top": 0,
+      "known": false
+    },
+    "saved": null,
+    "fonts": "loading",
+    "pendingImages": 62
+  },
+  {
+    "kind": "image-load",
+    "detail": {
+      "src": "http://127.0.0.1:60861/media/_w/480/users/1/images/1-1782813224074.webp",
+      "width": 320,
+      "height": 320
+    },
+    "timeOrigin": 1792583317865.7,
+    "now": 138.40000009536743,
+    "url": "http://127.0.0.1:60861/raspisanie-i-tseny",
+    "port": {
+      "scrollTop": 0,
+      "scrollHeight": 23603,
+      "clientHeight": 340,
+      "maxScroll": 23263
+    },
+    "history": {
+      "id": "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+      "top": 0,
+      "known": false
+    },
+    "saved": null,
+    "fonts": "loading",
+    "pendingImages": 62
+  },
+  {
+    "kind": "image-load",
+    "detail": {
+      "src": "http://127.0.0.1:60861/media/_w/480/users/1/images/1-1776163553541.webp",
+      "width": 320,
+      "height": 320
+    },
+    "timeOrigin": 1792583317865.7,
+    "now": 138.40000009536743,
+    "url": "http://127.0.0.1:60861/raspisanie-i-tseny",
+    "port": {
+      "scrollTop": 0,
+      "scrollHeight": 23603,
+      "clientHeight": 340,
+      "maxScroll": 23263
+    },
+    "history": {
+      "id": "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+      "top": 0,
+      "known": false
+    },
+    "saved": null,
+    "fonts": "loading",
+    "pendingImages": 62
+  },
+  {
+    "kind": "pageshow",
+    "detail": {
+      "persisted": false
+    },
+    "timeOrigin": 1792583317865.7,
+    "now": 139.90000009536743,
+    "url": "http://127.0.0.1:60861/raspisanie-i-tseny",
+    "port": {
+      "scrollTop": 0,
+      "scrollHeight": 23603,
+      "clientHeight": 340,
+      "maxScroll": 23263
+    },
+    "history": {
+      "id": "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+      "top": 0,
+      "known": false
+    },
+    "saved": null,
+    "fonts": "loaded",
+    "pendingImages": 62
+  },
+  {
+    "kind": "pageshow-task",
+    "timeOrigin": 1792583317865.7,
+    "now": 140.40000009536743,
+    "url": "http://127.0.0.1:60861/raspisanie-i-tseny",
+    "port": {
+      "scrollTop": 0,
+      "scrollHeight": 23603,
+      "clientHeight": 340,
+      "maxScroll": 23263
+    },
+    "history": {
+      "id": "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+      "top": 0,
+      "known": false
+    },
+    "saved": null,
+    "fonts": "loaded",
+    "pendingImages": 62
+  },
+  {
+    "kind": "pageshow-raf",
+    "timeOrigin": 1792583317865.7,
+    "now": 152.79999995231628,
+    "url": "http://127.0.0.1:60861/raspisanie-i-tseny",
+    "port": {
+      "scrollTop": 0,
+      "scrollHeight": 23603,
+      "clientHeight": 340,
+      "maxScroll": 23263
+    },
+    "history": {
+      "id": "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+      "top": 0,
+      "known": false
+    },
+    "saved": null,
+    "fonts": "loaded",
+    "pendingImages": 62
+  },
+  {
+    "kind": "port-scroll",
+    "timeOrigin": 1792583317865.7,
+    "now": 190.90000009536743,
+    "url": "http://127.0.0.1:60861/raspisanie-i-tseny",
+    "port": {
+      "scrollTop": 23083,
+      "scrollHeight": 23603,
+      "clientHeight": 340,
+      "maxScroll": 23263
+    },
+    "history": {
+      "id": "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+      "top": 0,
+      "known": false
+    },
+    "saved": null,
+    "fonts": "loaded",
+    "pendingImages": 62
+  },
+  {
+    "kind": "image-load",
+    "detail": {
+      "src": "http://127.0.0.1:60861/media/_w/480/users/1/images/1-1776771365590.webp",
+      "width": 320,
+      "height": 320
+    },
+    "timeOrigin": 1792583317865.7,
+    "now": 205.79999995231628,
+    "url": "http://127.0.0.1:60861/raspisanie-i-tseny",
+    "port": {
+      "scrollTop": 23083,
+      "scrollHeight": 23603,
+      "clientHeight": 340,
+      "maxScroll": 23263
+    },
+    "history": {
+      "id": "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+      "top": 0,
+      "known": false
+    },
+    "saved": null,
+    "fonts": "loaded",
+    "pendingImages": 60
+  },
+  {
+    "kind": "image-load",
+    "detail": {
+      "src": "http://127.0.0.1:60861/media/_w/480/users/1/images/1-1727065637334.webp",
+      "width": 320,
+      "height": 320
+    },
+    "timeOrigin": 1792583317865.7,
+    "now": 205.90000009536743,
+    "url": "http://127.0.0.1:60861/raspisanie-i-tseny",
+    "port": {
+      "scrollTop": 23083,
+      "scrollHeight": 23603,
+      "clientHeight": 340,
+      "maxScroll": 23263
+    },
+    "history": {
+      "id": "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+      "top": 0,
+      "known": false
+    },
+    "saved": null,
+    "fonts": "loaded",
+    "pendingImages": 60
+  },
+  {
+    "kind": "TEST-before-leave",
+    "url": "http://127.0.0.1:60861/raspisanie-i-tseny",
+    "port": {
+      "scrollTop": 23083,
+      "scrollHeight": 23603,
+      "clientHeight": 340,
+      "maxScroll": 23263
+    },
+    "history": {
+      "id": "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+      "top": 0,
+      "known": false
+    }
+  },
+  {
+    "kind": "replaceState",
+    "detail": {
+      "id": "e59e33e8-b3b3-49af-aa9e-b33203d07ebb",
+      "top": 0,
+      "known": false
+    },
+    "timeOrigin": 1792583318077.4,
+    "now": 28.5,
+    "url": "http://127.0.0.1:60861/kontakty",
+    "port": {
+      "scrollTop": 0,
+      "scrollHeight": 3272,
+      "clientHeight": 340,
+      "maxScroll": 2932
+    },
+    "history": {
+      "id": "e59e33e8-b3b3-49af-aa9e-b33203d07ebb",
+      "top": 0,
+      "known": false
+    },
+    "saved": [
+      [
+        "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+        23083
+      ]
+    ],
+    "fonts": "loading",
+    "pendingImages": 2
+  },
+  {
+    "kind": "image-load",
+    "detail": {
+      "src": "http://127.0.0.1:60861/logo-wordmark.svg",
+      "width": 300,
+      "height": 82
+    },
+    "timeOrigin": 1792583318077.4,
+    "now": 32.799999952316284,
+    "url": "http://127.0.0.1:60861/kontakty",
+    "port": {
+      "scrollTop": 0,
+      "scrollHeight": 3367,
+      "clientHeight": 340,
+      "maxScroll": 3027
+    },
+    "history": {
+      "id": "e59e33e8-b3b3-49af-aa9e-b33203d07ebb",
+      "top": 0,
+      "known": false
+    },
+    "saved": [
+      [
+        "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+        23083
+      ]
+    ],
+    "fonts": "loading",
+    "pendingImages": 0
+  },
+  {
+    "kind": "image-load",
+    "detail": {
+      "src": "http://127.0.0.1:60861/logo-icon.svg",
+      "width": 33,
+      "height": 34
+    },
+    "timeOrigin": 1792583318077.4,
+    "now": 37.40000009536743,
+    "url": "http://127.0.0.1:60861/kontakty",
+    "port": {
+      "scrollTop": 0,
+      "scrollHeight": 3367,
+      "clientHeight": 340,
+      "maxScroll": 3027
+    },
+    "history": {
+      "id": "e59e33e8-b3b3-49af-aa9e-b33203d07ebb",
+      "top": 0,
+      "known": false
+    },
+    "saved": [
+      [
+        "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+        23083
+      ]
+    ],
+    "fonts": "loading",
+    "pendingImages": 0
+  },
+  {
+    "kind": "pageshow",
+    "detail": {
+      "persisted": false
+    },
+    "timeOrigin": 1792583318077.4,
+    "now": 38,
+    "url": "http://127.0.0.1:60861/kontakty",
+    "port": {
+      "scrollTop": 0,
+      "scrollHeight": 3367,
+      "clientHeight": 340,
+      "maxScroll": 3027
+    },
+    "history": {
+      "id": "e59e33e8-b3b3-49af-aa9e-b33203d07ebb",
+      "top": 0,
+      "known": false
+    },
+    "saved": [
+      [
+        "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+        23083
+      ]
+    ],
+    "fonts": "loading",
+    "pendingImages": 0
+  },
+  {
+    "kind": "pageshow-task",
+    "timeOrigin": 1792583318077.4,
+    "now": 40,
+    "url": "http://127.0.0.1:60861/kontakty",
+    "port": {
+      "scrollTop": 0,
+      "scrollHeight": 3367,
+      "clientHeight": 340,
+      "maxScroll": 3027
+    },
+    "history": {
+      "id": "e59e33e8-b3b3-49af-aa9e-b33203d07ebb",
+      "top": 0,
+      "known": false
+    },
+    "saved": [
+      [
+        "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+        23083
+      ]
+    ],
+    "fonts": "loaded",
+    "pendingImages": 0
+  },
+  {
+    "kind": "pageshow-raf",
+    "timeOrigin": 1792583318077.4,
+    "now": 45.5,
+    "url": "http://127.0.0.1:60861/kontakty",
+    "port": {
+      "scrollTop": 0,
+      "scrollHeight": 3367,
+      "clientHeight": 340,
+      "maxScroll": 3027
+    },
+    "history": {
+      "id": "e59e33e8-b3b3-49af-aa9e-b33203d07ebb",
+      "top": 0,
+      "known": false
+    },
+    "saved": [
+      [
+        "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+        23083
+      ]
+    ],
+    "fonts": "loaded",
+    "pendingImages": 0
+  },
+  {
+    "kind": "port-scroll",
+    "timeOrigin": 1792583318077.4,
+    "now": 78.79999995231628,
+    "url": "http://127.0.0.1:60861/kontakty",
+    "port": {
+      "scrollTop": 2907,
+      "scrollHeight": 3367,
+      "clientHeight": 340,
+      "maxScroll": 3027
+    },
+    "history": {
+      "id": "e59e33e8-b3b3-49af-aa9e-b33203d07ebb",
+      "top": 0,
+      "known": false
+    },
+    "saved": [
+      [
+        "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+        23083
+      ]
+    ],
+    "fonts": "loaded",
+    "pendingImages": 0
+  },
+  {
+    "kind": "image-load",
+    "detail": {
+      "src": "http://127.0.0.1:60861/logo-wordmark.svg",
+      "width": 300,
+      "height": 82
+    },
+    "timeOrigin": 1792583318156.5,
+    "now": 55.40000009536743,
+    "url": "http://127.0.0.1:60861/raspisanie-i-tseny",
+    "port": {
+      "scrollTop": 0,
+      "scrollHeight": 23603,
+      "clientHeight": 340,
+      "maxScroll": 23263
+    },
+    "history": {
+      "id": "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+      "top": 23083,
+      "known": true
+    },
+    "saved": [
+      [
+        "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+        23083
+      ],
+      [
+        "e59e33e8-b3b3-49af-aa9e-b33203d07ebb",
+        2907
+      ]
+    ],
+    "fonts": "loading",
+    "pendingImages": 65
+  },
+  {
+    "kind": "image-load",
+    "detail": {
+      "src": "http://127.0.0.1:60861/logo-icon.svg",
+      "width": 33,
+      "height": 34
+    },
+    "timeOrigin": 1792583318156.5,
+    "now": 57.5,
+    "url": "http://127.0.0.1:60861/raspisanie-i-tseny",
+    "port": {
+      "scrollTop": 0,
+      "scrollHeight": 23603,
+      "clientHeight": 340,
+      "maxScroll": 23263
+    },
+    "history": {
+      "id": "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+      "top": 23083,
+      "known": true
+    },
+    "saved": [
+      [
+        "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+        23083
+      ],
+      [
+        "e59e33e8-b3b3-49af-aa9e-b33203d07ebb",
+        2907
+      ]
+    ],
+    "fonts": "loading",
+    "pendingImages": 65
+  },
+  {
+    "kind": "pageshow",
+    "detail": {
+      "persisted": false
+    },
+    "timeOrigin": 1792583318156.5,
+    "now": 58.200000047683716,
+    "url": "http://127.0.0.1:60861/raspisanie-i-tseny",
+    "port": {
+      "scrollTop": 0,
+      "scrollHeight": 23603,
+      "clientHeight": 340,
+      "maxScroll": 23263
+    },
+    "history": {
+      "id": "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+      "top": 23083,
+      "known": true
+    },
+    "saved": [
+      [
+        "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+        23083
+      ],
+      [
+        "e59e33e8-b3b3-49af-aa9e-b33203d07ebb",
+        2907
+      ]
+    ],
+    "fonts": "loaded",
+    "pendingImages": 65
+  },
+  {
+    "kind": "scrollTo-before",
+    "detail": [
+      {
+        "top": 23083,
+        "behavior": "instant"
+      }
+    ],
+    "timeOrigin": 1792583318156.5,
+    "now": 58.59999990463257,
+    "url": "http://127.0.0.1:60861/raspisanie-i-tseny",
+    "port": {
+      "scrollTop": 0,
+      "scrollHeight": 23603,
+      "clientHeight": 340,
+      "maxScroll": 23263
+    },
+    "history": {
+      "id": "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+      "top": 23083,
+      "known": true
+    },
+    "saved": [
+      [
+        "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+        23083
+      ],
+      [
+        "e59e33e8-b3b3-49af-aa9e-b33203d07ebb",
+        2907
+      ]
+    ],
+    "fonts": "loaded",
+    "pendingImages": 65
+  },
+  {
+    "kind": "scrollTo-after",
+    "detail": [
+      {
+        "top": 23083,
+        "behavior": "instant"
+      }
+    ],
+    "timeOrigin": 1792583318156.5,
+    "now": 58.799999952316284,
+    "url": "http://127.0.0.1:60861/raspisanie-i-tseny",
+    "port": {
+      "scrollTop": 23083,
+      "scrollHeight": 23603,
+      "clientHeight": 340,
+      "maxScroll": 23263
+    },
+    "history": {
+      "id": "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+      "top": 23083,
+      "known": true
+    },
+    "saved": [
+      [
+        "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+        23083
+      ],
+      [
+        "e59e33e8-b3b3-49af-aa9e-b33203d07ebb",
+        2907
+      ]
+    ],
+    "fonts": "loaded",
+    "pendingImages": 65
+  },
+  {
+    "kind": "port-scroll",
+    "timeOrigin": 1792583318156.5,
+    "now": 59,
+    "url": "http://127.0.0.1:60861/raspisanie-i-tseny",
+    "port": {
+      "scrollTop": 23083,
+      "scrollHeight": 23603,
+      "clientHeight": 340,
+      "maxScroll": 23263
+    },
+    "history": {
+      "id": "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+      "top": 23083,
+      "known": true
+    },
+    "saved": [
+      [
+        "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+        23083
+      ],
+      [
+        "e59e33e8-b3b3-49af-aa9e-b33203d07ebb",
+        2907
+      ]
+    ],
+    "fonts": "loaded",
+    "pendingImages": 65
+  },
+  {
+    "kind": "pageshow-raf",
+    "timeOrigin": 1792583318156.5,
+    "now": 62.5,
+    "url": "http://127.0.0.1:60861/raspisanie-i-tseny",
+    "port": {
+      "scrollTop": 23083,
+      "scrollHeight": 23603,
+      "clientHeight": 340,
+      "maxScroll": 23263
+    },
+    "history": {
+      "id": "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+      "top": 23083,
+      "known": true
+    },
+    "saved": [
+      [
+        "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+        23083
+      ],
+      [
+        "e59e33e8-b3b3-49af-aa9e-b33203d07ebb",
+        2907
+      ]
+    ],
+    "fonts": "loaded",
+    "pendingImages": 65
+  },
+  {
+    "kind": "pageshow-task",
+    "timeOrigin": 1792583318156.5,
+    "now": 66.90000009536743,
+    "url": "http://127.0.0.1:60861/raspisanie-i-tseny",
+    "port": {
+      "scrollTop": 23083,
+      "scrollHeight": 23603,
+      "clientHeight": 340,
+      "maxScroll": 23263
+    },
+    "history": {
+      "id": "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+      "top": 23083,
+      "known": true
+    },
+    "saved": [
+      [
+        "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+        23083
+      ],
+      [
+        "e59e33e8-b3b3-49af-aa9e-b33203d07ebb",
+        2907
+      ]
+    ],
+    "fonts": "loaded",
+    "pendingImages": 65
+  },
+  {
+    "kind": "image-load",
+    "detail": {
+      "src": "http://127.0.0.1:60861/media/_w/480/users/1/images/1-1727065637334.webp",
+      "width": 320,
+      "height": 320
+    },
+    "timeOrigin": 1792583318156.5,
+    "now": 84.40000009536743,
+    "url": "http://127.0.0.1:60861/raspisanie-i-tseny",
+    "port": {
+      "scrollTop": 23083,
+      "scrollHeight": 23603,
+      "clientHeight": 340,
+      "maxScroll": 23263
+    },
+    "history": {
+      "id": "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+      "top": 23083,
+      "known": true
+    },
+    "saved": [
+      [
+        "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+        23083
+      ],
+      [
+        "e59e33e8-b3b3-49af-aa9e-b33203d07ebb",
+        2907
+      ]
+    ],
+    "fonts": "loaded",
+    "pendingImages": 63
+  },
+  {
+    "kind": "image-load",
+    "detail": {
+      "src": "http://127.0.0.1:60861/media/_w/480/users/1/images/1-1776771365590.webp",
+      "width": 320,
+      "height": 320
+    },
+    "timeOrigin": 1792583318156.5,
+    "now": 84.59999990463257,
+    "url": "http://127.0.0.1:60861/raspisanie-i-tseny",
+    "port": {
+      "scrollTop": 23083,
+      "scrollHeight": 23603,
+      "clientHeight": 340,
+      "maxScroll": 23263
+    },
+    "history": {
+      "id": "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+      "top": 23083,
+      "known": true
+    },
+    "saved": [
+      [
+        "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+        23083
+      ],
+      [
+        "e59e33e8-b3b3-49af-aa9e-b33203d07ebb",
+        2907
+      ]
+    ],
+    "fonts": "loaded",
+    "pendingImages": 63
+  },
+  {
+    "kind": "TEST-after-back",
+    "url": "http://127.0.0.1:60861/raspisanie-i-tseny",
+    "port": {
+      "scrollTop": 23083,
+      "scrollHeight": 23603,
+      "clientHeight": 340,
+      "maxScroll": 23263
+    },
+    "history": {
+      "id": "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+      "top": 23083,
+      "known": true
+    }
+  },
+  {
+    "kind": "image-load",
+    "detail": {
+      "src": "http://127.0.0.1:60861/logo-wordmark.svg",
+      "width": 300,
+      "height": 82
+    },
+    "timeOrigin": 1792583324267.7,
+    "now": 27.700000047683716,
+    "url": "http://127.0.0.1:60861/kontakty",
+    "port": {
+      "scrollTop": 0,
+      "scrollHeight": 3367,
+      "clientHeight": 340,
+      "maxScroll": 3027
+    },
+    "history": {
+      "id": "e59e33e8-b3b3-49af-aa9e-b33203d07ebb",
+      "top": 2907,
+      "known": true
+    },
+    "saved": [
+      [
+        "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+        23083
+      ],
+      [
+        "e59e33e8-b3b3-49af-aa9e-b33203d07ebb",
+        2907
+      ]
+    ],
+    "fonts": "loading",
+    "pendingImages": 0
+  },
+  {
+    "kind": "image-load",
+    "detail": {
+      "src": "http://127.0.0.1:60861/logo-icon.svg",
+      "width": 33,
+      "height": 34
+    },
+    "timeOrigin": 1792583324267.7,
+    "now": 33.700000047683716,
+    "url": "http://127.0.0.1:60861/kontakty",
+    "port": {
+      "scrollTop": 0,
+      "scrollHeight": 3367,
+      "clientHeight": 340,
+      "maxScroll": 3027
+    },
+    "history": {
+      "id": "e59e33e8-b3b3-49af-aa9e-b33203d07ebb",
+      "top": 2907,
+      "known": true
+    },
+    "saved": [
+      [
+        "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+        23083
+      ],
+      [
+        "e59e33e8-b3b3-49af-aa9e-b33203d07ebb",
+        2907
+      ]
+    ],
+    "fonts": "loading",
+    "pendingImages": 0
+  },
+  {
+    "kind": "pageshow",
+    "detail": {
+      "persisted": false
+    },
+    "timeOrigin": 1792583324267.7,
+    "now": 34.10000014305115,
+    "url": "http://127.0.0.1:60861/kontakty",
+    "port": {
+      "scrollTop": 0,
+      "scrollHeight": 3367,
+      "clientHeight": 340,
+      "maxScroll": 3027
+    },
+    "history": {
+      "id": "e59e33e8-b3b3-49af-aa9e-b33203d07ebb",
+      "top": 2907,
+      "known": true
+    },
+    "saved": [
+      [
+        "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+        23083
+      ],
+      [
+        "e59e33e8-b3b3-49af-aa9e-b33203d07ebb",
+        2907
+      ]
+    ],
+    "fonts": "loading",
+    "pendingImages": 0
+  },
+  {
+    "kind": "scrollTo-before",
+    "detail": [
+      {
+        "top": 2907,
+        "behavior": "instant"
+      }
+    ],
+    "timeOrigin": 1792583324267.7,
+    "now": 34.90000009536743,
+    "url": "http://127.0.0.1:60861/kontakty",
+    "port": {
+      "scrollTop": 0,
+      "scrollHeight": 3367,
+      "clientHeight": 340,
+      "maxScroll": 3027
+    },
+    "history": {
+      "id": "e59e33e8-b3b3-49af-aa9e-b33203d07ebb",
+      "top": 2907,
+      "known": true
+    },
+    "saved": [
+      [
+        "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+        23083
+      ],
+      [
+        "e59e33e8-b3b3-49af-aa9e-b33203d07ebb",
+        2907
+      ]
+    ],
+    "fonts": "loading",
+    "pendingImages": 0
+  },
+  {
+    "kind": "scrollTo-after",
+    "detail": [
+      {
+        "top": 2907,
+        "behavior": "instant"
+      }
+    ],
+    "timeOrigin": 1792583324267.7,
+    "now": 35.5,
+    "url": "http://127.0.0.1:60861/kontakty",
+    "port": {
+      "scrollTop": 2907,
+      "scrollHeight": 3367,
+      "clientHeight": 340,
+      "maxScroll": 3027
+    },
+    "history": {
+      "id": "e59e33e8-b3b3-49af-aa9e-b33203d07ebb",
+      "top": 2907,
+      "known": true
+    },
+    "saved": [
+      [
+        "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+        23083
+      ],
+      [
+        "e59e33e8-b3b3-49af-aa9e-b33203d07ebb",
+        2907
+      ]
+    ],
+    "fonts": "loading",
+    "pendingImages": 0
+  },
+  {
+    "kind": "port-scroll",
+    "timeOrigin": 1792583324267.7,
+    "now": 35.700000047683716,
+    "url": "http://127.0.0.1:60861/kontakty",
+    "port": {
+      "scrollTop": 2907,
+      "scrollHeight": 3367,
+      "clientHeight": 340,
+      "maxScroll": 3027
+    },
+    "history": {
+      "id": "e59e33e8-b3b3-49af-aa9e-b33203d07ebb",
+      "top": 2907,
+      "known": true
+    },
+    "saved": [
+      [
+        "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+        23083
+      ],
+      [
+        "e59e33e8-b3b3-49af-aa9e-b33203d07ebb",
+        2907
+      ]
+    ],
+    "fonts": "loaded",
+    "pendingImages": 0
+  },
+  {
+    "kind": "pageshow-raf",
+    "timeOrigin": 1792583324267.7,
+    "now": 36.90000009536743,
+    "url": "http://127.0.0.1:60861/kontakty",
+    "port": {
+      "scrollTop": 2907,
+      "scrollHeight": 3367,
+      "clientHeight": 340,
+      "maxScroll": 3027
+    },
+    "history": {
+      "id": "e59e33e8-b3b3-49af-aa9e-b33203d07ebb",
+      "top": 2907,
+      "known": true
+    },
+    "saved": [
+      [
+        "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+        23083
+      ],
+      [
+        "e59e33e8-b3b3-49af-aa9e-b33203d07ebb",
+        2907
+      ]
+    ],
+    "fonts": "loaded",
+    "pendingImages": 0
+  },
+  {
+    "kind": "pageshow-task",
+    "timeOrigin": 1792583324267.7,
+    "now": 39.60000014305115,
+    "url": "http://127.0.0.1:60861/kontakty",
+    "port": {
+      "scrollTop": 2907,
+      "scrollHeight": 3367,
+      "clientHeight": 340,
+      "maxScroll": 3027
+    },
+    "history": {
+      "id": "e59e33e8-b3b3-49af-aa9e-b33203d07ebb",
+      "top": 2907,
+      "known": true
+    },
+    "saved": [
+      [
+        "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+        23083
+      ],
+      [
+        "e59e33e8-b3b3-49af-aa9e-b33203d07ebb",
+        2907
+      ]
+    ],
+    "fonts": "loaded",
+    "pendingImages": 0
+  },
+  {
+    "kind": "replaceState",
+    "detail": {
+      "id": "69bd54b3-23ce-485e-ace1-fada51c99cd4",
+      "top": 0,
+      "known": false
+    },
+    "timeOrigin": 1792583324336.8,
+    "now": 35,
+    "url": "http://127.0.0.1:60861/raspisanie-i-tseny",
+    "port": {
+      "scrollTop": 0,
+      "scrollHeight": 22819,
+      "clientHeight": 340,
+      "maxScroll": 22479
+    },
+    "history": {
+      "id": "69bd54b3-23ce-485e-ace1-fada51c99cd4",
+      "top": 0,
+      "known": false
+    },
+    "saved": [
+      [
+        "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+        23083
+      ],
+      [
+        "e59e33e8-b3b3-49af-aa9e-b33203d07ebb",
+        2790
+      ]
+    ],
+    "fonts": "loading",
+    "pendingImages": 67
+  },
+  {
+    "kind": "image-load",
+    "detail": {
+      "src": "http://127.0.0.1:60861/logo-wordmark.svg",
+      "width": 300,
+      "height": 82
+    },
+    "timeOrigin": 1792583324336.8,
+    "now": 42.89999985694885,
+    "url": "http://127.0.0.1:60861/raspisanie-i-tseny",
+    "port": {
+      "scrollTop": 0,
+      "scrollHeight": 22819,
+      "clientHeight": 340,
+      "maxScroll": 22479
+    },
+    "history": {
+      "id": "69bd54b3-23ce-485e-ace1-fada51c99cd4",
+      "top": 0,
+      "known": false
+    },
+    "saved": [
+      [
+        "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+        23083
+      ],
+      [
+        "e59e33e8-b3b3-49af-aa9e-b33203d07ebb",
+        2790
+      ]
+    ],
+    "fonts": "loading",
+    "pendingImages": 65
+  },
+  {
+    "kind": "image-load",
+    "detail": {
+      "src": "http://127.0.0.1:60861/logo-icon.svg",
+      "width": 33,
+      "height": 34
+    },
+    "timeOrigin": 1792583324336.8,
+    "now": 45,
+    "url": "http://127.0.0.1:60861/raspisanie-i-tseny",
+    "port": {
+      "scrollTop": 0,
+      "scrollHeight": 22819,
+      "clientHeight": 340,
+      "maxScroll": 22479
+    },
+    "history": {
+      "id": "69bd54b3-23ce-485e-ace1-fada51c99cd4",
+      "top": 0,
+      "known": false
+    },
+    "saved": [
+      [
+        "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+        23083
+      ],
+      [
+        "e59e33e8-b3b3-49af-aa9e-b33203d07ebb",
+        2790
+      ]
+    ],
+    "fonts": "loading",
+    "pendingImages": 65
+  },
+  {
+    "kind": "pageshow",
+    "detail": {
+      "persisted": false
+    },
+    "timeOrigin": 1792583324336.8,
+    "now": 50,
+    "url": "http://127.0.0.1:60861/raspisanie-i-tseny",
+    "port": {
+      "scrollTop": 0,
+      "scrollHeight": 22819,
+      "clientHeight": 340,
+      "maxScroll": 22479
+    },
+    "history": {
+      "id": "69bd54b3-23ce-485e-ace1-fada51c99cd4",
+      "top": 0,
+      "known": false
+    },
+    "saved": [
+      [
+        "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+        23083
+      ],
+      [
+        "e59e33e8-b3b3-49af-aa9e-b33203d07ebb",
+        2790
+      ]
+    ],
+    "fonts": "loaded",
+    "pendingImages": 65
+  },
+  {
+    "kind": "pageshow-task",
+    "timeOrigin": 1792583324336.8,
+    "now": 50.5,
+    "url": "http://127.0.0.1:60861/raspisanie-i-tseny",
+    "port": {
+      "scrollTop": 0,
+      "scrollHeight": 22819,
+      "clientHeight": 340,
+      "maxScroll": 22479
+    },
+    "history": {
+      "id": "69bd54b3-23ce-485e-ace1-fada51c99cd4",
+      "top": 0,
+      "known": false
+    },
+    "saved": [
+      [
+        "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+        23083
+      ],
+      [
+        "e59e33e8-b3b3-49af-aa9e-b33203d07ebb",
+        2790
+      ]
+    ],
+    "fonts": "loaded",
+    "pendingImages": 65
+  },
+  {
+    "kind": "pageshow-raf",
+    "timeOrigin": 1792583324336.8,
+    "now": 66.29999995231628,
+    "url": "http://127.0.0.1:60861/raspisanie-i-tseny",
+    "port": {
+      "scrollTop": 0,
+      "scrollHeight": 22819,
+      "clientHeight": 340,
+      "maxScroll": 22479
+    },
+    "history": {
+      "id": "69bd54b3-23ce-485e-ace1-fada51c99cd4",
+      "top": 0,
+      "known": false
+    },
+    "saved": [
+      [
+        "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+        23083
+      ],
+      [
+        "e59e33e8-b3b3-49af-aa9e-b33203d07ebb",
+        2790
+      ]
+    ],
+    "fonts": "loaded",
+    "pendingImages": 62
+  },
+  {
+    "kind": "image-load",
+    "detail": {
+      "src": "http://127.0.0.1:60861/media/_w/480/users/1/images/1-1782813224074.webp",
+      "width": 375,
+      "height": 375
+    },
+    "timeOrigin": 1792583324336.8,
+    "now": 67.39999985694885,
+    "url": "http://127.0.0.1:60861/raspisanie-i-tseny",
+    "port": {
+      "scrollTop": 0,
+      "scrollHeight": 22819,
+      "clientHeight": 340,
+      "maxScroll": 22479
+    },
+    "history": {
+      "id": "69bd54b3-23ce-485e-ace1-fada51c99cd4",
+      "top": 0,
+      "known": false
+    },
+    "saved": [
+      [
+        "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+        23083
+      ],
+      [
+        "e59e33e8-b3b3-49af-aa9e-b33203d07ebb",
+        2790
+      ]
+    ],
+    "fonts": "loaded",
+    "pendingImages": 62
+  },
+  {
+    "kind": "image-load",
+    "detail": {
+      "src": "http://127.0.0.1:60861/media/_w/480/users/1/images/1-1776163553541.webp",
+      "width": 375,
+      "height": 375
+    },
+    "timeOrigin": 1792583324336.8,
+    "now": 67.5,
+    "url": "http://127.0.0.1:60861/raspisanie-i-tseny",
+    "port": {
+      "scrollTop": 0,
+      "scrollHeight": 22819,
+      "clientHeight": 340,
+      "maxScroll": 22479
+    },
+    "history": {
+      "id": "69bd54b3-23ce-485e-ace1-fada51c99cd4",
+      "top": 0,
+      "known": false
+    },
+    "saved": [
+      [
+        "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+        23083
+      ],
+      [
+        "e59e33e8-b3b3-49af-aa9e-b33203d07ebb",
+        2790
+      ]
+    ],
+    "fonts": "loaded",
+    "pendingImages": 62
+  },
+  {
+    "kind": "image-load",
+    "detail": {
+      "src": "http://127.0.0.1:60861/media/_w/480/users/1/images/1-1775479215632.webp",
+      "width": 375,
+      "height": 375
+    },
+    "timeOrigin": 1792583324336.8,
+    "now": 67.5,
+    "url": "http://127.0.0.1:60861/raspisanie-i-tseny",
+    "port": {
+      "scrollTop": 0,
+      "scrollHeight": 22819,
+      "clientHeight": 340,
+      "maxScroll": 22479
+    },
+    "history": {
+      "id": "69bd54b3-23ce-485e-ace1-fada51c99cd4",
+      "top": 0,
+      "known": false
+    },
+    "saved": [
+      [
+        "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+        23083
+      ],
+      [
+        "e59e33e8-b3b3-49af-aa9e-b33203d07ebb",
+        2790
+      ]
+    ],
+    "fonts": "loaded",
+    "pendingImages": 62
+  },
+  {
+    "kind": "port-scroll",
+    "timeOrigin": 1792583324336.8,
+    "now": 91.19999980926514,
+    "url": "http://127.0.0.1:60861/raspisanie-i-tseny",
+    "port": {
+      "scrollTop": 22299,
+      "scrollHeight": 22819,
+      "clientHeight": 340,
+      "maxScroll": 22479
+    },
+    "history": {
+      "id": "69bd54b3-23ce-485e-ace1-fada51c99cd4",
+      "top": 0,
+      "known": false
+    },
+    "saved": [
+      [
+        "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+        23083
+      ],
+      [
+        "e59e33e8-b3b3-49af-aa9e-b33203d07ebb",
+        2790
+      ]
+    ],
+    "fonts": "loaded",
+    "pendingImages": 62
+  },
+  {
+    "kind": "image-load",
+    "detail": {
+      "src": "http://127.0.0.1:60861/media/_w/480/users/1/images/1-1776771365590.webp",
+      "width": 375,
+      "height": 375
+    },
+    "timeOrigin": 1792583324336.8,
+    "now": 106.19999980926514,
+    "url": "http://127.0.0.1:60861/raspisanie-i-tseny",
+    "port": {
+      "scrollTop": 22299,
+      "scrollHeight": 22819,
+      "clientHeight": 340,
+      "maxScroll": 22479
+    },
+    "history": {
+      "id": "69bd54b3-23ce-485e-ace1-fada51c99cd4",
+      "top": 0,
+      "known": false
+    },
+    "saved": [
+      [
+        "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+        23083
+      ],
+      [
+        "e59e33e8-b3b3-49af-aa9e-b33203d07ebb",
+        2790
+      ]
+    ],
+    "fonts": "loaded",
+    "pendingImages": 61
+  },
+  {
+    "kind": "image-load",
+    "detail": {
+      "src": "http://127.0.0.1:60861/media/_w/480/users/1/images/1-1727065637334.webp",
+      "width": 375,
+      "height": 375
+    },
+    "timeOrigin": 1792583324336.8,
+    "now": 106.69999980926514,
+    "url": "http://127.0.0.1:60861/raspisanie-i-tseny",
+    "port": {
+      "scrollTop": 22299,
+      "scrollHeight": 22819,
+      "clientHeight": 340,
+      "maxScroll": 22479
+    },
+    "history": {
+      "id": "69bd54b3-23ce-485e-ace1-fada51c99cd4",
+      "top": 0,
+      "known": false
+    },
+    "saved": [
+      [
+        "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+        23083
+      ],
+      [
+        "e59e33e8-b3b3-49af-aa9e-b33203d07ebb",
+        2790
+      ]
+    ],
+    "fonts": "loaded",
+    "pendingImages": 59
+  },
+  {
+    "kind": "image-load",
+    "detail": {
+      "src": "http://127.0.0.1:60861/media/_w/480/users/1/images/1-1763730383264.webp",
+      "width": 375,
+      "height": 375
+    },
+    "timeOrigin": 1792583324336.8,
+    "now": 106.79999995231628,
+    "url": "http://127.0.0.1:60861/raspisanie-i-tseny",
+    "port": {
+      "scrollTop": 22299,
+      "scrollHeight": 22819,
+      "clientHeight": 340,
+      "maxScroll": 22479
+    },
+    "history": {
+      "id": "69bd54b3-23ce-485e-ace1-fada51c99cd4",
+      "top": 0,
+      "known": false
+    },
+    "saved": [
+      [
+        "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+        23083
+      ],
+      [
+        "e59e33e8-b3b3-49af-aa9e-b33203d07ebb",
+        2790
+      ]
+    ],
+    "fonts": "loaded",
+    "pendingImages": 59
+  },
+  {
+    "kind": "TEST-before-leave",
+    "url": "http://127.0.0.1:60861/raspisanie-i-tseny",
+    "port": {
+      "scrollTop": 22299,
+      "scrollHeight": 22819,
+      "clientHeight": 340,
+      "maxScroll": 22479
+    },
+    "history": {
+      "id": "69bd54b3-23ce-485e-ace1-fada51c99cd4",
+      "top": 0,
+      "known": false
+    }
+  },
+  {
+    "kind": "replaceState",
+    "detail": {
+      "id": "fb616b9e-17d7-4f7f-b146-6ce5935903a8",
+      "top": 0,
+      "known": false
+    },
+    "timeOrigin": 1792583324448.5,
+    "now": 24.800000190734863,
+    "url": "http://127.0.0.1:60861/kontakty",
+    "port": {
+      "scrollTop": 0,
+      "scrollHeight": 3250,
+      "clientHeight": 340,
+      "maxScroll": 2910
+    },
+    "history": {
+      "id": "fb616b9e-17d7-4f7f-b146-6ce5935903a8",
+      "top": 0,
+      "known": false
+    },
+    "saved": [
+      [
+        "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+        23083
+      ],
+      [
+        "e59e33e8-b3b3-49af-aa9e-b33203d07ebb",
+        2790
+      ],
+      [
+        "69bd54b3-23ce-485e-ace1-fada51c99cd4",
+        22299
+      ]
+    ],
+    "fonts": "loading",
+    "pendingImages": 2
+  },
+  {
+    "kind": "image-load",
+    "detail": {
+      "src": "http://127.0.0.1:60861/logo-wordmark.svg",
+      "width": 300,
+      "height": 82
+    },
+    "timeOrigin": 1792583324448.5,
+    "now": 28.800000190734863,
+    "url": "http://127.0.0.1:60861/kontakty",
+    "port": {
+      "scrollTop": 0,
+      "scrollHeight": 3250,
+      "clientHeight": 340,
+      "maxScroll": 2910
+    },
+    "history": {
+      "id": "fb616b9e-17d7-4f7f-b146-6ce5935903a8",
+      "top": 0,
+      "known": false
+    },
+    "saved": [
+      [
+        "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+        23083
+      ],
+      [
+        "e59e33e8-b3b3-49af-aa9e-b33203d07ebb",
+        2790
+      ],
+      [
+        "69bd54b3-23ce-485e-ace1-fada51c99cd4",
+        22299
+      ]
+    ],
+    "fonts": "loading",
+    "pendingImages": 0
+  },
+  {
+    "kind": "image-load",
+    "detail": {
+      "src": "http://127.0.0.1:60861/logo-icon.svg",
+      "width": 33,
+      "height": 34
+    },
+    "timeOrigin": 1792583324448.5,
+    "now": 29.5,
+    "url": "http://127.0.0.1:60861/kontakty",
+    "port": {
+      "scrollTop": 0,
+      "scrollHeight": 3250,
+      "clientHeight": 340,
+      "maxScroll": 2910
+    },
+    "history": {
+      "id": "fb616b9e-17d7-4f7f-b146-6ce5935903a8",
+      "top": 0,
+      "known": false
+    },
+    "saved": [
+      [
+        "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+        23083
+      ],
+      [
+        "e59e33e8-b3b3-49af-aa9e-b33203d07ebb",
+        2790
+      ],
+      [
+        "69bd54b3-23ce-485e-ace1-fada51c99cd4",
+        22299
+      ]
+    ],
+    "fonts": "loading",
+    "pendingImages": 0
+  },
+  {
+    "kind": "pageshow",
+    "detail": {
+      "persisted": false
+    },
+    "timeOrigin": 1792583324448.5,
+    "now": 29.800000190734863,
+    "url": "http://127.0.0.1:60861/kontakty",
+    "port": {
+      "scrollTop": 0,
+      "scrollHeight": 3250,
+      "clientHeight": 340,
+      "maxScroll": 2910
+    },
+    "history": {
+      "id": "fb616b9e-17d7-4f7f-b146-6ce5935903a8",
+      "top": 0,
+      "known": false
+    },
+    "saved": [
+      [
+        "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+        23083
+      ],
+      [
+        "e59e33e8-b3b3-49af-aa9e-b33203d07ebb",
+        2790
+      ],
+      [
+        "69bd54b3-23ce-485e-ace1-fada51c99cd4",
+        22299
+      ]
+    ],
+    "fonts": "loaded",
+    "pendingImages": 0
+  },
+  {
+    "kind": "pageshow-task",
+    "timeOrigin": 1792583324448.5,
+    "now": 30.200000047683716,
+    "url": "http://127.0.0.1:60861/kontakty",
+    "port": {
+      "scrollTop": 0,
+      "scrollHeight": 3250,
+      "clientHeight": 340,
+      "maxScroll": 2910
+    },
+    "history": {
+      "id": "fb616b9e-17d7-4f7f-b146-6ce5935903a8",
+      "top": 0,
+      "known": false
+    },
+    "saved": [
+      [
+        "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+        23083
+      ],
+      [
+        "e59e33e8-b3b3-49af-aa9e-b33203d07ebb",
+        2790
+      ],
+      [
+        "69bd54b3-23ce-485e-ace1-fada51c99cd4",
+        22299
+      ]
+    ],
+    "fonts": "loaded",
+    "pendingImages": 0
+  },
+  {
+    "kind": "pageshow-raf",
+    "timeOrigin": 1792583324448.5,
+    "now": 44.5,
+    "url": "http://127.0.0.1:60861/kontakty",
+    "port": {
+      "scrollTop": 0,
+      "scrollHeight": 3250,
+      "clientHeight": 340,
+      "maxScroll": 2910
+    },
+    "history": {
+      "id": "fb616b9e-17d7-4f7f-b146-6ce5935903a8",
+      "top": 0,
+      "known": false
+    },
+    "saved": [
+      [
+        "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+        23083
+      ],
+      [
+        "e59e33e8-b3b3-49af-aa9e-b33203d07ebb",
+        2790
+      ],
+      [
+        "69bd54b3-23ce-485e-ace1-fada51c99cd4",
+        22299
+      ]
+    ],
+    "fonts": "loaded",
+    "pendingImages": 0
+  },
+  {
+    "kind": "port-scroll",
+    "timeOrigin": 1792583324448.5,
+    "now": 63,
+    "url": "http://127.0.0.1:60861/kontakty",
+    "port": {
+      "scrollTop": 2790,
+      "scrollHeight": 3250,
+      "clientHeight": 340,
+      "maxScroll": 2910
+    },
+    "history": {
+      "id": "fb616b9e-17d7-4f7f-b146-6ce5935903a8",
+      "top": 0,
+      "known": false
+    },
+    "saved": [
+      [
+        "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+        23083
+      ],
+      [
+        "e59e33e8-b3b3-49af-aa9e-b33203d07ebb",
+        2790
+      ],
+      [
+        "69bd54b3-23ce-485e-ace1-fada51c99cd4",
+        22299
+      ]
+    ],
+    "fonts": "loaded",
+    "pendingImages": 0
+  },
+  {
+    "kind": "image-load",
+    "detail": {
+      "src": "http://127.0.0.1:60861/logo-wordmark.svg",
+      "width": 300,
+      "height": 82
+    },
+    "timeOrigin": 1792583324513.6,
+    "now": 41.700000047683716,
+    "url": "http://127.0.0.1:60861/raspisanie-i-tseny",
+    "port": {
+      "scrollTop": 0,
+      "scrollHeight": 22819,
+      "clientHeight": 340,
+      "maxScroll": 22479
+    },
+    "history": {
+      "id": "69bd54b3-23ce-485e-ace1-fada51c99cd4",
+      "top": 22299,
+      "known": true
+    },
+    "saved": [
+      [
+        "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+        23083
+      ],
+      [
+        "e59e33e8-b3b3-49af-aa9e-b33203d07ebb",
+        2790
+      ],
+      [
+        "69bd54b3-23ce-485e-ace1-fada51c99cd4",
+        22299
+      ],
+      [
+        "fb616b9e-17d7-4f7f-b146-6ce5935903a8",
+        2790
+      ]
+    ],
+    "fonts": "loading",
+    "pendingImages": 65
+  },
+  {
+    "kind": "image-load",
+    "detail": {
+      "src": "http://127.0.0.1:60861/logo-icon.svg",
+      "width": 33,
+      "height": 34
+    },
+    "timeOrigin": 1792583324513.6,
+    "now": 43.700000047683716,
+    "url": "http://127.0.0.1:60861/raspisanie-i-tseny",
+    "port": {
+      "scrollTop": 0,
+      "scrollHeight": 22819,
+      "clientHeight": 340,
+      "maxScroll": 22479
+    },
+    "history": {
+      "id": "69bd54b3-23ce-485e-ace1-fada51c99cd4",
+      "top": 22299,
+      "known": true
+    },
+    "saved": [
+      [
+        "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+        23083
+      ],
+      [
+        "e59e33e8-b3b3-49af-aa9e-b33203d07ebb",
+        2790
+      ],
+      [
+        "69bd54b3-23ce-485e-ace1-fada51c99cd4",
+        22299
+      ],
+      [
+        "fb616b9e-17d7-4f7f-b146-6ce5935903a8",
+        2790
+      ]
+    ],
+    "fonts": "loading",
+    "pendingImages": 65
+  },
+  {
+    "kind": "pageshow",
+    "detail": {
+      "persisted": false
+    },
+    "timeOrigin": 1792583324513.6,
+    "now": 48,
+    "url": "http://127.0.0.1:60861/raspisanie-i-tseny",
+    "port": {
+      "scrollTop": 0,
+      "scrollHeight": 22819,
+      "clientHeight": 340,
+      "maxScroll": 22479
+    },
+    "history": {
+      "id": "69bd54b3-23ce-485e-ace1-fada51c99cd4",
+      "top": 22299,
+      "known": true
+    },
+    "saved": [
+      [
+        "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+        23083
+      ],
+      [
+        "e59e33e8-b3b3-49af-aa9e-b33203d07ebb",
+        2790
+      ],
+      [
+        "69bd54b3-23ce-485e-ace1-fada51c99cd4",
+        22299
+      ],
+      [
+        "fb616b9e-17d7-4f7f-b146-6ce5935903a8",
+        2790
+      ]
+    ],
+    "fonts": "loaded",
+    "pendingImages": 65
+  },
+  {
+    "kind": "scrollTo-before",
+    "detail": [
+      {
+        "top": 22299,
+        "behavior": "instant"
+      }
+    ],
+    "timeOrigin": 1792583324513.6,
+    "now": 48.40000009536743,
+    "url": "http://127.0.0.1:60861/raspisanie-i-tseny",
+    "port": {
+      "scrollTop": 0,
+      "scrollHeight": 22819,
+      "clientHeight": 340,
+      "maxScroll": 22479
+    },
+    "history": {
+      "id": "69bd54b3-23ce-485e-ace1-fada51c99cd4",
+      "top": 22299,
+      "known": true
+    },
+    "saved": [
+      [
+        "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+        23083
+      ],
+      [
+        "e59e33e8-b3b3-49af-aa9e-b33203d07ebb",
+        2790
+      ],
+      [
+        "69bd54b3-23ce-485e-ace1-fada51c99cd4",
+        22299
+      ],
+      [
+        "fb616b9e-17d7-4f7f-b146-6ce5935903a8",
+        2790
+      ]
+    ],
+    "fonts": "loaded",
+    "pendingImages": 65
+  },
+  {
+    "kind": "scrollTo-after",
+    "detail": [
+      {
+        "top": 22299,
+        "behavior": "instant"
+      }
+    ],
+    "timeOrigin": 1792583324513.6,
+    "now": 48.60000014305115,
+    "url": "http://127.0.0.1:60861/raspisanie-i-tseny",
+    "port": {
+      "scrollTop": 22299,
+      "scrollHeight": 22819,
+      "clientHeight": 340,
+      "maxScroll": 22479
+    },
+    "history": {
+      "id": "69bd54b3-23ce-485e-ace1-fada51c99cd4",
+      "top": 22299,
+      "known": true
+    },
+    "saved": [
+      [
+        "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+        23083
+      ],
+      [
+        "e59e33e8-b3b3-49af-aa9e-b33203d07ebb",
+        2790
+      ],
+      [
+        "69bd54b3-23ce-485e-ace1-fada51c99cd4",
+        22299
+      ],
+      [
+        "fb616b9e-17d7-4f7f-b146-6ce5935903a8",
+        2790
+      ]
+    ],
+    "fonts": "loaded",
+    "pendingImages": 65
+  },
+  {
+    "kind": "pageshow-task",
+    "timeOrigin": 1792583324513.6,
+    "now": 48.90000009536743,
+    "url": "http://127.0.0.1:60861/raspisanie-i-tseny",
+    "port": {
+      "scrollTop": 22299,
+      "scrollHeight": 22819,
+      "clientHeight": 340,
+      "maxScroll": 22479
+    },
+    "history": {
+      "id": "69bd54b3-23ce-485e-ace1-fada51c99cd4",
+      "top": 22299,
+      "known": true
+    },
+    "saved": [
+      [
+        "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+        23083
+      ],
+      [
+        "e59e33e8-b3b3-49af-aa9e-b33203d07ebb",
+        2790
+      ],
+      [
+        "69bd54b3-23ce-485e-ace1-fada51c99cd4",
+        22299
+      ],
+      [
+        "fb616b9e-17d7-4f7f-b146-6ce5935903a8",
+        2790
+      ]
+    ],
+    "fonts": "loaded",
+    "pendingImages": 65
+  },
+  {
+    "kind": "port-scroll",
+    "timeOrigin": 1792583324513.6,
+    "now": 64.5,
+    "url": "http://127.0.0.1:60861/raspisanie-i-tseny",
+    "port": {
+      "scrollTop": 22299,
+      "scrollHeight": 22819,
+      "clientHeight": 340,
+      "maxScroll": 22479
+    },
+    "history": {
+      "id": "69bd54b3-23ce-485e-ace1-fada51c99cd4",
+      "top": 22299,
+      "known": true
+    },
+    "saved": [
+      [
+        "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+        23083
+      ],
+      [
+        "e59e33e8-b3b3-49af-aa9e-b33203d07ebb",
+        2790
+      ],
+      [
+        "69bd54b3-23ce-485e-ace1-fada51c99cd4",
+        22299
+      ],
+      [
+        "fb616b9e-17d7-4f7f-b146-6ce5935903a8",
+        2790
+      ]
+    ],
+    "fonts": "loaded",
+    "pendingImages": 62
+  },
+  {
+    "kind": "pageshow-raf",
+    "timeOrigin": 1792583324513.6,
+    "now": 68.70000004768372,
+    "url": "http://127.0.0.1:60861/raspisanie-i-tseny",
+    "port": {
+      "scrollTop": 22299,
+      "scrollHeight": 22819,
+      "clientHeight": 340,
+      "maxScroll": 22479
+    },
+    "history": {
+      "id": "69bd54b3-23ce-485e-ace1-fada51c99cd4",
+      "top": 22299,
+      "known": true
+    },
+    "saved": [
+      [
+        "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+        23083
+      ],
+      [
+        "e59e33e8-b3b3-49af-aa9e-b33203d07ebb",
+        2790
+      ],
+      [
+        "69bd54b3-23ce-485e-ace1-fada51c99cd4",
+        22299
+      ],
+      [
+        "fb616b9e-17d7-4f7f-b146-6ce5935903a8",
+        2790
+      ]
+    ],
+    "fonts": "loaded",
+    "pendingImages": 62
+  },
+  {
+    "kind": "image-load",
+    "detail": {
+      "src": "http://127.0.0.1:60861/media/_w/480/users/1/images/1-1782813224074.webp",
+      "width": 375,
+      "height": 375
+    },
+    "timeOrigin": 1792583324513.6,
+    "now": 70.30000019073486,
+    "url": "http://127.0.0.1:60861/raspisanie-i-tseny",
+    "port": {
+      "scrollTop": 22299,
+      "scrollHeight": 22819,
+      "clientHeight": 340,
+      "maxScroll": 22479
+    },
+    "history": {
+      "id": "69bd54b3-23ce-485e-ace1-fada51c99cd4",
+      "top": 22299,
+      "known": true
+    },
+    "saved": [
+      [
+        "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+        23083
+      ],
+      [
+        "e59e33e8-b3b3-49af-aa9e-b33203d07ebb",
+        2790
+      ],
+      [
+        "69bd54b3-23ce-485e-ace1-fada51c99cd4",
+        22299
+      ],
+      [
+        "fb616b9e-17d7-4f7f-b146-6ce5935903a8",
+        2790
+      ]
+    ],
+    "fonts": "loaded",
+    "pendingImages": 62
+  },
+  {
+    "kind": "image-load",
+    "detail": {
+      "src": "http://127.0.0.1:60861/media/_w/480/users/1/images/1-1775479215632.webp",
+      "width": 375,
+      "height": 375
+    },
+    "timeOrigin": 1792583324513.6,
+    "now": 70.40000009536743,
+    "url": "http://127.0.0.1:60861/raspisanie-i-tseny",
+    "port": {
+      "scrollTop": 22299,
+      "scrollHeight": 22819,
+      "clientHeight": 340,
+      "maxScroll": 22479
+    },
+    "history": {
+      "id": "69bd54b3-23ce-485e-ace1-fada51c99cd4",
+      "top": 22299,
+      "known": true
+    },
+    "saved": [
+      [
+        "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+        23083
+      ],
+      [
+        "e59e33e8-b3b3-49af-aa9e-b33203d07ebb",
+        2790
+      ],
+      [
+        "69bd54b3-23ce-485e-ace1-fada51c99cd4",
+        22299
+      ],
+      [
+        "fb616b9e-17d7-4f7f-b146-6ce5935903a8",
+        2790
+      ]
+    ],
+    "fonts": "loaded",
+    "pendingImages": 62
+  },
+  {
+    "kind": "image-load",
+    "detail": {
+      "src": "http://127.0.0.1:60861/media/_w/480/users/1/images/1-1776163553541.webp",
+      "width": 375,
+      "height": 375
+    },
+    "timeOrigin": 1792583324513.6,
+    "now": 70.40000009536743,
+    "url": "http://127.0.0.1:60861/raspisanie-i-tseny",
+    "port": {
+      "scrollTop": 22299,
+      "scrollHeight": 22819,
+      "clientHeight": 340,
+      "maxScroll": 22479
+    },
+    "history": {
+      "id": "69bd54b3-23ce-485e-ace1-fada51c99cd4",
+      "top": 22299,
+      "known": true
+    },
+    "saved": [
+      [
+        "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+        23083
+      ],
+      [
+        "e59e33e8-b3b3-49af-aa9e-b33203d07ebb",
+        2790
+      ],
+      [
+        "69bd54b3-23ce-485e-ace1-fada51c99cd4",
+        22299
+      ],
+      [
+        "fb616b9e-17d7-4f7f-b146-6ce5935903a8",
+        2790
+      ]
+    ],
+    "fonts": "loaded",
+    "pendingImages": 62
+  },
+  {
+    "kind": "image-load",
+    "detail": {
+      "src": "http://127.0.0.1:60861/media/_w/480/users/1/images/1-1763730383264.webp",
+      "width": 375,
+      "height": 375
+    },
+    "timeOrigin": 1792583324513.6,
+    "now": 76.80000019073486,
+    "url": "http://127.0.0.1:60861/raspisanie-i-tseny",
+    "port": {
+      "scrollTop": 22299,
+      "scrollHeight": 22819,
+      "clientHeight": 340,
+      "maxScroll": 22479
+    },
+    "history": {
+      "id": "69bd54b3-23ce-485e-ace1-fada51c99cd4",
+      "top": 22299,
+      "known": true
+    },
+    "saved": [
+      [
+        "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+        23083
+      ],
+      [
+        "e59e33e8-b3b3-49af-aa9e-b33203d07ebb",
+        2790
+      ],
+      [
+        "69bd54b3-23ce-485e-ace1-fada51c99cd4",
+        22299
+      ],
+      [
+        "fb616b9e-17d7-4f7f-b146-6ce5935903a8",
+        2790
+      ]
+    ],
+    "fonts": "loaded",
+    "pendingImages": 60
+  },
+  {
+    "kind": "image-load",
+    "detail": {
+      "src": "http://127.0.0.1:60861/media/_w/480/users/1/images/1-1727065637334.webp",
+      "width": 375,
+      "height": 375
+    },
+    "timeOrigin": 1792583324513.6,
+    "now": 77.20000004768372,
+    "url": "http://127.0.0.1:60861/raspisanie-i-tseny",
+    "port": {
+      "scrollTop": 22299,
+      "scrollHeight": 22819,
+      "clientHeight": 340,
+      "maxScroll": 22479
+    },
+    "history": {
+      "id": "69bd54b3-23ce-485e-ace1-fada51c99cd4",
+      "top": 22299,
+      "known": true
+    },
+    "saved": [
+      [
+        "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+        23083
+      ],
+      [
+        "e59e33e8-b3b3-49af-aa9e-b33203d07ebb",
+        2790
+      ],
+      [
+        "69bd54b3-23ce-485e-ace1-fada51c99cd4",
+        22299
+      ],
+      [
+        "fb616b9e-17d7-4f7f-b146-6ce5935903a8",
+        2790
+      ]
+    ],
+    "fonts": "loaded",
+    "pendingImages": 59
+  },
+  {
+    "kind": "image-load",
+    "detail": {
+      "src": "http://127.0.0.1:60861/media/_w/480/users/1/images/1-1776771365590.webp",
+      "width": 375,
+      "height": 375
+    },
+    "timeOrigin": 1792583324513.6,
+    "now": 77.60000014305115,
+    "url": "http://127.0.0.1:60861/raspisanie-i-tseny",
+    "port": {
+      "scrollTop": 22299,
+      "scrollHeight": 22819,
+      "clientHeight": 340,
+      "maxScroll": 22479
+    },
+    "history": {
+      "id": "69bd54b3-23ce-485e-ace1-fada51c99cd4",
+      "top": 22299,
+      "known": true
+    },
+    "saved": [
+      [
+        "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+        23083
+      ],
+      [
+        "e59e33e8-b3b3-49af-aa9e-b33203d07ebb",
+        2790
+      ],
+      [
+        "69bd54b3-23ce-485e-ace1-fada51c99cd4",
+        22299
+      ],
+      [
+        "fb616b9e-17d7-4f7f-b146-6ce5935903a8",
+        2790
+      ]
+    ],
+    "fonts": "loaded",
+    "pendingImages": 59
+  },
+  {
+    "kind": "TEST-after-back",
+    "url": "http://127.0.0.1:60861/raspisanie-i-tseny",
+    "port": {
+      "scrollTop": 22299,
+      "scrollHeight": 22819,
+      "clientHeight": 340,
+      "maxScroll": 22479
+    },
+    "history": {
+      "id": "69bd54b3-23ce-485e-ace1-fada51c99cd4",
+      "top": 22299,
+      "known": true
+    }
+  },
+  {
+    "kind": "image-load",
+    "detail": {
+      "src": "http://127.0.0.1:60861/logo-wordmark.svg",
+      "width": 300,
+      "height": 82
+    },
+    "timeOrigin": 1792583330604.1,
+    "now": 31.59999990463257,
+    "url": "http://127.0.0.1:60861/kontakty",
+    "port": {
+      "scrollTop": 0,
+      "scrollHeight": 3250,
+      "clientHeight": 340,
+      "maxScroll": 2910
+    },
+    "history": {
+      "id": "fb616b9e-17d7-4f7f-b146-6ce5935903a8",
+      "top": 2790,
+      "known": true
+    },
+    "saved": [
+      [
+        "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+        23083
+      ],
+      [
+        "e59e33e8-b3b3-49af-aa9e-b33203d07ebb",
+        2790
+      ],
+      [
+        "69bd54b3-23ce-485e-ace1-fada51c99cd4",
+        22299
+      ],
+      [
+        "fb616b9e-17d7-4f7f-b146-6ce5935903a8",
+        2790
+      ]
+    ],
+    "fonts": "loading",
+    "pendingImages": 0
+  },
+  {
+    "kind": "image-load",
+    "detail": {
+      "src": "http://127.0.0.1:60861/logo-icon.svg",
+      "width": 33,
+      "height": 34
+    },
+    "timeOrigin": 1792583330604.1,
+    "now": 38.09999990463257,
+    "url": "http://127.0.0.1:60861/kontakty",
+    "port": {
+      "scrollTop": 0,
+      "scrollHeight": 3250,
+      "clientHeight": 340,
+      "maxScroll": 2910
+    },
+    "history": {
+      "id": "fb616b9e-17d7-4f7f-b146-6ce5935903a8",
+      "top": 2790,
+      "known": true
+    },
+    "saved": [
+      [
+        "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+        23083
+      ],
+      [
+        "e59e33e8-b3b3-49af-aa9e-b33203d07ebb",
+        2790
+      ],
+      [
+        "69bd54b3-23ce-485e-ace1-fada51c99cd4",
+        22299
+      ],
+      [
+        "fb616b9e-17d7-4f7f-b146-6ce5935903a8",
+        2790
+      ]
+    ],
+    "fonts": "loading",
+    "pendingImages": 0
+  },
+  {
+    "kind": "pageshow",
+    "detail": {
+      "persisted": false
+    },
+    "timeOrigin": 1792583330604.1,
+    "now": 38.59999990463257,
+    "url": "http://127.0.0.1:60861/kontakty",
+    "port": {
+      "scrollTop": 0,
+      "scrollHeight": 3250,
+      "clientHeight": 340,
+      "maxScroll": 2910
+    },
+    "history": {
+      "id": "fb616b9e-17d7-4f7f-b146-6ce5935903a8",
+      "top": 2790,
+      "known": true
+    },
+    "saved": [
+      [
+        "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+        23083
+      ],
+      [
+        "e59e33e8-b3b3-49af-aa9e-b33203d07ebb",
+        2790
+      ],
+      [
+        "69bd54b3-23ce-485e-ace1-fada51c99cd4",
+        22299
+      ],
+      [
+        "fb616b9e-17d7-4f7f-b146-6ce5935903a8",
+        2790
+      ]
+    ],
+    "fonts": "loading",
+    "pendingImages": 0
+  },
+  {
+    "kind": "scrollTo-before",
+    "detail": [
+      {
+        "top": 2790,
+        "behavior": "instant"
+      }
+    ],
+    "timeOrigin": 1792583330604.1,
+    "now": 39.5,
+    "url": "http://127.0.0.1:60861/kontakty",
+    "port": {
+      "scrollTop": 0,
+      "scrollHeight": 3250,
+      "clientHeight": 340,
+      "maxScroll": 2910
+    },
+    "history": {
+      "id": "fb616b9e-17d7-4f7f-b146-6ce5935903a8",
+      "top": 2790,
+      "known": true
+    },
+    "saved": [
+      [
+        "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+        23083
+      ],
+      [
+        "e59e33e8-b3b3-49af-aa9e-b33203d07ebb",
+        2790
+      ],
+      [
+        "69bd54b3-23ce-485e-ace1-fada51c99cd4",
+        22299
+      ],
+      [
+        "fb616b9e-17d7-4f7f-b146-6ce5935903a8",
+        2790
+      ]
+    ],
+    "fonts": "loading",
+    "pendingImages": 0
+  },
+  {
+    "kind": "scrollTo-after",
+    "detail": [
+      {
+        "top": 2790,
+        "behavior": "instant"
+      }
+    ],
+    "timeOrigin": 1792583330604.1,
+    "now": 40.299999952316284,
+    "url": "http://127.0.0.1:60861/kontakty",
+    "port": {
+      "scrollTop": 2790,
+      "scrollHeight": 3250,
+      "clientHeight": 340,
+      "maxScroll": 2910
+    },
+    "history": {
+      "id": "fb616b9e-17d7-4f7f-b146-6ce5935903a8",
+      "top": 2790,
+      "known": true
+    },
+    "saved": [
+      [
+        "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+        23083
+      ],
+      [
+        "e59e33e8-b3b3-49af-aa9e-b33203d07ebb",
+        2790
+      ],
+      [
+        "69bd54b3-23ce-485e-ace1-fada51c99cd4",
+        22299
+      ],
+      [
+        "fb616b9e-17d7-4f7f-b146-6ce5935903a8",
+        2790
+      ]
+    ],
+    "fonts": "loading",
+    "pendingImages": 0
+  },
+  {
+    "kind": "port-scroll",
+    "timeOrigin": 1792583330604.1,
+    "now": 40.39999985694885,
+    "url": "http://127.0.0.1:60861/kontakty",
+    "port": {
+      "scrollTop": 2790,
+      "scrollHeight": 3250,
+      "clientHeight": 340,
+      "maxScroll": 2910
+    },
+    "history": {
+      "id": "fb616b9e-17d7-4f7f-b146-6ce5935903a8",
+      "top": 2790,
+      "known": true
+    },
+    "saved": [
+      [
+        "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+        23083
+      ],
+      [
+        "e59e33e8-b3b3-49af-aa9e-b33203d07ebb",
+        2790
+      ],
+      [
+        "69bd54b3-23ce-485e-ace1-fada51c99cd4",
+        22299
+      ],
+      [
+        "fb616b9e-17d7-4f7f-b146-6ce5935903a8",
+        2790
+      ]
+    ],
+    "fonts": "loaded",
+    "pendingImages": 0
+  },
+  {
+    "kind": "pageshow-raf",
+    "timeOrigin": 1792583330604.1,
+    "now": 41.700000047683716,
+    "url": "http://127.0.0.1:60861/kontakty",
+    "port": {
+      "scrollTop": 2790,
+      "scrollHeight": 3250,
+      "clientHeight": 340,
+      "maxScroll": 2910
+    },
+    "history": {
+      "id": "fb616b9e-17d7-4f7f-b146-6ce5935903a8",
+      "top": 2790,
+      "known": true
+    },
+    "saved": [
+      [
+        "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+        23083
+      ],
+      [
+        "e59e33e8-b3b3-49af-aa9e-b33203d07ebb",
+        2790
+      ],
+      [
+        "69bd54b3-23ce-485e-ace1-fada51c99cd4",
+        22299
+      ],
+      [
+        "fb616b9e-17d7-4f7f-b146-6ce5935903a8",
+        2790
+      ]
+    ],
+    "fonts": "loaded",
+    "pendingImages": 0
+  },
+  {
+    "kind": "pageshow-task",
+    "timeOrigin": 1792583330604.1,
+    "now": 45.200000047683716,
+    "url": "http://127.0.0.1:60861/kontakty",
+    "port": {
+      "scrollTop": 2790,
+      "scrollHeight": 3250,
+      "clientHeight": 340,
+      "maxScroll": 2910
+    },
+    "history": {
+      "id": "fb616b9e-17d7-4f7f-b146-6ce5935903a8",
+      "top": 2790,
+      "known": true
+    },
+    "saved": [
+      [
+        "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+        23083
+      ],
+      [
+        "e59e33e8-b3b3-49af-aa9e-b33203d07ebb",
+        2790
+      ],
+      [
+        "69bd54b3-23ce-485e-ace1-fada51c99cd4",
+        22299
+      ],
+      [
+        "fb616b9e-17d7-4f7f-b146-6ce5935903a8",
+        2790
+      ]
+    ],
+    "fonts": "loaded",
+    "pendingImages": 0
+  },
+  {
+    "kind": "port-scroll",
+    "timeOrigin": 1792583330604.1,
+    "now": 82.29999995231628,
+    "url": "http://127.0.0.1:60861/kontakty",
+    "port": {
+      "scrollTop": 1498,
+      "scrollHeight": 1928,
+      "clientHeight": 340,
+      "maxScroll": 1588
+    },
+    "history": {
+      "id": "fb616b9e-17d7-4f7f-b146-6ce5935903a8",
+      "top": 2790,
+      "known": true
+    },
+    "saved": [
+      [
+        "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+        23083
+      ],
+      [
+        "e59e33e8-b3b3-49af-aa9e-b33203d07ebb",
+        2790
+      ],
+      [
+        "69bd54b3-23ce-485e-ace1-fada51c99cd4",
+        22299
+      ],
+      [
+        "fb616b9e-17d7-4f7f-b146-6ce5935903a8",
+        2790
+      ]
+    ],
+    "fonts": "loaded",
+    "pendingImages": 0
+  },
+  {
+    "kind": "replaceState",
+    "detail": {
+      "id": "1e72ed05-91e2-4945-bc21-2e0df86f33c7",
+      "top": 0,
+      "known": false
+    },
+    "timeOrigin": 1792583330679,
+    "now": 53,
+    "url": "http://127.0.0.1:60861/raspisanie-i-tseny",
+    "port": {
+      "scrollTop": 0,
+      "scrollHeight": 9147,
+      "clientHeight": 340,
+      "maxScroll": 8807
+    },
+    "history": {
+      "id": "1e72ed05-91e2-4945-bc21-2e0df86f33c7",
+      "top": 0,
+      "known": false
+    },
+    "saved": [
+      [
+        "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+        23083
+      ],
+      [
+        "e59e33e8-b3b3-49af-aa9e-b33203d07ebb",
+        2790
+      ],
+      [
+        "69bd54b3-23ce-485e-ace1-fada51c99cd4",
+        22299
+      ],
+      [
+        "fb616b9e-17d7-4f7f-b146-6ce5935903a8",
+        1498
+      ]
+    ],
+    "fonts": "loading",
+    "pendingImages": 65
+  },
+  {
+    "kind": "image-load",
+    "detail": {
+      "src": "http://127.0.0.1:60861/logo-wordmark.svg",
+      "width": 300,
+      "height": 82
+    },
+    "timeOrigin": 1792583330679,
+    "now": 59.60000014305115,
+    "url": "http://127.0.0.1:60861/raspisanie-i-tseny",
+    "port": {
+      "scrollTop": 0,
+      "scrollHeight": 9147,
+      "clientHeight": 340,
+      "maxScroll": 8807
+    },
+    "history": {
+      "id": "1e72ed05-91e2-4945-bc21-2e0df86f33c7",
+      "top": 0,
+      "known": false
+    },
+    "saved": [
+      [
+        "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+        23083
+      ],
+      [
+        "e59e33e8-b3b3-49af-aa9e-b33203d07ebb",
+        2790
+      ],
+      [
+        "69bd54b3-23ce-485e-ace1-fada51c99cd4",
+        22299
+      ],
+      [
+        "fb616b9e-17d7-4f7f-b146-6ce5935903a8",
+        1498
+      ]
+    ],
+    "fonts": "loading",
+    "pendingImages": 65
+  },
+  {
+    "kind": "image-load",
+    "detail": {
+      "src": "http://127.0.0.1:60861/logo-icon.svg",
+      "width": 33,
+      "height": 34
+    },
+    "timeOrigin": 1792583330679,
+    "now": 66.30000019073486,
+    "url": "http://127.0.0.1:60861/raspisanie-i-tseny",
+    "port": {
+      "scrollTop": 0,
+      "scrollHeight": 9147,
+      "clientHeight": 340,
+      "maxScroll": 8807
+    },
+    "history": {
+      "id": "1e72ed05-91e2-4945-bc21-2e0df86f33c7",
+      "top": 0,
+      "known": false
+    },
+    "saved": [
+      [
+        "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+        23083
+      ],
+      [
+        "e59e33e8-b3b3-49af-aa9e-b33203d07ebb",
+        2790
+      ],
+      [
+        "69bd54b3-23ce-485e-ace1-fada51c99cd4",
+        22299
+      ],
+      [
+        "fb616b9e-17d7-4f7f-b146-6ce5935903a8",
+        1498
+      ]
+    ],
+    "fonts": "loading",
+    "pendingImages": 65
+  },
+  {
+    "kind": "pageshow",
+    "detail": {
+      "persisted": false
+    },
+    "timeOrigin": 1792583330679,
+    "now": 67.5,
+    "url": "http://127.0.0.1:60861/raspisanie-i-tseny",
+    "port": {
+      "scrollTop": 0,
+      "scrollHeight": 9147,
+      "clientHeight": 340,
+      "maxScroll": 8807
+    },
+    "history": {
+      "id": "1e72ed05-91e2-4945-bc21-2e0df86f33c7",
+      "top": 0,
+      "known": false
+    },
+    "saved": [
+      [
+        "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+        23083
+      ],
+      [
+        "e59e33e8-b3b3-49af-aa9e-b33203d07ebb",
+        2790
+      ],
+      [
+        "69bd54b3-23ce-485e-ace1-fada51c99cd4",
+        22299
+      ],
+      [
+        "fb616b9e-17d7-4f7f-b146-6ce5935903a8",
+        1498
+      ]
+    ],
+    "fonts": "loaded",
+    "pendingImages": 65
+  },
+  {
+    "kind": "pageshow-task",
+    "timeOrigin": 1792583330679,
+    "now": 67.70000004768372,
+    "url": "http://127.0.0.1:60861/raspisanie-i-tseny",
+    "port": {
+      "scrollTop": 0,
+      "scrollHeight": 9147,
+      "clientHeight": 340,
+      "maxScroll": 8807
+    },
+    "history": {
+      "id": "1e72ed05-91e2-4945-bc21-2e0df86f33c7",
+      "top": 0,
+      "known": false
+    },
+    "saved": [
+      [
+        "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+        23083
+      ],
+      [
+        "e59e33e8-b3b3-49af-aa9e-b33203d07ebb",
+        2790
+      ],
+      [
+        "69bd54b3-23ce-485e-ace1-fada51c99cd4",
+        22299
+      ],
+      [
+        "fb616b9e-17d7-4f7f-b146-6ce5935903a8",
+        1498
+      ]
+    ],
+    "fonts": "loaded",
+    "pendingImages": 65
+  },
+  {
+    "kind": "pageshow-raf",
+    "timeOrigin": 1792583330679,
+    "now": 91,
+    "url": "http://127.0.0.1:60861/raspisanie-i-tseny",
+    "port": {
+      "scrollTop": 0,
+      "scrollHeight": 9147,
+      "clientHeight": 340,
+      "maxScroll": 8807
+    },
+    "history": {
+      "id": "1e72ed05-91e2-4945-bc21-2e0df86f33c7",
+      "top": 0,
+      "known": false
+    },
+    "saved": [
+      [
+        "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+        23083
+      ],
+      [
+        "e59e33e8-b3b3-49af-aa9e-b33203d07ebb",
+        2790
+      ],
+      [
+        "69bd54b3-23ce-485e-ace1-fada51c99cd4",
+        22299
+      ],
+      [
+        "fb616b9e-17d7-4f7f-b146-6ce5935903a8",
+        1498
+      ]
+    ],
+    "fonts": "loaded",
+    "pendingImages": 58
+  },
+  {
+    "kind": "image-load",
+    "detail": {
+      "src": "http://127.0.0.1:60861/media/_w/480/users/1/images/1-1782813224074.webp",
+      "width": 419,
+      "height": 419
+    },
+    "timeOrigin": 1792583330679,
+    "now": 92.30000019073486,
+    "url": "http://127.0.0.1:60861/raspisanie-i-tseny",
+    "port": {
+      "scrollTop": 0,
+      "scrollHeight": 9147,
+      "clientHeight": 340,
+      "maxScroll": 8807
+    },
+    "history": {
+      "id": "1e72ed05-91e2-4945-bc21-2e0df86f33c7",
+      "top": 0,
+      "known": false
+    },
+    "saved": [
+      [
+        "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+        23083
+      ],
+      [
+        "e59e33e8-b3b3-49af-aa9e-b33203d07ebb",
+        2790
+      ],
+      [
+        "69bd54b3-23ce-485e-ace1-fada51c99cd4",
+        22299
+      ],
+      [
+        "fb616b9e-17d7-4f7f-b146-6ce5935903a8",
+        1498
+      ]
+    ],
+    "fonts": "loaded",
+    "pendingImages": 58
+  },
+  {
+    "kind": "image-load",
+    "detail": {
+      "src": "http://127.0.0.1:60861/media/_w/480/users/1/images/1-1775479215632.webp",
+      "width": 419,
+      "height": 419
+    },
+    "timeOrigin": 1792583330679,
+    "now": 92.30000019073486,
+    "url": "http://127.0.0.1:60861/raspisanie-i-tseny",
+    "port": {
+      "scrollTop": 0,
+      "scrollHeight": 9147,
+      "clientHeight": 340,
+      "maxScroll": 8807
+    },
+    "history": {
+      "id": "1e72ed05-91e2-4945-bc21-2e0df86f33c7",
+      "top": 0,
+      "known": false
+    },
+    "saved": [
+      [
+        "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+        23083
+      ],
+      [
+        "e59e33e8-b3b3-49af-aa9e-b33203d07ebb",
+        2790
+      ],
+      [
+        "69bd54b3-23ce-485e-ace1-fada51c99cd4",
+        22299
+      ],
+      [
+        "fb616b9e-17d7-4f7f-b146-6ce5935903a8",
+        1498
+      ]
+    ],
+    "fonts": "loaded",
+    "pendingImages": 58
+  },
+  {
+    "kind": "image-load",
+    "detail": {
+      "src": "http://127.0.0.1:60861/media/_w/480/users/1/images/1-1776163553541.webp",
+      "width": 419,
+      "height": 419
+    },
+    "timeOrigin": 1792583330679,
+    "now": 92.40000009536743,
+    "url": "http://127.0.0.1:60861/raspisanie-i-tseny",
+    "port": {
+      "scrollTop": 0,
+      "scrollHeight": 9147,
+      "clientHeight": 340,
+      "maxScroll": 8807
+    },
+    "history": {
+      "id": "1e72ed05-91e2-4945-bc21-2e0df86f33c7",
+      "top": 0,
+      "known": false
+    },
+    "saved": [
+      [
+        "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+        23083
+      ],
+      [
+        "e59e33e8-b3b3-49af-aa9e-b33203d07ebb",
+        2790
+      ],
+      [
+        "69bd54b3-23ce-485e-ace1-fada51c99cd4",
+        22299
+      ],
+      [
+        "fb616b9e-17d7-4f7f-b146-6ce5935903a8",
+        1498
+      ]
+    ],
+    "fonts": "loaded",
+    "pendingImages": 58
+  },
+  {
+    "kind": "image-load",
+    "detail": {
+      "src": "http://127.0.0.1:60861/media/_w/480/users/1/images/1-1775648457002.webp",
+      "width": 419,
+      "height": 419
+    },
+    "timeOrigin": 1792583330679,
+    "now": 92.60000014305115,
+    "url": "http://127.0.0.1:60861/raspisanie-i-tseny",
+    "port": {
+      "scrollTop": 0,
+      "scrollHeight": 9147,
+      "clientHeight": 340,
+      "maxScroll": 8807
+    },
+    "history": {
+      "id": "1e72ed05-91e2-4945-bc21-2e0df86f33c7",
+      "top": 0,
+      "known": false
+    },
+    "saved": [
+      [
+        "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+        23083
+      ],
+      [
+        "e59e33e8-b3b3-49af-aa9e-b33203d07ebb",
+        2790
+      ],
+      [
+        "69bd54b3-23ce-485e-ace1-fada51c99cd4",
+        22299
+      ],
+      [
+        "fb616b9e-17d7-4f7f-b146-6ce5935903a8",
+        1498
+      ]
+    ],
+    "fonts": "loaded",
+    "pendingImages": 58
+  },
+  {
+    "kind": "image-load",
+    "detail": {
+      "src": "http://127.0.0.1:60861/media/_w/480/users/1/images/1-1776498441352.webp",
+      "width": 419,
+      "height": 419
+    },
+    "timeOrigin": 1792583330679,
+    "now": 92.70000004768372,
+    "url": "http://127.0.0.1:60861/raspisanie-i-tseny",
+    "port": {
+      "scrollTop": 0,
+      "scrollHeight": 9147,
+      "clientHeight": 340,
+      "maxScroll": 8807
+    },
+    "history": {
+      "id": "1e72ed05-91e2-4945-bc21-2e0df86f33c7",
+      "top": 0,
+      "known": false
+    },
+    "saved": [
+      [
+        "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+        23083
+      ],
+      [
+        "e59e33e8-b3b3-49af-aa9e-b33203d07ebb",
+        2790
+      ],
+      [
+        "69bd54b3-23ce-485e-ace1-fada51c99cd4",
+        22299
+      ],
+      [
+        "fb616b9e-17d7-4f7f-b146-6ce5935903a8",
+        1498
+      ]
+    ],
+    "fonts": "loaded",
+    "pendingImages": 58
+  },
+  {
+    "kind": "image-load",
+    "detail": {
+      "src": "http://127.0.0.1:60861/media/_w/480/users/1/images/1-1779192927333.webp",
+      "width": 419,
+      "height": 419
+    },
+    "timeOrigin": 1792583330679,
+    "now": 92.80000019073486,
+    "url": "http://127.0.0.1:60861/raspisanie-i-tseny",
+    "port": {
+      "scrollTop": 0,
+      "scrollHeight": 9147,
+      "clientHeight": 340,
+      "maxScroll": 8807
+    },
+    "history": {
+      "id": "1e72ed05-91e2-4945-bc21-2e0df86f33c7",
+      "top": 0,
+      "known": false
+    },
+    "saved": [
+      [
+        "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+        23083
+      ],
+      [
+        "e59e33e8-b3b3-49af-aa9e-b33203d07ebb",
+        2790
+      ],
+      [
+        "69bd54b3-23ce-485e-ace1-fada51c99cd4",
+        22299
+      ],
+      [
+        "fb616b9e-17d7-4f7f-b146-6ce5935903a8",
+        1498
+      ]
+    ],
+    "fonts": "loaded",
+    "pendingImages": 58
+  },
+  {
+    "kind": "image-load",
+    "detail": {
+      "src": "http://127.0.0.1:60861/media/_w/480/users/1/images/1-1761230598574.webp",
+      "width": 419,
+      "height": 419
+    },
+    "timeOrigin": 1792583330679,
+    "now": 92.80000019073486,
+    "url": "http://127.0.0.1:60861/raspisanie-i-tseny",
+    "port": {
+      "scrollTop": 0,
+      "scrollHeight": 9147,
+      "clientHeight": 340,
+      "maxScroll": 8807
+    },
+    "history": {
+      "id": "1e72ed05-91e2-4945-bc21-2e0df86f33c7",
+      "top": 0,
+      "known": false
+    },
+    "saved": [
+      [
+        "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+        23083
+      ],
+      [
+        "e59e33e8-b3b3-49af-aa9e-b33203d07ebb",
+        2790
+      ],
+      [
+        "69bd54b3-23ce-485e-ace1-fada51c99cd4",
+        22299
+      ],
+      [
+        "fb616b9e-17d7-4f7f-b146-6ce5935903a8",
+        1498
+      ]
+    ],
+    "fonts": "loaded",
+    "pendingImages": 58
+  },
+  {
+    "kind": "image-load",
+    "detail": {
+      "src": "http://127.0.0.1:60861/media/_w/480/users/1/images/1-1783686253402.webp",
+      "width": 419,
+      "height": 419
+    },
+    "timeOrigin": 1792583330679,
+    "now": 94,
+    "url": "http://127.0.0.1:60861/raspisanie-i-tseny",
+    "port": {
+      "scrollTop": 0,
+      "scrollHeight": 9147,
+      "clientHeight": 340,
+      "maxScroll": 8807
+    },
+    "history": {
+      "id": "1e72ed05-91e2-4945-bc21-2e0df86f33c7",
+      "top": 0,
+      "known": false
+    },
+    "saved": [
+      [
+        "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+        23083
+      ],
+      [
+        "e59e33e8-b3b3-49af-aa9e-b33203d07ebb",
+        2790
+      ],
+      [
+        "69bd54b3-23ce-485e-ace1-fada51c99cd4",
+        22299
+      ],
+      [
+        "fb616b9e-17d7-4f7f-b146-6ce5935903a8",
+        1498
+      ]
+    ],
+    "fonts": "loaded",
+    "pendingImages": 57
+  },
+  {
+    "kind": "image-load",
+    "detail": {
+      "src": "http://127.0.0.1:60861/media/_w/480/users/1/images/1-1761230661330.webp",
+      "width": 419,
+      "height": 419
+    },
+    "timeOrigin": 1792583330679,
+    "now": 105.10000014305115,
+    "url": "http://127.0.0.1:60861/raspisanie-i-tseny",
+    "port": {
+      "scrollTop": 0,
+      "scrollHeight": 9147,
+      "clientHeight": 340,
+      "maxScroll": 8807
+    },
+    "history": {
+      "id": "1e72ed05-91e2-4945-bc21-2e0df86f33c7",
+      "top": 0,
+      "known": false
+    },
+    "saved": [
+      [
+        "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+        23083
+      ],
+      [
+        "e59e33e8-b3b3-49af-aa9e-b33203d07ebb",
+        2790
+      ],
+      [
+        "69bd54b3-23ce-485e-ace1-fada51c99cd4",
+        22299
+      ],
+      [
+        "fb616b9e-17d7-4f7f-b146-6ce5935903a8",
+        1498
+      ]
+    ],
+    "fonts": "loaded",
+    "pendingImages": 56
+  },
+  {
+    "kind": "port-scroll",
+    "timeOrigin": 1792583330679,
+    "now": 120.80000019073486,
+    "url": "http://127.0.0.1:60861/raspisanie-i-tseny",
+    "port": {
+      "scrollTop": 8627,
+      "scrollHeight": 9147,
+      "clientHeight": 340,
+      "maxScroll": 8807
+    },
+    "history": {
+      "id": "1e72ed05-91e2-4945-bc21-2e0df86f33c7",
+      "top": 0,
+      "known": false
+    },
+    "saved": [
+      [
+        "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+        23083
+      ],
+      [
+        "e59e33e8-b3b3-49af-aa9e-b33203d07ebb",
+        2790
+      ],
+      [
+        "69bd54b3-23ce-485e-ace1-fada51c99cd4",
+        22299
+      ],
+      [
+        "fb616b9e-17d7-4f7f-b146-6ce5935903a8",
+        1498
+      ]
+    ],
+    "fonts": "loaded",
+    "pendingImages": 56
+  },
+  {
+    "kind": "TEST-before-leave",
+    "url": "http://127.0.0.1:60861/raspisanie-i-tseny",
+    "port": {
+      "scrollTop": 8627,
+      "scrollHeight": 9147,
+      "clientHeight": 340,
+      "maxScroll": 8807
+    },
+    "history": {
+      "id": "1e72ed05-91e2-4945-bc21-2e0df86f33c7",
+      "top": 0,
+      "known": false
+    }
+  },
+  {
+    "kind": "image-load",
+    "detail": {
+      "src": "http://127.0.0.1:60861/media/_w/480/users/1/images/1-1761231363783.webp",
+      "width": 419,
+      "height": 419
+    },
+    "timeOrigin": 1792583330679,
+    "now": 146.20000004768372,
+    "url": "http://127.0.0.1:60861/raspisanie-i-tseny",
+    "port": {
+      "scrollTop": 8627,
+      "scrollHeight": 9147,
+      "clientHeight": 340,
+      "maxScroll": 8807
+    },
+    "history": {
+      "id": "1e72ed05-91e2-4945-bc21-2e0df86f33c7",
+      "top": 0,
+      "known": false
+    },
+    "saved": [
+      [
+        "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+        23083
+      ],
+      [
+        "e59e33e8-b3b3-49af-aa9e-b33203d07ebb",
+        2790
+      ],
+      [
+        "69bd54b3-23ce-485e-ace1-fada51c99cd4",
+        22299
+      ],
+      [
+        "fb616b9e-17d7-4f7f-b146-6ce5935903a8",
+        1498
+      ]
+    ],
+    "fonts": "loaded",
+    "pendingImages": 54
+  },
+  {
+    "kind": "image-load",
+    "detail": {
+      "src": "http://127.0.0.1:60861/media/_w/480/users/1/images/1-1775132739287.webp",
+      "width": 419,
+      "height": 419
+    },
+    "timeOrigin": 1792583330679,
+    "now": 146.5,
+    "url": "http://127.0.0.1:60861/raspisanie-i-tseny",
+    "port": {
+      "scrollTop": 8627,
+      "scrollHeight": 9147,
+      "clientHeight": 340,
+      "maxScroll": 8807
+    },
+    "history": {
+      "id": "1e72ed05-91e2-4945-bc21-2e0df86f33c7",
+      "top": 0,
+      "known": false
+    },
+    "saved": [
+      [
+        "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+        23083
+      ],
+      [
+        "e59e33e8-b3b3-49af-aa9e-b33203d07ebb",
+        2790
+      ],
+      [
+        "69bd54b3-23ce-485e-ace1-fada51c99cd4",
+        22299
+      ],
+      [
+        "fb616b9e-17d7-4f7f-b146-6ce5935903a8",
+        1498
+      ]
+    ],
+    "fonts": "loaded",
+    "pendingImages": 53
+  },
+  {
+    "kind": "image-load",
+    "detail": {
+      "src": "http://127.0.0.1:60861/media/_w/480/users/1/images/1-1775479386530.webp",
+      "width": 419,
+      "height": 419
+    },
+    "timeOrigin": 1792583330679,
+    "now": 146.80000019073486,
+    "url": "http://127.0.0.1:60861/raspisanie-i-tseny",
+    "port": {
+      "scrollTop": 8627,
+      "scrollHeight": 9147,
+      "clientHeight": 340,
+      "maxScroll": 8807
+    },
+    "history": {
+      "id": "1e72ed05-91e2-4945-bc21-2e0df86f33c7",
+      "top": 0,
+      "known": false
+    },
+    "saved": [
+      [
+        "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+        23083
+      ],
+      [
+        "e59e33e8-b3b3-49af-aa9e-b33203d07ebb",
+        2790
+      ],
+      [
+        "69bd54b3-23ce-485e-ace1-fada51c99cd4",
+        22299
+      ],
+      [
+        "fb616b9e-17d7-4f7f-b146-6ce5935903a8",
+        1498
+      ]
+    ],
+    "fonts": "loaded",
+    "pendingImages": 53
+  },
+  {
+    "kind": "image-load",
+    "detail": {
+      "src": "http://127.0.0.1:60861/media/_w/480/users/1/images/1-1783681507126.webp",
+      "width": 419,
+      "height": 419
+    },
+    "timeOrigin": 1792583330679,
+    "now": 147,
+    "url": "http://127.0.0.1:60861/raspisanie-i-tseny",
+    "port": {
+      "scrollTop": 8627,
+      "scrollHeight": 9147,
+      "clientHeight": 340,
+      "maxScroll": 8807
+    },
+    "history": {
+      "id": "1e72ed05-91e2-4945-bc21-2e0df86f33c7",
+      "top": 0,
+      "known": false
+    },
+    "saved": [
+      [
+        "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+        23083
+      ],
+      [
+        "e59e33e8-b3b3-49af-aa9e-b33203d07ebb",
+        2790
+      ],
+      [
+        "69bd54b3-23ce-485e-ace1-fada51c99cd4",
+        22299
+      ],
+      [
+        "fb616b9e-17d7-4f7f-b146-6ce5935903a8",
+        1498
+      ]
+    ],
+    "fonts": "loaded",
+    "pendingImages": 52
+  },
+  {
+    "kind": "replaceState",
+    "detail": {
+      "id": "d75fa94f-5174-405a-bcf3-e33640cbd66b",
+      "top": 0,
+      "known": false
+    },
+    "timeOrigin": 1792583330819.5,
+    "now": 49.700000047683716,
+    "url": "http://127.0.0.1:60861/kontakty",
+    "port": {
+      "scrollTop": 0,
+      "scrollHeight": 1928,
+      "clientHeight": 340,
+      "maxScroll": 1588
+    },
+    "history": {
+      "id": "d75fa94f-5174-405a-bcf3-e33640cbd66b",
+      "top": 0,
+      "known": false
+    },
+    "saved": [
+      [
+        "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+        23083
+      ],
+      [
+        "e59e33e8-b3b3-49af-aa9e-b33203d07ebb",
+        2790
+      ],
+      [
+        "69bd54b3-23ce-485e-ace1-fada51c99cd4",
+        22299
+      ],
+      [
+        "fb616b9e-17d7-4f7f-b146-6ce5935903a8",
+        1498
+      ],
+      [
+        "1e72ed05-91e2-4945-bc21-2e0df86f33c7",
+        8627
+      ]
+    ],
+    "fonts": "loading",
+    "pendingImages": 0
+  },
+  {
+    "kind": "image-load",
+    "detail": {
+      "src": "http://127.0.0.1:60861/logo-wordmark.svg",
+      "width": 300,
+      "height": 82
+    },
+    "timeOrigin": 1792583330819.5,
+    "now": 53.200000047683716,
+    "url": "http://127.0.0.1:60861/kontakty",
+    "port": {
+      "scrollTop": 0,
+      "scrollHeight": 1928,
+      "clientHeight": 340,
+      "maxScroll": 1588
+    },
+    "history": {
+      "id": "d75fa94f-5174-405a-bcf3-e33640cbd66b",
+      "top": 0,
+      "known": false
+    },
+    "saved": [
+      [
+        "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+        23083
+      ],
+      [
+        "e59e33e8-b3b3-49af-aa9e-b33203d07ebb",
+        2790
+      ],
+      [
+        "69bd54b3-23ce-485e-ace1-fada51c99cd4",
+        22299
+      ],
+      [
+        "fb616b9e-17d7-4f7f-b146-6ce5935903a8",
+        1498
+      ],
+      [
+        "1e72ed05-91e2-4945-bc21-2e0df86f33c7",
+        8627
+      ]
+    ],
+    "fonts": "loading",
+    "pendingImages": 0
+  },
+  {
+    "kind": "image-load",
+    "detail": {
+      "src": "http://127.0.0.1:60861/logo-icon.svg",
+      "width": 33,
+      "height": 34
+    },
+    "timeOrigin": 1792583330819.5,
+    "now": 54,
+    "url": "http://127.0.0.1:60861/kontakty",
+    "port": {
+      "scrollTop": 0,
+      "scrollHeight": 1928,
+      "clientHeight": 340,
+      "maxScroll": 1588
+    },
+    "history": {
+      "id": "d75fa94f-5174-405a-bcf3-e33640cbd66b",
+      "top": 0,
+      "known": false
+    },
+    "saved": [
+      [
+        "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+        23083
+      ],
+      [
+        "e59e33e8-b3b3-49af-aa9e-b33203d07ebb",
+        2790
+      ],
+      [
+        "69bd54b3-23ce-485e-ace1-fada51c99cd4",
+        22299
+      ],
+      [
+        "fb616b9e-17d7-4f7f-b146-6ce5935903a8",
+        1498
+      ],
+      [
+        "1e72ed05-91e2-4945-bc21-2e0df86f33c7",
+        8627
+      ]
+    ],
+    "fonts": "loading",
+    "pendingImages": 0
+  },
+  {
+    "kind": "pageshow",
+    "detail": {
+      "persisted": false
+    },
+    "timeOrigin": 1792583330819.5,
+    "now": 54.700000047683716,
+    "url": "http://127.0.0.1:60861/kontakty",
+    "port": {
+      "scrollTop": 0,
+      "scrollHeight": 1928,
+      "clientHeight": 340,
+      "maxScroll": 1588
+    },
+    "history": {
+      "id": "d75fa94f-5174-405a-bcf3-e33640cbd66b",
+      "top": 0,
+      "known": false
+    },
+    "saved": [
+      [
+        "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+        23083
+      ],
+      [
+        "e59e33e8-b3b3-49af-aa9e-b33203d07ebb",
+        2790
+      ],
+      [
+        "69bd54b3-23ce-485e-ace1-fada51c99cd4",
+        22299
+      ],
+      [
+        "fb616b9e-17d7-4f7f-b146-6ce5935903a8",
+        1498
+      ],
+      [
+        "1e72ed05-91e2-4945-bc21-2e0df86f33c7",
+        8627
+      ]
+    ],
+    "fonts": "loaded",
+    "pendingImages": 0
+  },
+  {
+    "kind": "pageshow-task",
+    "timeOrigin": 1792583330819.5,
+    "now": 54.90000009536743,
+    "url": "http://127.0.0.1:60861/kontakty",
+    "port": {
+      "scrollTop": 0,
+      "scrollHeight": 1928,
+      "clientHeight": 340,
+      "maxScroll": 1588
+    },
+    "history": {
+      "id": "d75fa94f-5174-405a-bcf3-e33640cbd66b",
+      "top": 0,
+      "known": false
+    },
+    "saved": [
+      [
+        "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+        23083
+      ],
+      [
+        "e59e33e8-b3b3-49af-aa9e-b33203d07ebb",
+        2790
+      ],
+      [
+        "69bd54b3-23ce-485e-ace1-fada51c99cd4",
+        22299
+      ],
+      [
+        "fb616b9e-17d7-4f7f-b146-6ce5935903a8",
+        1498
+      ],
+      [
+        "1e72ed05-91e2-4945-bc21-2e0df86f33c7",
+        8627
+      ]
+    ],
+    "fonts": "loaded",
+    "pendingImages": 0
+  },
+  {
+    "kind": "pageshow-raf",
+    "timeOrigin": 1792583330819.5,
+    "now": 64,
+    "url": "http://127.0.0.1:60861/kontakty",
+    "port": {
+      "scrollTop": 0,
+      "scrollHeight": 1928,
+      "clientHeight": 340,
+      "maxScroll": 1588
+    },
+    "history": {
+      "id": "d75fa94f-5174-405a-bcf3-e33640cbd66b",
+      "top": 0,
+      "known": false
+    },
+    "saved": [
+      [
+        "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+        23083
+      ],
+      [
+        "e59e33e8-b3b3-49af-aa9e-b33203d07ebb",
+        2790
+      ],
+      [
+        "69bd54b3-23ce-485e-ace1-fada51c99cd4",
+        22299
+      ],
+      [
+        "fb616b9e-17d7-4f7f-b146-6ce5935903a8",
+        1498
+      ],
+      [
+        "1e72ed05-91e2-4945-bc21-2e0df86f33c7",
+        8627
+      ]
+    ],
+    "fonts": "loaded",
+    "pendingImages": 0
+  },
+  {
+    "kind": "port-scroll",
+    "timeOrigin": 1792583330819.5,
+    "now": 114.60000014305115,
+    "url": "http://127.0.0.1:60861/kontakty",
+    "port": {
+      "scrollTop": 1468,
+      "scrollHeight": 1928,
+      "clientHeight": 340,
+      "maxScroll": 1588
+    },
+    "history": {
+      "id": "d75fa94f-5174-405a-bcf3-e33640cbd66b",
+      "top": 0,
+      "known": false
+    },
+    "saved": [
+      [
+        "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+        23083
+      ],
+      [
+        "e59e33e8-b3b3-49af-aa9e-b33203d07ebb",
+        2790
+      ],
+      [
+        "69bd54b3-23ce-485e-ace1-fada51c99cd4",
+        22299
+      ],
+      [
+        "fb616b9e-17d7-4f7f-b146-6ce5935903a8",
+        1498
+      ],
+      [
+        "1e72ed05-91e2-4945-bc21-2e0df86f33c7",
+        8627
+      ]
+    ],
+    "fonts": "loaded",
+    "pendingImages": 0
+  },
+  {
+    "kind": "image-load",
+    "detail": {
+      "src": "http://127.0.0.1:60861/logo-wordmark.svg",
+      "width": 300,
+      "height": 82
+    },
+    "timeOrigin": 1792583330931,
+    "now": 58.09999990463257,
+    "url": "http://127.0.0.1:60861/raspisanie-i-tseny",
+    "port": {
+      "scrollTop": 0,
+      "scrollHeight": 9147,
+      "clientHeight": 340,
+      "maxScroll": 8807
+    },
+    "history": {
+      "id": "1e72ed05-91e2-4945-bc21-2e0df86f33c7",
+      "top": 8627,
+      "known": true
+    },
+    "saved": [
+      [
+        "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+        23083
+      ],
+      [
+        "e59e33e8-b3b3-49af-aa9e-b33203d07ebb",
+        2790
+      ],
+      [
+        "69bd54b3-23ce-485e-ace1-fada51c99cd4",
+        22299
+      ],
+      [
+        "fb616b9e-17d7-4f7f-b146-6ce5935903a8",
+        1498
+      ],
+      [
+        "1e72ed05-91e2-4945-bc21-2e0df86f33c7",
+        8627
+      ],
+      [
+        "d75fa94f-5174-405a-bcf3-e33640cbd66b",
+        1468
+      ]
+    ],
+    "fonts": "loading",
+    "pendingImages": 65
+  },
+  {
+    "kind": "image-load",
+    "detail": {
+      "src": "http://127.0.0.1:60861/logo-icon.svg",
+      "width": 33,
+      "height": 34
+    },
+    "timeOrigin": 1792583330931,
+    "now": 62.39999985694885,
+    "url": "http://127.0.0.1:60861/raspisanie-i-tseny",
+    "port": {
+      "scrollTop": 0,
+      "scrollHeight": 9147,
+      "clientHeight": 340,
+      "maxScroll": 8807
+    },
+    "history": {
+      "id": "1e72ed05-91e2-4945-bc21-2e0df86f33c7",
+      "top": 8627,
+      "known": true
+    },
+    "saved": [
+      [
+        "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+        23083
+      ],
+      [
+        "e59e33e8-b3b3-49af-aa9e-b33203d07ebb",
+        2790
+      ],
+      [
+        "69bd54b3-23ce-485e-ace1-fada51c99cd4",
+        22299
+      ],
+      [
+        "fb616b9e-17d7-4f7f-b146-6ce5935903a8",
+        1498
+      ],
+      [
+        "1e72ed05-91e2-4945-bc21-2e0df86f33c7",
+        8627
+      ],
+      [
+        "d75fa94f-5174-405a-bcf3-e33640cbd66b",
+        1468
+      ]
+    ],
+    "fonts": "loading",
+    "pendingImages": 59
+  },
+  {
+    "kind": "image-load",
+    "detail": {
+      "src": "http://127.0.0.1:60861/media/_w/480/users/1/images/1-1775479215632.webp",
+      "width": 419,
+      "height": 419
+    },
+    "timeOrigin": 1792583330931,
+    "now": 63.299999952316284,
+    "url": "http://127.0.0.1:60861/raspisanie-i-tseny",
+    "port": {
+      "scrollTop": 0,
+      "scrollHeight": 9147,
+      "clientHeight": 340,
+      "maxScroll": 8807
+    },
+    "history": {
+      "id": "1e72ed05-91e2-4945-bc21-2e0df86f33c7",
+      "top": 8627,
+      "known": true
+    },
+    "saved": [
+      [
+        "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+        23083
+      ],
+      [
+        "e59e33e8-b3b3-49af-aa9e-b33203d07ebb",
+        2790
+      ],
+      [
+        "69bd54b3-23ce-485e-ace1-fada51c99cd4",
+        22299
+      ],
+      [
+        "fb616b9e-17d7-4f7f-b146-6ce5935903a8",
+        1498
+      ],
+      [
+        "1e72ed05-91e2-4945-bc21-2e0df86f33c7",
+        8627
+      ],
+      [
+        "d75fa94f-5174-405a-bcf3-e33640cbd66b",
+        1468
+      ]
+    ],
+    "fonts": "loading",
+    "pendingImages": 59
+  },
+  {
+    "kind": "image-load",
+    "detail": {
+      "src": "http://127.0.0.1:60861/media/_w/480/users/1/images/1-1782813224074.webp",
+      "width": 419,
+      "height": 419
+    },
+    "timeOrigin": 1792583330931,
+    "now": 63.39999985694885,
+    "url": "http://127.0.0.1:60861/raspisanie-i-tseny",
+    "port": {
+      "scrollTop": 0,
+      "scrollHeight": 9147,
+      "clientHeight": 340,
+      "maxScroll": 8807
+    },
+    "history": {
+      "id": "1e72ed05-91e2-4945-bc21-2e0df86f33c7",
+      "top": 8627,
+      "known": true
+    },
+    "saved": [
+      [
+        "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+        23083
+      ],
+      [
+        "e59e33e8-b3b3-49af-aa9e-b33203d07ebb",
+        2790
+      ],
+      [
+        "69bd54b3-23ce-485e-ace1-fada51c99cd4",
+        22299
+      ],
+      [
+        "fb616b9e-17d7-4f7f-b146-6ce5935903a8",
+        1498
+      ],
+      [
+        "1e72ed05-91e2-4945-bc21-2e0df86f33c7",
+        8627
+      ],
+      [
+        "d75fa94f-5174-405a-bcf3-e33640cbd66b",
+        1468
+      ]
+    ],
+    "fonts": "loading",
+    "pendingImages": 59
+  },
+  {
+    "kind": "image-load",
+    "detail": {
+      "src": "http://127.0.0.1:60861/media/_w/480/users/1/images/1-1775648457002.webp",
+      "width": 419,
+      "height": 419
+    },
+    "timeOrigin": 1792583330931,
+    "now": 63.39999985694885,
+    "url": "http://127.0.0.1:60861/raspisanie-i-tseny",
+    "port": {
+      "scrollTop": 0,
+      "scrollHeight": 9147,
+      "clientHeight": 340,
+      "maxScroll": 8807
+    },
+    "history": {
+      "id": "1e72ed05-91e2-4945-bc21-2e0df86f33c7",
+      "top": 8627,
+      "known": true
+    },
+    "saved": [
+      [
+        "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+        23083
+      ],
+      [
+        "e59e33e8-b3b3-49af-aa9e-b33203d07ebb",
+        2790
+      ],
+      [
+        "69bd54b3-23ce-485e-ace1-fada51c99cd4",
+        22299
+      ],
+      [
+        "fb616b9e-17d7-4f7f-b146-6ce5935903a8",
+        1498
+      ],
+      [
+        "1e72ed05-91e2-4945-bc21-2e0df86f33c7",
+        8627
+      ],
+      [
+        "d75fa94f-5174-405a-bcf3-e33640cbd66b",
+        1468
+      ]
+    ],
+    "fonts": "loading",
+    "pendingImages": 59
+  },
+  {
+    "kind": "image-load",
+    "detail": {
+      "src": "http://127.0.0.1:60861/media/_w/480/users/1/images/1-1776163553541.webp",
+      "width": 419,
+      "height": 419
+    },
+    "timeOrigin": 1792583330931,
+    "now": 63.59999990463257,
+    "url": "http://127.0.0.1:60861/raspisanie-i-tseny",
+    "port": {
+      "scrollTop": 0,
+      "scrollHeight": 9147,
+      "clientHeight": 340,
+      "maxScroll": 8807
+    },
+    "history": {
+      "id": "1e72ed05-91e2-4945-bc21-2e0df86f33c7",
+      "top": 8627,
+      "known": true
+    },
+    "saved": [
+      [
+        "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+        23083
+      ],
+      [
+        "e59e33e8-b3b3-49af-aa9e-b33203d07ebb",
+        2790
+      ],
+      [
+        "69bd54b3-23ce-485e-ace1-fada51c99cd4",
+        22299
+      ],
+      [
+        "fb616b9e-17d7-4f7f-b146-6ce5935903a8",
+        1498
+      ],
+      [
+        "1e72ed05-91e2-4945-bc21-2e0df86f33c7",
+        8627
+      ],
+      [
+        "d75fa94f-5174-405a-bcf3-e33640cbd66b",
+        1468
+      ]
+    ],
+    "fonts": "loaded",
+    "pendingImages": 59
+  },
+  {
+    "kind": "image-load",
+    "detail": {
+      "src": "http://127.0.0.1:60861/media/_w/480/users/1/images/1-1779192927333.webp",
+      "width": 419,
+      "height": 419
+    },
+    "timeOrigin": 1792583330931,
+    "now": 63.59999990463257,
+    "url": "http://127.0.0.1:60861/raspisanie-i-tseny",
+    "port": {
+      "scrollTop": 0,
+      "scrollHeight": 9147,
+      "clientHeight": 340,
+      "maxScroll": 8807
+    },
+    "history": {
+      "id": "1e72ed05-91e2-4945-bc21-2e0df86f33c7",
+      "top": 8627,
+      "known": true
+    },
+    "saved": [
+      [
+        "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+        23083
+      ],
+      [
+        "e59e33e8-b3b3-49af-aa9e-b33203d07ebb",
+        2790
+      ],
+      [
+        "69bd54b3-23ce-485e-ace1-fada51c99cd4",
+        22299
+      ],
+      [
+        "fb616b9e-17d7-4f7f-b146-6ce5935903a8",
+        1498
+      ],
+      [
+        "1e72ed05-91e2-4945-bc21-2e0df86f33c7",
+        8627
+      ],
+      [
+        "d75fa94f-5174-405a-bcf3-e33640cbd66b",
+        1468
+      ]
+    ],
+    "fonts": "loaded",
+    "pendingImages": 59
+  },
+  {
+    "kind": "image-load",
+    "detail": {
+      "src": "http://127.0.0.1:60861/media/_w/480/users/1/images/1-1776498441352.webp",
+      "width": 419,
+      "height": 419
+    },
+    "timeOrigin": 1792583330931,
+    "now": 63.700000047683716,
+    "url": "http://127.0.0.1:60861/raspisanie-i-tseny",
+    "port": {
+      "scrollTop": 0,
+      "scrollHeight": 9147,
+      "clientHeight": 340,
+      "maxScroll": 8807
+    },
+    "history": {
+      "id": "1e72ed05-91e2-4945-bc21-2e0df86f33c7",
+      "top": 8627,
+      "known": true
+    },
+    "saved": [
+      [
+        "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+        23083
+      ],
+      [
+        "e59e33e8-b3b3-49af-aa9e-b33203d07ebb",
+        2790
+      ],
+      [
+        "69bd54b3-23ce-485e-ace1-fada51c99cd4",
+        22299
+      ],
+      [
+        "fb616b9e-17d7-4f7f-b146-6ce5935903a8",
+        1498
+      ],
+      [
+        "1e72ed05-91e2-4945-bc21-2e0df86f33c7",
+        8627
+      ],
+      [
+        "d75fa94f-5174-405a-bcf3-e33640cbd66b",
+        1468
+      ]
+    ],
+    "fonts": "loaded",
+    "pendingImages": 59
+  },
+  {
+    "kind": "pageshow",
+    "detail": {
+      "persisted": false
+    },
+    "timeOrigin": 1792583330931,
+    "now": 63.799999952316284,
+    "url": "http://127.0.0.1:60861/raspisanie-i-tseny",
+    "port": {
+      "scrollTop": 0,
+      "scrollHeight": 9147,
+      "clientHeight": 340,
+      "maxScroll": 8807
+    },
+    "history": {
+      "id": "1e72ed05-91e2-4945-bc21-2e0df86f33c7",
+      "top": 8627,
+      "known": true
+    },
+    "saved": [
+      [
+        "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+        23083
+      ],
+      [
+        "e59e33e8-b3b3-49af-aa9e-b33203d07ebb",
+        2790
+      ],
+      [
+        "69bd54b3-23ce-485e-ace1-fada51c99cd4",
+        22299
+      ],
+      [
+        "fb616b9e-17d7-4f7f-b146-6ce5935903a8",
+        1498
+      ],
+      [
+        "1e72ed05-91e2-4945-bc21-2e0df86f33c7",
+        8627
+      ],
+      [
+        "d75fa94f-5174-405a-bcf3-e33640cbd66b",
+        1468
+      ]
+    ],
+    "fonts": "loaded",
+    "pendingImages": 59
+  },
+  {
+    "kind": "scrollTo-before",
+    "detail": [
+      {
+        "top": 8627,
+        "behavior": "instant"
+      }
+    ],
+    "timeOrigin": 1792583330931,
+    "now": 64.39999985694885,
+    "url": "http://127.0.0.1:60861/raspisanie-i-tseny",
+    "port": {
+      "scrollTop": 0,
+      "scrollHeight": 9147,
+      "clientHeight": 340,
+      "maxScroll": 8807
+    },
+    "history": {
+      "id": "1e72ed05-91e2-4945-bc21-2e0df86f33c7",
+      "top": 8627,
+      "known": true
+    },
+    "saved": [
+      [
+        "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+        23083
+      ],
+      [
+        "e59e33e8-b3b3-49af-aa9e-b33203d07ebb",
+        2790
+      ],
+      [
+        "69bd54b3-23ce-485e-ace1-fada51c99cd4",
+        22299
+      ],
+      [
+        "fb616b9e-17d7-4f7f-b146-6ce5935903a8",
+        1498
+      ],
+      [
+        "1e72ed05-91e2-4945-bc21-2e0df86f33c7",
+        8627
+      ],
+      [
+        "d75fa94f-5174-405a-bcf3-e33640cbd66b",
+        1468
+      ]
+    ],
+    "fonts": "loaded",
+    "pendingImages": 59
+  },
+  {
+    "kind": "scrollTo-after",
+    "detail": [
+      {
+        "top": 8627,
+        "behavior": "instant"
+      }
+    ],
+    "timeOrigin": 1792583330931,
+    "now": 64.5,
+    "url": "http://127.0.0.1:60861/raspisanie-i-tseny",
+    "port": {
+      "scrollTop": 8627,
+      "scrollHeight": 9147,
+      "clientHeight": 340,
+      "maxScroll": 8807
+    },
+    "history": {
+      "id": "1e72ed05-91e2-4945-bc21-2e0df86f33c7",
+      "top": 8627,
+      "known": true
+    },
+    "saved": [
+      [
+        "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+        23083
+      ],
+      [
+        "e59e33e8-b3b3-49af-aa9e-b33203d07ebb",
+        2790
+      ],
+      [
+        "69bd54b3-23ce-485e-ace1-fada51c99cd4",
+        22299
+      ],
+      [
+        "fb616b9e-17d7-4f7f-b146-6ce5935903a8",
+        1498
+      ],
+      [
+        "1e72ed05-91e2-4945-bc21-2e0df86f33c7",
+        8627
+      ],
+      [
+        "d75fa94f-5174-405a-bcf3-e33640cbd66b",
+        1468
+      ]
+    ],
+    "fonts": "loaded",
+    "pendingImages": 59
+  },
+  {
+    "kind": "port-scroll",
+    "timeOrigin": 1792583330931,
+    "now": 64.59999990463257,
+    "url": "http://127.0.0.1:60861/raspisanie-i-tseny",
+    "port": {
+      "scrollTop": 8627,
+      "scrollHeight": 9147,
+      "clientHeight": 340,
+      "maxScroll": 8807
+    },
+    "history": {
+      "id": "1e72ed05-91e2-4945-bc21-2e0df86f33c7",
+      "top": 8627,
+      "known": true
+    },
+    "saved": [
+      [
+        "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+        23083
+      ],
+      [
+        "e59e33e8-b3b3-49af-aa9e-b33203d07ebb",
+        2790
+      ],
+      [
+        "69bd54b3-23ce-485e-ace1-fada51c99cd4",
+        22299
+      ],
+      [
+        "fb616b9e-17d7-4f7f-b146-6ce5935903a8",
+        1498
+      ],
+      [
+        "1e72ed05-91e2-4945-bc21-2e0df86f33c7",
+        8627
+      ],
+      [
+        "d75fa94f-5174-405a-bcf3-e33640cbd66b",
+        1468
+      ]
+    ],
+    "fonts": "loaded",
+    "pendingImages": 59
+  },
+  {
+    "kind": "pageshow-raf",
+    "timeOrigin": 1792583330931,
+    "now": 68.79999995231628,
+    "url": "http://127.0.0.1:60861/raspisanie-i-tseny",
+    "port": {
+      "scrollTop": 8627,
+      "scrollHeight": 9147,
+      "clientHeight": 340,
+      "maxScroll": 8807
+    },
+    "history": {
+      "id": "1e72ed05-91e2-4945-bc21-2e0df86f33c7",
+      "top": 8627,
+      "known": true
+    },
+    "saved": [
+      [
+        "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+        23083
+      ],
+      [
+        "e59e33e8-b3b3-49af-aa9e-b33203d07ebb",
+        2790
+      ],
+      [
+        "69bd54b3-23ce-485e-ace1-fada51c99cd4",
+        22299
+      ],
+      [
+        "fb616b9e-17d7-4f7f-b146-6ce5935903a8",
+        1498
+      ],
+      [
+        "1e72ed05-91e2-4945-bc21-2e0df86f33c7",
+        8627
+      ],
+      [
+        "d75fa94f-5174-405a-bcf3-e33640cbd66b",
+        1468
+      ]
+    ],
+    "fonts": "loaded",
+    "pendingImages": 59
+  },
+  {
+    "kind": "pageshow-task",
+    "timeOrigin": 1792583330931,
+    "now": 71.70000004768372,
+    "url": "http://127.0.0.1:60861/raspisanie-i-tseny",
+    "port": {
+      "scrollTop": 8627,
+      "scrollHeight": 9147,
+      "clientHeight": 340,
+      "maxScroll": 8807
+    },
+    "history": {
+      "id": "1e72ed05-91e2-4945-bc21-2e0df86f33c7",
+      "top": 8627,
+      "known": true
+    },
+    "saved": [
+      [
+        "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+        23083
+      ],
+      [
+        "e59e33e8-b3b3-49af-aa9e-b33203d07ebb",
+        2790
+      ],
+      [
+        "69bd54b3-23ce-485e-ace1-fada51c99cd4",
+        22299
+      ],
+      [
+        "fb616b9e-17d7-4f7f-b146-6ce5935903a8",
+        1498
+      ],
+      [
+        "1e72ed05-91e2-4945-bc21-2e0df86f33c7",
+        8627
+      ],
+      [
+        "d75fa94f-5174-405a-bcf3-e33640cbd66b",
+        1468
+      ]
+    ],
+    "fonts": "loaded",
+    "pendingImages": 56
+  },
+  {
+    "kind": "image-load",
+    "detail": {
+      "src": "http://127.0.0.1:60861/media/_w/480/users/1/images/1-1761230598574.webp",
+      "width": 419,
+      "height": 419
+    },
+    "timeOrigin": 1792583330931,
+    "now": 72.20000004768372,
+    "url": "http://127.0.0.1:60861/raspisanie-i-tseny",
+    "port": {
+      "scrollTop": 8627,
+      "scrollHeight": 9147,
+      "clientHeight": 340,
+      "maxScroll": 8807
+    },
+    "history": {
+      "id": "1e72ed05-91e2-4945-bc21-2e0df86f33c7",
+      "top": 8627,
+      "known": true
+    },
+    "saved": [
+      [
+        "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+        23083
+      ],
+      [
+        "e59e33e8-b3b3-49af-aa9e-b33203d07ebb",
+        2790
+      ],
+      [
+        "69bd54b3-23ce-485e-ace1-fada51c99cd4",
+        22299
+      ],
+      [
+        "fb616b9e-17d7-4f7f-b146-6ce5935903a8",
+        1498
+      ],
+      [
+        "1e72ed05-91e2-4945-bc21-2e0df86f33c7",
+        8627
+      ],
+      [
+        "d75fa94f-5174-405a-bcf3-e33640cbd66b",
+        1468
+      ]
+    ],
+    "fonts": "loaded",
+    "pendingImages": 56
+  },
+  {
+    "kind": "image-load",
+    "detail": {
+      "src": "http://127.0.0.1:60861/media/_w/480/users/1/images/1-1783686253402.webp",
+      "width": 419,
+      "height": 419
+    },
+    "timeOrigin": 1792583330931,
+    "now": 72.29999995231628,
+    "url": "http://127.0.0.1:60861/raspisanie-i-tseny",
+    "port": {
+      "scrollTop": 8627,
+      "scrollHeight": 9147,
+      "clientHeight": 340,
+      "maxScroll": 8807
+    },
+    "history": {
+      "id": "1e72ed05-91e2-4945-bc21-2e0df86f33c7",
+      "top": 8627,
+      "known": true
+    },
+    "saved": [
+      [
+        "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+        23083
+      ],
+      [
+        "e59e33e8-b3b3-49af-aa9e-b33203d07ebb",
+        2790
+      ],
+      [
+        "69bd54b3-23ce-485e-ace1-fada51c99cd4",
+        22299
+      ],
+      [
+        "fb616b9e-17d7-4f7f-b146-6ce5935903a8",
+        1498
+      ],
+      [
+        "1e72ed05-91e2-4945-bc21-2e0df86f33c7",
+        8627
+      ],
+      [
+        "d75fa94f-5174-405a-bcf3-e33640cbd66b",
+        1468
+      ]
+    ],
+    "fonts": "loaded",
+    "pendingImages": 56
+  },
+  {
+    "kind": "image-load",
+    "detail": {
+      "src": "http://127.0.0.1:60861/media/_w/480/users/1/images/1-1761230661330.webp",
+      "width": 419,
+      "height": 419
+    },
+    "timeOrigin": 1792583330931,
+    "now": 72.39999985694885,
+    "url": "http://127.0.0.1:60861/raspisanie-i-tseny",
+    "port": {
+      "scrollTop": 8627,
+      "scrollHeight": 9147,
+      "clientHeight": 340,
+      "maxScroll": 8807
+    },
+    "history": {
+      "id": "1e72ed05-91e2-4945-bc21-2e0df86f33c7",
+      "top": 8627,
+      "known": true
+    },
+    "saved": [
+      [
+        "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+        23083
+      ],
+      [
+        "e59e33e8-b3b3-49af-aa9e-b33203d07ebb",
+        2790
+      ],
+      [
+        "69bd54b3-23ce-485e-ace1-fada51c99cd4",
+        22299
+      ],
+      [
+        "fb616b9e-17d7-4f7f-b146-6ce5935903a8",
+        1498
+      ],
+      [
+        "1e72ed05-91e2-4945-bc21-2e0df86f33c7",
+        8627
+      ],
+      [
+        "d75fa94f-5174-405a-bcf3-e33640cbd66b",
+        1468
+      ]
+    ],
+    "fonts": "loaded",
+    "pendingImages": 56
+  },
+  {
+    "kind": "image-load",
+    "detail": {
+      "src": "http://127.0.0.1:60861/media/_w/480/users/1/images/1-1775487762265.webp",
+      "width": 419,
+      "height": 419
+    },
+    "timeOrigin": 1792583330931,
+    "now": 76.89999985694885,
+    "url": "http://127.0.0.1:60861/raspisanie-i-tseny",
+    "port": {
+      "scrollTop": 8627,
+      "scrollHeight": 9147,
+      "clientHeight": 340,
+      "maxScroll": 8807
+    },
+    "history": {
+      "id": "1e72ed05-91e2-4945-bc21-2e0df86f33c7",
+      "top": 8627,
+      "known": true
+    },
+    "saved": [
+      [
+        "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+        23083
+      ],
+      [
+        "e59e33e8-b3b3-49af-aa9e-b33203d07ebb",
+        2790
+      ],
+      [
+        "69bd54b3-23ce-485e-ace1-fada51c99cd4",
+        22299
+      ],
+      [
+        "fb616b9e-17d7-4f7f-b146-6ce5935903a8",
+        1498
+      ],
+      [
+        "1e72ed05-91e2-4945-bc21-2e0df86f33c7",
+        8627
+      ],
+      [
+        "d75fa94f-5174-405a-bcf3-e33640cbd66b",
+        1468
+      ]
+    ],
+    "fonts": "loaded",
+    "pendingImages": 55
+  },
+  {
+    "kind": "image-load",
+    "detail": {
+      "src": "http://127.0.0.1:60861/media/_w/480/users/1/images/1-1775479386530.webp",
+      "width": 419,
+      "height": 419
+    },
+    "timeOrigin": 1792583330931,
+    "now": 110.20000004768372,
+    "url": "http://127.0.0.1:60861/raspisanie-i-tseny",
+    "port": {
+      "scrollTop": 8627,
+      "scrollHeight": 9147,
+      "clientHeight": 340,
+      "maxScroll": 8807
+    },
+    "history": {
+      "id": "1e72ed05-91e2-4945-bc21-2e0df86f33c7",
+      "top": 8627,
+      "known": true
+    },
+    "saved": [
+      [
+        "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+        23083
+      ],
+      [
+        "e59e33e8-b3b3-49af-aa9e-b33203d07ebb",
+        2790
+      ],
+      [
+        "69bd54b3-23ce-485e-ace1-fada51c99cd4",
+        22299
+      ],
+      [
+        "fb616b9e-17d7-4f7f-b146-6ce5935903a8",
+        1498
+      ],
+      [
+        "1e72ed05-91e2-4945-bc21-2e0df86f33c7",
+        8627
+      ],
+      [
+        "d75fa94f-5174-405a-bcf3-e33640cbd66b",
+        1468
+      ]
+    ],
+    "fonts": "loaded",
+    "pendingImages": 52
+  },
+  {
+    "kind": "image-load",
+    "detail": {
+      "src": "http://127.0.0.1:60861/media/_w/480/users/1/images/1-1761231363783.webp",
+      "width": 419,
+      "height": 419
+    },
+    "timeOrigin": 1792583330931,
+    "now": 110.59999990463257,
+    "url": "http://127.0.0.1:60861/raspisanie-i-tseny",
+    "port": {
+      "scrollTop": 8627,
+      "scrollHeight": 9147,
+      "clientHeight": 340,
+      "maxScroll": 8807
+    },
+    "history": {
+      "id": "1e72ed05-91e2-4945-bc21-2e0df86f33c7",
+      "top": 8627,
+      "known": true
+    },
+    "saved": [
+      [
+        "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+        23083
+      ],
+      [
+        "e59e33e8-b3b3-49af-aa9e-b33203d07ebb",
+        2790
+      ],
+      [
+        "69bd54b3-23ce-485e-ace1-fada51c99cd4",
+        22299
+      ],
+      [
+        "fb616b9e-17d7-4f7f-b146-6ce5935903a8",
+        1498
+      ],
+      [
+        "1e72ed05-91e2-4945-bc21-2e0df86f33c7",
+        8627
+      ],
+      [
+        "d75fa94f-5174-405a-bcf3-e33640cbd66b",
+        1468
+      ]
+    ],
+    "fonts": "loaded",
+    "pendingImages": 52
+  },
+  {
+    "kind": "image-load",
+    "detail": {
+      "src": "http://127.0.0.1:60861/media/_w/480/users/1/images/1-1783681507126.webp",
+      "width": 419,
+      "height": 419
+    },
+    "timeOrigin": 1792583330931,
+    "now": 110.79999995231628,
+    "url": "http://127.0.0.1:60861/raspisanie-i-tseny",
+    "port": {
+      "scrollTop": 8627,
+      "scrollHeight": 9147,
+      "clientHeight": 340,
+      "maxScroll": 8807
+    },
+    "history": {
+      "id": "1e72ed05-91e2-4945-bc21-2e0df86f33c7",
+      "top": 8627,
+      "known": true
+    },
+    "saved": [
+      [
+        "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+        23083
+      ],
+      [
+        "e59e33e8-b3b3-49af-aa9e-b33203d07ebb",
+        2790
+      ],
+      [
+        "69bd54b3-23ce-485e-ace1-fada51c99cd4",
+        22299
+      ],
+      [
+        "fb616b9e-17d7-4f7f-b146-6ce5935903a8",
+        1498
+      ],
+      [
+        "1e72ed05-91e2-4945-bc21-2e0df86f33c7",
+        8627
+      ],
+      [
+        "d75fa94f-5174-405a-bcf3-e33640cbd66b",
+        1468
+      ]
+    ],
+    "fonts": "loaded",
+    "pendingImages": 52
+  },
+  {
+    "kind": "image-load",
+    "detail": {
+      "src": "http://127.0.0.1:60861/media/_w/480/users/1/images/1-1775132739287.webp",
+      "width": 419,
+      "height": 419
+    },
+    "timeOrigin": 1792583330931,
+    "now": 111.09999990463257,
+    "url": "http://127.0.0.1:60861/raspisanie-i-tseny",
+    "port": {
+      "scrollTop": 8627,
+      "scrollHeight": 9147,
+      "clientHeight": 340,
+      "maxScroll": 8807
+    },
+    "history": {
+      "id": "1e72ed05-91e2-4945-bc21-2e0df86f33c7",
+      "top": 8627,
+      "known": true
+    },
+    "saved": [
+      [
+        "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+        23083
+      ],
+      [
+        "e59e33e8-b3b3-49af-aa9e-b33203d07ebb",
+        2790
+      ],
+      [
+        "69bd54b3-23ce-485e-ace1-fada51c99cd4",
+        22299
+      ],
+      [
+        "fb616b9e-17d7-4f7f-b146-6ce5935903a8",
+        1498
+      ],
+      [
+        "1e72ed05-91e2-4945-bc21-2e0df86f33c7",
+        8627
+      ],
+      [
+        "d75fa94f-5174-405a-bcf3-e33640cbd66b",
+        1468
+      ]
+    ],
+    "fonts": "loaded",
+    "pendingImages": 51
+  },
+  {
+    "kind": "image-load",
+    "detail": {
+      "src": "http://127.0.0.1:60861/media/_w/480/users/1/images/1-1755010380110.webp",
+      "width": 419,
+      "height": 419
+    },
+    "timeOrigin": 1792583330931,
+    "now": 112.89999985694885,
+    "url": "http://127.0.0.1:60861/raspisanie-i-tseny",
+    "port": {
+      "scrollTop": 8627,
+      "scrollHeight": 9147,
+      "clientHeight": 340,
+      "maxScroll": 8807
+    },
+    "history": {
+      "id": "1e72ed05-91e2-4945-bc21-2e0df86f33c7",
+      "top": 8627,
+      "known": true
+    },
+    "saved": [
+      [
+        "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+        23083
+      ],
+      [
+        "e59e33e8-b3b3-49af-aa9e-b33203d07ebb",
+        2790
+      ],
+      [
+        "69bd54b3-23ce-485e-ace1-fada51c99cd4",
+        22299
+      ],
+      [
+        "fb616b9e-17d7-4f7f-b146-6ce5935903a8",
+        1498
+      ],
+      [
+        "1e72ed05-91e2-4945-bc21-2e0df86f33c7",
+        8627
+      ],
+      [
+        "d75fa94f-5174-405a-bcf3-e33640cbd66b",
+        1468
+      ]
+    ],
+    "fonts": "loaded",
+    "pendingImages": 50
+  },
+  {
+    "kind": "image-load",
+    "detail": {
+      "src": "http://127.0.0.1:60861/media/_w/480/users/1/images/1-1727065586220.webp",
+      "width": 419,
+      "height": 419
+    },
+    "timeOrigin": 1792583330931,
+    "now": 116.09999990463257,
+    "url": "http://127.0.0.1:60861/raspisanie-i-tseny",
+    "port": {
+      "scrollTop": 8627,
+      "scrollHeight": 9147,
+      "clientHeight": 340,
+      "maxScroll": 8807
+    },
+    "history": {
+      "id": "1e72ed05-91e2-4945-bc21-2e0df86f33c7",
+      "top": 8627,
+      "known": true
+    },
+    "saved": [
+      [
+        "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+        23083
+      ],
+      [
+        "e59e33e8-b3b3-49af-aa9e-b33203d07ebb",
+        2790
+      ],
+      [
+        "69bd54b3-23ce-485e-ace1-fada51c99cd4",
+        22299
+      ],
+      [
+        "fb616b9e-17d7-4f7f-b146-6ce5935903a8",
+        1498
+      ],
+      [
+        "1e72ed05-91e2-4945-bc21-2e0df86f33c7",
+        8627
+      ],
+      [
+        "d75fa94f-5174-405a-bcf3-e33640cbd66b",
+        1468
+      ]
+    ],
+    "fonts": "loaded",
+    "pendingImages": 47
+  },
+  {
+    "kind": "image-load",
+    "detail": {
+      "src": "http://127.0.0.1:60861/media/_w/480/users/1/images/1-1763730383264.webp",
+      "width": 419,
+      "height": 419
+    },
+    "timeOrigin": 1792583330931,
+    "now": 116.39999985694885,
+    "url": "http://127.0.0.1:60861/raspisanie-i-tseny",
+    "port": {
+      "scrollTop": 8627,
+      "scrollHeight": 9147,
+      "clientHeight": 340,
+      "maxScroll": 8807
+    },
+    "history": {
+      "id": "1e72ed05-91e2-4945-bc21-2e0df86f33c7",
+      "top": 8627,
+      "known": true
+    },
+    "saved": [
+      [
+        "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+        23083
+      ],
+      [
+        "e59e33e8-b3b3-49af-aa9e-b33203d07ebb",
+        2790
+      ],
+      [
+        "69bd54b3-23ce-485e-ace1-fada51c99cd4",
+        22299
+      ],
+      [
+        "fb616b9e-17d7-4f7f-b146-6ce5935903a8",
+        1498
+      ],
+      [
+        "1e72ed05-91e2-4945-bc21-2e0df86f33c7",
+        8627
+      ],
+      [
+        "d75fa94f-5174-405a-bcf3-e33640cbd66b",
+        1468
+      ]
+    ],
+    "fonts": "loaded",
+    "pendingImages": 47
+  },
+  {
+    "kind": "image-load",
+    "detail": {
+      "src": "http://127.0.0.1:60861/media/_w/480/users/1/images/1-1727065637334.webp",
+      "width": 419,
+      "height": 419
+    },
+    "timeOrigin": 1792583330931,
+    "now": 116.5,
+    "url": "http://127.0.0.1:60861/raspisanie-i-tseny",
+    "port": {
+      "scrollTop": 8627,
+      "scrollHeight": 9147,
+      "clientHeight": 340,
+      "maxScroll": 8807
+    },
+    "history": {
+      "id": "1e72ed05-91e2-4945-bc21-2e0df86f33c7",
+      "top": 8627,
+      "known": true
+    },
+    "saved": [
+      [
+        "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+        23083
+      ],
+      [
+        "e59e33e8-b3b3-49af-aa9e-b33203d07ebb",
+        2790
+      ],
+      [
+        "69bd54b3-23ce-485e-ace1-fada51c99cd4",
+        22299
+      ],
+      [
+        "fb616b9e-17d7-4f7f-b146-6ce5935903a8",
+        1498
+      ],
+      [
+        "1e72ed05-91e2-4945-bc21-2e0df86f33c7",
+        8627
+      ],
+      [
+        "d75fa94f-5174-405a-bcf3-e33640cbd66b",
+        1468
+      ]
+    ],
+    "fonts": "loaded",
+    "pendingImages": 47
+  },
+  {
+    "kind": "image-load",
+    "detail": {
+      "src": "http://127.0.0.1:60861/media/_w/480/users/1/images/1-1776771365590.webp",
+      "width": 419,
+      "height": 419
+    },
+    "timeOrigin": 1792583330931,
+    "now": 118.29999995231628,
+    "url": "http://127.0.0.1:60861/raspisanie-i-tseny",
+    "port": {
+      "scrollTop": 8627,
+      "scrollHeight": 9147,
+      "clientHeight": 340,
+      "maxScroll": 8807
+    },
+    "history": {
+      "id": "1e72ed05-91e2-4945-bc21-2e0df86f33c7",
+      "top": 8627,
+      "known": true
+    },
+    "saved": [
+      [
+        "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+        23083
+      ],
+      [
+        "e59e33e8-b3b3-49af-aa9e-b33203d07ebb",
+        2790
+      ],
+      [
+        "69bd54b3-23ce-485e-ace1-fada51c99cd4",
+        22299
+      ],
+      [
+        "fb616b9e-17d7-4f7f-b146-6ce5935903a8",
+        1498
+      ],
+      [
+        "1e72ed05-91e2-4945-bc21-2e0df86f33c7",
+        8627
+      ],
+      [
+        "d75fa94f-5174-405a-bcf3-e33640cbd66b",
+        1468
+      ]
+    ],
+    "fonts": "loaded",
+    "pendingImages": 46
+  },
+  {
+    "kind": "TEST-after-back",
+    "url": "http://127.0.0.1:60861/raspisanie-i-tseny",
+    "port": {
+      "scrollTop": 8627,
+      "scrollHeight": 9147,
+      "clientHeight": 340,
+      "maxScroll": 8807
+    },
+    "history": {
+      "id": "1e72ed05-91e2-4945-bc21-2e0df86f33c7",
+      "top": 8627,
+      "known": true
+    }
+  },
+  {
+    "kind": "image-load",
+    "detail": {
+      "src": "http://127.0.0.1:60861/logo-icon.svg",
+      "width": 33,
+      "height": 34
+    },
+    "timeOrigin": 1792583337069.7,
+    "now": 50.700000047683716,
+    "url": "http://127.0.0.1:60861/kontakty",
+    "port": {
+      "scrollTop": 0,
+      "scrollHeight": 1928,
+      "clientHeight": 340,
+      "maxScroll": 1588
+    },
+    "history": {
+      "id": "d75fa94f-5174-405a-bcf3-e33640cbd66b",
+      "top": 1468,
+      "known": true
+    },
+    "saved": [
+      [
+        "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+        23083
+      ],
+      [
+        "e59e33e8-b3b3-49af-aa9e-b33203d07ebb",
+        2790
+      ],
+      [
+        "69bd54b3-23ce-485e-ace1-fada51c99cd4",
+        22299
+      ],
+      [
+        "fb616b9e-17d7-4f7f-b146-6ce5935903a8",
+        1498
+      ],
+      [
+        "1e72ed05-91e2-4945-bc21-2e0df86f33c7",
+        8627
+      ],
+      [
+        "d75fa94f-5174-405a-bcf3-e33640cbd66b",
+        1468
+      ]
+    ],
+    "fonts": "loading",
+    "pendingImages": 0
+  },
+  {
+    "kind": "image-load",
+    "detail": {
+      "src": "http://127.0.0.1:60861/logo-wordmark.svg",
+      "width": 300,
+      "height": 82
+    },
+    "timeOrigin": 1792583337069.7,
+    "now": 51.799999952316284,
+    "url": "http://127.0.0.1:60861/kontakty",
+    "port": {
+      "scrollTop": 0,
+      "scrollHeight": 1928,
+      "clientHeight": 340,
+      "maxScroll": 1588
+    },
+    "history": {
+      "id": "d75fa94f-5174-405a-bcf3-e33640cbd66b",
+      "top": 1468,
+      "known": true
+    },
+    "saved": [
+      [
+        "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+        23083
+      ],
+      [
+        "e59e33e8-b3b3-49af-aa9e-b33203d07ebb",
+        2790
+      ],
+      [
+        "69bd54b3-23ce-485e-ace1-fada51c99cd4",
+        22299
+      ],
+      [
+        "fb616b9e-17d7-4f7f-b146-6ce5935903a8",
+        1498
+      ],
+      [
+        "1e72ed05-91e2-4945-bc21-2e0df86f33c7",
+        8627
+      ],
+      [
+        "d75fa94f-5174-405a-bcf3-e33640cbd66b",
+        1468
+      ]
+    ],
+    "fonts": "loading",
+    "pendingImages": 0
+  },
+  {
+    "kind": "pageshow",
+    "detail": {
+      "persisted": false
+    },
+    "timeOrigin": 1792583337069.7,
+    "now": 52.299999952316284,
+    "url": "http://127.0.0.1:60861/kontakty",
+    "port": {
+      "scrollTop": 0,
+      "scrollHeight": 1928,
+      "clientHeight": 340,
+      "maxScroll": 1588
+    },
+    "history": {
+      "id": "d75fa94f-5174-405a-bcf3-e33640cbd66b",
+      "top": 1468,
+      "known": true
+    },
+    "saved": [
+      [
+        "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+        23083
+      ],
+      [
+        "e59e33e8-b3b3-49af-aa9e-b33203d07ebb",
+        2790
+      ],
+      [
+        "69bd54b3-23ce-485e-ace1-fada51c99cd4",
+        22299
+      ],
+      [
+        "fb616b9e-17d7-4f7f-b146-6ce5935903a8",
+        1498
+      ],
+      [
+        "1e72ed05-91e2-4945-bc21-2e0df86f33c7",
+        8627
+      ],
+      [
+        "d75fa94f-5174-405a-bcf3-e33640cbd66b",
+        1468
+      ]
+    ],
+    "fonts": "loaded",
+    "pendingImages": 0
+  },
+  {
+    "kind": "scrollTo-before",
+    "detail": [
+      {
+        "top": 1468,
+        "behavior": "instant"
+      }
+    ],
+    "timeOrigin": 1792583337069.7,
+    "now": 52.40000009536743,
+    "url": "http://127.0.0.1:60861/kontakty",
+    "port": {
+      "scrollTop": 0,
+      "scrollHeight": 1928,
+      "clientHeight": 340,
+      "maxScroll": 1588
+    },
+    "history": {
+      "id": "d75fa94f-5174-405a-bcf3-e33640cbd66b",
+      "top": 1468,
+      "known": true
+    },
+    "saved": [
+      [
+        "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+        23083
+      ],
+      [
+        "e59e33e8-b3b3-49af-aa9e-b33203d07ebb",
+        2790
+      ],
+      [
+        "69bd54b3-23ce-485e-ace1-fada51c99cd4",
+        22299
+      ],
+      [
+        "fb616b9e-17d7-4f7f-b146-6ce5935903a8",
+        1498
+      ],
+      [
+        "1e72ed05-91e2-4945-bc21-2e0df86f33c7",
+        8627
+      ],
+      [
+        "d75fa94f-5174-405a-bcf3-e33640cbd66b",
+        1468
+      ]
+    ],
+    "fonts": "loaded",
+    "pendingImages": 0
+  },
+  {
+    "kind": "scrollTo-after",
+    "detail": [
+      {
+        "top": 1468,
+        "behavior": "instant"
+      }
+    ],
+    "timeOrigin": 1792583337069.7,
+    "now": 52.5,
+    "url": "http://127.0.0.1:60861/kontakty",
+    "port": {
+      "scrollTop": 1468,
+      "scrollHeight": 1928,
+      "clientHeight": 340,
+      "maxScroll": 1588
+    },
+    "history": {
+      "id": "d75fa94f-5174-405a-bcf3-e33640cbd66b",
+      "top": 1468,
+      "known": true
+    },
+    "saved": [
+      [
+        "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+        23083
+      ],
+      [
+        "e59e33e8-b3b3-49af-aa9e-b33203d07ebb",
+        2790
+      ],
+      [
+        "69bd54b3-23ce-485e-ace1-fada51c99cd4",
+        22299
+      ],
+      [
+        "fb616b9e-17d7-4f7f-b146-6ce5935903a8",
+        1498
+      ],
+      [
+        "1e72ed05-91e2-4945-bc21-2e0df86f33c7",
+        8627
+      ],
+      [
+        "d75fa94f-5174-405a-bcf3-e33640cbd66b",
+        1468
+      ]
+    ],
+    "fonts": "loaded",
+    "pendingImages": 0
+  },
+  {
+    "kind": "pageshow-task",
+    "timeOrigin": 1792583337069.7,
+    "now": 52.700000047683716,
+    "url": "http://127.0.0.1:60861/kontakty",
+    "port": {
+      "scrollTop": 1468,
+      "scrollHeight": 1928,
+      "clientHeight": 340,
+      "maxScroll": 1588
+    },
+    "history": {
+      "id": "d75fa94f-5174-405a-bcf3-e33640cbd66b",
+      "top": 1468,
+      "known": true
+    },
+    "saved": [
+      [
+        "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+        23083
+      ],
+      [
+        "e59e33e8-b3b3-49af-aa9e-b33203d07ebb",
+        2790
+      ],
+      [
+        "69bd54b3-23ce-485e-ace1-fada51c99cd4",
+        22299
+      ],
+      [
+        "fb616b9e-17d7-4f7f-b146-6ce5935903a8",
+        1498
+      ],
+      [
+        "1e72ed05-91e2-4945-bc21-2e0df86f33c7",
+        8627
+      ],
+      [
+        "d75fa94f-5174-405a-bcf3-e33640cbd66b",
+        1468
+      ]
+    ],
+    "fonts": "loaded",
+    "pendingImages": 0
+  },
+  {
+    "kind": "port-scroll",
+    "timeOrigin": 1792583337069.7,
+    "now": 54.40000009536743,
+    "url": "http://127.0.0.1:60861/kontakty",
+    "port": {
+      "scrollTop": 1468,
+      "scrollHeight": 1928,
+      "clientHeight": 340,
+      "maxScroll": 1588
+    },
+    "history": {
+      "id": "d75fa94f-5174-405a-bcf3-e33640cbd66b",
+      "top": 1468,
+      "known": true
+    },
+    "saved": [
+      [
+        "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+        23083
+      ],
+      [
+        "e59e33e8-b3b3-49af-aa9e-b33203d07ebb",
+        2790
+      ],
+      [
+        "69bd54b3-23ce-485e-ace1-fada51c99cd4",
+        22299
+      ],
+      [
+        "fb616b9e-17d7-4f7f-b146-6ce5935903a8",
+        1498
+      ],
+      [
+        "1e72ed05-91e2-4945-bc21-2e0df86f33c7",
+        8627
+      ],
+      [
+        "d75fa94f-5174-405a-bcf3-e33640cbd66b",
+        1468
+      ]
+    ],
+    "fonts": "loaded",
+    "pendingImages": 0
+  },
+  {
+    "kind": "pageshow-raf",
+    "timeOrigin": 1792583337069.7,
+    "now": 56.40000009536743,
+    "url": "http://127.0.0.1:60861/kontakty",
+    "port": {
+      "scrollTop": 1468,
+      "scrollHeight": 1928,
+      "clientHeight": 340,
+      "maxScroll": 1588
+    },
+    "history": {
+      "id": "d75fa94f-5174-405a-bcf3-e33640cbd66b",
+      "top": 1468,
+      "known": true
+    },
+    "saved": [
+      [
+        "9f4ceb3a-dca0-49c9-acbb-492bd56bd4c4",
+        23083
+      ],
+      [
+        "e59e33e8-b3b3-49af-aa9e-b33203d07ebb",
+        2790
+      ],
+      [
+        "69bd54b3-23ce-485e-ace1-fada51c99cd4",
+        22299
+      ],
+      [
+        "fb616b9e-17d7-4f7f-b146-6ce5935903a8",
+        1498
+      ],
+      [
+        "1e72ed05-91e2-4945-bc21-2e0df86f33c7",
+        8627
+      ],
+      [
+        "d75fa94f-5174-405a-bcf3-e33640cbd66b",
+        1468
+      ]
+    ],
+    "fonts": "loaded",
+    "pendingImages": 0
+  }
+]

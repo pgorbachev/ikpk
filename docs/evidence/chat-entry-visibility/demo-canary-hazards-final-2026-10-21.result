@@ -1,0 +1,9 @@
+Demo canary/hazard targeted checks — 2026-10-21
+
+Test files: tests/rich-content-canary.demo.test.ts and tests/rich-content-hazard.demo.test.ts (4 tests total). Existing configured timeout: 15 seconds. No timeout/config/source change was made.
+
+One authorized retry, from web/:
+./node_modules/.bin/vitest run --config vitest.demo.config.ts tests/rich-content-canary.demo.test.ts tests/rich-content-hazard.demo.test.ts --maxWorkers=1
+Result: exit 1; 1 failed, 3 passed. The failed test was `rich-content contract: whole-dist canary (demo) > hostile canary отсутствует во всём dist-demo`, at `tests/rich-content-canary.demo.test.ts:22:3`; elapsed 22,702 ms against the existing 15,000 ms timeout. It sequentially scans HTML files returned by `demoPages()`; the Chromium hazard/marker-inventory test passed. Total wall time 25.45 sec. Durable raw output was copied losslessly to `demo-canary-timeout-final-2026-10-21.log.gz` (uncompressed SHA-256 `86c96574da0404fcd728d13739c4b8bf91bff3193731c81893031cab4ea1a87b`). No more retries were run.
+
+A preliminary auxiliary attempt has no separate durable output and is not relied on. An older 4/4 demo result predates the final source freeze and is historical. A separate “5 passed” stdout had no recoverable command and does not match the four tests in these demo files; it is preserved separately as unclassified output and is not evidence for this gate.

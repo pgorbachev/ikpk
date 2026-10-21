@@ -1,0 +1,6 @@
+command=TMPDIR=/private/tmp npx playwright test tests/chat-entry-visibility.spec.ts --config playwright.attached.config.ts --project=desktop --workers=1
+exit=1
+summary=3 passed; 2 failed; 5 did not run; 3.2m
+failure1=PageDown assertion started from scrollTop 480 after wheel had already reached max; test precondition, confirmed by observed value
+failure2=Playwright retry rebuilt fixture and hit ENOSPC at /private/tmp/ikpk-widget-probe-V2Z7Bu; no product conclusion for this retry
+artifacts=implementation-chat-entry-page-down-error.md, implementation-chat-entry-enospc-error.md

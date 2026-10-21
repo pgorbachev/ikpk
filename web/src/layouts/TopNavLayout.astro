@@ -19,6 +19,7 @@ import Footer from '../components/Footer.astro';
 import Analytics from '../components/Analytics.astro';
 import ChatFacade from '../components/chat/ChatFacade.astro';
 import { isDemoForms } from '../lib/forms';
+import { chatLoaderConfig, isDemoOutput } from '../lib/external-widgets';
 import '../styles/global.css';
 
 const {
@@ -29,6 +30,7 @@ const {
   schema,
   preloadHero = false,
 } = Astro.props;
+const chatPage = chatLoaderConfig().state === 'address' && !isDemoOutput;
 ---
 
 <!doctype html>
@@ -44,7 +46,15 @@ const {
     />
     <MotionScript />
   </head>
-  <body class="layout-topnav">
+  <body class:list={['layout-topnav', chatPage && 'layout-topnav--chat']} data-chat-page={chatPage ? '' : undefined}>
+    <div
+      class:list={['page-flow', chatPage && 'page-flow--scrollport']}
+      data-page-flow
+      data-page-scrollport={chatPage ? '' : undefined}
+      tabindex={chatPage ? 0 : undefined}
+      role={chatPage ? 'region' : undefined}
+      aria-label={chatPage ? 'Содержимое страницы' : undefined}
+    >
     {isDemoForms && (
       <div class="demo-banner" data-demo-banner>
         {import.meta.env.DEMO_PROFILE === 'demo193' ? 'Стейджинг-стенд' : 'Демо-стенд'}: формы заявки отключены, обращения в CRM не создаются
@@ -58,6 +68,7 @@ const {
       <slot />
     </main>
     <Footer />
+    </div>
     {/* Только боевая сборка — см. пояснение в BaseLayout.astro */}
     {!isDemoForms && <Analytics />}
     {/* Прямой сосед <body>, не внутри <main> — см. пояснение в BaseLayout.astro.

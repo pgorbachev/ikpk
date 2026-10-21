@@ -1,0 +1,2 @@
+command=cd web && TMPDIR=/private/tmp npm run test:build (local IPC escalation)
+exit_code=1

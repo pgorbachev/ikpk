@@ -1,0 +1,320 @@
+<div id="ikpk-mobile-placement">
+  <div class="ikpk-width-control"><label for="ikpk-phone-width">Ширина телефона</label><select id="ikpk-phone-width" data-width-select aria-label="Ширина телефона"><option value="320">320 px</option><option value="375">375 px</option></select></div>
+  <div class="viz-carousel viz-dotted-background" aria-label="Варианты размещения кнопки чата" data-previous-label="Предыдущий вариант" data-next-label="Следующий вариант">
+    <section data-variant="Внизу в свободной зоне" aria-label="Кнопка в отдельной нижней зоне">
+      <div class="ikpk-variant-intro"><h2>Внизу в свободной зоне</h2><p>Страница прокручивается над отдельным слотом высотой <span data-zone-height-label>80 px</span>.</p></div>
+      <div class="ikpk-devices" data-layout="zone" aria-label="Расписание в начале, середине и подвале"></div>
+    </section>
+    <section data-variant="В шапке" aria-label="Кнопка в закреплённой шапке" hidden>
+      <div class="ikpk-variant-intro"><h2>В шапке</h2><p>Кнопка остаётся рядом с логотипом; вся страница прокручивается под шапкой.</p></div>
+      <div class="ikpk-devices" data-layout="header" aria-label="Расписание в начале, середине и подвале"></div>
+    </section>
+  </div>
+  <template id="ikpk-placement-phone">
+    <article class="ikpk-device">
+      <div class="ikpk-device-caption"><strong data-position-label></strong><span data-viewport-label></span></div>
+      <div class="ikpk-screen">
+        <header class="ikpk-header">
+          <div class="ikpk-brand"><span>ИКПК</span><small>ИНСТИТУТ</small></div>
+          <span class="ikpk-menu" aria-hidden="true"><i data-lucide="menu"></i></span>
+        </header>
+        <div class="ikpk-scrollport" aria-label="Прокручиваемое расписание">
+          <main class="ikpk-page">
+            <div class="ikpk-breadcrumb">Главная <span>›</span> Расписание</div>
+            <p class="ikpk-eyebrow">ОБУЧЕНИЕ И СЕМИНАРЫ</p>
+            <h3>Расписание и цены</h3>
+            <div class="ikpk-notices">
+              <p><i data-lucide="info" aria-hidden="true"></i><span>Уважаемые студенты, обратите внимание на то, что в расписании возможны изменения.</span></p>
+              <p><i data-lucide="triangle-alert" aria-hidden="true"></i><span>Убедительно просим вас уточнять расписание и цены перед покупкой билетов и бронированием отеля.</span></p>
+            </div>
+            <div class="ikpk-filters" aria-label="Фильтры расписания">
+              <label class="ikpk-search"><i data-lucide="search" aria-hidden="true"></i><input type="search" placeholder="Поиск" aria-label="Поиск"></label>
+              <label><span>Месяц</span><select aria-label="Месяц"><option>Не выбрано</option><option>Октябрь</option><option>Ноябрь</option></select></label>
+              <label><span>Институт</span><select aria-label="Институт"><option>Не выбрано</option><option>ИКПК</option><option>Институт Барраля</option><option>Институт Апледжера</option></select></label>
+              <label><span>Программа обучения</span><select aria-label="Программа обучения" disabled><option>Не выбрано</option></select></label>
+              <label><span>Место проведения</span><select aria-label="Место проведения"><option>Не выбрано</option><option>Санкт-Петербург</option><option>Москва</option><option>Онлайн</option></select></label>
+            </div>
+            <div class="ikpk-results"><strong>Семинары</strong><span>1–6 из 24</span></div>
+            <div class="ikpk-card-list">
+              <article class="ikpk-seminar" id="entry-1">
+                <div class="ikpk-card-top"><span>Вебинары и межсеминарские встречи</span><span class="ikpk-price">Бесплатно</span></div>
+                <h4>Межсеминарская встреча — вебинар «Возвращение» пролеченных дисфункций</h4>
+                <dl><div><dt>Автор</dt><dd>Колесник Марк Алексеевич</dd></div><div><dt>Институт</dt><dd>ИКПК</dd></div><div><dt>Программа обучения</dt><dd>Вебинары и межсеминарские встречи</dd></div><div><dt>Дата проведения</dt><dd>22 октября 2026</dd></div><div><dt>Место проведения</dt><dd>Онлайн</dd></div></dl>
+                <div class="ikpk-card-links"><a href="#entry-1" data-local-link>Подробнее <i data-lucide="arrow-up-right" aria-hidden="true"></i></a><a href="#entry-1" data-local-link>Записаться на семинар</a></div>
+              </article>
+              <article class="ikpk-seminar" id="entry-2">
+                <div class="ikpk-card-top"><span>Психокинезиология</span><span class="ikpk-price">30 000 ₽</span></div>
+                <h4>Кинезиология здоровья. Уровень 1</h4>
+                <dl><div><dt>Автор</dt><dd>Жарова Людмила Семеновна</dd></div><div><dt>Институт</dt><dd>ИКПК</dd></div><div><dt>Программа обучения</dt><dd>Психокинезиология</dd></div><div><dt>Дата проведения</dt><dd>23–25 октября 2026</dd></div><div><dt>Место проведения</dt><dd>Санкт-Петербург</dd></div></dl>
+                <div class="ikpk-card-links"><a href="#entry-2" data-local-link>Подробнее <i data-lucide="arrow-up-right" aria-hidden="true"></i></a><a href="#entry-2" data-local-link>Записаться на семинар</a></div>
+              </article>
+              <article class="ikpk-seminar" id="entry-3">
+                <div class="ikpk-card-top"><span>Висцеральные техники</span><span class="ikpk-price">65 000 ₽</span></div>
+                <h4>VM-1: Брюшная полость. Уровень 1</h4>
+                <dl><div><dt>Автор</dt><dd>Paolo Ricci</dd></div><div><dt>Институт</dt><dd>Институт Барраля</dd></div><div><dt>Программа обучения</dt><dd>Висцеральные техники</dd></div><div><dt>Дата проведения</dt><dd>29 октября – 1 ноября 2026</dd></div><div><dt>Место проведения</dt><dd>Москва</dd></div></dl>
+                <div class="ikpk-card-links"><a href="#entry-3" data-local-link>Подробнее <i data-lucide="arrow-up-right" aria-hidden="true"></i></a><a href="#entry-3" data-local-link>Записаться на семинар</a></div>
+              </article>
+              <article class="ikpk-seminar" id="entry-4">
+                <div class="ikpk-card-top"><span>Массаж</span><span class="ikpk-price">24 000 ₽</span></div>
+                <h4>Карта патологий</h4>
+                <dl><div><dt>Автор</dt><dd>Федорова Татьяна Васильевна</dd></div><div><dt>Институт</dt><dd>ИКПК</dd></div><div><dt>Программа обучения</dt><dd>Массаж</dd></div><div><dt>Дата проведения</dt><dd>5–6 ноября 2026</dd></div><div><dt>Место проведения</dt><dd>Санкт-Петербург</dd></div></dl>
+                <div class="ikpk-card-links"><a href="#entry-4" data-local-link>Подробнее <i data-lucide="arrow-up-right" aria-hidden="true"></i></a><a href="#entry-4" data-local-link>Записаться на семинар</a></div>
+              </article>
+              <article class="ikpk-seminar" id="entry-5">
+                <div class="ikpk-card-top"><span>Мозг</span><span class="ikpk-price">65 000 ₽</span></div>
+                <h4>TBS-2: Мозг говорит. Уровень 2</h4>
+                <dl><div><dt>Автор</dt><dd>Thomas Rasmussen</dd></div><div><dt>Институт</dt><dd>Институт Апледжера</dd></div><div><dt>Программа обучения</dt><dd>Мозг</dd></div><div><dt>Дата проведения</dt><dd>7–10 ноября 2026</dd></div><div><dt>Место проведения</dt><dd>Москва</dd></div></dl>
+                <div class="ikpk-card-links"><a href="#entry-5" data-local-link>Подробнее <i data-lucide="arrow-up-right" aria-hidden="true"></i></a><a href="#entry-5" data-local-link>Записаться на семинар</a></div>
+              </article>
+              <article class="ikpk-seminar" id="entry-6">
+                <div class="ikpk-card-top"><span>Краниосакральная терапия</span><span class="ikpk-price">65 000 ₽</span></div>
+                <h4>CST-2: Краниосакральная терапия. Уровень 2</h4>
+                <dl><div><dt>Автор</dt><dd>Радзинская Елена Викторовна</dd></div><div><dt>Институт</dt><dd>Институт Апледжера</dd></div><div><dt>Программа обучения</dt><dd>Краниосакральная терапия</dd></div><div><dt>Дата проведения</dt><dd>12–15 ноября 2026</dd></div><div><dt>Место проведения</dt><dd>Москва</dd></div></dl>
+                <div class="ikpk-card-links"><a href="#entry-6" data-local-link>Подробнее <i data-lucide="arrow-up-right" aria-hidden="true"></i></a><a href="#entry-6" data-local-link>Записаться на семинар</a></div>
+              </article>
+            </div>
+            <nav class="ikpk-pagination" aria-label="Страницы расписания"><button type="button" aria-current="page">1</button><button type="button">2</button><button type="button">3</button><span>из 3</span></nav>
+            <footer class="ikpk-footer">
+              <strong>Институт клинической прикладной кинезиологии</strong>
+              <a href="tel:+78126465450">+7 (812) 646-54-50</a><a href="tel:+79810387797">+7 981 038-77-97</a><a href="mailto:info@ikpk.su">info@ikpk.su</a>
+              <div class="ikpk-footer-links"><span>Обучение</span><span>Компания</span><span>Подписывайтесь</span></div>
+              <small>© 2026 ikpk.su · Политика конфиденциальности</small>
+            </footer>
+          </main>
+        </div>
+        <div class="ikpk-chat-slot"></div>
+        <section class="ikpk-chat-panel" role="dialog" aria-label="Условный чат — макет" hidden>
+          <header><span><i data-lucide="messages-square" aria-hidden="true"></i> Чат с ИКПК</span><button type="button" data-close-chat aria-label="Закрыть условный чат"><i data-lucide="x" aria-hidden="true"></i></button></header>
+          <small>Условная панель · макет</small>
+          <p>Здравствуйте! Что вы хотели бы узнать об обучении?</p>
+          <div class="ikpk-chat-input">Сообщение… <i data-lucide="send" aria-hidden="true"></i></div>
+        </section>
+      </div>
+    </article>
+  </template>
+</div>
+<style>
+  #ikpk-mobile-placement { --ikpk-phone-width:320px; --ikpk-zone-height:80px; --ikpk-bg:light-dark(#fff,#181d18); --ikpk-page:light-dark(#f5f8f4,#202820); --ikpk-text:light-dark(#1a211a,#edf2ec); --ikpk-muted:light-dark(#5e695d,#b7c3b5); --ikpk-green:light-dark(#357a38,#88bd86); --ikpk-green-ink:light-dark(#fff,#122712); --ikpk-line:light-dark(#dce5da,#3c4c3b); --ikpk-brand:light-dark(#4e9fab,#86c3cc); --ikpk-warn:light-dark(#fff7e8,#342a18); --ikpk-warn-ink:light-dark(#705319,#eed59a); --ikpk-shadow:light-dark(#19361c26,#0008); width:100%; color:var(--ikpk-text); font:400 14px/1.42 Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
+  #ikpk-mobile-placement * { box-sizing:border-box; }
+  #ikpk-mobile-placement .ikpk-width-control { display:flex; align-items:center; gap:8px; min-height:44px; margin:0 0 8px 4px; color:var(--ikpk-muted); font-size:12px; }
+  #ikpk-mobile-placement .ikpk-width-control label { margin:0; }
+  #ikpk-mobile-placement .ikpk-width-control select { width:auto; min-width:98px; height:36px; font-size:14px; }
+  #ikpk-mobile-placement .ikpk-variant-intro { margin:0 auto 10px; max-width:1024px; }
+  #ikpk-mobile-placement .ikpk-variant-intro h2 { margin:0; font-size:18px; line-height:1.25; font-weight:500; }
+  #ikpk-mobile-placement .ikpk-variant-intro p { margin:3px 0 0; color:var(--ikpk-muted); font-size:12px; }
+  #ikpk-mobile-placement .ikpk-devices { display:flex; flex-wrap:wrap; align-items:flex-start; justify-content:center; gap:12px; padding:8px 0 12px; }
+  #ikpk-mobile-placement .ikpk-device { width:var(--ikpk-phone-width); min-width:0; flex:0 0 var(--ikpk-phone-width); }
+  #ikpk-mobile-placement .ikpk-device-caption { display:flex; align-items:baseline; justify-content:space-between; gap:6px; min-height:24px; margin:0 2px 5px; color:var(--ikpk-muted); font-size:11px; }
+  #ikpk-mobile-placement .ikpk-device-caption strong { color:var(--ikpk-text); font-weight:500; }
+  #ikpk-mobile-placement .ikpk-screen { position:relative; display:flex; flex-direction:column; width:100%; height:620px; overflow:hidden; border:1px solid var(--ikpk-line); border-radius:12px; background:var(--ikpk-page); box-shadow:0 5px 20px var(--ikpk-shadow); isolation:isolate; }
+  #ikpk-mobile-placement .ikpk-header { display:flex; align-items:center; justify-content:space-between; gap:8px; flex:none; min-height:68px; padding:10px 14px; background:var(--ikpk-bg); border-bottom:1px solid var(--ikpk-line); }
+  #ikpk-mobile-placement .ikpk-brand { display:flex; flex-direction:column; flex:none; color:var(--ikpk-brand); font-size:21px; line-height:1; font-weight:600; letter-spacing:-.6px; }
+  #ikpk-mobile-placement .ikpk-brand small { margin-top:4px; font-size:11px; letter-spacing:1px; font-weight:500; }
+  #ikpk-mobile-placement .ikpk-menu { display:flex; align-items:center; justify-content:center; width:30px; height:30px; flex:none; color:var(--ikpk-text); }
+  #ikpk-mobile-placement .ikpk-menu svg { width:20px; height:20px; }
+  #ikpk-mobile-placement .ikpk-scrollport { min-height:0; flex:1; overflow:auto; overscroll-behavior:contain; scrollbar-color:var(--ikpk-muted) transparent; scrollbar-width:thin; }
+  #ikpk-mobile-placement .ikpk-page { padding:13px 14px 0; }
+  #ikpk-mobile-placement .ikpk-breadcrumb { color:var(--ikpk-muted); font-size:12px; }
+  #ikpk-mobile-placement .ikpk-breadcrumb span { padding:0 4px; }
+  #ikpk-mobile-placement .ikpk-eyebrow { margin:13px 0 2px; color:var(--ikpk-green); font-size:12px; font-weight:600; letter-spacing:.05em; }
+  #ikpk-mobile-placement h3 { margin:0 0 10px; font-size:22px; line-height:1.15; font-weight:500; letter-spacing:-.3px; }
+  #ikpk-mobile-placement .ikpk-notices { display:grid; gap:5px; margin:0 0 12px; }
+  #ikpk-mobile-placement .ikpk-notices p { display:flex; align-items:flex-start; gap:7px; margin:0; padding:8px; background:var(--ikpk-warn); color:var(--ikpk-warn-ink); border-radius:5px; font-size:12px; line-height:1.35; }
+  #ikpk-mobile-placement .ikpk-notices svg { width:14px; height:14px; flex:none; margin-top:1px; }
+  #ikpk-mobile-placement .ikpk-filters { display:grid; grid-template-columns:1fr 1fr; gap:6px; margin:0 0 11px; }
+  #ikpk-mobile-placement .ikpk-filters label { display:flex; flex-direction:column; gap:3px; min-width:0; color:var(--ikpk-muted); font-size:12px; }
+  #ikpk-mobile-placement .ikpk-search { grid-column:1/-1; position:relative; }
+  #ikpk-mobile-placement .ikpk-search svg { position:absolute; left:10px; top:15px; width:16px; height:16px; color:var(--ikpk-muted); }
+  #ikpk-mobile-placement input, #ikpk-mobile-placement select { width:100%; height:44px; padding:0 10px; border:1px solid var(--ikpk-line); border-radius:5px; background:var(--ikpk-bg); color:var(--ikpk-text); font:inherit; font-size:16px; }
+  #ikpk-mobile-placement select[data-width-select] { width:auto; min-width:98px; height:36px; font-size:14px; }
+  #ikpk-mobile-placement input { padding-left:34px; }
+  #ikpk-mobile-placement input::placeholder { color:var(--ikpk-muted); }
+  #ikpk-mobile-placement select:disabled { color:var(--ikpk-muted); opacity:.75; }
+  #ikpk-mobile-placement .ikpk-results { display:flex; justify-content:space-between; align-items:center; margin:0 0 7px; font-size:14px; }
+  #ikpk-mobile-placement .ikpk-results strong { font-weight:500; }
+  #ikpk-mobile-placement .ikpk-results span { color:var(--ikpk-muted); font-size:12px; }
+  #ikpk-mobile-placement .ikpk-card-list { display:grid; gap:7px; }
+  #ikpk-mobile-placement .ikpk-seminar { padding:12px; border:1px solid var(--ikpk-line); border-left:2px solid var(--ikpk-green); border-radius:6px; background:var(--ikpk-bg); }
+  #ikpk-mobile-placement .ikpk-card-top { display:flex; align-items:flex-start; justify-content:space-between; gap:8px; color:var(--ikpk-green); font-size:12px; line-height:1.35; }
+  #ikpk-mobile-placement .ikpk-price { flex:none; color:var(--ikpk-text); font-size:12px; font-weight:500; white-space:nowrap; }
+  #ikpk-mobile-placement h4 { margin:6px 0 8px; font-size:16px; line-height:1.3; font-weight:500; }
+  #ikpk-mobile-placement dl { display:grid; gap:5px; margin:0; font-size:12px; line-height:1.35; }
+  #ikpk-mobile-placement dl div { display:grid; grid-template-columns:110px minmax(0,1fr); gap:6px; }
+  #ikpk-mobile-placement dt { color:var(--ikpk-muted); }
+  #ikpk-mobile-placement dd { min-width:0; margin:0; overflow-wrap:anywhere; }
+  #ikpk-mobile-placement .ikpk-card-links { display:flex; flex-wrap:wrap; gap:8px 14px; margin-top:10px; font-size:12px; }
+  #ikpk-mobile-placement .ikpk-card-links a { display:inline-flex; align-items:center; gap:4px; min-height:32px; color:var(--ikpk-green); text-decoration:none; }
+  #ikpk-mobile-placement .ikpk-card-links a svg { width:14px; height:14px; }
+  #ikpk-mobile-placement .ikpk-pagination { display:flex; align-items:center; gap:6px; padding:10px 0 13px; color:var(--ikpk-muted); font-size:12px; }
+  #ikpk-mobile-placement .ikpk-pagination button { min-width:32px; height:32px; border:1px solid var(--ikpk-line); border-radius:4px; background:var(--ikpk-bg); color:var(--ikpk-text); font:inherit; }
+  #ikpk-mobile-placement .ikpk-pagination button[aria-current="page"] { border-color:var(--ikpk-green); color:var(--ikpk-green); }
+  #ikpk-mobile-placement .ikpk-footer { display:grid; gap:7px; margin:0 -14px; padding:15px 14px 17px; background:var(--ikpk-bg); border-top:1px solid var(--ikpk-line); font-size:12px; }
+  #ikpk-mobile-placement .ikpk-footer strong { font-size:14px; font-weight:500; }
+  #ikpk-mobile-placement .ikpk-footer a { color:var(--ikpk-text); text-decoration:none; }
+  #ikpk-mobile-placement .ikpk-footer-links { display:flex; flex-wrap:wrap; gap:8px 14px; margin-top:4px; color:var(--ikpk-muted); }
+  #ikpk-mobile-placement .ikpk-footer small { margin-top:4px; color:var(--ikpk-muted); font-size:11px; }
+  #ikpk-mobile-placement .ikpk-chat-slot { display:none; }
+  #ikpk-mobile-placement .ikpk-chat-trigger { display:inline-flex; align-items:center; justify-content:center; gap:10px; width:max-content; height:52px; padding:0 20px; border:0; border-radius:999px; background:#357a38; color:#fff; box-shadow:0 3px 11px var(--ikpk-shadow); font:500 14px/1 Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; white-space:nowrap; }
+  #ikpk-mobile-placement .ikpk-chat-trigger svg { width:22px; height:22px; flex:none; }
+  #ikpk-mobile-placement [data-layout="zone"] .ikpk-screen > .ikpk-header { display:none; }
+  #ikpk-mobile-placement [data-layout="zone"] .ikpk-scrollport > .ikpk-header { display:flex; }
+  #ikpk-mobile-placement [data-layout="zone"] .ikpk-chat-slot { display:flex; align-items:center; justify-content:flex-end; flex:none; height:var(--ikpk-zone-height); padding:0 12px; background:var(--ikpk-page); }
+  #ikpk-mobile-placement [data-layout="header"] .ikpk-header { justify-content:space-between; gap:8px; min-height:68px; padding:8px 10px; }
+  #ikpk-mobile-placement .ikpk-chat-panel { position:absolute; z-index:3; right:8px; bottom:8px; width:min(300px,calc(100% - 16px)); overflow:hidden; border:1px solid var(--ikpk-line); border-radius:10px; background:var(--ikpk-bg); box-shadow:0 8px 28px var(--ikpk-shadow); }
+  #ikpk-mobile-placement .ikpk-chat-panel[hidden] { display:none; }
+  #ikpk-mobile-placement .ikpk-chat-panel header { display:flex; align-items:center; justify-content:space-between; padding:9px 11px; background:var(--ikpk-green); color:var(--ikpk-green-ink); font-weight:500; }
+  #ikpk-mobile-placement .ikpk-chat-panel header span { display:flex; align-items:center; gap:6px; }
+  #ikpk-mobile-placement .ikpk-chat-panel header svg { width:18px; height:18px; }
+  #ikpk-mobile-placement .ikpk-chat-panel header button { display:grid; place-items:center; width:28px; height:28px; border:0; background:transparent; color:inherit; }
+  #ikpk-mobile-placement .ikpk-chat-panel > small { display:block; padding:9px 12px 0; color:var(--ikpk-muted); font-size:11px; }
+  #ikpk-mobile-placement .ikpk-chat-panel > p { margin:18px 12px 40px; padding:10px; border-radius:0 9px 9px 9px; background:var(--ikpk-page); font-size:12px; }
+  #ikpk-mobile-placement .ikpk-chat-input { display:flex; justify-content:space-between; padding:12px; border-top:1px solid var(--ikpk-line); color:var(--ikpk-muted); font-size:11px; }
+  #ikpk-mobile-placement .ikpk-chat-input svg { width:15px; height:15px; }
+  #ikpk-mobile-placement [hidden] { display:none!important; }
+</style>
+<script>
+(function () {
+  const root = document.getElementById('ikpk-mobile-placement');
+  const template = document.getElementById('ikpk-placement-phone');
+  const previous = window.openai && window.openai.widgetState;
+  const previousModel = previous && previous.modelContent;
+  const previousPrivate = previous && previous.privateContent;
+  const rememberedWidth = Number(previousPrivate && previousPrivate.phoneWidth != null ? previousPrivate.phoneWidth : previousModel && previousModel.phoneWidth);
+  const rememberedZoneValue = previousPrivate && previousPrivate.zoneHeight;
+  const rememberedZoneHeight = typeof rememberedZoneValue === 'number' ? rememberedZoneValue : NaN;
+  const state = {
+    width: rememberedWidth === 375 ? 375 : 320,
+    zoneHeight: Number.isFinite(rememberedZoneHeight) ? Math.min(96, Math.max(72, rememberedZoneHeight)) : 80
+  };
+  const positions = [
+    { label: 'Начало', key: 'start' },
+    { label: 'Середина', key: 'middle' },
+    { label: 'Подвал', key: 'footer' }
+  ];
+
+  function makeTrigger() {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'ikpk-chat-trigger';
+    button.setAttribute('aria-label', 'Написать нам');
+    button.innerHTML = '<i data-lucide="message-circle" aria-hidden="true"></i><span>Написать нам</span>';
+    button.addEventListener('click', function () {
+      const screen = button.closest('.ikpk-screen');
+      const panel = screen.querySelector('.ikpk-chat-panel');
+      panel.hidden = false;
+      panel.querySelector('[data-close-chat]').focus();
+    });
+    return button;
+  }
+
+  function positionScrollports(force) {
+    root.querySelectorAll('.ikpk-device').forEach(function (device) {
+      const port = device.querySelector('.ikpk-scrollport');
+      if (port.clientHeight === 0 || port.clientWidth === 0) return;
+      if (!force && device.dataset.positionedWidth === String(state.width)) return;
+      const key = device.dataset.position;
+      const max = Math.max(0, port.scrollHeight - port.clientHeight);
+      port.scrollTop = key === 'start' ? 0 : key === 'middle' ? Math.round(max / 2) : max;
+      device.dataset.positionedWidth = String(state.width);
+    });
+  }
+
+  function renderState(reposition) {
+    root.style.setProperty('--ikpk-phone-width', state.width + 'px');
+    root.style.setProperty('--ikpk-zone-height', state.zoneHeight + 'px');
+    root.querySelector('[data-width-select]').value = String(state.width);
+    root.querySelector('[data-zone-height-label]').textContent = state.zoneHeight + ' px';
+    root.querySelectorAll('[data-viewport-label]').forEach(function (label) { label.textContent = 'Телефон · ' + state.width + ' px'; });
+    if (reposition) requestAnimationFrame(function () { requestAnimationFrame(function () { positionScrollports(true); }); });
+  }
+
+  function saveState() {
+    if (window.openai && window.openai.setWidgetState) {
+      window.openai.setWidgetState({
+        modelContent: { phoneWidth: state.width },
+        privateContent: { phoneWidth: state.width, zoneHeight: state.zoneHeight }
+      }).catch(function () {});
+    }
+  }
+
+  root.querySelectorAll('.ikpk-devices').forEach(function (group) {
+    const layout = group.dataset.layout;
+    positions.forEach(function (position) {
+      const fragment = template.content.cloneNode(true);
+      const device = fragment.querySelector('.ikpk-device');
+      const screen = fragment.querySelector('.ikpk-screen');
+      const header = fragment.querySelector('.ikpk-header');
+      const scrollport = fragment.querySelector('.ikpk-scrollport');
+      device.dataset.position = position.key;
+      screen.dataset.layout = layout;
+      fragment.querySelector('[data-position-label]').textContent = position.label;
+      fragment.querySelector('[data-viewport-label]').textContent = 'Телефон · ' + state.width + ' px';
+      const trigger = makeTrigger();
+      if (layout === 'zone') {
+        scrollport.prepend(header);
+        screen.querySelector('.ikpk-chat-slot').appendChild(trigger);
+      } else {
+        header.insertBefore(trigger, header.querySelector('.ikpk-menu'));
+      }
+      if (globalThis.ResizeObserver) {
+        const resizeObserver = new ResizeObserver(function () { positionScrollports(false); });
+        resizeObserver.observe(scrollport);
+      }
+      fragment.querySelectorAll('[data-local-link]').forEach(function (link) {
+        link.addEventListener('click', function (event) { event.preventDefault(); });
+      });
+      fragment.querySelectorAll('.ikpk-pagination button').forEach(function (button) {
+        button.addEventListener('click', function () {
+          device.querySelectorAll('.ikpk-pagination button').forEach(function (item) { item.removeAttribute('aria-current'); });
+          button.setAttribute('aria-current', 'page');
+        });
+      });
+      fragment.querySelector('[data-close-chat]').addEventListener('click', function () {
+        const panel = screen.querySelector('.ikpk-chat-panel');
+        panel.hidden = true;
+        trigger.focus();
+      });
+      group.appendChild(fragment);
+    });
+  });
+
+  renderState(false);
+  root.querySelector('[data-width-select]').addEventListener('change', function (event) {
+    state.width = Number(event.currentTarget.value);
+    if (state.width !== 320 && state.width !== 375) state.width = 320;
+    renderState(true);
+    saveState();
+  });
+  if (globalThis.lucide) lucide.createIcons();
+  Promise.resolve(document.fonts && document.fonts.ready).then(function () {
+    requestAnimationFrame(function () { requestAnimationFrame(function () { positionScrollports(true); }); });
+  });
+  if (globalThis.Tweak) {
+    const zoneGroup = root.querySelector('[data-layout="zone"]');
+    const tweak = new Tweak({ container: zoneGroup, onChange: function () {
+      renderState(true);
+      saveState();
+    } });
+    tweak.addSlider(state, 'zoneHeight', { label: 'Нижняя свободная зона', min: 72, max: 96, step: 2, unit: 'px', reference: '--ikpk-zone-height' });
+  }
+  window.addEventListener('openai:set_globals', function (event) {
+    const snapshot = event.detail && event.detail.globals && event.detail.globals.widgetState;
+    const incomingModel = snapshot && snapshot.modelContent;
+    const incomingPrivate = snapshot && snapshot.privateContent;
+    if (!snapshot) return;
+    const width = Number(incomingPrivate && incomingPrivate.phoneWidth != null ? incomingPrivate.phoneWidth : incomingModel && incomingModel.phoneWidth);
+    const zoneValue = incomingPrivate && incomingPrivate.zoneHeight;
+    const zoneHeight = typeof zoneValue === 'number' ? zoneValue : NaN;
+    if (width === 320 || width === 375) state.width = width;
+    if (Number.isFinite(zoneHeight)) state.zoneHeight = Math.min(96, Math.max(72, zoneHeight));
+    renderState(true);
+  });
+  root.addEventListener('keydown', function (event) {
+    if (event.key !== 'Escape') return;
+    const panel = event.target.closest('.ikpk-screen')?.querySelector('.ikpk-chat-panel');
+    if (!panel || panel.hidden) return;
+    panel.hidden = true;
+    event.target.closest('.ikpk-screen').querySelector('.ikpk-chat-trigger').focus();
+  });
+})();
+</script>
