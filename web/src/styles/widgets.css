@@ -61,11 +61,8 @@
   color: #0b260c;
 }
 
-:root[data-theme='dark'] .chat-trigger:hover {
-  background: var(--color-accent-700);
-}
-
 body.layout-topnav--chat {
+  --chat-lower-zone-height: calc(80px + env(safe-area-inset-bottom, 0px));
   display: grid;
   grid-template-rows: minmax(0, 1fr) auto;
   height: calc(var(--chat-viewport-offset, 0px) + var(--chat-viewport-height, 100dvh));
@@ -89,6 +86,19 @@ body.layout-topnav--chat {
 
 .page-flow--scrollport :where([id]) {
   scroll-margin-top: 0;
+}
+
+body.layout-topnav--chat .topnav-drawer {
+  max-height: var(--chat-drawer-max-height, max(0px, calc(var(--chat-viewport-height, 100vh) - var(--chat-lower-zone-height) - var(--chat-drawer-top-space, calc(var(--header-height, 60px) + 8px)))));
+}
+
+body.layout-topnav--chat .header-search {
+  max-height: var(--chat-search-max-height, max(0px, calc(var(--chat-viewport-height, 100vh) - var(--chat-lower-zone-height) - var(--chat-search-top-space, var(--header-height, 60px)))));
+  overflow-y: auto;
+}
+
+body.layout-topnav--chat .header-search-pagefind .pagefind-ui__drawer {
+  max-height: min(60vh, max(0px, calc(var(--chat-search-max-height, 100vh) - 100px)));
 }
 
 .chat-mount {

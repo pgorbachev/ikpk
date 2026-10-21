@@ -138,20 +138,34 @@ async function contrastAndButtonState(page: Page, width: number, theme: 'light' 
     const r = el.getBoundingClientRect();
     const style = getComputedStyle(el);
     const icon = el.querySelector<HTMLElement>('[aria-hidden="true"]');
+    const caption = [...el.querySelectorAll<HTMLElement>('span')].find((node) =>
+      !node.closest('[aria-hidden="true"]') && node.textContent?.trim() === 'Написать нам',
+    );
     const iconRect = icon?.getBoundingClientRect();
-    const text = el.textContent?.replace(/\s+/g, ' ').trim() ?? '';
-    const label = el.getAttribute('aria-label') ?? el.getAttribute('title') ?? text;
+    const range = document.createRange();
+    if (caption) range.selectNodeContents(caption);
+    const textRects = caption ? [...range.getClientRects()] : [];
+    const captionStyle = caption ? getComputedStyle(caption) : null;
     return {
-      label, text, height: r.height, width: r.width,
+      label: el.getAttribute('aria-label') ?? el.getAttribute('title') ?? '',
+      captionText: caption?.textContent?.trim() ?? '',
+      captionFontSize: captionStyle ? parseFloat(captionStyle.fontSize) : 0,
+      captionVisible: Boolean(caption && captionStyle && captionStyle.display !== 'none'
+        && captionStyle.visibility !== 'hidden' && Number(captionStyle.opacity) > 0
+        && textRects.length === 1 && textRects[0].width > 0 && textRects[0].height > 0
+        && textRects[0].left >= r.left && textRects[0].right <= r.right
+        && textRects[0].top >= r.top && textRects[0].bottom <= r.bottom),
+      height: r.height, width: r.width,
       paddingLeft: parseFloat(style.paddingLeft), paddingRight: parseFloat(style.paddingRight),
       gap: parseFloat(style.columnGap === 'normal' ? style.gap : style.columnGap),
       iconWidth: iconRect?.width ?? 0,
       iconHeight: iconRect?.height ?? 0,
-      textVisible: Boolean(text) && r.width > 0,
     };
   });
   expect.soft(before.label, `${theme} ${width}: accessible name follows the visible caption`).toBe('Написать нам');
-  expect.soft(before.text, `${theme} ${width}: full visible caption exists`).toContain('Написать нам');
+  expect.soft(before.captionText, `${theme} ${width}: visible caption is the expected one-line text`).toBe('Написать нам');
+  expect.soft(before.captionFontSize, `${theme} ${width}: caption matches approved 14px mockup`).toBe(14);
+  expect.soft(before.captionVisible, `${theme} ${width}: caption text is rendered on one visible line`).toBe(true);
   expect.soft(before.height, `${theme} ${width}: capsule height`).toBe(52);
   expect.soft(before.paddingLeft, `${theme} ${width}: left horizontal padding`).toBe(20);
   expect.soft(before.paddingRight, `${theme} ${width}: right horizontal padding`).toBe(20);
@@ -168,16 +182,15 @@ async function contrastAndButtonState(page: Page, width: number, theme: 'light' 
       await page.keyboard.press('Shift+Tab');
     } },
   ];
+  let unfocusedShadow = '';
   for (const state of states) {
     await state.activate();
     const metrics = await trigger.evaluate((el) => {
       const style = getComputedStyle(el);
-      const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
-      let textNode: Node | null = null;
-      while (walker.nextNode()) {
-        if (walker.currentNode.textContent?.trim()) { textNode = walker.currentNode; break; }
-      }
-      const textColor = textNode?.parentElement ? getComputedStyle(textNode.parentElement).color : style.color;
+      const caption = [...el.querySelectorAll<HTMLElement>('span')].find((node) =>
+        !node.closest('[aria-hidden="true"]') && node.textContent?.trim() === 'Написать нам',
+      );
+      const textColor = caption ? getComputedStyle(caption).color : '';
       const rgb = (value: string) => value.match(/[\d.]+/g)?.slice(0, 3).map(Number) ?? [0, 0, 0];
       const linear = (v: number) => { const x = v / 255; return x <= .04045 ? x / 12.92 : ((x + .055) / 1.055) ** 2.4; };
       const luminance = (value: string) => {
@@ -187,18 +200,24 @@ async function contrastAndButtonState(page: Page, width: number, theme: 'light' 
       const fg = luminance(textColor);
       const bg = luminance(style.backgroundColor);
       return {
-        ratio: textNode ? (Math.max(fg, bg) + .05) / (Math.min(fg, bg) + .05) : 0,
+        ratio: caption ? (Math.max(fg, bg) + .05) / (Math.min(fg, bg) + .05) : 0,
         outlineStyle: style.outlineStyle,
         outlineWidth: parseFloat(style.outlineWidth),
+        outlineColor: style.outlineColor,
         boxShadow: style.boxShadow,
-        textFound: textNode !== null,
+        textFound: Boolean(caption),
       };
     });
     expect.soft(metrics.ratio, `${theme} ${width} ${state.name}: text contrast >= 4.5:1`).toBeGreaterThanOrEqual(4.5);
     expect.soft(metrics.textFound, `${theme} ${width} ${state.name}: actual visible caption has measurable text`).toBe(true);
+    if (state.name === 'normal') unfocusedShadow = metrics.boxShadow;
     if (state.name === 'focus') {
-      const visibleFocus = (metrics.outlineStyle !== 'none' && metrics.outlineWidth > 0)
-        || (metrics.boxShadow !== 'none' && !/rgba\([^)]*,\s*0(?:\.0+)?\)/.test(metrics.boxShadow));
+      const outlineChannels = metrics.outlineColor.match(/[\d.]+/g)?.map(Number) ?? [];
+      const outlineAlpha = outlineChannels.length >= 4 ? outlineChannels[3] : 1;
+      const opaqueOutline = metrics.outlineStyle !== 'none' && metrics.outlineWidth > 0
+        && outlineAlpha >= 0.99;
+      const changedShadow = metrics.boxShadow !== unfocusedShadow && metrics.boxShadow !== 'none';
+      const visibleFocus = opaqueOutline || changedShadow;
       expect.soft(visibleFocus,
         `${theme} ${width}: keyboard focus has a visible indicator`).toBe(true);
     }
@@ -208,10 +227,10 @@ async function contrastAndButtonState(page: Page, width: number, theme: 'light' 
   await page.mouse.down();
   const pressed = await trigger.evaluate((el) => {
     const style = getComputedStyle(el);
-    const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
-    let textNode: Node | null = null;
-    while (walker.nextNode()) if (walker.currentNode.textContent?.trim()) { textNode = walker.currentNode; break; }
-    const color = textNode?.parentElement ? getComputedStyle(textNode.parentElement).color : style.color;
+    const caption = [...el.querySelectorAll<HTMLElement>('span')].find((node) =>
+      !node.closest('[aria-hidden="true"]') && node.textContent?.trim() === 'Написать нам',
+    );
+    const color = caption ? getComputedStyle(caption).color : '';
     const luminance = (value: string) => {
       const parts = value.match(/[\d.]+/g)?.slice(0, 3).map((part) => Number(part) / 255) ?? [0, 0, 0];
       const [r, g, b] = parts.map((v) => v <= .04045 ? v / 12.92 : ((v + .055) / 1.055) ** 2.4);
@@ -219,7 +238,7 @@ async function contrastAndButtonState(page: Page, width: number, theme: 'light' 
     };
     const fg = luminance(color);
     const bg = luminance(style.backgroundColor);
-    return { ratio: textNode ? (Math.max(fg, bg) + .05) / (Math.min(fg, bg) + .05) : 0 };
+    return { ratio: caption ? (Math.max(fg, bg) + .05) / (Math.min(fg, bg) + .05) : 0 };
   });
   // Release outside the trigger so this visual-state probe cannot activate the chat.
   await page.mouse.move(0, 0);
@@ -261,14 +280,14 @@ test.describe('chat entry visibility approved contract', () => {
 
   test('page flow has one real scrollport and an 80px sibling lower zone without clipped visible overlap', async ({ page }) => {
     await protectThirdParties(page);
-    const templates = TEMPLATES.filter(({ name }) => TD52.has(name));
-    expect(templates.map(({ name }) => name).sort()).toEqual([...TD52].sort());
+    const templates = TEMPLATES;
+    expect(templates.map(({ name }) => name).filter((name) => TD52.has(name)).sort()).toEqual([...TD52].sort());
 
     for (const width of WIDTHS) {
       await page.setViewportSize({ width, height: width === 375 ? 812 : 720 });
       for (const { name, path } of templates) {
         const response = await page.goto(activeUrl(path));
-        expect(response?.status(), `${name}: real TD-52 page is present`).toBe(200);
+        expect(response?.status(), `${name}: applicable page is present in this preview fixture`).toBe(200);
         await expect(page.locator(TRIGGER), `${name}: chat remains the subject`).toHaveCount(1);
         for (const position of ['start', 'middle', 'footer'] as const) {
           const before = await snapshotLayout(page);
@@ -331,78 +350,192 @@ test.describe('chat entry visibility approved contract', () => {
 
   test('anchor, history, wheel, touch-like scroll, keyboard scroll, and focus reveal stay in the shared scrollport', async ({ page }) => {
     await protectThirdParties(page);
-    await page.setViewportSize({ width: 375, height: 420 });
-    await page.goto(activeUrl('/institut-apledzhera#programs'));
-    const hasTarget = await page.locator('#programs').count();
-    expect(hasTarget, 'anchor target is present on the selected page').toBe(1);
-    const scroll = await snapshotLayout(page);
-    expect.soft(scroll.scrollportFound, 'anchor navigation uses a real shared scrollport').toBe(true);
-    const targetVisible = await page.locator('#programs').evaluate((el) => {
-      const target = el.getBoundingClientRect();
-      const header = document.querySelector('header')?.getBoundingClientRect();
-      return target.top >= (header?.bottom ?? 0) && target.top < innerHeight;
-    });
-    expect.soft(targetVisible, '#programs is revealed below the sticky header').toBe(true);
+    for (const width of WIDTHS) {
+      await page.setViewportSize({ width, height: 420 });
+      await page.goto(activeUrl('/institut-apledzhera#programs'));
+      const hasTarget = await page.locator('#programs').count();
+      expect(hasTarget, 'anchor target is present on the selected page').toBe(1);
+      const scroll = await snapshotLayout(page);
+      expect.soft(scroll.scrollportFound, 'anchor navigation uses a real shared scrollport').toBe(true);
+      const targetVisible = await page.locator('#programs').evaluate((el) => {
+        const target = el.getBoundingClientRect();
+        const header = document.querySelector('header')?.getBoundingClientRect();
+        return target.top >= (header?.bottom ?? 0) && target.top < innerHeight;
+      });
+      expect.soft(targetVisible, '#programs is revealed below the sticky header').toBe(true);
 
-    await page.goto(activeUrl('/raspisanie-i-tseny'));
-    const beforeWheel = (await snapshotLayout(page)).scrollportScrollTop;
-    await page.mouse.wheel(0, 480);
-    await expect.poll(async () => (await snapshotLayout(page)).scrollportScrollTop,
-      'wheel advances the shared scrollport').toBeGreaterThan(beforeWheel);
-    const beforeKeyboard = (await snapshotLayout(page)).scrollportScrollTop;
-    await page.keyboard.press('PageDown');
-    await expect.poll(async () => (await snapshotLayout(page)).scrollportScrollTop,
-      'PageDown advances the shared scrollport').toBeGreaterThan(beforeKeyboard);
+      await page.goto(activeUrl('/raspisanie-i-tseny'));
+      const resetPort = async () => page.evaluate(() => {
+        const port = document.querySelector<HTMLElement>('[data-page-scrollport]');
+        if (port) port.scrollTop = 0;
+      });
+      const beforeKeyboard = (await snapshotLayout(page)).scrollportScrollTop;
+      await page.keyboard.press('PageDown');
+      await expect.poll(async () => (await snapshotLayout(page)).scrollportScrollTop,
+        'PageDown advances the shared scrollport from its start on a fresh page').toBeGreaterThan(beforeKeyboard);
 
+      await resetPort();
+      const beforeWheel = (await snapshotLayout(page)).scrollportScrollTop;
+      await page.mouse.wheel(0, 480);
+      await expect.poll(async () => (await snapshotLayout(page)).scrollportScrollTop,
+        'wheel advances the shared scrollport').toBeGreaterThan(beforeWheel);
+
+      await resetPort();
+      const session = await page.context().newCDPSession(page);
+      const beforeTouch = (await snapshotLayout(page)).scrollportScrollTop;
+      await session.send('Input.synthesizeScrollGesture', { x: 180, y: 300, yDistance: -420, speed: 650, gestureSourceType: 'touch' });
+      await session.detach();
+      await expect.poll(async () => (await snapshotLayout(page)).scrollportScrollTop,
+        'Chromium touch-like scroll gesture advances the shared scrollport').toBeGreaterThan(beforeTouch);
+
+      await page.goto(activeUrl('/raspisanie-i-tseny'));
+      await page.evaluate(() => {
+        const port = [...document.querySelectorAll<HTMLElement>('body *')].find((el) => {
+          const style = getComputedStyle(el);
+          return /(auto|scroll)/.test(style.overflowY) && el.hasAttribute('data-page-scrollport');
+        });
+        if (port) port.scrollTop = Math.max(0, port.scrollHeight - port.clientHeight - 180);
+        else window.scrollTo(0, document.documentElement.scrollHeight - innerHeight - 180);
+      });
+      const schedulePosition = await snapshotLayout(page);
+      const scheduleUrl = page.url();
+      await page.goto(activeUrl('/kontakty'));
+      await page.evaluate(() => {
+        const port = [...document.querySelectorAll<HTMLElement>('body *')].find((el) => {
+          const style = getComputedStyle(el);
+          return /(auto|scroll)/.test(style.overflowY) && el.hasAttribute('data-page-scrollport');
+        });
+        if (port) port.scrollTop = Math.max(0, port.scrollHeight - port.clientHeight - 120);
+        else window.scrollTo(0, document.documentElement.scrollHeight - innerHeight - 120);
+      });
+      const contactsPosition = await snapshotLayout(page);
+      await page.goBack();
+      await expect(page).toHaveURL(scheduleUrl);
+      await expect.poll(async () => (await snapshotLayout(page)).scrollportScrollTop,
+        'back restores the schedule scrollport position').toBe(schedulePosition.scrollportScrollTop);
+      await page.goForward();
+      await expect(page).toHaveURL(/kontakty/);
+      await expect.poll(async () => (await snapshotLayout(page)).scrollportScrollTop,
+        'forward restores the contacts scrollport position').toBe(contactsPosition.scrollportScrollTop);
+
+      const focusable = page.locator('footer a[href]').first();
+      await focusable.focus();
+      const focused = await focusable.evaluate((el) => {
+        const rect = el.getBoundingClientRect();
+        const host = [...document.querySelectorAll<HTMLElement>('body *')].find((candidate) => {
+          const style = getComputedStyle(candidate);
+          return /(auto|scroll)/.test(style.overflowY) && candidate.hasAttribute('data-page-scrollport') && candidate.contains(el);
+        });
+        const box = host?.getBoundingClientRect();
+        return Boolean(box && rect.top >= box.top && rect.bottom <= box.bottom);
+      });
+      expect.soft(focused, 'keyboard focus reveal keeps the full footer control inside the shared scrollport').toBe(true);
+    }
+  });
+
+  test('short mobile viewport keeps the full menu and search controls inside the shared scrollport', async ({ page }) => {
+    await protectThirdParties(page);
+    for (const width of [320, 375]) {
+      await page.setViewportSize({ width, height: 420 });
+      await page.goto(activeUrl('/'));
+      const port = page.locator('[data-page-scrollport]');
+      await expect(port).toHaveCount(1);
+      await page.locator('details.topnav-mobile > summary').click();
+      const drawer = page.locator('.topnav-drawer');
+      await expect(drawer).toBeVisible();
+      const initial = await page.evaluate(() => ({
+        drawer: document.querySelector<HTMLElement>('.topnav-drawer')!.getBoundingClientRect().toJSON(),
+        port: document.querySelector<HTMLElement>('[data-page-scrollport]')!.getBoundingClientRect().toJSON(),
+      }));
+      expect(initial.drawer.bottom, `${width}: mobile menu starts and ends inside the clipped content region`).toBeLessThanOrEqual(initial.port.bottom + 1);
+
+      await drawer.evaluate((el: HTMLElement) => { el.scrollTop = el.scrollHeight; });
+      const lastPhone = drawer.locator('.drawer-phone').last();
+      const lastLink = await lastPhone.evaluate((el) => {
+        const rect = el.getBoundingClientRect();
+        const menu = el.closest<HTMLElement>('.topnav-drawer')!.getBoundingClientRect();
+        const clip = document.querySelector<HTMLElement>('[data-page-scrollport]')!.getBoundingClientRect();
+        return {
+          visible: rect.top >= menu.top && rect.bottom <= menu.bottom && rect.top >= clip.top && rect.bottom <= clip.bottom,
+          text: el.textContent?.trim(),
+        };
+      });
+      expect(lastLink.text, `${width}: last phone link remains the final menu control`).toBeTruthy();
+      expect(lastLink.visible, `${width}: last menu control is reachable within the visible scrollport`).toBe(true);
+
+      const openSearch = page.locator('[data-search-open]');
+      await openSearch.scrollIntoViewIfNeeded();
+      await openSearch.click();
+      const search = page.locator('#header-search');
+      const closeSearch = page.locator('#header-search-close');
+      await expect(search).toBeVisible();
+      await closeSearch.scrollIntoViewIfNeeded();
+      const searchBounds = await page.evaluate(() => {
+        const panel = document.querySelector<HTMLElement>('#header-search')!.getBoundingClientRect();
+        const close = document.querySelector<HTMLElement>('#header-search-close')!.getBoundingClientRect();
+        const port = document.querySelector<HTMLElement>('[data-page-scrollport]')!.getBoundingClientRect();
+        return {
+          panelBottom: panel.bottom,
+          closeInside: close.top >= panel.top && close.bottom <= panel.bottom
+            && close.top >= port.top && close.bottom <= port.bottom,
+        };
+      });
+      expect(searchBounds.panelBottom, `${width}: search popup fits under the reduced visual viewport`).toBeLessThanOrEqual(initial.port.bottom + 1);
+      expect(searchBounds.closeInside, `${width}: search has a reachable close control in its clipped region`).toBe(true);
+
+      const query = page.locator('#header-search-pagefind input[type="search"]');
+      await expect(query, `${width}: search input is available in the popup`).toBeVisible();
+      await query.fill('семинар');
+      const results = page.locator('#header-search-pagefind .pagefind-ui__result');
+      await expect.poll(() => results.count(), `${width}: local Pagefind returns results`).toBeGreaterThan(0);
+      const resultDrawer = page.locator('#header-search-pagefind .pagefind-ui__drawer');
+      const lastResult = results.last();
+      await resultDrawer.evaluate((el: HTMLElement) => { el.scrollTop = el.scrollHeight; });
+      const lastResultVisible = await lastResult.evaluate((el) => {
+        const rect = el.getBoundingClientRect();
+        const drawer = el.closest<HTMLElement>('.pagefind-ui__drawer')!.getBoundingClientRect();
+        const panel = el.closest<HTMLElement>('#header-search')!.getBoundingClientRect();
+        const clip = document.querySelector<HTMLElement>('[data-page-scrollport]')!.getBoundingClientRect();
+        return rect.top >= drawer.top && rect.bottom <= drawer.bottom
+          && rect.top >= panel.top && rect.bottom <= panel.bottom
+          && rect.top >= clip.top && rect.bottom <= clip.bottom;
+      });
+      expect(lastResultVisible, `${width}: the final local search result remains reachable above the lower-zone clip`).toBe(true);
+    }
+  });
+
+  test('safe-area inset expands the separate lower zone while preserving the 80px useful area', async ({ page }) => {
+    await protectThirdParties(page);
+    await page.setViewportSize({ width: 375, height: 640 });
+    await page.goto(activeUrl('/'));
     const session = await page.context().newCDPSession(page);
-    const beforeTouch = (await snapshotLayout(page)).scrollportScrollTop;
-    await session.send('Input.synthesizeScrollGesture', { x: 180, y: 300, yDistance: -420, speed: 650, gestureSourceType: 'touch' });
+    await session.send('Emulation.setSafeAreaInsetsOverride', { insets: { bottom: 20 } });
+    const measured = await page.evaluate(() => {
+      const facade = document.querySelector<HTMLElement>('[data-chat-facade]')!;
+      const trigger = facade.querySelector<HTMLElement>('[data-chat-trigger]')!;
+      const port = document.querySelector<HTMLElement>('[data-page-scrollport]')!;
+      const rect = facade.getBoundingClientRect();
+      const button = trigger.getBoundingClientRect();
+      const probe = document.createElement('div');
+      probe.style.cssText = 'position:fixed;left:-10000px;padding-bottom:env(safe-area-inset-bottom)';
+      document.body.append(probe);
+      const inset = parseFloat(getComputedStyle(probe).paddingBottom) || 0;
+      probe.remove();
+      return {
+        inset,
+        lowerHeight: rect.height,
+        usefulHeight: rect.height - inset,
+        buttonInsideUsefulArea: button.top >= rect.top && button.bottom <= rect.bottom - inset,
+        portBottom: port.getBoundingClientRect().bottom,
+        lowerTop: rect.top,
+      };
+    });
     await session.detach();
-    await expect.poll(async () => (await snapshotLayout(page)).scrollportScrollTop,
-      'Chromium touch-like scroll gesture advances the shared scrollport').toBeGreaterThan(beforeTouch);
-
-    await page.goto(activeUrl('/raspisanie-i-tseny'));
-    await page.evaluate(() => {
-      const port = [...document.querySelectorAll<HTMLElement>('body *')].find((el) => {
-        const style = getComputedStyle(el);
-        return /(auto|scroll)/.test(style.overflowY) && el.hasAttribute('data-page-scrollport');
-      });
-      if (port) port.scrollTop = Math.max(0, port.scrollHeight - port.clientHeight - 180);
-      else window.scrollTo(0, document.documentElement.scrollHeight - innerHeight - 180);
-    });
-    const schedulePosition = await snapshotLayout(page);
-    const scheduleUrl = page.url();
-    await page.goto(activeUrl('/kontakty'));
-    await page.evaluate(() => {
-      const port = [...document.querySelectorAll<HTMLElement>('body *')].find((el) => {
-        const style = getComputedStyle(el);
-        return /(auto|scroll)/.test(style.overflowY) && el.hasAttribute('data-page-scrollport');
-      });
-      if (port) port.scrollTop = Math.max(0, port.scrollHeight - port.clientHeight - 120);
-      else window.scrollTo(0, document.documentElement.scrollHeight - innerHeight - 120);
-    });
-    const contactsPosition = await snapshotLayout(page);
-    await page.goBack();
-    await expect(page).toHaveURL(scheduleUrl);
-    await expect.poll(async () => (await snapshotLayout(page)).scrollportScrollTop,
-      'back restores the schedule scrollport position').toBe(schedulePosition.scrollportScrollTop);
-    await page.goForward();
-    await expect(page).toHaveURL(/kontakty/);
-    await expect.poll(async () => (await snapshotLayout(page)).scrollportScrollTop,
-      'forward restores the contacts scrollport position').toBe(contactsPosition.scrollportScrollTop);
-
-    const focusable = page.locator('footer a[href]').first();
-    await focusable.focus();
-    const focused = await focusable.evaluate((el) => {
-      const rect = el.getBoundingClientRect();
-      const host = [...document.querySelectorAll<HTMLElement>('body *')].find((candidate) => {
-        const style = getComputedStyle(candidate);
-        return /(auto|scroll)/.test(style.overflowY) && candidate.hasAttribute('data-page-scrollport') && candidate.contains(el);
-      });
-      const box = host?.getBoundingClientRect();
-      return Boolean(box && rect.top >= box.top && rect.bottom <= box.bottom);
-    });
-    expect.soft(focused, 'keyboard focus reveal keeps the full footer control inside the shared scrollport').toBe(true);
+    expect(measured.inset, 'CDP overrides the safe-area inset for this Chromium fixture').toBe(20);
+    expect(measured.lowerHeight, 'safe area is added outside the useful lower-zone height').toBe(100);
+    expect(measured.usefulHeight, 'lower zone retains 80 CSS px above the safe area').toBe(80);
+    expect(measured.buttonInsideUsefulArea, 'capsule remains in the useful 80px portion').toBe(true);
+    expect(measured.portBottom, 'scrollport ends before the full lower zone').toBeLessThanOrEqual(measured.lowerTop + 1);
   });
 
   test('shared scrollport drives the header shadow and the no-IntersectionObserver reviews fallback', async ({ page }) => {
@@ -454,6 +587,20 @@ test.describe('chat entry visibility approved contract', () => {
         viewport.dispatchEvent(new Event('resize'));
       };
     });
+    await page.setViewportSize({ width: 375, height: 420 });
+    await page.goto(activeUrl('/kontakty'));
+    const pageField = page.locator('.newsletter-signup-input').first();
+    await expect(pageField, 'page contains the existing newsletter input').toHaveCount(1);
+    await pageField.scrollIntoViewIfNeeded();
+    await pageField.focus();
+    await page.evaluate(() => (window as Window & { __setVisualViewportForTest?: (height: number, offsetTop: number) => void }).__setVisualViewportForTest?.(260, 20));
+    const pageFieldVisible = await pageField.evaluate((el) => {
+      const rect = el.getBoundingClientRect();
+      const port = document.querySelector<HTMLElement>('[data-page-scrollport]')!.getBoundingClientRect();
+      return rect.top >= port.top && rect.bottom <= port.bottom;
+    });
+    expect.soft(pageFieldVisible, 'focused lower page field stays revealed when the visual viewport shrinks').toBe(true);
+
     await page.setViewportSize({ width: 375, height: 812 });
     await page.goto(activeUrl('/oplata'));
     const entry = page.locator(PAYMENT_ENTRY);
@@ -503,6 +650,18 @@ test.describe('chat entry visibility approved contract', () => {
     expect.soft(viewportMetrics.layoutEvents, 'layout viewport resize event was delivered').toBeGreaterThan(0);
     expect.soft(viewportMetrics.visualEvents, 'visualViewport resize event was delivered').toBeGreaterThan(0);
     expect.soft(viewportMetrics.safeAreaBottom, 'headless Chromium reports the actual safe-area inset for this fixture').toBe(0);
+    const lowerPaymentField = page.locator('#payment-consent');
+    await lowerPaymentField.focus();
+    await page.evaluate(() => (window as Window & { __setVisualViewportForTest?: (height: number, offsetTop: number) => void }).__setVisualViewportForTest?.(300, 0));
+    const lowerPaymentFieldVisible = await lowerPaymentField.evaluate((el) => {
+      const rect = el.getBoundingClientRect();
+      const panel = document.querySelector<HTMLElement>('.payment-dialog-panel')!.getBoundingClientRect();
+      const vv = visualViewport;
+      const top = Math.max(panel.top, vv?.offsetTop ?? 0);
+      const bottom = Math.min(panel.bottom, (vv?.offsetTop ?? 0) + (vv?.height ?? innerHeight));
+      return rect.top >= top && rect.bottom <= bottom;
+    });
+    expect.soft(lowerPaymentFieldVisible, 'focused lower payment field remains visible after a second keyboard viewport resize').toBe(true);
     const visibleBounds = await page.evaluate((triggerSelector) => {
       const vv = window.visualViewport!;
       const button = document.querySelector<HTMLElement>(triggerSelector)!.getBoundingClientRect();

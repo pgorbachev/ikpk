@@ -762,12 +762,11 @@ test.describe('кнопка чата не перекрывает содержи�
     });
   }
 
-  test('точка «вне элемента», выбранная существующим перебором, не попадает в кнопку чата', async ({ page }) => {
-    // Существующие переборы идут СНИЗУ вверх и отбрасывают интерактивные узлы, поэтому
-    // сама кнопка будет пропущена — риск обратный: неинтерактивная фиксированная
-    // обёртка вокруг кнопки под признак «интерактивное» не попадёт, и точка окажется
-    // на ней. Прогон тогда упадёт по причине, к его предмету не относящейся.
-    await guard(page);
+  test('точка вне элементов управления в нижней зоне не активирует чат', async ({ page }) => {
+    // Нижняя зона теперь занимает всю ширину строки и может попасть под выбранную
+    // свободную точку. Проверяем поведение этой точки: она не относится к кнопке и
+    // не должна загружать или открывать чат.
+    const seen = await guard(page);
     await page.goto(url('/'));
     await expect(page.locator(`[${SEL_CHAT_FACADE}]`), 'фасада чата нет — предмета нет').toHaveCount(1);
 
@@ -780,16 +779,24 @@ test.describe('кнопка чата не перекрывает содержи�
           const el = document.elementFromPoint(x, y);
           if (el === null) continue;
           if (el.closest(interactive)) continue;
-          return { x, y, inFacade: facade !== null && facade.contains(el), tag: el.tagName.toLowerCase() };
+          return {
+            x, y,
+            inFacade: facade !== null && facade.contains(el),
+            inTrigger: Boolean(el.closest(`[${SEL_CHAT_TRIGGER}]`)),
+            tag: el.tagName.toLowerCase(),
+          };
         }
       return null;
     }, SEL_CHAT_FACADE);
 
     expect(landed, 'ни одной неинтерактивной точки не нашлось — перебор проверить нечем').not.toBeNull();
     expect(
-      landed!.inFacade,
-      `точка «вне элемента» (${landed!.x}, ${landed!.y}) попала внутрь фасада чата ` +
-        `(${landed!.tag}): существующие прогоны начнут падать по чужой причине`,
+      landed!.inTrigger,
+      `точка вне контролов (${landed!.x}, ${landed!.y}) попала в триггер чата (${landed!.tag})`,
     ).toBe(false);
+    const before = seen.toHost(LOADER_HOST);
+    await page.mouse.click(landed!.x, landed!.y);
+    await expect(page.locator('[data-chat-stub-panel]'), 'blank lower-zone click does not open the chat').toHaveCount(0);
+    expect(seen.toHost(LOADER_HOST), 'blank lower-zone click does not load the chat script').toEqual(before);
   });
 });

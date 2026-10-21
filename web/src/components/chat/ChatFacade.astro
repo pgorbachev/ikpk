@@ -94,11 +94,30 @@ const showFacade = config.state === 'address' && !isDemoOutput;
     if (pageScrollport && document.body.hasAttribute('data-chat-page')) {
       const viewport = window.visualViewport;
       const updateViewport = function () {
-        document.body.style.setProperty('--chat-viewport-height', (viewport ? viewport.height : window.innerHeight) + 'px');
-        document.body.style.setProperty('--chat-viewport-offset', (viewport ? viewport.offsetTop : 0) + 'px');
+        const height = viewport ? viewport.height : window.innerHeight;
+        const offset = viewport ? viewport.offsetTop : 0;
+        const portRect = pageScrollport.getBoundingClientRect();
+        const setPixel = function (name, value) {
+          const next = Math.max(0, value) + 'px';
+          if (document.body.style.getPropertyValue(name) !== next) document.body.style.setProperty(name, next);
+        };
+        setPixel('--chat-viewport-height', height);
+        setPixel('--chat-viewport-offset', offset);
+
+        // Popups are children of the sticky header, but the page scrollport clips
+        // them. Measure their actual anchors against that clip so a demo banner,
+        // sticky header, or reduced visual viewport cannot hide the last controls.
+        const header = document.querySelector('header.topnav');
+        const menuAnchor = header && header.querySelector('.topnav-mobile > summary');
+        const drawerTop = menuAnchor ? menuAnchor.getBoundingClientRect().bottom + 8 : portRect.top;
+        const searchTop = header ? header.getBoundingClientRect().bottom : portRect.top;
+        const visibleBottom = Math.min(portRect.bottom, offset + height);
+        setPixel('--chat-drawer-max-height', visibleBottom - drawerTop);
+        setPixel('--chat-search-max-height', visibleBottom - searchTop);
       };
       updateViewport();
       window.addEventListener('resize', updateViewport, { passive: true });
+      pageScrollport.addEventListener('scroll', updateViewport, { passive: true });
       if (viewport) {
         viewport.addEventListener('resize', updateViewport, { passive: true });
         viewport.addEventListener('scroll', updateViewport, { passive: true });
