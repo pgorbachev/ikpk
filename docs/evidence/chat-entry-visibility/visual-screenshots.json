@@ -1,68 +1,198 @@
-[
-  {
-    "file": "chat-entry-320-mid.png",
-    "width": 320,
-    "height": 720,
-    "route": "/raspisanie-i-tseny",
-    "position": "mid",
-    "requestedScrollTop": 11481,
-    "actualScrollTop": 11481,
-    "scrollHeight": 23603,
-    "clientHeight": 640
-  },
-  {
-    "file": "chat-entry-320-footer.png",
-    "width": 320,
-    "height": 720,
-    "route": "/raspisanie-i-tseny",
-    "position": "footer",
-    "requestedScrollTop": 23603,
-    "actualScrollTop": 22963,
-    "scrollHeight": 23603,
-    "clientHeight": 640
-  },
-  {
-    "file": "chat-entry-375-mid.png",
-    "width": 375,
-    "height": 812,
-    "route": "/raspisanie-i-tseny",
-    "position": "mid",
-    "requestedScrollTop": 11043,
-    "actualScrollTop": 11043,
-    "scrollHeight": 22819,
-    "clientHeight": 732
-  },
-  {
-    "file": "chat-entry-375-footer.png",
-    "width": 375,
-    "height": 812,
-    "route": "/raspisanie-i-tseny",
-    "position": "footer",
-    "requestedScrollTop": 22819,
-    "actualScrollTop": 22087,
-    "scrollHeight": 22819,
-    "clientHeight": 732
-  },
-  {
-    "file": "chat-entry-1280-mid.png",
-    "width": 1280,
-    "height": 720,
-    "route": "/raspisanie-i-tseny",
-    "position": "mid",
-    "requestedScrollTop": 4253,
-    "actualScrollTop": 4253,
-    "scrollHeight": 9147,
-    "clientHeight": 640
-  },
-  {
-    "file": "chat-entry-1280-footer.png",
-    "width": 1280,
-    "height": 720,
-    "route": "/raspisanie-i-tseny",
-    "position": "footer",
-    "requestedScrollTop": 9147,
-    "actualScrollTop": 8507,
-    "scrollHeight": 9147,
-    "clientHeight": 640
-  }
-]
+{
+  "capturedAt": "2026-10-21T13:47:26.058Z",
+  "source": "fresh buildProbe fixture",
+  "observations": [
+    {
+      "file": "chat-entry-320-mid.png",
+      "route": "/raspisanie-i-tseny",
+      "fixture": "non-demo preview payment plus chat; external requests guarded",
+      "headerRect": {
+        "x": 0,
+        "y": 0,
+        "top": 0,
+        "right": 320,
+        "bottom": 68.5625,
+        "width": 320,
+        "height": 68.5625
+      },
+      "scrollportRect": {
+        "x": 0,
+        "y": 0,
+        "top": 0,
+        "right": 320,
+        "bottom": 732,
+        "width": 320,
+        "height": 732
+      },
+      "scrollportScrollTop": 11435,
+      "scrollportScrollHeight": 23603,
+      "windowScrollY": 0,
+      "documentScrollHeight": 812,
+      "viewport": {
+        "width": 320,
+        "height": 812
+      },
+      "sha256": "5e1c71a1f98dd92e0ed5c7a7a8fcd57c2f6566386cb39649aab0fbe7d29007a2"
+    },
+    {
+      "file": "chat-entry-320-footer.png",
+      "route": "/raspisanie-i-tseny",
+      "fixture": "non-demo preview payment plus chat; external requests guarded",
+      "headerRect": {
+        "x": 0,
+        "y": 0,
+        "top": 0,
+        "right": 320,
+        "bottom": 68.5625,
+        "width": 320,
+        "height": 68.5625
+      },
+      "scrollportRect": {
+        "x": 0,
+        "y": 0,
+        "top": 0,
+        "right": 320,
+        "bottom": 732,
+        "width": 320,
+        "height": 732
+      },
+      "scrollportScrollTop": 22871,
+      "scrollportScrollHeight": 23603,
+      "windowScrollY": 0,
+      "documentScrollHeight": 812,
+      "viewport": {
+        "width": 320,
+        "height": 812
+      },
+      "sha256": "3e82f2b27e17608ede5d6808c7c3a4598cac4d985c89a35104f642626e4e2d55"
+    },
+    {
+      "file": "chat-entry-375-mid.png",
+      "route": "/raspisanie-i-tseny",
+      "fixture": "non-demo preview payment plus chat; external requests guarded",
+      "headerRect": {
+        "x": 0,
+        "y": 0,
+        "top": 0,
+        "right": 375,
+        "bottom": 68.5625,
+        "width": 375,
+        "height": 68.5625
+      },
+      "scrollportRect": {
+        "x": 0,
+        "y": 0,
+        "top": 0,
+        "right": 375,
+        "bottom": 732,
+        "width": 375,
+        "height": 732
+      },
+      "scrollportScrollTop": 11043,
+      "scrollportScrollHeight": 22819,
+      "windowScrollY": 0,
+      "documentScrollHeight": 812,
+      "viewport": {
+        "width": 375,
+        "height": 812
+      },
+      "sha256": "b6bc605f9aa2e4b10e95d793ea6d572058579ffeb64274b0c28fc72b25c4200d"
+    },
+    {
+      "file": "chat-entry-375-footer.png",
+      "route": "/raspisanie-i-tseny",
+      "fixture": "non-demo preview payment plus chat; external requests guarded",
+      "headerRect": {
+        "x": 0,
+        "y": 0,
+        "top": 0,
+        "right": 375,
+        "bottom": 68.5625,
+        "width": 375,
+        "height": 68.5625
+      },
+      "scrollportRect": {
+        "x": 0,
+        "y": 0,
+        "top": 0,
+        "right": 375,
+        "bottom": 732,
+        "width": 375,
+        "height": 732
+      },
+      "scrollportScrollTop": 22087,
+      "scrollportScrollHeight": 22819,
+      "windowScrollY": 0,
+      "documentScrollHeight": 812,
+      "viewport": {
+        "width": 375,
+        "height": 812
+      },
+      "sha256": "aa71d33ae74daa02607ca01656c92eac9b13d5603cecaf400d598e9ce8f15512"
+    },
+    {
+      "file": "chat-entry-1280-mid.png",
+      "route": "/raspisanie-i-tseny",
+      "fixture": "non-demo preview payment plus chat; external requests guarded",
+      "headerRect": {
+        "x": 0,
+        "y": 0,
+        "top": 0,
+        "right": 1280,
+        "bottom": 58.578125,
+        "width": 1280,
+        "height": 58.578125
+      },
+      "scrollportRect": {
+        "x": 0,
+        "y": 0,
+        "top": 0,
+        "right": 1280,
+        "bottom": 640,
+        "width": 1280,
+        "height": 640
+      },
+      "scrollportScrollTop": 4253,
+      "scrollportScrollHeight": 9147,
+      "windowScrollY": 0,
+      "documentScrollHeight": 720,
+      "viewport": {
+        "width": 1280,
+        "height": 720
+      },
+      "sha256": "dd09d979fa691b6056f7da94b25198909ce219598cefd69013e0a6e5106ba4dd"
+    },
+    {
+      "file": "chat-entry-1280-footer.png",
+      "route": "/raspisanie-i-tseny",
+      "fixture": "non-demo preview payment plus chat; external requests guarded",
+      "headerRect": {
+        "x": 0,
+        "y": 0,
+        "top": 0,
+        "right": 1280,
+        "bottom": 58.578125,
+        "width": 1280,
+        "height": 58.578125
+      },
+      "scrollportRect": {
+        "x": 0,
+        "y": 0,
+        "top": 0,
+        "right": 1280,
+        "bottom": 640,
+        "width": 1280,
+        "height": 640
+      },
+      "scrollportScrollTop": 8507,
+      "scrollportScrollHeight": 9147,
+      "windowScrollY": 0,
+      "documentScrollHeight": 720,
+      "viewport": {
+        "width": 1280,
+        "height": 720
+      },
+      "sha256": "c8bd4edbbf2b38734cd84db3826c136b03f4fdbeaa46056c690fbd4934e8bbd9"
+    }
+  ]
+}

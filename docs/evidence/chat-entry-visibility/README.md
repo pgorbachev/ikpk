@@ -1,4 +1,8 @@
-# chat-entry-visibility RED evidence
+# Evidence index
+
+Current local acceptance results are in [final-verification-2026-10-21.md](final-verification-2026-10-21.md). This file preserves the original partial RED and infrastructure history; it is historical evidence, not the final gate result. The original RED was interrupted before all required scenarios ran, so OpenSpec tasks 2.1–2.3 remain unchecked.
+
+# Historical chat-entry-visibility RED evidence
 
 Base revision: `origin/main@2fee597b5335f6c61fd61a622fa2a5f3f475a605`.
 The approved proposal/design/delta spec were copied from the planning worktree without changing normative scope or HTML mockups. Owner approval was recorded as 2026-10-21 in `tasks.md`, `design.md`, and `review.md`.

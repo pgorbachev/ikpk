@@ -14344,7 +14344,7 @@
       "exitCode": 1,
       "selectedTests": {
         "failed": 2,
-        "passed": 0
+        "passed": 1
       },
       "log": "docs/evidence/chat-entry-visibility/oracle-fixtures-red-2026-10-21.log.gz",
       "uncompressedBytes": 2460,

@@ -1,5 +1,7 @@
 # Chat entry visibility implementation checkpoint
 
+> Historical checkpoint, superseded by [final-verification-2026-10-21.md](final-verification-2026-10-21.md). The findings below describe the earlier candidate and failed runs; they are not current gate results. The clean RED phase was partial, so OpenSpec tasks 2.1–2.3 remain unchecked.
+
 This checkpoint records implementation status at the source review candidate. It is not a full-green result.
 
 - Candidate source/test changes: capsule styling/layout, shared page scrollport, body-level payment overlay, viewport-aware page geometry, and lazy chat trigger are in the implementation branch. Mobile menu and search popup max-heights now use their measured anchor and the actual scrollport/visual-viewport bottom.

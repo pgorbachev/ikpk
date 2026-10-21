@@ -1,6 +1,6 @@
 # Payment transport regression — 2026-10-21
 
-Проверка выполнена в отдельном worktree `verify/chat-entry-payment-20261021` на точном candidate `9fcef2db3014ed267ebdf75898f22b26cc71f276`. Кандидат основан на зафиксированном свежем `origin/main` `fabaa27f1e2108d82e4a0f3e58864b29d40f5419`. Product source freeze: `a95fdf0a05359d82b5ebe483b53d7f08436bdb6`.
+Проверка выполнена в отдельном worktree `verify/chat-entry-payment-20261021` на точном candidate `9fcef2db3014ed267ebdf75898f22b26cc71f276`. Кандидат основан на зафиксированном свежем `origin/main` `fabaa27f1e2108d82e4a0f3e58864b29d40f5419`. Product source freeze: `da95fdf0a05359d82b5ebe483b53d7f08436bdb6`.
 
 ## Команды и результат
 
