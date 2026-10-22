@@ -3,19 +3,20 @@
  * Faculty: ближайшее событие карточкой с портретом ведущего (studio §7.3).
  * Не строка (editorial) и не первая ячейка сетки (modular).
  */
+import StartVisibility from '../../StartVisibility.astro';
 import { getUpcomingSeminars } from '../../../lib/home';
 import { registrationHref } from '../../../lib/forms';
 import { getAssetDimensions, srcsetFor } from '../../../lib/media';
 
-const [next] = getUpcomingSeminars(1);
-const dim = next?.teacherPhoto ? getAssetDimensions(next.teacherPhoto) : undefined;
-const ctaHref = next
-  ? registrationHref(next.registrationFormLink) || next.href
-  : '/raspisanie-i-tseny';
+const candidates = getUpcomingSeminars(Infinity);
 ---
 
-{next && (
-  <section class="event-teacher-section" data-event-teacher>
+<div data-start-list data-start-limit="1">
+{candidates.map((next, i) => {
+ const dim = next.teacherPhoto ? getAssetDimensions(next.teacherPhoto) : undefined;
+ const ctaHref = registrationHref(next.registrationFormLink) || next.href;
+ return (
+  <section data-start-offer data-starts-at-instant={next.startsAtInstant} data-start-time-zone={next.startTimeZone} hidden={i > 0} class="event-teacher-section" data-event-teacher>
     <div class="container">
       <article class="event-teacher">
         <div class="event-teacher-date">
@@ -62,7 +63,9 @@ const ctaHref = next
       </article>
     </div>
   </section>
-)}
+); })}
+</div>
+<StartVisibility />
 
 <style>
   .event-teacher-section { padding: var(--space-block) 0; }

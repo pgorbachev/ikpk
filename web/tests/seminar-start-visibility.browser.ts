@@ -95,3 +95,43 @@ test('historical seminar remains reachable when its last registration expires', 
   await expect(page.locator('.seminar-content')).toContainText('Описание сохраняется');
   await expect(page.locator('.seminar-register-link:visible')).toHaveCount(0);
 });
+
+test('selected expired month resets while search still filters available offers', async ({ page }) => {
+  await open(page, '/raspisanie-i-tseny', BEFORE);
+  await expect(month(page)).toBeEnabled();
+  await month(page).selectOption('2026-10');
+  await expect(shownCards(page)).toHaveCount(2);
+  await page.clock.runFor(1_000);
+  await expect(month(page)).toHaveValue('');
+  await expect(month(page).locator('option[value="2026-11"]')).toHaveText('Ноябрь 2026 (25)');
+  await page.locator('[data-schedule-search]').fill('Сеанс 61004');
+  await expect(shownCards(page)).toHaveCount(1);
+  await expect(shownCards(page)).toContainText('Сеанс 61004');
+  await expect(page.locator('[data-schedule-pagination]')).toBeHidden();
+  await page.locator('[data-schedule-search]').fill('');
+  await expect(shownCards(page)).toHaveCount(25);
+});
+
+test('all offers expire without removing course descriptions or detail routes', async ({ page }) => {
+  await open(page, '/', '2026-12-01T00:00:00Z');
+  await expect(page.locator('.hero-d-next:visible')).toHaveCount(0);
+  await expect(page.locator('.upcoming-card:visible')).toHaveCount(0);
+  await page.goto(`${fixture.url}/raspisanie-i-tseny`);
+  await expect(month(page)).toBeDisabled();
+  await expect(month(page).locator('option')).toHaveCount(1);
+  await expect(shownCards(page)).toHaveCount(0);
+  await expect(page.locator('[data-schedule-empty]')).toBeVisible();
+  await page.goto(`${fixture.url}${fixture.detailPaths[0]}`);
+  await expect(page.locator('.seminar-content')).toContainText('Описание сохраняется');
+  await expect(page.locator('[data-testid="seminar-schedule-empty"]')).toBeVisible();
+  await expect(page.locator('.seminar-register-link:visible')).toHaveCount(0);
+});
+
+test('open program advances the nearest date on resume', async ({ page }) => {
+  await open(page, fixture.programPath, BEFORE);
+  await expect(seminarCard(page, TITLES[1]).locator('[data-testid="seminar-nearest-date"]')).toBeVisible();
+  await page.clock.setSystemTime(new Date(AFTER));
+  await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+  await expect(seminarCard(page, TITLES[1]).locator('[data-testid="seminar-nearest-date"]')).toBeHidden();
+  await expect(seminarCard(page, TITLES[0]).locator('[data-testid="seminar-nearest-date"]')).toContainText('4 ноя');
+});

@@ -21,6 +21,7 @@
  *     строка подняла бы карточку и сдвинула описание на узких ширинах ниже цены,
  *     названной при выборе варианта.
  */
+import StartVisibility from '../StartVisibility.astro';
 import { formatDate, formatPrice } from '../../lib/data';
 import { calendarDay, calendarDayDate } from '../../lib/schedule-window';
 import { registrationHref, isExternalFormHref } from '../../lib/forms';
@@ -81,19 +82,19 @@ function metaLine(entry: ScheduleEntry): string {
 ---
 
 <aside class="seminar-schedule" data-testid="seminar-schedule" aria-labelledby="seminar-schedule-title">
-  <div class="seminar-schedule-panel" data-seminar-schedule-panel>
+  <div data-start-list class="seminar-schedule-panel" data-seminar-schedule-panel>
     <div class="seminar-schedule-head">
       <h2 id="seminar-schedule-title">Расписание</h2>
       <a href="/raspisanie-i-tseny" class="seminar-schedule-all">Показать все</a>
     </div>
 
-    {rows.length > 0 ? (
+    {rows.length > 0 && (
       <ol class="seminar-schedule-list">
         {rows.map(({ entry, teachers }) => {
           const href = registrationHref(entry.registrationFormLink) || '/raspisanie-i-tseny';
           const external = isExternalFormHref(href);
           return (
-            <li class="seminar-schedule-entry" data-seminar-schedule-card>
+            <li data-start-offer data-starts-at-instant={entry.startsAtInstant} data-start-time-zone={entry.startTimeZone} class="seminar-schedule-entry" data-seminar-schedule-card>
               {/*
                 Каждая дата — своя часть, тире между ними остаётся точкой переноса, а
                 внутри части неразрывны только год и «г.». Иначе диапазон рвётся посреди
@@ -147,15 +148,16 @@ function metaLine(entry: ScheduleEntry): string {
           );
         })}
       </ol>
-    ) : (
-      <p class="seminar-schedule-empty" data-testid="seminar-schedule-empty">
+    )}
+      <p data-start-empty hidden={rows.length > 0} class="seminar-schedule-empty" data-testid="seminar-schedule-empty">
         Даты пока не назначены. Уточняйте у менеджера:{' '}
         <a href={PHONE_HREF}>{PHONE}</a>,{' '}
         <a href={MANAGER_PHONE_HREF}>{MANAGER_PHONE}</a>
       </p>
-    )}
   </div>
 </aside>
+
+<StartVisibility />
 
 <style>
   /*

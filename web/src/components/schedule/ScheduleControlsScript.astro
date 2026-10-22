@@ -41,10 +41,39 @@
       institute: option.dataset.institute || '',
     }));
 
+    const allInstituteOptions = Array.from(institute.options).map((option) => option.cloneNode(true));
+    const allCityOptions = Array.from(city.options).map((option) => option.cloneNode(true));
+    const allMonthGroups = hasMonth ? Array.from(month.children).map((child) => child.cloneNode(true)) : [];
+    const updateAvailableOptions = () => {
+      const available = items.filter((item) => item.dataset.startAvailable !== 'false');
+      for (const { select, options, key } of [{ select: institute, options: allInstituteOptions, key: 'institute' }, { select: city, options: allCityOptions, key: 'city' }]) {
+        const selected = select.value;
+        const values = new Set(available.map((item) => item.dataset[key]));
+        select.replaceChildren(...options.filter((option) => !option.value || values.has(option.value)).map((option) => option.cloneNode(true)));
+        select.value = values.has(selected) ? selected : '';
+      }
+      if (hasMonth) {
+        const selected = month.value;
+        const counts = new Map();
+        available.forEach((item) => (item.dataset.months || '').split(' ').filter(Boolean).forEach((key) => counts.set(key, (counts.get(key) || 0) + 1)));
+        month.replaceChildren(...allMonthGroups.map((group) => group.cloneNode(true)));
+        Array.from(month.options).forEach((option) => {
+          if (!option.value) return;
+          const count = counts.get(option.value);
+          if (!count) option.remove();
+          else option.textContent = option.textContent.replace(/\(\d+\)$/, `(${count})`);
+        });
+        month.querySelectorAll('optgroup').forEach((group) => { if (!group.children.length) group.remove(); });
+        month.value = counts.has(selected) ? selected : '';
+        month.disabled = counts.size === 0;
+      }
+    };
+
     const updateProgramOptions = () => {
       const selectedInstitute = institute.value;
       const previousValue = program.value;
-      const allowed = allProgramOptions.filter((option) => !option.institute || option.institute === selectedInstitute);
+      const offered = new Set(items.filter((item) => item.dataset.startAvailable !== 'false').map((item) => item.dataset.program));
+      const allowed = allProgramOptions.filter((option) => !option.value || (offered.has(option.value) && option.institute === selectedInstitute));
 
       program.innerHTML = '';
       for (const option of allowed) {
@@ -79,7 +108,7 @@
         // случайности формата, а не по устройству.
         const matchesMonth = !selectedMonth
           || (item.dataset.months || '').split(' ').indexOf(selectedMonth) !== -1;
-        return matchesInstitute && matchesProgram && matchesCity && matchesSearch && matchesMonth;
+        return item.dataset.startAvailable !== 'false' && matchesInstitute && matchesProgram && matchesCity && matchesSearch && matchesMonth;
       });
     };
 
@@ -193,6 +222,11 @@
       });
     }
 
+    document.addEventListener('seminar-offers-updated', () => {
+      updateAvailableOptions();
+      updateProgramOptions();
+      applyFilters();
+    });
     updateProgramOptions();
     applyFilters();
   })();

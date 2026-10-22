@@ -73,6 +73,8 @@ function scheduleEntry(
     institute: { id: 1, name: page.institute.name, shortname: page.institute.name },
     startAt: `${startAt}T00:00:00.000Z`,
     endAt: `${endAt}T00:00:00.000Z`,
+    startsAtInstant: `${startAt}T16:00:00Z`,
+    startTimeZone: 'Europe/Moscow',
     teachers: [],
     image: null,
     isFree: true,
@@ -102,8 +104,7 @@ function renderedFixture(): { pages: FixturePage; outDir: string } {
   fixtureTypes.course_groups = [pages.group];
   fixtureTypes.seminars = [pages.planned, pages.empty];
   fixtureTypes.schedule_entries = [
-    // Active and ongoing on the reference date. It is the first-day winner even
-    // though a later event has a shorter end date.
+    // Already started on the reference date: ongoing rows must not be offered.
     scheduleEntry(pages, 465, 'active', '2026-09-10', '2026-09-20', 'Дальний конец'),
     // Same first day: the visible end date lets this tie-break be checked in HTML.
     scheduleEntry(pages, 90, 'active', '2026-09-10', '2026-09-18', 'Якорный город'),
@@ -158,7 +159,7 @@ const cardFor = (html: string, title: string) =>
 
 describe('controlled schedule fixture is reflected in built program and seminar pages', () => {
   it(
-    'selects the nearest active event, keeps all active rows, and uses the shared manager contact only when empty',
+    'offers only unstarted sessions and retains the manager contact when no future date exists',
     () => {
       const { pages, outDir } = renderedFixture();
       const programPath = `/${pages.institute.slug}/${pages.group.slug}`;
@@ -174,22 +175,22 @@ describe('controlled schedule fixture is reflected in built program and seminar 
       expect(emptyCard, 'program output must contain the controlled empty seminar card').toBeTruthy();
 
       const nearest = within(plannedCard!, (el) => attr(el, 'data-testid') === 'seminar-nearest-date');
-      expect(nearest.map(normalizedText)).toEqual(['10–18 сен']);
-      expect(within(plannedCard!, (el) => attr(el, 'data-testid') === 'seminar-date-fallback')).toHaveLength(0);
-      expect([...walk(plannedCard!)].some((el) => attr(el, 'href') === MANAGER_PHONE_HREF)).toBe(false);
+      expect(nearest.map(normalizedText)).toEqual(['15 сен']);
+      expect(within(plannedCard!, (el) => attr(el, 'data-testid') === 'seminar-date-fallback' && attr(el, 'hidden') === null)).toHaveLength(0);
+      expect([...walk(plannedCard!)].some((el) => attr(el, 'href') === MANAGER_PHONE_HREF && attr(el, 'hidden') === null)).toBe(false);
 
       const rows = findAll(plannedPage, (el) => attr(el, 'data-seminar-schedule-card') !== null);
       const rowText = rows.map(normalizedText);
-      expect(rows).toHaveLength(5);
-      expect(rowText.some((text) => text.includes('Москва'))).toBe(true);
-      expect(rowText.some((text) => text.includes('Дальний конец'))).toBe(true);
+      expect(rows).toHaveLength(1);
+      expect(rowText.some((text) => text.includes('Москва'))).toBe(false);
+      expect(rowText.some((text) => text.includes('Дальний конец'))).toBe(false);
       expect(rowText.some((text) => text.includes('Поздний старт'))).toBe(true);
       expect(rowText.some((text) => text.includes('ОТМЕНЕНО') || text.includes('ИСТЕКЛО'))).toBe(false);
-      expect(findAll(plannedPage, (el) => attr(el, 'data-testid') === 'seminar-schedule-empty')).toHaveLength(0);
+      expect(findAll(plannedPage, (el) => attr(el, 'data-testid') === 'seminar-schedule-empty' && attr(el, 'hidden') === null)).toHaveLength(0);
 
-      const emptyDateFallback = within(emptyCard!, (el) => attr(el, 'data-testid') === 'seminar-date-fallback');
+      const emptyDateFallback = within(emptyCard!, (el) => attr(el, 'data-testid') === 'seminar-date-fallback' && attr(el, 'hidden') === null);
       expect(emptyDateFallback.map(normalizedText)).toEqual(['Даты пока не назначены']);
-      expect(within(emptyCard!, (el) => attr(el, 'data-testid') === 'seminar-nearest-date')).toHaveLength(0);
+      expect(within(emptyCard!, (el) => attr(el, 'data-testid') === 'seminar-nearest-date' && attr(el, 'hidden') === null)).toHaveLength(0);
       const emptyCardPhone = within(emptyCard!, (el) => attr(el, 'href') === MANAGER_PHONE_HREF)[0];
       expect(emptyCardPhone && normalizedText(emptyCardPhone)).toContain(MANAGER_PHONE);
 

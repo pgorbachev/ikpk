@@ -15,7 +15,7 @@ import {
 } from '../../../lib/data';
 import type { CourseGroup, Institute, Seminar } from '../../../lib/data';
 import RichContent from '../../../components/RichContent.astro';
-import { calendarDay, isCurrentOrFuture } from '../../../lib/schedule-window';
+import { calendarDay, isBeforeStart } from '../../../lib/schedule-window';
 import type { GetStaticPaths } from 'astro';
 
 export const getStaticPaths: GetStaticPaths = () => {
@@ -43,12 +43,10 @@ const { seminar, courseGroup, institute } = Astro.props as {
   institute: Institute;
 };
 
-// Актуальность считается по ПОСЛЕДНЕМУ дню события, а не по первому: из 63
-// записей расписания 60 многодневные, и фильтр по startAt убирал бы идущий
-// семинар со страницы уже на второй день обучения.
+// Dated offers expire at start; the description and route remain available.
 const today = getSnapshotReferenceDate();
 const schedule = getScheduleEntries().filter(
-  (e) => e.seminar?.slug === seminar.slug && e.status === 'active' && isCurrentOrFuture(e, today)
+  (e) => e.seminar?.slug === seminar.slug && e.status === 'active' && isBeforeStart(e, today)
 );
 const sortedSchedule = [...schedule].sort(
   (a, b) => calendarDay(a.startAt).localeCompare(calendarDay(b.startAt))

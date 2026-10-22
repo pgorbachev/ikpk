@@ -3,7 +3,7 @@ import SchedulePage from '../components/schedule/SchedulePage.astro';
 import BaseLayout from '../layouts/BaseLayout.astro';
 import Breadcrumbs from '../components/Breadcrumbs.astro';
 import { formatPrice, getInstitutes, getPage, getScheduleEntries, getSnapshotReferenceDate, getTeachers, teacherPageHref } from '../lib/data';
-import { calendarDay, calendarDayDate, isCurrentOrFuture } from '../lib/schedule-window';
+import { calendarDay, calendarDayDate, isBeforeStart } from '../lib/schedule-window';
 import { monthKeys, monthOptions } from '../lib/schedule-months';
 import { registrationHref } from '../lib/forms';
 import { publicScheduleTitle } from '../lib/schedule-public-title';
@@ -60,8 +60,8 @@ function formatDurationLabel(startAt: string, endAt: string, duration: string | 
 
 const todayDate = getSnapshotReferenceDate();
 const entries = getScheduleEntries()
-  // По последнему дню события, а не по первому: многодневных записей 60 из 63.
-  .filter((entry) => entry.status === 'active' && isCurrentOrFuture(entry, todayDate))
+  // Reproducible initial offers; the browser advances this exact boundary.
+  .filter((entry) => entry.status === 'active' && isBeforeStart(entry, todayDate))
   .sort((a, b) => calendarDay(a.startAt).localeCompare(calendarDay(b.startAt)));
 
 const instituteByName = new Map(institutes.map((institute) => [institute.name, institute]));
@@ -126,6 +126,8 @@ const items = entries.map((entry) => {
   ].join(' ').toLowerCase();
 
   return {
+    startsAtInstant: entry.startsAtInstant,
+    startTimeZone: entry.startTimeZone,
     additionalText: entry.additionalText || '',
     cityName: entry.city?.name || 'Уточняется',
     citySlug: slugify(entry.city?.name || 'unknown'),

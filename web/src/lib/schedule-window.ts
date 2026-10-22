@@ -1,22 +1,7 @@
-/**
- * Актуальность записи расписания для показа посетителю.
- *
- * Событие остаётся актуальным до своего ПОСЛЕДНЕГО дня, а не до первого: из 63
- * записей 60 многодневные, и фильтр по `startAt` убирал бы идущий семинар со
- * страницы уже на второй день обучения — человек, приехавший на трёхдневный курс,
- * не нашёл бы его в расписании.
- *
- * Тот же вывод для статуса семинара живёт в `web/scripts/lib/planned-seminars.ts`,
- * но там он нужен на этапе импорта данных, а здесь — на этапе сборки страниц.
- * Дублирование сознательное: `src/` не должен зависеть от `scripts/`, иначе
- * скрипты импорта попадают в клиентский граф сборки.
- *
- * Дата передаётся аргументом, а не берётся из `new Date()` внутри: иначе проверку
- * нельзя написать фикстурами, и она краснела бы от хода времени — так уже
- * случилось с гейтом `catalog-data`.
- */
-
 export interface ScheduleWindowEntry {
+  startsAtInstant?: string;
+  startTimeZone?: string;
+  startTimeConfirmed?: boolean;
   startAt?: string;
   endAt?: string;
   /**
@@ -27,6 +12,15 @@ export interface ScheduleWindowEntry {
   city?: { name?: string } | string | null;
   /** Идентификатор записи: число в нынешнем материале, строка допустима схемой. */
   id?: number | string;
+}
+
+/** Exact offer boundary. Invalid or unresolved times never become offers. */
+export function isBeforeStart(entry: ScheduleWindowEntry, now: string | Date | number): boolean {
+  if (!entry.startsAtInstant || !entry.startTimeZone || entry.startTimeConfirmed === false
+    || !/(?:Z|[+-]\d{2}:\d{2})$/.test(entry.startsAtInstant)) return false;
+  const start = Date.parse(entry.startsAtInstant);
+  const current = typeof now === 'number' ? now : new Date(now).getTime();
+  return Number.isFinite(start) && Number.isFinite(current) && current < start;
 }
 
 /**
@@ -70,17 +64,7 @@ export function isCurrentOrFuture(entry: ScheduleWindowEntry, today: string): bo
   return lastDay(entry) >= today;
 }
 
-/**
- * Событие ещё не началось на дату `today` (календарная, `YYYY-MM-DD`).
- *
- * Это другой вопрос, чем `isCurrentOrFuture`. Страница расписания держит идущий
- * семинар до последнего дня. Строка «Ближайший семинар» и список ближайших на
- * главной — про набор, на который ещё можно приехать к началу: живой ikpk.su
- * (`/api/public/events`) уже начавшиеся из этой выборки убирает.
- *
- * Сравнение живёт здесь, а не у вызывающего: гейт `schedule-window.test.ts`
- * запрещает фильтровать `src/` по `startAt` вне этого модуля.
- */
+/** Legacy calendar-day query, retained for date-only data inspection. Offers use isBeforeStart. */
 export function isUpcomingStart(entry: ScheduleWindowEntry, today: string): boolean {
   return calendarDay(entry.startAt) >= today;
 }
@@ -89,17 +73,7 @@ export function isUpcomingStart(entry: ScheduleWindowEntry, today: string): bool
 export const calendarToday = (): string => new Date().toISOString().slice(0, 10);
 
 /**
- * Ближайшее ещё не закончившееся событие из набора, или `undefined`.
- *
- * Дата аргументом по той же причине, что и в `isCurrentOrFuture`: вывод должен
- * проверяться фикстурами, а не зависеть от хода времени.
- *
- * **Идущее событие считается ближайшим** — право считаться запланированным даётся по
- * ПОСЛЕДНЕМУ дню. Это сознательно расходится с `home.ts`, где «ближайший семинар» на
- * главной считается по первому дню: там подписываются три ближайших СОБЫТИЯ, и уже идущее
- * среди них выглядело бы приглашением опоздать. Здесь предмет другой — чип отвечает на
- * вопрос «когда этот семинар», и его ответ обязан совпадать с первой строкой расписания на
- * странице самого семинара, которая берёт `isCurrentOrFuture`.
+ * Legacy date-only query. Public offers use isBeforeStart with compareNearest ordering.
  *
  * **Порядок выбора задан требованием, а не удобством** (change
  * `cms-content-authoring-and-migration`, требование «Даты семинара выводятся из расписания»):

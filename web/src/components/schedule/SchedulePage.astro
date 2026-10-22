@@ -1,4 +1,5 @@
 ---
+import StartVisibility from '../StartVisibility.astro';
 import ScheduleControlsScript from './ScheduleControlsScript.astro';
 import ScheduleFilters from './ScheduleFilters.astro';
 import ScheduleListing from './ScheduleListing.astro';
@@ -17,6 +18,8 @@ interface ProgramOption {
 }
 
 interface ScheduleItem {
+  startsAtInstant?: string;
+  startTimeZone?: string;
   additionalText: string;
   cityName: string;
   citySlug: string;
@@ -56,6 +59,7 @@ const { items, cities, institutes, months, programs, title } = Astro.props as Pr
   <ScheduleFilters institutes={institutes} programs={programs} cities={cities} months={months} />
   <ScheduleListing items={items} />
   <ScheduleControlsScript />
+  <StartVisibility />
 </section>
 
 <style>
