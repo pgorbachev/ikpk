@@ -39,6 +39,7 @@ TARGET_HOST = "194.226.99.10"
 INITIAL_PROD_HOST = "89.111.184.196"
 INITIAL_PROD_PAYMENT_ENDPOINT = "https://ikpk.su/api"
 INITIAL_PROD_CHAT_LOADER_SRC = "https://cdn-ru.bitrix24.ru/b35315886/crm/site_button/loader_2_siutnh.js"
+STAGING194_CHAT_LOADER_SRC = INITIAL_PROD_CHAT_LOADER_SRC
 INITIAL_PROD_CMS_ENV_FILE = Path("/etc/ikpk-cms/trial.env")
 INITIAL_PROD_OPERATION_ID = "initial-prod-20261019-A-01"
 REQUIRED_CONFIG = {
@@ -1124,7 +1125,11 @@ def _activate_cms(config: dict[str, Any], cms_release: Path, candidate_db: Path,
 
 
 def _build_static(config: dict[str, Any], source_root: Path, capture: Path,
-                  read_only_paths: Optional[list[Path]] = None) -> tuple[Path, str]:
+                  read_only_paths: Optional[list[Path]] = None,
+                  chat_loader_src: Optional[str] = None) -> tuple[Path, str]:
+    if chat_loader_src is not None and (config.get("profile", "staging194") != "staging194"
+                                        or chat_loader_src != STAGING194_CHAT_LOADER_SRC):
+        raise HostFailure("only staging194 static-main may use the owner-approved chat loader")
     web = source_root / "web"
     _validate_prepared_web_dependencies(source_root)
     initial_prod = config.get("profile") == "initial-prod"
@@ -1138,7 +1143,7 @@ def _build_static(config: dict[str, Any], source_root: Path, capture: Path,
         dist_name = "dist"
     else:
         capture_environment.update({"DEMO_PROFILE": "demo193", "DEPLOY_MODE": "stand", "PAYMENT_ROLE": "ci",
-                                   "DEMO_FORMS": "stub", "CHAT_LOADER_SRC": "none",
+                                   "DEMO_FORMS": "stub", "CHAT_LOADER_SRC": chat_loader_src or "none",
                                    "CHAT_OFFLINE_MESSAGE": "absent", "DEMO_SITE_URL": config["siteBaseUrl"]})
         capture_args = ["--server-capture", str(capture)]
         build_script = "build:demo193"
@@ -1146,8 +1151,11 @@ def _build_static(config: dict[str, Any], source_root: Path, capture: Path,
     _run_as_cms(config, web, [str(web / "node_modules/.bin/tsx"),
         str(web / "scripts/capture-content-snapshot.ts"), *capture_args], timeout=1800,
         environment=capture_environment, read_only_path=read_only_paths)
+    build_environment = dict(capture_environment)
+    if chat_loader_src is not None:
+        build_environment["CHAT_LOADER_PROFILE"] = "staging194-static-main"
     _run_as_cms(config, web, ["/usr/bin/npm", "run", build_script], timeout=1800,
-                environment=capture_environment, read_only_path=read_only_paths)
+                environment=build_environment, read_only_path=read_only_paths)
     dist = web / dist_name
     if not dist.is_dir() or dist.is_symlink():
         raise HostFailure(f"static build did not produce a real {dist_name} directory")
@@ -1714,7 +1722,8 @@ def _static_main_prepare(config: dict[str, Any], state: RehearsalState, operatio
     if manifest.get("sourceSha") != source_sha or manifest.get("operationId") != operation_id:
         raise HostFailure("static-main sealed CMS capture is not bound to this main source")
     _prepare_static_web_dependencies(config, source_root, protected_paths)
-    built, digest = _build_static(config, source_root, capture, read_only_paths=protected_paths)
+    built, digest = _build_static(config, source_root, capture, read_only_paths=protected_paths,
+                                  chat_loader_src=STAGING194_CHAT_LOADER_SRC)
     if (_current_target(Path(config["currentStatic"])) != old_static
             or _tree_sha256(old_static) != old_tree):
         raise HostFailure("static-main old static release changed during candidate preparation")

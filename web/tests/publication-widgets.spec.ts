@@ -1,8 +1,24 @@
 import { test, expect, candidate, actualTemplates } from './helpers/publication-candidate';
 import { installThirdPartyGuard, FIXED_SIZE_WIDGET_BODY } from './helpers/third-party-guard';
+import { attr, findAll, textOf } from './helpers/dom';
 
 test('candidate declared widgets load lazily, preserve geometry and use isolated requests', async ({ page }) => {
-  const { chatLoaderSrc } = candidate();
+  const built = candidate();
+  const { chatLoaderSrc } = built;
+  const expectedChatLoaderSrc = process.env.CHAT_LOADER_SRC;
+  expect(expectedChatLoaderSrc, 'publication browser check must configure its expected chat loader independently')
+    .toBeDefined();
+  expect(chatLoaderSrc, 'built chat loader must match the independently configured publication value')
+    .toBe(expectedChatLoaderSrc === 'none' ? null : expectedChatLoaderSrc);
+  if (expectedChatLoaderSrc && expectedChatLoaderSrc !== 'none') {
+    const home = built.pages.find((page) => page.route === '/')!;
+    const facade = findAll(home.html, (node) => attr(node, 'data-chat-facade') !== null)[0];
+    const trigger = findAll(home.html, (node) => attr(node, 'data-chat-trigger') !== null)[0];
+    expect(facade, 'built homepage must contain the site-owned chat facade').toBeDefined();
+    expect(trigger && attr(trigger, 'data-chat-loader-src'), 'built trigger must declare the expected loader')
+      .toBe(expectedChatLoaderSrc);
+    expect(trigger && textOf(trigger)).toContain('Написать нам');
+  }
   const guard = await installThirdPartyGuard(page, { chatLoaderSrc, reviewsWidgetBody: FIXED_SIZE_WIDGET_BODY });
   await page.goto('/');
   const reviews = page.locator('[data-reviews-embed]');
