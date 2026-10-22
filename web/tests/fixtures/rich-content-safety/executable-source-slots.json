@@ -692,8 +692,8 @@
     "file": "components/StartVisibility.astro",
     "nodeKind": "element",
     "locator": "components/StartVisibility.astro:L5:C1:style",
-    "fingerprint": "198bf7b99f6e3a612f5be85ed35e3d04a29f34a1d76482b7101879d9c3a510a7",
-    "identity": "style|is:global=empty:|body:92ff4236ab633083"
+    "fingerprint": "b513a55281c9ce5695a4cc43c1dd9a5c921c4aaea0b2cbb93c30bec100ad86b7",
+    "identity": "style|is:global=empty:|body:22443e1b3bdd7f42"
   },
   {
     "slotId": "src:components/topnav/HeaderTools.astro:L106:C1:script",

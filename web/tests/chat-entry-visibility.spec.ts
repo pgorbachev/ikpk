@@ -53,6 +53,28 @@ async function protectThirdParties(page: Page) {
   return installThirdPartyGuard(page, { chatLoaderSrc: PROBE_CHAT_LOADER_SRC });
 }
 
+// Hash-history tests need a stable target even when the dated #upcoming block is empty.
+async function installHistoryFragment(page: Page) {
+  await page.addInitScript(() => {
+    const install = () => {
+      const footer = document.querySelector('footer');
+      const actions = document.querySelector('.hero-d-actions');
+      if (footer) footer.id = 'history-fragment-target';
+      if (actions && !actions.querySelector('[data-history-fragment-link]')) {
+        const anchor = document.createElement('a');
+        anchor.href = '#history-fragment-target';
+        anchor.textContent = 'К подвалу';
+        anchor.setAttribute('data-history-fragment-link', '');
+        actions.append(anchor);
+      }
+      if (footer && actions) observer.disconnect();
+    };
+    const observer = new MutationObserver(install);
+    observer.observe(document, { childList: true, subtree: true });
+    install();
+  });
+}
+
 async function snapshotLayout(page: Page) {
   return page.evaluate((triggerSelector) => {
     const header = document.querySelector('header');
@@ -646,32 +668,33 @@ test.describe('chat entry visibility approved contract', () => {
 
   test('native same-document hash Back and Forward restore the shared scrollport', async ({ page }) => {
     await protectThirdParties(page);
+    await installHistoryFragment(page);
     await page.setViewportSize({ width: 375, height: 812 });
     await page.goto(activeUrl('/kontakty'));
     await page.goto(activeUrl('/'));
     const port = page.locator('[data-page-scrollport]');
     await expect(port).toHaveCount(1);
     await port.evaluate((el: HTMLElement) => el.scrollTo({ top: 500, behavior: 'instant' }));
-    const anchor = page.locator('a[href="#upcoming"]').first();
+    const anchor = page.locator('[data-history-fragment-link]');
     await expect(anchor).toBeVisible();
     await anchor.scrollIntoViewIfNeeded();
     const initialPosition = await port.evaluate((el: HTMLElement) => el.scrollTop);
     await anchor.click();
-    await expect(page).toHaveURL(/#upcoming$/);
+    await expect(page).toHaveURL(/#history-fragment-target$/);
     await expect.poll(() => port.evaluate((el: HTMLElement) => el.scrollTop)).toBeGreaterThan(initialPosition);
     await port.evaluate((el: HTMLElement) => el.scrollTo({ top: 900, behavior: 'instant' }));
     const hashPosition = await port.evaluate((el: HTMLElement) => el.scrollTop);
     await page.goto(activeUrl('/kontakty'));
     await page.goBack();
-    await expect(page).toHaveURL(/#upcoming$/);
+    await expect(page).toHaveURL(/#history-fragment-target$/);
     await expect.poll(() => port.evaluate((el: HTMLElement) => el.scrollTop),
       'full-page Back restores the hash entry position after a document change').toBe(hashPosition);
     await page.goBack();
-    await expect(page).not.toHaveURL(/#upcoming$/);
+    await expect(page).not.toHaveURL(/#history-fragment-target$/);
     await expect.poll(() => port.evaluate((el: HTMLElement) => el.scrollTop),
       'native same-document Back restores the measured pre-hash position').toBe(initialPosition);
     await page.goForward();
-    await expect(page).toHaveURL(/#upcoming$/);
+    await expect(page).toHaveURL(/#history-fragment-target$/);
     await expect.poll(() => port.evaluate((el: HTMLElement) => el.scrollTop),
       'native same-document Forward restores the measured hash-entry position').toBe(hashPosition);
     await page.goForward();
@@ -680,6 +703,7 @@ test.describe('chat entry visibility approved contract', () => {
 
   test('history keeps a forward fragment position after its document is left and reloaded', async ({ page }) => {
     await protectThirdParties(page);
+    await installHistoryFragment(page);
     await page.setViewportSize({ width: 375, height: 812 });
     await page.goto(activeUrl('/kontakty'));
     await page.goto(activeUrl('/'));
@@ -688,21 +712,21 @@ test.describe('chat entry visibility approved contract', () => {
     const port = page.locator('[data-page-scrollport]');
     await expect(port).toHaveCount(1);
     await port.evaluate((el: HTMLElement) => el.scrollTo({ top: 500, behavior: 'instant' }));
-    const anchor = page.locator('a[href="#upcoming"]').first();
+    const anchor = page.locator('[data-history-fragment-link]');
     await anchor.scrollIntoViewIfNeeded();
     const firstEntryPosition = await port.evaluate((el: HTMLElement) => el.scrollTop);
     await anchor.click();
-    await expect(page).toHaveURL(/#upcoming$/);
+    await expect(page).toHaveURL(/#history-fragment-target$/);
     await port.evaluate((el: HTMLElement) => el.scrollTo({ top: 900, behavior: 'instant' }));
     const fragmentEntryPosition = await port.evaluate((el: HTMLElement) => el.scrollTop);
 
     await page.goBack();
-    await expect(page).not.toHaveURL(/#upcoming$/);
+    await expect(page).not.toHaveURL(/#history-fragment-target$/);
     await expect.poll(() => port.evaluate((el: HTMLElement) => el.scrollTop)).toBe(firstEntryPosition);
     await page.goBack();
     await expect(page).toHaveURL(/kontakty/);
     await page.evaluate(() => history.go(2));
-    await expect(page).toHaveURL(/#upcoming$/);
+    await expect(page).toHaveURL(/#history-fragment-target$/);
     expect(await page.evaluate(() => performance.timeOrigin), 'the original A document was destroyed before restoring its forward fragment entry')
       .not.toBe(originalDocumentTime);
     await expect.poll(() => port.evaluate((el: HTMLElement) => el.scrollTop),

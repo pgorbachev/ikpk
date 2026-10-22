@@ -43,7 +43,7 @@ describe('controlled schedule fixture is reflected in built program and seminar 
       expect(attr(hero[0], 'href')).toBe(plannedPath);
       const heroTitle = within(hero[0], (el) => attr(el, 'class')?.split(/\s+/).includes('hero-d-next-title') ?? false);
       expect(heroTitle).toHaveLength(1);
-      expect(normalizedText(heroTitle[0]).length).toBeGreaterThan(0);
+      expect(normalizedText(heroTitle[0])).toBe(pages.planned.name.trim().replace(/\s+/g, ' '));
 
       const scheduleCards = findAll(schedule, (el) => attr(el, 'data-testid') === 'schedule-card');
       expect(scheduleCards.length).toBeGreaterThan(0);
