@@ -5,19 +5,6 @@ test.beforeEach(async ({ page }) => {
   await installThirdPartyGuard(page);
 });
 
-test('unknown seminar price fits a 320px schedule card', async ({ page }) => {
-  await page.setViewportSize({ width: 320, height: 800 });
-  await page.goto('/raspisanie-i-tseny');
-  const price = page.locator('.schedule-card-price:visible').first();
-  // Exercise the production card with the longest price label regardless of
-  // which entries happen to be present in the pinned content snapshot.
-  await price.evaluate((element) => { element.textContent = 'Стоимость уточняется'; });
-  await expect(price).toHaveText('Стоимость уточняется');
-  const overflow = await page.evaluate(() =>
-    document.documentElement.scrollWidth - document.documentElement.clientWidth);
-  expect(overflow, 'unknown price must not widen the mobile page').toBeLessThanOrEqual(1);
-});
-
 // ─── Homepage ────────────────────────────────────────────
 test.describe('Homepage', () => {
   test('loads and has correct title', async ({ page }) => {
@@ -175,10 +162,15 @@ test.describe('Content quality', () => {
     await expect(page.locator('.contact-shell-link').first()).toContainText('646-54-50');
   });
 
-  test('schedule page has events table', async ({ page }) => {
+  test('schedule page shows eligible events or its empty state', async ({ page }) => {
     await page.goto('/raspisanie-i-tseny');
-    const rows = page.locator('.schedule-card');
-    expect(await rows.count()).toBeGreaterThan(0);
+    await expect(page.getByRole('heading', { name: 'Расписание и цены' })).toBeVisible();
+    const rows = page.locator('[data-schedule-item]:visible');
+    if (await rows.count() === 0) {
+      await expect(page.locator('[data-schedule-empty]')).toBeVisible();
+    } else {
+      await expect(rows.first().locator('.schedule-card')).toBeVisible();
+    }
   });
 });
 

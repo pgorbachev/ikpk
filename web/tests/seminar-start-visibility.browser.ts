@@ -35,6 +35,17 @@ test('control: confirmed sessions and last month are offered before start', asyn
   await month(page).selectOption('2026-10');
   await expect(shownCards(page)).toHaveCount(2);
 });
+test('unknown seminar price fits a 320px schedule card', async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 800 });
+  await open(page, '/raspisanie-i-tseny', BEFORE);
+  const price = shownCards(page).first().locator('.schedule-card-price');
+  await expect(price).toBeVisible();
+  await price.evaluate((element) => { element.textContent = 'Стоимость уточняется'; });
+  await expect(price).toHaveText('Стоимость уточняется');
+  const overflow = await page.evaluate(() =>
+    document.documentElement.scrollWidth - document.documentElement.clientWidth);
+  expect(overflow, 'unknown price must not widen the mobile page').toBeLessThanOrEqual(1);
+});
 test('home loaded after start advances hero and refills beyond original three', async ({ page }) => {
   await open(page, '/', AFTER); await expectNextHome(page);
 });
