@@ -692,6 +692,41 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
             self.assertEqual((dist / "_astro/legacy.0123456789.css").read_text(encoding="utf-8"),
                              "previous hash asset")
 
+    def test_static_build_can_include_the_owner_approved_staging194_chat_loader(self):
+        with tempfile.TemporaryDirectory(prefix="ikpk-static-chat-env-") as temporary:
+            root = Path(temporary)
+            source = root / "candidate"
+            web = source / "web"
+            snapshot_dir = web / ".snapshot"
+            snapshot_dir.mkdir(parents=True)
+            (snapshot_dir / "snapshot.json").write_text('{"snapshotId":"snap:editor-data"}', encoding="utf-8")
+            (source / ".ikpk-rehearsal-ci.json").write_text(json.dumps({"sourceSha": "a" * 40}), encoding="utf-8")
+            releases = root / "releases"
+            releases.mkdir()
+            calls = []
+
+            def run_build(_config, cwd, argv, **kwargs):
+                calls.append((argv, kwargs.get("environment")))
+                if argv[:3] == ["/usr/bin/npm", "run", "build:demo193"]:
+                    dist = cwd / "dist-demo193"
+                    dist.mkdir()
+                    (dist / "index.html").write_text("candidate", encoding="utf-8")
+                return ""
+
+            with patch.object(rehearsal_host, "_validate_prepared_web_dependencies"), \
+                 patch.object(rehearsal_host, "_run_as_cms", side_effect=run_build):
+                rehearsal_host._build_static({"staticReleaseRoot": str(releases),
+                                              "siteBaseUrl": "https://194.226.99.10"}, source,
+                    root / "capture", chat_loader_src=rehearsal_host.STAGING194_CHAT_LOADER_SRC)
+
+            build_environments = [environment for argv, environment in calls
+                                  if argv[0] == "/usr/bin/npm"]
+            self.assertEqual(len(build_environments), 1)
+            self.assertEqual(build_environments[0]["CHAT_LOADER_SRC"],
+                             "https://cdn-ru.bitrix24.ru/b35315886/crm/site_button/loader_2_siutnh.js")
+            self.assertEqual(build_environments[0]["DEMO_FORMS"], "stub")
+            self.assertEqual(build_environments[0]["PAYMENT_ROLE"], "ci")
+
     def test_initial_prod_static_build_preserves_chat_loader_for_capture_and_build(self):
         with tempfile.TemporaryDirectory(prefix="ikpk-initial-prod-chat-env-") as temporary:
             root = Path(temporary)
@@ -1256,7 +1291,9 @@ class StaticMainAdmissionTests(unittest.TestCase):
             create_capture.assert_called_once()
             self.assertEqual(create_capture.call_args.kwargs["read_only_paths"], [root])
             prepare_web.assert_called_once_with(config, candidate.resolve(), [root])
-            build_static.assert_called_once_with(config, candidate.resolve(), capture, read_only_paths=[root])
+            build_static.assert_called_once_with(
+                config, candidate.resolve(), capture, read_only_paths=[root],
+                chat_loader_src="https://cdn-ru.bitrix24.ru/b35315886/crm/site_button/loader_2_siutnh.js")
 
     def test_static_main_cms_fingerprint_does_not_follow_current_static_media_symlink(self):
         with tempfile.TemporaryDirectory(prefix="ikpk-static-main-fingerprint-") as temporary:

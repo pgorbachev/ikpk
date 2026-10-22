@@ -36,6 +36,7 @@ INITIAL_PROD_IDENTITY = Path.home() / ".ssh/id_ed25519_ikpk_vps"
 INITIAL_PROD_KNOWN_HOSTS = Path.home() / ".ssh/known_hosts"
 INITIAL_PROD_OPERATION_ID = "initial-prod-20261019-A-01"
 INITIAL_PROD_CHAT_LOADER_SRC = "https://cdn-ru.bitrix24.ru/b35315886/crm/site_button/loader_2_siutnh.js"
+STAGING194_CHAT_LOADER_SRC = INITIAL_PROD_CHAT_LOADER_SRC
 CANONICAL_REPOSITORY = "pgorbachev/ikpk"
 CANONICAL_REF = "refs/heads/dev"
 WORKFLOW = "Tests"
@@ -355,7 +356,8 @@ def _static_tree_sha256(root: Path) -> str:
 
 
 def browser_check(source_sha: str, operation_id: str, static_digest: str, archive: bytes,
-                  profile: str = "staging194", admitted_run: Optional[dict] = None) -> None:
+                  profile: str = "staging194", admitted_run: Optional[dict] = None,
+                  chat_loader_src: Optional[str] = None) -> None:
     executable = ROOT / "web/node_modules/.bin/playwright"
     if not executable.is_file():
         raise Refusal("local Playwright dependencies are missing; browser acceptance was not run")
@@ -448,7 +450,8 @@ def browser_check(source_sha: str, operation_id: str, static_digest: str, archiv
                                                "CHAT_LOADER_SRC": INITIAL_PROD_CHAT_LOADER_SRC}
                                               if profile == "initial-prod" else {"PUBLICATION_STAGING_CAPTURE": "1",
                                                "DEPLOY_MODE": "stand", "PAYMENT_ROLE": "ci", "DEMO_FORMS": "stub",
-                                               "CHAT_LOADER_SRC": "none", "CHAT_OFFLINE_MESSAGE": "absent"}),
+                                               "CHAT_LOADER_SRC": chat_loader_src or "none",
+                                               "CHAT_OFFLINE_MESSAGE": "absent"}),
                            "CONTENT_SNAPSHOT_DIR": str(snapshot_root), "PUBLICATION_TREE_DIR": str(static_root),
                            "PUBLICATION_BASE_URL": f"http://127.0.0.1:{server.server_address[1]}",
                            "PUBLICATION_COMMIT": source_sha, "PUBLICATION_SNAPSHOT_ID": release["snapshotId"],
@@ -545,7 +548,8 @@ def invoke(args: argparse.Namespace) -> None:
             raise Refusal("host returned an invalid static-main candidate digest")
         candidate = ssh_remote(["export-static-main", "--operation-id", args.operation_id,
                                 "--source-sha", args.source_sha])
-        browser_check(args.source_sha, args.operation_id, digest, candidate, "staging194", admitted_run)
+        browser_check(args.source_sha, args.operation_id, digest, candidate, "staging194", admitted_run,
+                      chat_loader_src=STAGING194_CHAT_LOADER_SRC)
         current_run = validate_static_main_ci(args.source_sha)
         if current_run != admitted_run:
             raise Refusal("canonical main source, Tests run, or Release proof changed during acceptance")

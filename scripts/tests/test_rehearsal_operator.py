@@ -84,8 +84,14 @@ class OperatorAdmissionTests(unittest.TestCase):
                  patch.object(staging193.socketserver, "ThreadingTCPServer", return_value=server), \
                  patch.object(staging193.threading, "Thread", return_value=thread), \
                  patch.object(staging193.subprocess, "run", return_value=subprocess.CompletedProcess([], 0)) as run:
-                staging193.browser_check(SHA, operation_id, digest, archive)
+                staging193.browser_check(SHA, operation_id, digest, archive,
+                    chat_loader_src="https://cdn-ru.bitrix24.ru/b35315886/crm/site_button/loader_2_siutnh.js")
             run.assert_called_once()
+            environment = run.call_args.kwargs["env"]
+            self.assertEqual(environment["CHAT_LOADER_SRC"],
+                "https://cdn-ru.bitrix24.ru/b35315886/crm/site_button/loader_2_siutnh.js")
+            self.assertEqual(environment["DEMO_FORMS"], "stub")
+            self.assertEqual(environment["PAYMENT_ROLE"], "ci")
 
     def test_browser_check_rejects_demo_capture_manifest_for_another_source_sha(self):
         with tempfile.TemporaryDirectory(prefix="ikpk-browser-proof-") as temporary:
@@ -239,7 +245,8 @@ class OperatorAdmissionTests(unittest.TestCase):
         self.assertEqual([call[0][0] for call in calls], ["static-main", "export-static-main", "static-main"])
         self.assertEqual(calls[0][1], b"source archive")
         self.assertIn("--browser-digest", calls[-1][0])
-        browser.assert_called_once_with(SHA, "main-static", "c" * 64, b"candidate bytes", "staging194", provenance)
+        browser.assert_called_once_with(SHA, "main-static", "c" * 64, b"candidate bytes", "staging194", provenance,
+            chat_loader_src=staging193.STAGING194_CHAT_LOADER_SRC)
 
     def test_static_main_refuses_changed_main_proof_before_remote_activation(self):
         admitted = {"sourceSha": SHA, "runId": 123, "attempt": 2}
