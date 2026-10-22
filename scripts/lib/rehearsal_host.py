@@ -25,7 +25,7 @@ import tempfile
 import time
 from pathlib import Path
 from typing import Any, Optional
-from urllib.parse import urlsplit
+from urllib.parse import quote, urlsplit
 
 try:
     from .rehearsal_state import RehearsalRefusal, RehearsalState, durable_json
