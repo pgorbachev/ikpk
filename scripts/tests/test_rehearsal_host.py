@@ -1539,6 +1539,83 @@ class StaticMainAdmissionTests(unittest.TestCase):
             self.assertTrue(any(row.get("record") == "static-main-rolled-back"
                                 for row in state._operation_rows("main-op")))
 
+    def test_static_main_commit_probes_encoded_media_before_durable_commit(self):
+        with tempfile.TemporaryDirectory(prefix="ikpk-static-main-media-commit-") as temporary:
+            root = Path(temporary)
+            source_sha = "a" * 40
+            releases = root / "releases"
+            releases.mkdir()
+            candidate = releases / f"{source_sha}-main-op"
+            (candidate / "_astro").mkdir(parents=True)
+            (candidate / "index.html").write_text("candidate", encoding="utf-8")
+            (candidate / "_astro/app.abcdef123456.js").write_text("asset", encoding="utf-8")
+            old = releases / "old"
+            old.mkdir()
+            (old / "index.html").write_text("old", encoding="utf-8")
+            pointer = root / "current"
+            pointer.symlink_to(old)
+            candidate_digest = rehearsal_host._tree_sha256(candidate)
+
+            capture = root / "source" / f"{source_sha}-main-op/.staging193-rehearsal/main-op/capture"
+            capture.mkdir(parents=True)
+            media_url = "/uploads/проба media.jpg"
+            (capture / "media-manifest.json").write_text(
+                json.dumps({"media": [{"url": media_url}]}), encoding="utf-8")
+
+            state_dir = root / "state"
+            state_dir.mkdir()
+            state = RehearsalState(state_dir)
+            provenance = {"repository": "pgorbachev/ikpk", "ref": "refs/heads/main",
+                "sourceSha": source_sha, "workflow": "Tests", "workflowName": "Tests",
+                "event": "push", "headBranch": "main", "runId": 39670066783, "attempt": 2,
+                "status": "completed", "conclusion": "success",
+                "requiredJobs": sorted(rehearsal_host.STATIC_MAIN_REQUIRED_JOBS),
+                "runUrl": "https://github.com/pgorbachev/ikpk/actions/runs/39670066783",
+                "additionalWorkflows": [{"workflow": workflow, "headSha": source_sha,
+                    "event": "push", "headBranch": "main", "runId": index + 100,
+                    "attempt": 1, "status": "completed", "conclusion": "success",
+                    "requiredJobs": ["required job"],
+                    "runUrl": f"https://github.com/pgorbachev/ikpk/actions/runs/{index + 100}"}
+                    for index, workflow in enumerate(rehearsal_host.STATIC_MAIN_ADDITIONAL_WORKFLOWS)]}
+            config = {"profile": "staging194", "staticMainReleasePolicy": "ci-only-approved",
+                      "staticReleaseRoot": str(releases), "currentStatic": str(pointer),
+                      "releaseRoot": str(root / "source"), "siteHealthUrl": "https://site.test/health",
+                      "siteBaseUrl": "https://site.test", "siteReleaseUrl": "https://site.test/release.json",
+                      "siteProbeUrls": ["https://site.test/"]}
+            fingerprint = {"cms": "unchanged"}
+            state._append({"version": 1, "record": "static-main-start", "operationKind": "static-main",
+                           "operationId": "main-op", "sourceSha": source_sha, "provenance": provenance,
+                           "oldStaticPath": str(old.resolve()),
+                           "oldStaticTreeSha256": rehearsal_host._tree_sha256(old),
+                           "configSha256": rehearsal_host._config_sha256(config),
+                           "cmsFingerprint": fingerprint})
+            state._append({"version": 1, "record": "static-main-prepared", "operationKind": "static-main",
+                           "operationId": "main-op", "sourceSha": source_sha,
+                           "staticTreeSha256": candidate_digest, "snapshotId": "snapshot-main"})
+            curl_commands = []
+
+            def curl(argv, **_kwargs):
+                curl_commands.append(argv)
+                if argv[-1] == config["siteReleaseUrl"]:
+                    release = {"commit": source_sha, "operationId": "main-op",
+                               "staticTreeSha256": candidate_digest, "snapshotId": "snapshot-main"}
+                    return subprocess.CompletedProcess(argv, 0, json.dumps(release), "")
+                if "--write-out" in argv:
+                    return subprocess.CompletedProcess(argv, 0, "200", "")
+                return subprocess.CompletedProcess(argv, 0, "", "")
+
+            with patch.object(rehearsal_host, "_static_main_cms_fingerprint", return_value=fingerprint), \
+                 patch.object(rehearsal_host, "run", side_effect=curl):
+                result = rehearsal_host._static_main_commit(
+                    config, state, "main-op", source_sha, provenance, candidate_digest)
+
+            self.assertEqual(result["phase"], "committed")
+            self.assertEqual(pointer.resolve(strict=True), candidate.resolve(strict=True))
+            self.assertTrue(any(row.get("record") == "static-main-committed"
+                                for row in state._operation_rows("main-op")))
+            encoded_media_url = "https://site.test/uploads/%D0%BF%D1%80%D0%BE%D0%B1%D0%B0%20media.jpg"
+            self.assertIn(encoded_media_url, [argv[-1] for argv in curl_commands])
+
     def test_generic_recovery_refuses_static_main_operation_kind(self):
         with tempfile.TemporaryDirectory(prefix="ikpk-static-main-kind-") as temporary:
             state_dir = Path(temporary)
