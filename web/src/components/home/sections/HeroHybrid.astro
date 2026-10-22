@@ -9,6 +9,16 @@ import { getUpcomingSeminars } from '../../../lib/home';
 
 const candidates = getUpcomingSeminars(Infinity);
 const next = candidates[0];
+const heroCandidates = candidates.map((candidate) => ({
+  startsAtInstant: candidate.startsAtInstant,
+  startTimeZone: candidate.startTimeZone,
+  startTimeConfirmed: candidate.startTimeConfirmed,
+  title: candidate.title,
+  href: candidate.href,
+  dateLabel: candidate.dateLabel,
+  cityName: candidate.cityName,
+  priceLabel: candidate.priceLabel,
+}));
 // Визуал hero — нейтральный брендовый плейсхолдер: реального фото занятия
 // (преподаватель + участники + мануальная практика) у нас пока нет,
 // запрошено у заказчика (docs/client-requests.md). Тёмный видео-thumbnail
@@ -33,7 +43,7 @@ const next = candidates[0];
       </ul>
 
       {next && (
-        <a data-start-hero={JSON.stringify(candidates)} class="hero-d-next" href={next.href}>
+        <a data-start-hero={JSON.stringify(heroCandidates)} class="hero-d-next" href={next.href}>
           <span class="hero-d-next-label">Ближайший семинар</span>
           {/* Название есть в данных (`title` в lib/home.ts), но в разметку не
               попадало: строка «14–16 авг · Санкт-Петербург · 45 000 ₽» не
