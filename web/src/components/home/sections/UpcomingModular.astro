@@ -18,7 +18,7 @@ const seminars = getUpcomingSeminars(Infinity);
       </div>
       <div class="up-mod-grid">
         {seminars.map((s, i) => (
-          <article data-start-offer data-starts-at-instant={s.startsAtInstant} data-start-time-zone={s.startTimeZone} hidden={i >= 6} class:list={['up-mod-card', { featured: i === 0 }]} data-upcoming-card={i === 0 ? 'featured' : undefined}>
+          <article data-start-offer data-starts-at-instant={s.startsAtInstant} data-start-time-zone={s.startTimeZone} data-start-time-confirmed={String(s.startTimeConfirmed === true)} hidden={i >= 6} class:list={['up-mod-card', { featured: i === 0 }]} data-upcoming-card={i === 0 ? 'featured' : undefined}>
             <div class="up-mod-date" aria-hidden="true">
               <span class="up-mod-day">{s.dayLabel}</span>
               <span class="up-mod-month">{s.monthLabel}</span>

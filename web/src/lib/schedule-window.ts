@@ -16,7 +16,7 @@ export interface ScheduleWindowEntry {
 
 /** Exact offer boundary. Invalid or unresolved times never become offers. */
 export function isBeforeStart(entry: ScheduleWindowEntry, now: string | Date | number): boolean {
-  if (!entry.startsAtInstant || !entry.startTimeZone || entry.startTimeConfirmed === false
+  if (!entry.startsAtInstant || !entry.startTimeZone || entry.startTimeConfirmed !== true
     || !/(?:Z|[+-]\d{2}:\d{2})$/.test(entry.startsAtInstant)) return false;
   const start = Date.parse(entry.startsAtInstant);
   const current = typeof now === 'number' ? now : new Date(now).getTime();

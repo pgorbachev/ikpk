@@ -20,6 +20,7 @@ export interface UpcomingSeminar {
   id: number;
   startsAtInstant?: string;
   startTimeZone?: string;
+  startTimeConfirmed?: boolean;
   title: string;
   href: string;
   instituteName: string;
@@ -186,6 +187,7 @@ export function getUpcomingSeminars(limit = 3, now: Date = new Date(getSnapshotR
         id: e.id,
         startsAtInstant: e.startsAtInstant,
         startTimeZone: e.startTimeZone,
+        startTimeConfirmed: e.startTimeConfirmed,
         title: publicScheduleTitle(e),
         href,
         instituteName: e.institute.name,

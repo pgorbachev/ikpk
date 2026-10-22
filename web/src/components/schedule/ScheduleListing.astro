@@ -4,6 +4,7 @@ import ScheduleEventCard from './ScheduleEventCard.astro';
 interface ScheduleItem {
   startsAtInstant?: string;
   startTimeZone?: string;
+  startTimeConfirmed?: boolean;
   additionalText: string;
   cityName: string;
   citySlug: string;
@@ -48,6 +49,7 @@ const { items } = Astro.props as Props;
       data-start-offer
       data-starts-at-instant={card.startsAtInstant}
       data-start-time-zone={card.startTimeZone}
+      data-start-time-confirmed={String(card.startTimeConfirmed === true)}
       data-schedule-item
       data-institute={card.instituteSlug}
       data-program={card.programSlug}

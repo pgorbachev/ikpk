@@ -15,6 +15,7 @@ export function initStartVisibility(): void {
   const entryFor = (element: HTMLElement): ScheduleWindowEntry => ({
     startsAtInstant: element.dataset.startsAtInstant,
     startTimeZone: element.dataset.startTimeZone,
+    startTimeConfirmed: element.dataset.startTimeConfirmed === 'true',
   });
   const entries = [...offers.map(entryFor), ...heroes.flatMap(({ entries }) => entries), ...dates.flatMap(({ entries }) => entries)];
   let timer: ReturnType<typeof setTimeout>;
