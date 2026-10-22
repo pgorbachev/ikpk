@@ -40,6 +40,8 @@ export function initStartVisibility(): void {
     for (const { element, entries } of heroes) {
       const next = entries.find((entry) => isBeforeStart(entry, now));
       element.hidden = !next;
+      const upcomingAction = element.closest('.hero-d')?.querySelector<HTMLElement>('[data-start-upcoming-action]');
+      if (upcomingAction) upcomingAction.hidden = !next;
       if (next) {
         element.href = next.href!;
         element.querySelector<HTMLElement>('.hero-d-next-title')!.textContent = next.title!;

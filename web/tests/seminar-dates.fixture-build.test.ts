@@ -33,8 +33,30 @@ describe('controlled schedule fixture is reflected in built program and seminar 
       const program = readBuiltPage(outDir, programPath);
       const plannedPage = readBuiltPage(outDir, plannedPath);
       const emptyPage = readBuiltPage(outDir, emptyPath);
+      const home = readBuiltPage(outDir, '/');
+      const schedule = readBuiltPage(outDir, '/raspisanie-i-tseny');
       const plannedCard = cardFor(program, pages.planned.name);
       const emptyCard = cardFor(program, pages.empty.name);
+
+      const hero = findAll(home, (el) => attr(el, 'class')?.split(/\s+/).includes('hero-d-next') ?? false);
+      expect(hero).toHaveLength(1);
+      expect(attr(hero[0], 'href')).toBe(plannedPath);
+      const heroTitle = within(hero[0], (el) => attr(el, 'class')?.split(/\s+/).includes('hero-d-next-title') ?? false);
+      expect(heroTitle).toHaveLength(1);
+      expect(normalizedText(heroTitle[0]).length).toBeGreaterThan(0);
+
+      const scheduleCards = findAll(schedule, (el) => attr(el, 'data-testid') === 'schedule-card');
+      expect(scheduleCards.length).toBeGreaterThan(0);
+      const scheduleActions = scheduleCards.flatMap((card) =>
+        within(card, (el) => el.tagName === 'a' && attr(el, 'class')?.split(/\s+/).includes('btn-primary') === true)
+          .map(normalizedText),
+      );
+      expect(scheduleActions).toContain('Записаться на семинар');
+      expect(scheduleActions).not.toContain('Зарегистрироваться');
+      const detailActions = findAll(plannedPage, (el) => el.tagName === 'a' && attr(el, 'class')?.split(/\s+/).includes('seminar-register-link') === true)
+        .map(normalizedText);
+      expect(detailActions).toContain('Записаться на семинар');
+      expect(detailActions).not.toContain('Зарегистрироваться');
 
       expect(plannedCard, 'program output must contain the controlled seminar card').toBeTruthy();
       expect(emptyCard, 'program output must contain the controlled empty seminar card').toBeTruthy();

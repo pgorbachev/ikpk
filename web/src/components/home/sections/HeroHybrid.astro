@@ -57,7 +57,7 @@ const heroCandidates = candidates.map((candidate) => ({
 
       <div class="hero-d-actions">
         <a href={CTA_HREF} class="btn btn-primary" data-cta="hero">Подобрать программу</a>
-        <a href="#upcoming" class="btn btn-outline">Ближайшие семинары</a>
+        {next && <a data-start-upcoming-action href="#upcoming" class="btn btn-outline">Ближайшие семинары</a>}
       </div>
     </div>
 

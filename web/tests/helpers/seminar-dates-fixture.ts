@@ -71,7 +71,7 @@ function scheduleEntry(
     program: { id: 1, slug: page.group.slug, name: page.group.name },
     additionalText: '',
     duration: '',
-    registrationFormLink: '',
+    registrationFormLink: '/registration-fixture',
   };
   return { ...entry, startTimeConfirmation: startTimeFingerprint(entry) };
 }

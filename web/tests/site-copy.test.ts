@@ -3,7 +3,8 @@ import { readFileSync } from 'node:fs';
 import { dist, walkHtml, readPage, allPages } from './helpers/dist-pages';
 import { attr, byClass, findAll, hasClass, parseDocument, textOf, walk } from './helpers/dom';
 import type { Element } from './helpers/dom';
-import { getInstitutes, getScheduleEntries } from '../src/lib/data.js';
+import { getInstitutes, getScheduleEntries, getSnapshotReferenceDate } from '../src/lib/data.js';
+import { isBeforeStart } from '../src/lib/schedule-window.js';
 
 // ─── Тексты, которые видит посетитель ────────────────────────────────────────
 //
@@ -22,6 +23,9 @@ const CITY_PHONE = '646-54-50';
 const CITY_TEL = 'tel:+78126465450';
 const MOBILE_PHONE = '038-77-97';
 const MOBILE_TEL = 'tel:+79810387797';
+const offeredEntries = () => getScheduleEntries().filter(
+  (entry) => entry.status === 'active' && entry.startAt && isBeforeStart(entry, getSnapshotReferenceDate()),
+);
 
 /** Все собранные страницы. Пустой список — «не смогла проверить», а не «дефектов нет». */
 function pages(): { path: string; html: string }[] {
@@ -301,7 +305,12 @@ describe('D14 — часы показаны как часы менеджера, 
 describe('D2 — блок «Ближайший семинар» на главной выводит название', () => {
   it('название взято из данных расписания и относится к тому же семинару, что ссылка', () => {
     const home = readPage('/');
-    const block = only(byClass(home, 'hero-d-next'), 'блок «Ближайший семинар» на главной');
+    const blocks = byClass(home, 'hero-d-next');
+    if (offeredEntries().length === 0) {
+      expect(blocks, 'блок ближайшего семинара без доступной даты').toEqual([]);
+      return;
+    }
+    const block = only(blocks, 'блок «Ближайший семинар» на главной');
     const titleEl = only(
       [...walk(block)].filter((el) => hasClass(el, 'hero-d-next-title')),
       'элемент с названием семинара внутри блока',
@@ -360,10 +369,16 @@ describe('D11 — на /raspisanie-i-tseny кнопка называется «�
   it('карточки расписания больше не зовут «Зарегистрироваться»', () => {
     const html = readPage('/raspisanie-i-tseny/');
     const cards = findAll(html, (el) => attr(el, 'data-testid') === 'schedule-card');
-    expect(cards.length, 'карточек расписания не найдено').toBeGreaterThan(5);
+    if (offeredEntries().length === 0) {
+      expect(cards, 'карточки расписания без доступных дат').toEqual([]);
+      return;
+    }
+    expect(cards.length, 'карточек расписания не найдено').toBeGreaterThan(0);
     const labels = new Set(cards.flatMap((card) => buttonsIn(card).map(textOf)));
     expect([...labels], 'осталась старая подпись').not.toContain('Зарегистрироваться');
-    expect([...labels], 'новой подписи нет ни на одной карточке').toContain('Записаться на семинар');
+    if (offeredEntries().some((entry) => entry.city?.name !== 'Онлайн' && entry.registrationFormLink)) {
+      expect([...labels], 'новой подписи нет ни на одной карточке').toContain('Записаться на семинар');
+    }
   });
 
   // Решение владельца 2026-08-23: расширить D11 на страницу отдельного семинара.
@@ -375,7 +390,11 @@ describe('D11 — на /raspisanie-i-tseny кнопка называется «�
       '/institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya/osnovy-manualnogo-myshechnogo-testirovaniya/',
     );
     const links = findAll(html, (el) => el.tagName === 'a' && hasClass(el, 'seminar-register-link'));
-    expect(links.length, 'на странице семинара нет кнопок записи — проверять нечего').toBeGreaterThan(0);
+    if (links.length === 0) {
+      expect(offeredEntries().filter((entry) => entry.seminar.slug === 'osnovy-manualnogo-myshechnogo-testirovaniya'),
+        'доступная дата потеряла кнопку записи').toEqual([]);
+      return;
+    }
     const labels = [...new Set(links.map(textOf))];
     expect(labels, 'осталась старая подпись').not.toContain('Зарегистрироваться');
     expect(labels, 'подписи кнопок записи на странице семинара').toEqual(['Записаться на семинар']);

@@ -51,6 +51,14 @@ test('focus and visibility resume reconcile home after a missed timer', async ({
   await page.evaluate(() => { document.dispatchEvent(new Event('visibilitychange')); window.dispatchEvent(new Event('focus')); });
   await expectNextHome(page);
 });
+test('home hides the upcoming jump after the last session starts', async ({ page }) => {
+  await open(page, '/', BEFORE);
+  await expect(page.locator('[data-start-upcoming-action]')).toBeVisible();
+  await page.clock.setSystemTime(new Date('2030-01-01T00:00:00Z'));
+  await page.evaluate(() => { document.dispatchEvent(new Event('visibilitychange')); });
+  await expect(page.locator('[data-start-upcoming-action]')).toBeHidden();
+  await expect(page.locator('#upcoming')).toBeHidden();
+});
 test('schedule loaded after start removes expired offers and their final month', async ({ page }) => {
   await open(page, '/raspisanie-i-tseny', AFTER);
   await expect(month(page)).toBeEnabled();
