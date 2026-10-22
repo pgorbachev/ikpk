@@ -4,7 +4,7 @@
 
 Проверенная ревизия кода: `64d2d99bfd3c2cd38caa2488b61d9720947889da`. В отдельном worktree `/private/tmp/ikpk-seminar-start-mutation-20261023`, созданном от этой ревизии, запущен `npx vitest run tests/seminar-start-visibility.test.ts -t 'at equality'`: 1 тест прошёл, 24 остальных сценария отфильтрованы.
 
-Временно заменён `current < start` в `web/src/lib/schedule-window.ts` прежним правилом сравнения календарных дат через `isUpcomingStart`. Тот же тест упал (1 failed): при равенстве текущего времени и времени начала ожидалось `false`, получено `true` (`tests/seminar-start-visibility.test.ts:53`). Затем файл восстановлен через `git restore`, тест повторно прошёл (1 passed), `git status --short --branch` показал только имя ветки, а `git diff --exit-code` завершился успешно. Эта мутация доказывает, что регрессионный тест различает старое и новое правило на точной границе.
+Временно заменён `current < start` в `web/src/lib/schedule-window.ts` прежним правилом сравнения календарных дат через `isUpcomingStart`. Тот же тест упал (1 failed): при равенстве текущего времени и времени начала ожидалось `false`, получено `true` (`web/tests/seminar-start-visibility.test.ts:53`, `expect(beforeStart(webinar, now)).toBe(expected);`). Затем файл восстановлен через `git restore`, тест повторно прошёл (1 passed), `git status --short --branch` показал только имя ветки, а `git diff --exit-code` завершился успешно. Эта мутация доказывает, что регрессионный тест различает старое и новое правило на точной границе.
 
 ## Локальные проверки до итогового переноса тестового гейта
 
@@ -16,7 +16,7 @@
 
 После переноса обязательного month gate (`659337f7fdeb4ae4a0373c2c2307602ac4c765f7`) независимое ревью нашло дефект обвязки: новый Playwright suite очищал общий `test-results` и удалял `schedule-month-run.json` до копирования в CI. Это воспроизведено на зелёном полном прогоне: 19 month и 24 start сценария прошли, но JSON-файл отсутствовал. Для второго suite назначен отдельный `outputDir` в `web/tests/seminar-start-visibility.config.ts`.
 
-Повторный `npm run test:e2e:schedule` завершился с кодом 0: 19/19 month сценариев, мета-проверка всех 19 тегов и 0 пропусков, затем 24/24 exact-start сценариев в `Europe/Moscow` и `America/Los_Angeles`. После завершения обеих suites `test-results/schedule-month-run.json` существует, непустой и читается как JSON. Дополнительный `npx vitest run tests/browser-test-gating.test.ts`: 6/6.
+Повторный `npm run test:e2e:schedule` завершился с кодом 0: 19/19 month сценариев, мета-проверка всех 19 тегов и 0 пропусков, затем 24/24 exact-start сценариев в зонах Europe/Moscow и America/Los_Angeles. После завершения обеих suites JSON-отчёт сценариев месяца существует, непустой и читается. Дополнительный `npx vitest run tests/browser-test-gating.test.ts`: 6/6.
 
 Результаты изолированного CMS исполнителя: реальные Strapi проверки 11/11, формы и роли 9/9, снимок 103/103, подтверждение 14/14, публикация 14/14, отрицательные сценарии capture 2/2; CMS build, typecheck и lint завершились успешно. Это проверка кода и синтетических данных, не подтверждение актуальных времён в живой CMS.
 

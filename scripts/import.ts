@@ -813,10 +813,10 @@ async function importScheduleEntries(): Promise<void> {
       name: e.name,
       startAt: (e.startAt as string) ?? null,
       endAt: (e.endAt as string) ?? null,
-      // Legacy sources do not establish a confirmed time. Never infer it from notes.
-      startsAtInstant: (e.startsAtInstant as string) ?? null,
-      startTimeZone: (e.startTimeZone as string) ?? null,
-      startTimeConfirmed: false,
+      // Legacy sources do not establish a confirmed time. Missing values must not erase
+      // an editor's confirmation on repeat import; a changed date resets it in CMS.
+      ...(e.startsAtInstant != null ? { startsAtInstant: e.startsAtInstant as string } : {}),
+      ...(e.startTimeZone != null ? { startTimeZone: e.startTimeZone as string } : {}),
       city:
         (e.city as { name?: string } | undefined)?.name ?? null,
       price: (e.newPrice as number) ?? null,

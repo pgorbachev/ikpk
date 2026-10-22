@@ -1,6 +1,6 @@
 # RED regression run
 
-The tests were written and run by a separate executor in `tests/seminar-start-visibility-red-20261022` before implementation. Its test-only commit is `5d0fc1008928be98f8f70199b6ad44ec039a88ca`, based on preimplementation commit `84afdd50bc0de63edd7272bd92400585edf61fe6`. That commit changes only five files under `web/tests/`; no product code is in the test branch.
+The tests were written and run by a separate executor in the tests/seminar-start-visibility-red-20261022 branch before implementation. Its test-only commit is `5d0fc1008928be98f8f70199b6ad44ec039a88ca`, based on preimplementation commit `84afdd50bc0de63edd7272bd92400585edf61fe6`. That commit changes only five files under `web/tests/`; no product code is in the test branch.
 
 From `web/` with the test-only tree:
 
