@@ -1,0 +1,555 @@
+
+Running 18 tests using 1 worker
+
+(node:20214) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+[1/18] [start-moscow] › tests/seminar-start-visibility.browser.ts:30:1 › control: confirmed sessions and last month are offered before start
+[2/18] [start-moscow] › tests/seminar-start-visibility.browser.ts:38:1 › home loaded after start advances hero and refills beyond original three
+  1) [start-moscow] › tests/seminar-start-visibility.browser.ts:38:1 › home loaded after start advances hero and refills beyond original three
+
+    Error: expect(locator).toContainText(expected) failed
+
+    Locator: locator('.hero-d-next')
+    Expected substring: "Следующий анонс"
+    Received string:    "Ближайший семинарГраничный семинар31 окт – 2 ноя · Онлайн · Бесплатно"
+    Timeout: 2000ms
+
+    Call log:
+      - Expect "toContainText" locator('.hero-d-next') with timeout 2000ms
+      - waiting for locator('.hero-d-next')
+        21 × locator resolved to <a class="hero-d-next" data-astro-cid-xex2zu2w="" href="/institut-klinicheskoy-prikladnoy-kineziologii/vebinary-i-mezhseminarskie-vstrechi-ikpk/start-fixture-0">…</a>
+           - unexpected value "Ближайший семинарГраничный семинар31 окт – 2 ноя · Онлайн · Бесплатно"
+
+
+      21 | const seminarCard = (page: Page, title: string) => page.locator('[data-testid="course-group-seminar-card"]').filter({ has: page.getByRole('heading', { name: title, exact: true }) });
+      22 | async function expectNextHome(page: Page) {
+    > 23 |   await expect(page.locator('.hero-d-next')).toContainText(TITLES[2]);
+         |                                              ^
+      24 |   await expect(page.locator('.upcoming-card:visible')).toHaveCount(3);
+      25 |   // Outside the original top three: expired slots must refill.
+      26 |   await expect(page.locator('.upcoming-card:visible').filter({ hasText: TITLES[3] })).toBeVisible();
+        at expectNextHome (/private/tmp/ikpk-seminar-start-red-20261022/web/tests/seminar-start-visibility.browser.ts:23:46)
+        at /private/tmp/ikpk-seminar-start-red-20261022/web/tests/seminar-start-visibility.browser.ts:39:39
+
+    Error Context: test-results/seminar-start-visibility.b-d2088-fills-beyond-original-three-start-moscow/error-context.md
+
+
+(node:20330) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+[3/18] [start-moscow] › tests/seminar-start-visibility.browser.ts:41:1 › open home removes offers at exact equality without reload
+  2) [start-moscow] › tests/seminar-start-visibility.browser.ts:41:1 › open home removes offers at exact equality without reload
+
+    Error: expect(locator).toContainText(expected) failed
+
+    Locator: locator('.hero-d-next')
+    Expected substring: "Следующий анонс"
+    Received string:    "Ближайший семинарГраничный семинар31 окт – 2 ноя · Онлайн · Бесплатно"
+    Timeout: 2000ms
+
+    Call log:
+      - Expect "toContainText" locator('.hero-d-next') with timeout 2000ms
+      - waiting for locator('.hero-d-next')
+        21 × locator resolved to <a class="hero-d-next" data-astro-cid-xex2zu2w="" href="/institut-klinicheskoy-prikladnoy-kineziologii/vebinary-i-mezhseminarskie-vstrechi-ikpk/start-fixture-0">…</a>
+           - unexpected value "Ближайший семинарГраничный семинар31 окт – 2 ноя · Онлайн · Бесплатно"
+
+
+      21 | const seminarCard = (page: Page, title: string) => page.locator('[data-testid="course-group-seminar-card"]').filter({ has: page.getByRole('heading', { name: title, exact: true }) });
+      22 | async function expectNextHome(page: Page) {
+    > 23 |   await expect(page.locator('.hero-d-next')).toContainText(TITLES[2]);
+         |                                              ^
+      24 |   await expect(page.locator('.upcoming-card:visible')).toHaveCount(3);
+      25 |   // Outside the original top three: expired slots must refill.
+      26 |   await expect(page.locator('.upcoming-card:visible').filter({ hasText: TITLES[3] })).toBeVisible();
+        at expectNextHome (/private/tmp/ikpk-seminar-start-red-20261022/web/tests/seminar-start-visibility.browser.ts:23:46)
+        at /private/tmp/ikpk-seminar-start-red-20261022/web/tests/seminar-start-visibility.browser.ts:44:41
+
+    Error Context: test-results/seminar-start-visibility.b-4327f-act-equality-without-reload-start-moscow/error-context.md
+
+
+(node:20363) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+[4/18] [start-moscow] › tests/seminar-start-visibility.browser.ts:46:1 › focus and visibility resume reconcile home after a missed timer
+  3) [start-moscow] › tests/seminar-start-visibility.browser.ts:46:1 › focus and visibility resume reconcile home after a missed timer
+
+    Error: expect(locator).toContainText(expected) failed
+
+    Locator: locator('.hero-d-next')
+    Expected substring: "Следующий анонс"
+    Received string:    "Ближайший семинарГраничный семинар31 окт – 2 ноя · Онлайн · Бесплатно"
+    Timeout: 2000ms
+
+    Call log:
+      - Expect "toContainText" locator('.hero-d-next') with timeout 2000ms
+      - waiting for locator('.hero-d-next')
+        21 × locator resolved to <a class="hero-d-next" data-astro-cid-xex2zu2w="" href="/institut-klinicheskoy-prikladnoy-kineziologii/vebinary-i-mezhseminarskie-vstrechi-ikpk/start-fixture-0">…</a>
+           - unexpected value "Ближайший семинарГраничный семинар31 окт – 2 ноя · Онлайн · Бесплатно"
+
+
+      21 | const seminarCard = (page: Page, title: string) => page.locator('[data-testid="course-group-seminar-card"]').filter({ has: page.getByRole('heading', { name: title, exact: true }) });
+      22 | async function expectNextHome(page: Page) {
+    > 23 |   await expect(page.locator('.hero-d-next')).toContainText(TITLES[2]);
+         |                                              ^
+      24 |   await expect(page.locator('.upcoming-card:visible')).toHaveCount(3);
+      25 |   // Outside the original top three: expired slots must refill.
+      26 |   await expect(page.locator('.upcoming-card:visible').filter({ hasText: TITLES[3] })).toBeVisible();
+        at expectNextHome (/private/tmp/ikpk-seminar-start-red-20261022/web/tests/seminar-start-visibility.browser.ts:23:46)
+        at /private/tmp/ikpk-seminar-start-red-20261022/web/tests/seminar-start-visibility.browser.ts:52:9
+
+    Error Context: test-results/seminar-start-visibility.b-5c63b-e-home-after-a-missed-timer-start-moscow/error-context.md
+
+
+(node:20403) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+[5/18] [start-moscow] › tests/seminar-start-visibility.browser.ts:54:1 › schedule loaded after start removes expired offers and their final month
+  4) [start-moscow] › tests/seminar-start-visibility.browser.ts:54:1 › schedule loaded after start removes expired offers and their final month
+
+    Error: expect(locator).toHaveCount(expected) failed
+
+    Locator:  locator('[data-schedule-filter="month"]').locator('option[value="2026-10"]')
+    Expected: 0
+    Received: 1
+    Timeout:  2000ms
+
+    Call log:
+      - Expect "toHaveCount" locator('[data-schedule-filter="month"]').locator('option[value="2026-10"]') with timeout 2000ms
+      - waiting for locator('[data-schedule-filter="month"]').locator('option[value="2026-10"]')
+        21 × locator resolved to 1 element
+           - unexpected value "1"
+
+
+      55 |   await open(page, '/raspisanie-i-tseny', AFTER);
+      56 |   await expect(month(page)).toBeEnabled();
+    > 57 |   await expect(month(page).locator('option[value="2026-10"]')).toHaveCount(0);
+         |                                                                ^
+      58 |   await expect(shownCards(page)).toHaveCount(25);
+      59 |   await expect(shownCards(page).filter({ hasText: 'Сеанс 61001' })).toHaveCount(0);
+      60 |   await expect(shownCards(page).filter({ hasText: 'Сеанс 61004' })).toBeVisible();
+        at /private/tmp/ikpk-seminar-start-red-20261022/web/tests/seminar-start-visibility.browser.ts:57:64
+
+    Error Context: test-results/seminar-start-visibility.b-7cbc5-ffers-and-their-final-month-start-moscow/error-context.md
+
+
+(node:20773) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+[6/18] [start-moscow] › tests/seminar-start-visibility.browser.ts:62:1 › open schedule updates month, counts and pagination at the boundary
+  5) [start-moscow] › tests/seminar-start-visibility.browser.ts:62:1 › open schedule updates month, counts and pagination at the boundary
+
+    Error: expect(locator).toHaveCount(expected) failed
+
+    Locator:  locator('[data-schedule-filter="month"]').locator('option[value="2026-10"]')
+    Expected: 0
+    Received: 1
+    Timeout:  2000ms
+
+    Call log:
+      - Expect "toHaveCount" locator('[data-schedule-filter="month"]').locator('option[value="2026-10"]') with timeout 2000ms
+      - waiting for locator('[data-schedule-filter="month"]').locator('option[value="2026-10"]')
+        21 × locator resolved to 1 element
+           - unexpected value "1"
+
+
+      68 |   await expect(shownCards(page)).toHaveCount(2);
+      69 |   await page.clock.runFor(1_000);
+    > 70 |   await expect(month(page).locator('option[value="2026-10"]')).toHaveCount(0);
+         |                                                                ^
+      71 |   await expect(secondPage).toHaveCount(0);
+      72 |   await expect(shownCards(page)).toHaveCount(25);
+      73 | });
+        at /private/tmp/ikpk-seminar-start-red-20261022/web/tests/seminar-start-visibility.browser.ts:70:64
+
+    Error Context: test-results/seminar-start-visibility.b-d4c22--pagination-at-the-boundary-start-moscow/error-context.md
+
+
+(node:20809) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+[7/18] [start-moscow] › tests/seminar-start-visibility.browser.ts:74:1 › program retains course description but drops final started date and advances repeat session
+  6) [start-moscow] › tests/seminar-start-visibility.browser.ts:74:1 › program retains course description but drops final started date and advances repeat session
+
+    Error: expect(locator).toHaveCount(expected) failed
+
+    Locator:  locator('[data-testid="course-group-seminar-card"]').filter({ has: getByRole('heading', { name: 'Последний сеанс курса', exact: true }) }).locator('[data-testid="seminar-nearest-date"]:visible')
+    Expected: 0
+    Received: 1
+    Timeout:  2000ms
+
+    Call log:
+      - Expect "toHaveCount" locator('[data-testid="course-group-seminar-card"]').filter({ has: getByRole('heading', { name: 'Последний сеанс курса', exact: true }) }).locator('[data-testid="seminar-nearest-date"]:visible') with timeout 2000ms
+      - waiting for locator('[data-testid="course-group-seminar-card"]').filter({ has: getByRole('heading', { name: 'Последний сеанс курса', exact: true }) }).locator('[data-testid="seminar-nearest-date"]:visible')
+        21 × locator resolved to 1 element
+           - unexpected value "1"
+
+
+      76 |   const finished = seminarCard(page, TITLES[1]);
+      77 |   await expect(finished).toBeVisible();
+    > 78 |   await expect(finished.locator('[data-testid="seminar-nearest-date"]:visible')).toHaveCount(0);
+         |                                                                                  ^
+      79 |   await expect(finished.locator(`a[href="${fixture.detailPaths[1]}"]`).first()).toBeVisible();
+      80 |   await expect(seminarCard(page, TITLES[0]).locator('[data-testid="seminar-nearest-date"]')).toContainText('4 ноя');
+      81 | });
+        at /private/tmp/ikpk-seminar-start-red-20261022/web/tests/seminar-start-visibility.browser.ts:78:82
+
+    Error Context: test-results/seminar-start-visibility.b-7a46e-and-advances-repeat-session-start-moscow/error-context.md
+
+
+(node:20853) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+[8/18] [start-moscow] › tests/seminar-start-visibility.browser.ts:82:1 › seminar route retains description and only offers the future session
+  7) [start-moscow] › tests/seminar-start-visibility.browser.ts:82:1 › seminar route retains description and only offers the future session
+
+    Error: expect(locator).toHaveCount(expected) failed
+
+    Locator:  locator('[data-seminar-schedule-card]:visible')
+    Expected: 1
+    Received: 2
+    Timeout:  2000ms
+
+    Call log:
+      - Expect "toHaveCount" locator('[data-seminar-schedule-card]:visible') with timeout 2000ms
+      - waiting for locator('[data-seminar-schedule-card]:visible')
+        21 × locator resolved to 2 elements
+           - unexpected value "2"
+
+
+      84 |   await expect(page.getByRole('heading', { name: TITLES[0], exact: true })).toBeVisible();
+      85 |   await expect(page.locator('.seminar-content')).toContainText('Описание сохраняется');
+    > 86 |   await expect(page.locator('[data-seminar-schedule-card]:visible')).toHaveCount(1);
+         |                                                                      ^
+      87 |   await expect(page.locator('[data-seminar-schedule-card]:visible')).toContainText('Сеанс 61004');
+      88 |   await expect(page.locator('a[href="/registration-fixture-61001"]:visible')).toHaveCount(0);
+      89 | });
+        at /private/tmp/ikpk-seminar-start-red-20261022/web/tests/seminar-start-visibility.browser.ts:86:70
+
+    Error Context: test-results/seminar-start-visibility.b-45477-y-offers-the-future-session-start-moscow/error-context.md
+
+
+(node:20880) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+[9/18] [start-moscow] › tests/seminar-start-visibility.browser.ts:90:1 › historical seminar remains reachable when its last registration expires
+  8) [start-moscow] › tests/seminar-start-visibility.browser.ts:90:1 › historical seminar remains reachable when its last registration expires
+
+    Error: expect(locator).toHaveCount(expected) failed
+
+    Locator:  locator('.seminar-register-link:visible')
+    Expected: 0
+    Received: 1
+    Timeout:  2000ms
+
+    Call log:
+      - Expect "toHaveCount" locator('.seminar-register-link:visible') with timeout 2000ms
+      - waiting for locator('.seminar-register-link:visible')
+        21 × locator resolved to 1 element
+           - unexpected value "1"
+
+
+      94 |   await expect(page.getByRole('heading', { name: TITLES[1], exact: true })).toBeVisible();
+      95 |   await expect(page.locator('.seminar-content')).toContainText('Описание сохраняется');
+    > 96 |   await expect(page.locator('.seminar-register-link:visible')).toHaveCount(0);
+         |                                                                ^
+      97 | });
+      98 |
+        at /private/tmp/ikpk-seminar-start-red-20261022/web/tests/seminar-start-visibility.browser.ts:96:64
+
+    Error Context: test-results/seminar-start-visibility.b-bab43-s-last-registration-expires-start-moscow/error-context.md
+
+
+(node:20942) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+[10/18] [start-los-angeles] › tests/seminar-start-visibility.browser.ts:30:1 › control: confirmed sessions and last month are offered before start
+[11/18] [start-los-angeles] › tests/seminar-start-visibility.browser.ts:38:1 › home loaded after start advances hero and refills beyond original three
+  9) [start-los-angeles] › tests/seminar-start-visibility.browser.ts:38:1 › home loaded after start advances hero and refills beyond original three
+
+    Error: expect(locator).toContainText(expected) failed
+
+    Locator: locator('.hero-d-next')
+    Expected substring: "Следующий анонс"
+    Received string:    "Ближайший семинарГраничный семинар31 окт – 2 ноя · Онлайн · Бесплатно"
+    Timeout: 2000ms
+
+    Call log:
+      - Expect "toContainText" locator('.hero-d-next') with timeout 2000ms
+      - waiting for locator('.hero-d-next')
+        21 × locator resolved to <a class="hero-d-next" data-astro-cid-xex2zu2w="" href="/institut-klinicheskoy-prikladnoy-kineziologii/vebinary-i-mezhseminarskie-vstrechi-ikpk/start-fixture-0">…</a>
+           - unexpected value "Ближайший семинарГраничный семинар31 окт – 2 ноя · Онлайн · Бесплатно"
+
+
+      21 | const seminarCard = (page: Page, title: string) => page.locator('[data-testid="course-group-seminar-card"]').filter({ has: page.getByRole('heading', { name: title, exact: true }) });
+      22 | async function expectNextHome(page: Page) {
+    > 23 |   await expect(page.locator('.hero-d-next')).toContainText(TITLES[2]);
+         |                                              ^
+      24 |   await expect(page.locator('.upcoming-card:visible')).toHaveCount(3);
+      25 |   // Outside the original top three: expired slots must refill.
+      26 |   await expect(page.locator('.upcoming-card:visible').filter({ hasText: TITLES[3] })).toBeVisible();
+        at expectNextHome (/private/tmp/ikpk-seminar-start-red-20261022/web/tests/seminar-start-visibility.browser.ts:23:46)
+        at /private/tmp/ikpk-seminar-start-red-20261022/web/tests/seminar-start-visibility.browser.ts:39:39
+
+    Error Context: test-results/seminar-start-visibility.b-d2088-fills-beyond-original-three-start-los-angeles/error-context.md
+
+
+(node:20981) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+[12/18] [start-los-angeles] › tests/seminar-start-visibility.browser.ts:41:1 › open home removes offers at exact equality without reload
+  10) [start-los-angeles] › tests/seminar-start-visibility.browser.ts:41:1 › open home removes offers at exact equality without reload
+
+    Error: expect(locator).toContainText(expected) failed
+
+    Locator: locator('.hero-d-next')
+    Expected substring: "Следующий анонс"
+    Received string:    "Ближайший семинарГраничный семинар31 окт – 2 ноя · Онлайн · Бесплатно"
+    Timeout: 2000ms
+
+    Call log:
+      - Expect "toContainText" locator('.hero-d-next') with timeout 2000ms
+      - waiting for locator('.hero-d-next')
+        21 × locator resolved to <a class="hero-d-next" data-astro-cid-xex2zu2w="" href="/institut-klinicheskoy-prikladnoy-kineziologii/vebinary-i-mezhseminarskie-vstrechi-ikpk/start-fixture-0">…</a>
+           - unexpected value "Ближайший семинарГраничный семинар31 окт – 2 ноя · Онлайн · Бесплатно"
+
+
+      21 | const seminarCard = (page: Page, title: string) => page.locator('[data-testid="course-group-seminar-card"]').filter({ has: page.getByRole('heading', { name: title, exact: true }) });
+      22 | async function expectNextHome(page: Page) {
+    > 23 |   await expect(page.locator('.hero-d-next')).toContainText(TITLES[2]);
+         |                                              ^
+      24 |   await expect(page.locator('.upcoming-card:visible')).toHaveCount(3);
+      25 |   // Outside the original top three: expired slots must refill.
+      26 |   await expect(page.locator('.upcoming-card:visible').filter({ hasText: TITLES[3] })).toBeVisible();
+        at expectNextHome (/private/tmp/ikpk-seminar-start-red-20261022/web/tests/seminar-start-visibility.browser.ts:23:46)
+        at /private/tmp/ikpk-seminar-start-red-20261022/web/tests/seminar-start-visibility.browser.ts:44:41
+
+    Error Context: test-results/seminar-start-visibility.b-4327f-act-equality-without-reload-start-los-angeles/error-context.md
+
+
+(node:21019) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+[13/18] [start-los-angeles] › tests/seminar-start-visibility.browser.ts:46:1 › focus and visibility resume reconcile home after a missed timer
+  11) [start-los-angeles] › tests/seminar-start-visibility.browser.ts:46:1 › focus and visibility resume reconcile home after a missed timer
+
+    Error: expect(locator).toContainText(expected) failed
+
+    Locator: locator('.hero-d-next')
+    Expected substring: "Следующий анонс"
+    Received string:    "Ближайший семинарГраничный семинар31 окт – 2 ноя · Онлайн · Бесплатно"
+    Timeout: 2000ms
+
+    Call log:
+      - Expect "toContainText" locator('.hero-d-next') with timeout 2000ms
+      - waiting for locator('.hero-d-next')
+        21 × locator resolved to <a class="hero-d-next" data-astro-cid-xex2zu2w="" href="/institut-klinicheskoy-prikladnoy-kineziologii/vebinary-i-mezhseminarskie-vstrechi-ikpk/start-fixture-0">…</a>
+           - unexpected value "Ближайший семинарГраничный семинар31 окт – 2 ноя · Онлайн · Бесплатно"
+
+
+      21 | const seminarCard = (page: Page, title: string) => page.locator('[data-testid="course-group-seminar-card"]').filter({ has: page.getByRole('heading', { name: title, exact: true }) });
+      22 | async function expectNextHome(page: Page) {
+    > 23 |   await expect(page.locator('.hero-d-next')).toContainText(TITLES[2]);
+         |                                              ^
+      24 |   await expect(page.locator('.upcoming-card:visible')).toHaveCount(3);
+      25 |   // Outside the original top three: expired slots must refill.
+      26 |   await expect(page.locator('.upcoming-card:visible').filter({ hasText: TITLES[3] })).toBeVisible();
+        at expectNextHome (/private/tmp/ikpk-seminar-start-red-20261022/web/tests/seminar-start-visibility.browser.ts:23:46)
+        at /private/tmp/ikpk-seminar-start-red-20261022/web/tests/seminar-start-visibility.browser.ts:52:9
+
+    Error Context: test-results/seminar-start-visibility.b-5c63b-e-home-after-a-missed-timer-start-los-angeles/error-context.md
+
+
+(node:21391) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+[14/18] [start-los-angeles] › tests/seminar-start-visibility.browser.ts:54:1 › schedule loaded after start removes expired offers and their final month
+  12) [start-los-angeles] › tests/seminar-start-visibility.browser.ts:54:1 › schedule loaded after start removes expired offers and their final month
+
+    Error: expect(locator).toHaveCount(expected) failed
+
+    Locator:  locator('[data-schedule-filter="month"]').locator('option[value="2026-10"]')
+    Expected: 0
+    Received: 1
+    Timeout:  2000ms
+
+    Call log:
+      - Expect "toHaveCount" locator('[data-schedule-filter="month"]').locator('option[value="2026-10"]') with timeout 2000ms
+      - waiting for locator('[data-schedule-filter="month"]').locator('option[value="2026-10"]')
+        21 × locator resolved to 1 element
+           - unexpected value "1"
+
+
+      55 |   await open(page, '/raspisanie-i-tseny', AFTER);
+      56 |   await expect(month(page)).toBeEnabled();
+    > 57 |   await expect(month(page).locator('option[value="2026-10"]')).toHaveCount(0);
+         |                                                                ^
+      58 |   await expect(shownCards(page)).toHaveCount(25);
+      59 |   await expect(shownCards(page).filter({ hasText: 'Сеанс 61001' })).toHaveCount(0);
+      60 |   await expect(shownCards(page).filter({ hasText: 'Сеанс 61004' })).toBeVisible();
+        at /private/tmp/ikpk-seminar-start-red-20261022/web/tests/seminar-start-visibility.browser.ts:57:64
+
+    Error Context: test-results/seminar-start-visibility.b-7cbc5-ffers-and-their-final-month-start-los-angeles/error-context.md
+
+
+(node:22034) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+[15/18] [start-los-angeles] › tests/seminar-start-visibility.browser.ts:62:1 › open schedule updates month, counts and pagination at the boundary
+  13) [start-los-angeles] › tests/seminar-start-visibility.browser.ts:62:1 › open schedule updates month, counts and pagination at the boundary
+
+    Error: expect(locator).toHaveCount(expected) failed
+
+    Locator:  locator('[data-schedule-filter="month"]').locator('option[value="2026-10"]')
+    Expected: 0
+    Received: 1
+    Timeout:  2000ms
+
+    Call log:
+      - Expect "toHaveCount" locator('[data-schedule-filter="month"]').locator('option[value="2026-10"]') with timeout 2000ms
+      - waiting for locator('[data-schedule-filter="month"]').locator('option[value="2026-10"]')
+        21 × locator resolved to 1 element
+           - unexpected value "1"
+
+
+      68 |   await expect(shownCards(page)).toHaveCount(2);
+      69 |   await page.clock.runFor(1_000);
+    > 70 |   await expect(month(page).locator('option[value="2026-10"]')).toHaveCount(0);
+         |                                                                ^
+      71 |   await expect(secondPage).toHaveCount(0);
+      72 |   await expect(shownCards(page)).toHaveCount(25);
+      73 | });
+        at /private/tmp/ikpk-seminar-start-red-20261022/web/tests/seminar-start-visibility.browser.ts:70:64
+
+    Error Context: test-results/seminar-start-visibility.b-d4c22--pagination-at-the-boundary-start-los-angeles/error-context.md
+
+
+(node:22546) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+[16/18] [start-los-angeles] › tests/seminar-start-visibility.browser.ts:74:1 › program retains course description but drops final started date and advances repeat session
+  14) [start-los-angeles] › tests/seminar-start-visibility.browser.ts:74:1 › program retains course description but drops final started date and advances repeat session
+
+    Error: expect(locator).toHaveCount(expected) failed
+
+    Locator:  locator('[data-testid="course-group-seminar-card"]').filter({ has: getByRole('heading', { name: 'Последний сеанс курса', exact: true }) }).locator('[data-testid="seminar-nearest-date"]:visible')
+    Expected: 0
+    Received: 1
+    Timeout:  2000ms
+
+    Call log:
+      - Expect "toHaveCount" locator('[data-testid="course-group-seminar-card"]').filter({ has: getByRole('heading', { name: 'Последний сеанс курса', exact: true }) }).locator('[data-testid="seminar-nearest-date"]:visible') with timeout 2000ms
+      - waiting for locator('[data-testid="course-group-seminar-card"]').filter({ has: getByRole('heading', { name: 'Последний сеанс курса', exact: true }) }).locator('[data-testid="seminar-nearest-date"]:visible')
+        21 × locator resolved to 1 element
+           - unexpected value "1"
+
+
+      76 |   const finished = seminarCard(page, TITLES[1]);
+      77 |   await expect(finished).toBeVisible();
+    > 78 |   await expect(finished.locator('[data-testid="seminar-nearest-date"]:visible')).toHaveCount(0);
+         |                                                                                  ^
+      79 |   await expect(finished.locator(`a[href="${fixture.detailPaths[1]}"]`).first()).toBeVisible();
+      80 |   await expect(seminarCard(page, TITLES[0]).locator('[data-testid="seminar-nearest-date"]')).toContainText('4 ноя');
+      81 | });
+        at /private/tmp/ikpk-seminar-start-red-20261022/web/tests/seminar-start-visibility.browser.ts:78:82
+
+    Error Context: test-results/seminar-start-visibility.b-7a46e-and-advances-repeat-session-start-los-angeles/error-context.md
+
+
+(node:22593) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+[17/18] [start-los-angeles] › tests/seminar-start-visibility.browser.ts:82:1 › seminar route retains description and only offers the future session
+  15) [start-los-angeles] › tests/seminar-start-visibility.browser.ts:82:1 › seminar route retains description and only offers the future session
+
+    Error: expect(locator).toHaveCount(expected) failed
+
+    Locator:  locator('[data-seminar-schedule-card]:visible')
+    Expected: 1
+    Received: 2
+    Timeout:  2000ms
+
+    Call log:
+      - Expect "toHaveCount" locator('[data-seminar-schedule-card]:visible') with timeout 2000ms
+      - waiting for locator('[data-seminar-schedule-card]:visible')
+        21 × locator resolved to 2 elements
+           - unexpected value "2"
+
+
+      84 |   await expect(page.getByRole('heading', { name: TITLES[0], exact: true })).toBeVisible();
+      85 |   await expect(page.locator('.seminar-content')).toContainText('Описание сохраняется');
+    > 86 |   await expect(page.locator('[data-seminar-schedule-card]:visible')).toHaveCount(1);
+         |                                                                      ^
+      87 |   await expect(page.locator('[data-seminar-schedule-card]:visible')).toContainText('Сеанс 61004');
+      88 |   await expect(page.locator('a[href="/registration-fixture-61001"]:visible')).toHaveCount(0);
+      89 | });
+        at /private/tmp/ikpk-seminar-start-red-20261022/web/tests/seminar-start-visibility.browser.ts:86:70
+
+    Error Context: test-results/seminar-start-visibility.b-45477-y-offers-the-future-session-start-los-angeles/error-context.md
+
+
+(node:22953) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+[18/18] [start-los-angeles] › tests/seminar-start-visibility.browser.ts:90:1 › historical seminar remains reachable when its last registration expires
+  16) [start-los-angeles] › tests/seminar-start-visibility.browser.ts:90:1 › historical seminar remains reachable when its last registration expires
+
+    Error: expect(locator).toHaveCount(expected) failed
+
+    Locator:  locator('.seminar-register-link:visible')
+    Expected: 0
+    Received: 1
+    Timeout:  2000ms
+
+    Call log:
+      - Expect "toHaveCount" locator('.seminar-register-link:visible') with timeout 2000ms
+      - waiting for locator('.seminar-register-link:visible')
+        21 × locator resolved to 1 element
+           - unexpected value "1"
+
+
+      94 |   await expect(page.getByRole('heading', { name: TITLES[1], exact: true })).toBeVisible();
+      95 |   await expect(page.locator('.seminar-content')).toContainText('Описание сохраняется');
+    > 96 |   await expect(page.locator('.seminar-register-link:visible')).toHaveCount(0);
+         |                                                                ^
+      97 | });
+      98 |
+        at /private/tmp/ikpk-seminar-start-red-20261022/web/tests/seminar-start-visibility.browser.ts:96:64
+
+    Error Context: test-results/seminar-start-visibility.b-bab43-s-last-registration-expires-start-los-angeles/error-context.md
+
+
+  16 failed
+    [start-moscow] › tests/seminar-start-visibility.browser.ts:38:1 › home loaded after start advances hero and refills beyond original three
+    [start-moscow] › tests/seminar-start-visibility.browser.ts:41:1 › open home removes offers at exact equality without reload
+    [start-moscow] › tests/seminar-start-visibility.browser.ts:46:1 › focus and visibility resume reconcile home after a missed timer
+    [start-moscow] › tests/seminar-start-visibility.browser.ts:54:1 › schedule loaded after start removes expired offers and their final month
+    [start-moscow] › tests/seminar-start-visibility.browser.ts:62:1 › open schedule updates month, counts and pagination at the boundary
+    [start-moscow] › tests/seminar-start-visibility.browser.ts:74:1 › program retains course description but drops final started date and advances repeat session
+    [start-moscow] › tests/seminar-start-visibility.browser.ts:82:1 › seminar route retains description and only offers the future session
+    [start-moscow] › tests/seminar-start-visibility.browser.ts:90:1 › historical seminar remains reachable when its last registration expires
+    [start-los-angeles] › tests/seminar-start-visibility.browser.ts:38:1 › home loaded after start advances hero and refills beyond original three
+    [start-los-angeles] › tests/seminar-start-visibility.browser.ts:41:1 › open home removes offers at exact equality without reload
+    [start-los-angeles] › tests/seminar-start-visibility.browser.ts:46:1 › focus and visibility resume reconcile home after a missed timer
+    [start-los-angeles] › tests/seminar-start-visibility.browser.ts:54:1 › schedule loaded after start removes expired offers and their final month
+    [start-los-angeles] › tests/seminar-start-visibility.browser.ts:62:1 › open schedule updates month, counts and pagination at the boundary
+    [start-los-angeles] › tests/seminar-start-visibility.browser.ts:74:1 › program retains course description but drops final started date and advances repeat session
+    [start-los-angeles] › tests/seminar-start-visibility.browser.ts:82:1 › seminar route retains description and only offers the future session
+    [start-los-angeles] › tests/seminar-start-visibility.browser.ts:90:1 › historical seminar remains reachable when its last registration expires
+  2 passed (48.8s)
