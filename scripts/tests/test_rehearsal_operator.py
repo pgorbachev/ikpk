@@ -1,10 +1,13 @@
+import hashlib
+import io
 import json
 import shlex
 import subprocess
+import tarfile
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from scripts.rehearsal import staging193
 
@@ -27,6 +30,76 @@ class OperatorAdmissionTests(unittest.TestCase):
             "createdAt": "2026-10-18T10:00:00Z",
         }]
         self.jobs = [{"name": name, "status": "completed", "conclusion": "success"} for name in JOBS]
+
+    def _browser_candidate(self, root, manifest_source_sha=SHA):
+        operation_id = "capture-op"
+        snapshot_id = "snapshot-demo"
+        manifest = {"version": 1, "host": "194.226.99.10", "siteUrl": "https://194.226.99.10",
+                    "sourceId": "demo193-cms", "operationId": operation_id,
+                    "sourceSha": manifest_source_sha, "capturedAt": "2026-10-22T10:00:00.000Z",
+                    "schemaDigest": "schema-digest", "databaseSha256": "database-digest",
+                    "mediaManifestSha256": "media-digest"}
+        manifest_bytes = json.dumps(manifest, separators=(",", ":")).encode()
+        snapshot = {"sourcePolicy": "demo-publication-only", "sourceAge": "untracked",
+                    "origin": {"kind": "server-db", "sourceId": "demo193-cms"},
+                    "snapshotId": snapshot_id,
+                    "captureProof": {"version": 1, "method": "quiesced-sqlite-backup",
+                        "sourceId": "demo193-cms", "captureId": operation_id,
+                        "schemaDigest": "schema-digest", "databaseDigest": "database-digest",
+                        "mediaManifestDigest": "media-digest",
+                        "bundleDigest": hashlib.sha256(manifest_bytes).hexdigest()}}
+        static_root = Path(root) / "static"
+        snapshot_root = Path(root) / "snapshot"
+        static_root.mkdir()
+        snapshot_root.mkdir()
+        (static_root / "index.html").write_text("candidate", encoding="utf-8")
+        static_digest = staging193._static_tree_sha256(static_root)
+        release = {"commit": SHA, "operationId": operation_id,
+                   "staticTreeSha256": static_digest, "snapshotId": snapshot_id}
+        (static_root / "release.json").write_text(json.dumps(release), encoding="utf-8")
+        (snapshot_root / "snapshot.json").write_text(json.dumps(snapshot), encoding="utf-8")
+        (snapshot_root / "capture-manifest.json").write_bytes(manifest_bytes)
+        archive = io.BytesIO()
+        with tarfile.open(fileobj=archive, mode="w:") as bundle:
+            for base in (static_root, snapshot_root):
+                for path in sorted(base.rglob("*")):
+                    if path.is_file():
+                        name = f"{base.name}/{path.relative_to(base).as_posix()}"
+                        payload = path.read_bytes()
+                        member = tarfile.TarInfo(name)
+                        member.size = len(payload)
+                        bundle.addfile(member, io.BytesIO(payload))
+        return operation_id, static_digest, archive.getvalue()
+
+    def test_browser_check_accepts_real_demo_capture_proof_without_source_sha(self):
+        with tempfile.TemporaryDirectory(prefix="ikpk-browser-proof-") as temporary:
+            root = Path(temporary)
+            (root / "web/node_modules/.bin").mkdir(parents=True)
+            (root / "web/node_modules/.bin/playwright").touch()
+            operation_id, digest, archive = self._browser_candidate(root)
+            server = MagicMock()
+            server.server_address = ("127.0.0.1", 12345)
+            thread = MagicMock()
+            with patch.object(staging193, "ROOT", root), \
+                 patch.object(staging193.socketserver, "ThreadingTCPServer", return_value=server), \
+                 patch.object(staging193.threading, "Thread", return_value=thread), \
+                 patch.object(staging193.subprocess, "run", return_value=subprocess.CompletedProcess([], 0)) as run:
+                staging193.browser_check(SHA, operation_id, digest, archive)
+            run.assert_called_once()
+
+    def test_browser_check_rejects_demo_capture_manifest_for_another_source_sha(self):
+        with tempfile.TemporaryDirectory(prefix="ikpk-browser-proof-") as temporary:
+            root = Path(temporary)
+            (root / "web/node_modules/.bin").mkdir(parents=True)
+            (root / "web/node_modules/.bin/playwright").touch()
+            operation_id, digest, archive = self._browser_candidate(root, manifest_source_sha="b" * 40)
+            with patch.object(staging193, "ROOT", root), \
+                 patch.object(staging193.socketserver, "ThreadingTCPServer") as server, \
+                 patch.object(staging193.subprocess, "run") as run:
+                with self.assertRaisesRegex(staging193.Refusal, "not the sealed CMS capture"):
+                    staging193.browser_check(SHA, operation_id, digest, archive)
+            server.assert_not_called()
+            run.assert_not_called()
 
     def _capture(self, argv):
         if argv[:2] == ["gh", "repo"]:
