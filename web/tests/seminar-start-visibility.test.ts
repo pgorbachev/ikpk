@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { startTimeFingerprint } from '../../cms/src/seminar-management/start-time';
 import * as scheduleWindow from '../src/lib/schedule-window';
 import { validateSnapshotContract } from '../scripts/lib/content-contract';
 import type { Snapshot } from '../scripts/lib/content-snapshot';
@@ -8,8 +9,10 @@ import type { Snapshot } from '../scripts/lib/content-snapshot';
 const webinar = {
   id: 22, status: 'active', startAt: '2026-10-22T00:00:00.000Z',
   endAt: '2026-10-22T00:00:00.000Z', startsAtInstant: '2026-10-22T16:00:00Z',
+  startTimeConfirmed: true, startTimeConfirmation: '',
   startTimeZone: 'Europe/Moscow', additionalText: 'Начало в 19:00',
 };
+webinar.startTimeConfirmation = startTimeFingerprint(webinar)!;
 type Entry = Partial<typeof webinar>;
 
 function beforeStart(entry: Entry, now: string): boolean {

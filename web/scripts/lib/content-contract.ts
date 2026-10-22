@@ -1,3 +1,4 @@
+import { isLegacyPinnedSchedule, seminarStartReport } from './seminar-start-contract.ts';
 import type { Snapshot } from './content-snapshot.ts';
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
@@ -25,7 +26,8 @@ export interface ContractViolation {
   type: string;
   recordId: string;
   field?: string;
-  rule: 'required-field-empty' | 'duplicate-identifier' | 'broken-relation' | 'slug-not-url-safe';
+  rule: 'required-field-empty' | 'duplicate-identifier' | 'broken-relation' | 'slug-not-url-safe' | 'unconfirmed-start-time';
+  reason?: string;
   relatedRecordIds?: string[];
 }
 
@@ -99,6 +101,12 @@ export function validateSnapshotContract(snapshot: Snapshot): { ok: boolean; vio
   const institutes = types.institutes ?? [];
   const teachers = types.teachers ?? [];
   const schedule = types.schedule ?? types.schedule_entries ?? [];
+  if (!isLegacyPinnedSchedule(snapshot)) {
+    for (const issue of seminarStartReport(snapshot)) {
+      violations.push({ type: 'schedule', recordId: issue.recordId, field: 'startsAtInstant',
+        rule: 'unconfirmed-start-time', reason: issue.reason });
+    }
+  }
 
   for (const article of articles) {
     requireGroup('articles', article, ['slug'], violations);
@@ -211,7 +219,7 @@ function assertSnapshotContractCore(snapshot: Snapshot, allowDemoProof: boolean)
     .sort((a, b) => b[1] - a[1])
     .map(([key, count]) => `${key} ×${count}`)
     .join('; ');
-  const examples = violations.slice(0, 3).map((v) => v.recordId).join(', ');
+  const examples = violations.map((v) => `${v.recordId}${v.reason ? `: ${v.reason}` : ''}`).join('; ');
   throw new Error(`контракт снимка нарушен: ${violations.length} — ${summary}. Примеры: ${examples}`);
 }
 

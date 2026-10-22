@@ -13,6 +13,7 @@ import { registerSiteRefresh } from './seminar-management/site-refresh';
 export default {
   register({ strapi }) {
     strapi.customFields.register({ name: 'wall-clock-datetime', type: 'datetime' });
+    strapi.customFields.register({ name: 'start-time-confirmation', type: 'boolean' });
     registerSeminarUid(strapi);
     registerSeminarDocuments(strapi);
     registerUnlinkedEntryList(strapi);

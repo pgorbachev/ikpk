@@ -91,6 +91,20 @@
       "type": "relation",
       "relation": "manyToMany",
       "target": "api::teacher.teacher"
+    },
+    "startsAtInstant": {
+      "type": "datetime"
+    },
+    "startTimeZone": {
+      "type": "string"
+    },
+    "startTimeConfirmed": {
+      "type": "boolean",
+      "default": false,
+      "customField": "global::start-time-confirmation"
+    },
+    "startTimeConfirmation": {
+      "type": "string"
     }
   }
 }

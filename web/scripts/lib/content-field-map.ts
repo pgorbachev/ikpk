@@ -140,6 +140,11 @@ export const FIELD_MAP: readonly FieldMapEntry[] = [
   { type: 'schedule_entries', field: 'legacy_id', source: 'legacy_id' },
   { type: 'schedule_entries', field: 'name', source: 'name' },
   { type: 'schedule_entries', field: 'startAt', source: 'startAt' },
+  { type: 'schedule_entries', field: 'startsAtInstant', source: 'startsAtInstant' },
+  { type: 'schedule_entries', field: 'startTimeZone', source: 'startTimeZone' },
+  { type: 'schedule_entries', field: 'startTimeConfirmed', source: 'startTimeConfirmed' },
+  { type: 'schedule_entries', field: 'startTimeConfirmation', source: 'startTimeConfirmation' },
+
   { type: 'schedule_entries', field: 'endAt', source: 'endAt' },
   { type: 'schedule_entries', field: 'city', source: 'city' },
   { type: 'schedule_entries', field: 'price', source: 'price' },

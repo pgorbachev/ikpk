@@ -28,6 +28,9 @@ const ENTRY_FIELDS = [
   ['seminar', 'Семинар', 6, true, ''],
   ['startAt', 'Начало', 6, true, ''],
   ['endAt', 'Окончание', 6, true, ''],
+  ['startsAtInstant', 'Точный момент начала', 6, true, 'Дата и время в часовом поясе вашего браузера. Ниже проверьте результат в зоне проведения.'],
+  ['startTimeZone', 'Зона проведения', 6, true, 'IANA, например Europe/Moscow.'],
+  ['startTimeConfirmed', 'Время начала проверено', 12, true, 'При изменении даты, момента или зоны сохраните запись, затем подтвердите время заново.'],
   ['image', 'Изображение', 6, true, ''],
   ['city', 'Город', 6, true, ''],
   ['entry_status', 'Статус', 6, true, ''],
@@ -41,7 +44,7 @@ const ENTRY_FIELDS = [
 ];
 
 // The approved migration carries this source flag as data without adding editor UI.
-const HIDDEN = new Set(['name', 'admin_label', 'legacy_id', 'teachers', 'isEventCollection']);
+const HIDDEN = new Set(['name', 'admin_label', 'legacy_id', 'teachers', 'isEventCollection', 'startTimeConfirmation']);
 
 function labelOf(fields, name, fallback) {
   const found = fields.find((field) => field[0] === name);

@@ -1,3 +1,4 @@
+import { applyStartTimeConfirmation, dayInZone, startTimePublicationError } from './start-time.js';
 import { errors } from '@strapi/utils';
 import {
   FOREIGN_LINK_MESSAGE,
@@ -181,6 +182,8 @@ async function assertPublishedWrite(strapi, context) {
     startAt: Object.prototype.hasOwnProperty.call(data, 'startAt') ? data.startAt : existing?.startAt,
     endAt: Object.prototype.hasOwnProperty.call(data, 'endAt') ? data.endAt : existing?.endAt,
   });
+  const timeError = startTimePublicationError({ entry_status: 'active', ...existing, ...data }, dayInZone(new Date(), 'Europe/Moscow'));
+  if (timeError) messages.push(timeError);
   if (messages.length > 0) throw new ValidationError(messages.join(' '));
 }
 
@@ -192,6 +195,8 @@ async function applyEntryWrite(strapi, context) {
     readsExisting && context.params.documentId
       ? await findDraft(strapi, SCHEDULE_ENTRY_UID, context.params.documentId, ['seminar'])
       : null;
+  applyStartTimeConfirmation(data, context.action === 'clone' ? null : existing);
+  if (context.action === 'clone') { data.startTimeConfirmed = false; data.startTimeConfirmation = null; }
   const previousSeminarId = seminarIdOf(existing);
   const seminarId = await resolvedSeminarId(strapi, data, previousSeminarId);
   const name = decideEntryName({
@@ -224,6 +229,8 @@ async function assertEntryPublishable(strapi, context) {
     startAt: draft.startAt,
     endAt: draft.endAt,
   });
+  const timeError = startTimePublicationError(draft, dayInZone(new Date(), 'Europe/Moscow'));
+  if (timeError) messages.push(timeError);
   if (messages.length > 0) throw new ValidationError(messages.join(' '));
   const name = decideEntryName({
     trustedImport: false,
@@ -347,8 +354,8 @@ export function registerSeminarDocuments(strapi) {
       context.uid === SCHEDULE_ENTRY_UID &&
       (context.action === 'create' || context.action === 'update' || context.action === 'clone')
     ) {
-      await assertPublishedWrite(strapi, context);
       await applyEntryWrite(strapi, context);
+      await assertPublishedWrite(strapi, context);
       return next();
     }
     if (context.uid === SCHEDULE_ENTRY_UID && context.action === 'publish') {
