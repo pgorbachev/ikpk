@@ -466,6 +466,50 @@ test.describe('чат: наша кнопка, чужой интерфейс по
     ).toBe(true);
   });
 
+  test('кнопка открывает список каналов CRM site-button и повторно раскрывает его без второй загрузки', async ({ page }) => {
+    const seen = await guard(page, {
+      // Публичный CRM site_button loader создаёт BX.SiteButton, но не посылает
+      // onBitrixLiveChat. `buttons.show()` раскрывает штатный список каналов.
+      chatLoaderBody: `(function () {
+        var chooser = document.createElement('div');
+        chooser.setAttribute('data-site-button-chooser', '');
+        chooser.setAttribute('role', 'dialog');
+        chooser.hidden = true;
+        var channel = document.createElement('button');
+        channel.textContent = 'Telegram';
+        var close = document.createElement('button');
+        close.textContent = 'Закрыть';
+        close.addEventListener('click', function () { chooser.hidden = true; });
+        chooser.appendChild(channel);
+        chooser.appendChild(close);
+        document.body.appendChild(chooser);
+        window.BX = window.BX || {};
+        window.BX.SiteButton = {
+          buttons: {
+            show: function () {
+              chooser.hidden = false;
+              chooser.setAttribute('data-open-count', String(Number(chooser.getAttribute('data-open-count') || 0) + 1));
+            }
+          }
+        };
+      })();`,
+    });
+    await page.goto(url('/'));
+    const trigger = page.locator(`[${SEL_CHAT_TRIGGER}]`);
+    await trigger.click();
+
+    const chooser = page.locator('[data-site-button-chooser]');
+    await expect(chooser, 'первое нажатие должно раскрыть штатный chooser после ленивой загрузки site_button').toBeVisible();
+    await expect(chooser).toHaveAttribute('data-open-count', '1');
+    await chooser.getByRole('button', { name: 'Закрыть' }).click();
+    await expect(chooser, 'штатное закрытие должно скрыть chooser перед повторным открытием').toBeHidden();
+
+    await trigger.click();
+    await expect(chooser, 'повторное нажатие должно снова раскрыть chooser').toBeVisible();
+    await expect(chooser).toHaveAttribute('data-open-count', '2');
+    expect(seen.toHost(LOADER_HOST), 'повторное нажатие повторно загрузило внешний loader').toHaveLength(1);
+  });
+
   test('загрузчик не ответил — панель не появляется, а телефоны в подвале видны', async ({ page }) => {
     // Наша гарантия при неответившем стороннем загрузчике — подвал, и только он. Прежняя
     // редакция спеки обещала здесь ещё и часы работы; сужение названо ею прямо.
