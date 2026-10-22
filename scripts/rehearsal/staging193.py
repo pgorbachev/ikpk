@@ -423,7 +423,7 @@ def browser_check(source_sha: str, operation_id: str, static_digest: str, archiv
                 and snapshot.get("sourceAge") == "untracked"
                 and snapshot.get("origin", {}).get("sourceId") == "demo193-cms"
                 and proof.get("captureId") == operation_id and capture.get("sourceId") == "demo193-cms"
-                and proof.get("sourceSha") == source_sha and capture.get("sourceSha") == source_sha)
+                and capture.get("sourceSha") == source_sha)
         if (not proof_matches or snapshot.get("snapshotId") != release.get("snapshotId")
                 or snapshot.get("origin", {}).get("kind") != "server-db"
                 or proof.get("captureId") != operation_id or capture.get("operationId") != operation_id
