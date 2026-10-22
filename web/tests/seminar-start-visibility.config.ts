@@ -5,6 +5,7 @@ export default defineConfig({
   testDir: '.',
   testMatch: 'seminar-start-visibility.browser.ts',
   globalSetup: './helpers/seminar-start-global.ts',
+  outputDir: '../test-results/seminar-start',
   workers: 1,
   timeout: 20_000,
   expect: { timeout: 2_000 },
