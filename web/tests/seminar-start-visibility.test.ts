@@ -38,6 +38,11 @@ beforeEach(() => {
 afterEach(() => vi.useRealTimers());
 
 describe('seminar exact start boundary', () => {
+  it.each([undefined, false])('never offers an instant and zone without explicit confirmation: %s', (startTimeConfirmed) => {
+    const entry = { ...webinar, startTimeConfirmed };
+    expect(beforeStart(entry, '2026-10-22T15:59:59Z')).toBe(false);
+  });
+
   it.each([
     ['one second before', '2026-10-22T15:59:59Z', true],
     ['one millisecond before', '2026-10-22T15:59:59.999Z', true],

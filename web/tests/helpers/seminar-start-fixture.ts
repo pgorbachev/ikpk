@@ -3,6 +3,7 @@ import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync,
 import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { extname, join, resolve, sep } from 'node:path';
+import { startTimeFingerprint } from '../../../cms/src/seminar-management/start-time';
 
 export const BEFORE = '2026-10-31T15:59:59Z';
 export const AFTER = '2026-10-31T16:00:01Z';
@@ -25,16 +26,19 @@ export async function serveSeminarStartFixture() {
     description_html: '<p>Описание сохраняется после начала семинара.</p>',
     description_text: 'Описание сохраняется после начала семинара.', images: [], teachers: [],
   }));
-  const event = (id: number, seminarIndex: number, date: string, end = date) => ({
-    id, status: 'active', name: `fixture-${id}`, seminar: { id: seminarIndex + 1, name: TITLES[seminarIndex], slug: seminars[seminarIndex].slug },
-    institute: { id: 1, name: institute.name, shortname: 'ИКПК' },
-    startAt: `${date}T00:00:00.000Z`, endAt: `${end}T00:00:00.000Z`,
-    startsAtInstant: `${date}T16:00:00Z`, startTimeZone: 'Europe/Moscow',
-    teachers: [], image: null, isFree: true, isEventCollection: false, description: null,
-    oldPrice: 0, newPrice: 0, city: { id: 1, name: 'Онлайн' },
-    program: { id: 1, slug: group.slug, name: group.name },
-    additionalText: `Сеанс ${id}`, duration: '8', registrationFormLink: `/registration-fixture-${id}`,
-  });
+  const event = (id: number, seminarIndex: number, date: string, end = date) => {
+    const entry = {
+      id, status: 'active', name: `fixture-${id}`, seminar: { id: seminarIndex + 1, name: TITLES[seminarIndex], slug: seminars[seminarIndex].slug },
+      institute: { id: 1, name: institute.name, shortname: 'ИКПК' },
+      startAt: `${date}T00:00:00.000Z`, endAt: `${end}T00:00:00.000Z`,
+      startsAtInstant: `${date}T16:00:00Z`, startTimeZone: 'Europe/Moscow', startTimeConfirmed: true,
+      teachers: [], image: null, isFree: true, isEventCollection: false, description: null,
+      oldPrice: 0, newPrice: 0, city: { id: 1, name: 'Онлайн' },
+      program: { id: 1, slug: group.slug, name: group.name },
+      additionalText: `Сеанс ${id}`, duration: '8', registrationFormLink: `/registration-fixture-${id}`,
+    };
+    return { ...entry, startTimeConfirmation: startTimeFingerprint(entry) };
+  };
   const entries = [
     event(61001, 0, '2026-10-31', '2026-11-02'), event(61002, 1, '2026-10-31'),
     event(61003, 2, '2026-11-02'), event(61004, 0, '2026-11-04'),

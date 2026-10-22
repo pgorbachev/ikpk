@@ -1,148 +1,12 @@
-import { spawnSync } from 'node:child_process';
-import {
-  copyFileSync,
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from 'node:fs';
-import { tmpdir } from 'node:os';
+import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
 import { attr, findAll, textOf, walk } from './helpers/dom';
 import { MANAGER_PHONE, MANAGER_PHONE_HREF } from '../src/lib/navigation';
+import { buildSeminarDatesFixture } from './helpers/seminar-dates-fixture';
 
-const WEB_ROOT = join(import.meta.dirname, '..');
-const SNAPSHOT_SOURCE = join(WEB_ROOT, '..', 'fixtures', 'content-snapshot');
-const REFERENCE_DATE = '2026-09-15';
-const tempDirs: string[] = [];
-
-type Snapshot = {
-  referenceDate: string;
-  content: { types: Record<string, unknown[]> };
-  [key: string]: unknown;
-};
-
-type FixturePage = {
-  institute: { slug: string; legacy_id: string; name: string };
-  group: { slug: string; legacy_id: string; institute_legacy_id: string; name: string };
-  planned: { slug: string; name: string; course_group_legacy_id: string };
-  empty: { slug: string; name: string; course_group_legacy_id: string };
-};
-
-const tempDir = (prefix: string, parent = tmpdir()): string => {
-  const dir = mkdtempSync(join(parent, prefix));
-  tempDirs.push(dir);
-  return dir;
-};
-
-afterAll(() => {
-  for (const dir of tempDirs) rmSync(dir, { recursive: true, force: true });
-});
-
-function fixtureRecords(snapshot: Snapshot): FixturePage {
-  const groups = snapshot.content.types.course_groups as FixturePage['group'][];
-  const seminars = snapshot.content.types.seminars as FixturePage['planned'][];
-  const institutes = snapshot.content.types.institutes as FixturePage['institute'][];
-  const group = groups.find((item) =>
-    seminars.filter((seminar) => seminar.course_group_legacy_id === item.legacy_id).length >= 2,
-  );
-  if (!group) throw new Error('Pinned snapshot needs a program with at least two seminars');
-  const institute = institutes.find((item) => item.legacy_id === group.institute_legacy_id);
-  const [planned, empty] = seminars.filter(
-    (seminar) => seminar.course_group_legacy_id === group.legacy_id,
-  );
-  if (!institute || !planned || !empty) throw new Error('Fixture program is missing its institute or seminars');
-  return { institute, group, planned, empty };
-}
-
-function scheduleEntry(
-  page: FixturePage,
-  id: number,
-  status: string,
-  startAt: string,
-  endAt: string,
-  city: string,
-): Record<string, unknown> {
-  return {
-    id,
-    status,
-    name: `Fixture event ${id}`,
-    seminar: { id: 1, name: page.planned.name, slug: page.planned.slug },
-    institute: { id: 1, name: page.institute.name, shortname: page.institute.name },
-    startAt: `${startAt}T00:00:00.000Z`,
-    endAt: `${endAt}T00:00:00.000Z`,
-    startsAtInstant: `${startAt}T16:00:00Z`,
-    startTimeZone: 'Europe/Moscow',
-    teachers: [],
-    image: null,
-    isFree: true,
-    isEventCollection: false,
-    description: null,
-    oldPrice: 0,
-    newPrice: 0,
-    city: { id, name: city },
-    program: { id: 1, slug: page.group.slug, name: page.group.name },
-    additionalText: '',
-    duration: '',
-    registrationFormLink: '',
-  };
-}
-
-function renderedFixture(): { pages: FixturePage; outDir: string } {
-  const source = JSON.parse(readFileSync(join(SNAPSHOT_SOURCE, 'snapshot.json'), 'utf8')) as Snapshot;
-  const pages = fixtureRecords(source);
-  const types = source.content.types;
-
-  // The fixture is deliberately small: retain just the route records under test and
-  // empty unrelated collections so the second build does not copy or process media.
-  const fixtureTypes: Record<string, unknown[]> = Object.fromEntries(
-    Object.keys(types).map((name) => [name, []]),
-  );
-  fixtureTypes.institutes = [pages.institute];
-  fixtureTypes.course_groups = [pages.group];
-  fixtureTypes.seminars = [pages.planned, pages.empty];
-  fixtureTypes.schedule_entries = [
-    // Already started on the reference date: ongoing rows must not be offered.
-    scheduleEntry(pages, 465, 'active', '2026-09-10', '2026-09-20', 'Дальний конец'),
-    // Same first day: the visible end date lets this tie-break be checked in HTML.
-    scheduleEntry(pages, 90, 'active', '2026-09-10', '2026-09-18', 'Якорный город'),
-    // Same date range; city and numeric-ID ties are represented in the rendered
-    // schedule rows, while the program card intentionally exposes dates only.
-    scheduleEntry(pages, 10, 'active', '2026-09-10', '2026-09-18', 'Москва'),
-    scheduleEntry(pages, 9, 'active', '2026-09-10', '2026-09-18', 'Москва'),
-    scheduleEntry(pages, 24, 'active', '2026-09-15', '2026-09-15', 'Поздний старт'),
-    scheduleEntry(pages, 1, 'cancelled', '2026-09-01', '2026-09-30', 'ОТМЕНЕНО'),
-    scheduleEntry(pages, 2, 'active', '2026-09-01', '2026-09-14', 'ИСТЕКЛО'),
-  ];
-
-  const fixtureRoot = tempDir('ikpk-seminar-date-snapshot-');
-  // Astro uses cwd/.astro/.prerender for outDir outside cwd; widget probes
-  // already build there. Keep this fixture's prerender output in its own tree.
-  const buildParent = join(WEB_ROOT, '.astro');
-  mkdirSync(buildParent, { recursive: true });
-  const outDir = join(tempDir('ikpk-seminar-date-build-', buildParent), 'dist');
-  writeFileSync(
-    join(fixtureRoot, 'snapshot.json'),
-    `${JSON.stringify({ ...source, referenceDate: REFERENCE_DATE, content: { types: fixtureTypes } })}\n`,
-  );
-  copyFileSync(join(SNAPSHOT_SOURCE, 'collapsible_panels.json'), join(fixtureRoot, 'collapsible_panels.json'));
-
-  const astro = join(WEB_ROOT, 'node_modules', 'astro', 'bin', 'astro.mjs');
-  const result = spawnSync(process.execPath, [astro, 'build', '--outDir', outDir], {
-    cwd: WEB_ROOT,
-    encoding: 'utf8',
-    timeout: 120_000,
-    env: { ...process.env, CONTENT_SNAPSHOT_DIR: fixtureRoot },
-  });
-  if (result.error || result.status !== 0) {
-    throw new Error(
-      `Controlled Astro build failed (${result.status ?? 'no exit status'}):\n${result.error?.message ?? ''}\n${result.stdout}\n${result.stderr}`,
-    );
-  }
-  return { pages, outDir };
-}
+let fixture: ReturnType<typeof buildSeminarDatesFixture>;
+afterAll(() => fixture?.close());
 
 const readBuiltPage = (outDir: string, path: string): string =>
   readFileSync(join(outDir, path, 'index.html'), 'utf8');
@@ -161,7 +25,8 @@ describe('controlled schedule fixture is reflected in built program and seminar 
   it(
     'offers only unstarted sessions and retains the manager contact when no future date exists',
     () => {
-      const { pages, outDir } = renderedFixture();
+      fixture = buildSeminarDatesFixture();
+      const { pages, outDir } = fixture;
       const programPath = `/${pages.institute.slug}/${pages.group.slug}`;
       const plannedPath = `${programPath}/${pages.planned.slug}`;
       const emptyPath = `${programPath}/${pages.empty.slug}`;
@@ -181,7 +46,7 @@ describe('controlled schedule fixture is reflected in built program and seminar 
 
       const rows = findAll(plannedPage, (el) => attr(el, 'data-seminar-schedule-card') !== null);
       const rowText = rows.map(normalizedText);
-      expect(rows).toHaveLength(1);
+      expect(rows).toHaveLength(3);
       expect(rowText.some((text) => text.includes('Москва'))).toBe(false);
       expect(rowText.some((text) => text.includes('Дальний конец'))).toBe(false);
       expect(rowText.some((text) => text.includes('Поздний старт'))).toBe(true);

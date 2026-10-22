@@ -1,7 +1,11 @@
-import { describe, it, expect } from 'vitest';
-import { existsSync } from 'fs';
+import { afterAll, beforeAll, describe, it, expect } from 'vitest';
+import { existsSync, readFileSync } from 'fs';
 import { join } from 'path';
 import { dist, readPage } from './helpers/dist-pages';
+import { buildSeminarDatesFixture } from './helpers/seminar-dates-fixture';
+import { attr, findAll, walk } from './helpers/dom';
+import { getScheduleEntries, getSnapshotReferenceDate } from '../src/lib/data';
+import { isBeforeStart } from '../src/lib/schedule-window';
 
 // ─── Гейт по собранному dist: месяц доставляется разметкой ────────────────────
 // Спецификация: openspec/specs/schedule-month-filter/spec.md
@@ -10,8 +14,8 @@ import { dist, readPage } from './helpers/dist-pages';
 // месяцы, в которых что-то есть», «Контрол месяца не обещает того, чего не делает»,
 // «Клиентский код не выводит время».
 //
-// Файл КРАСНЫЙ по замыслу: признака месяца у карточек и контрола месяца в разметке
-// ещё нет.
+// Предмет существует по построению на малом синтетическом снимке. Исторический
+// снимок без подтверждённых моментов проверяется отдельно как характеристика.
 //
 // Почему гейт по разметке, а не браузерный: месяц выводится на этапе сборки, и
 // предмет проверки — отданный документ. Он же закрывает сценарий «без JavaScript»:
@@ -29,6 +33,9 @@ import { dist, readPage } from './helpers/dist-pages';
 //                находит именно его, а не соседний inline-скрипт.
 
 const PAGE = '/raspisanie-i-tseny/';
+let fixture: ReturnType<typeof buildSeminarDatesFixture>;
+beforeAll(() => { fixture = buildSeminarDatesFixture(); }, 150_000);
+afterAll(() => fixture?.close());
 
 const MONTH_NAMES = [
   'Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь',
@@ -38,9 +45,9 @@ const MONTH_NAMES = [
 const KEY = /^\d{4}-(0[1-9]|1[0-2])$/;
 
 function html(): string {
-  const file = join(dist, PAGE, 'index.html');
+  const file = join(fixture.outDir, PAGE, 'index.html');
   expect(existsSync(file), `нет ${file} — страница не собрана, проверять нечего`).toBe(true);
-  return readPage(PAGE);
+  return readFileSync(file, 'utf8');
 }
 
 interface ScheduleItem {
@@ -108,6 +115,14 @@ function controlsScript(): string {
 }
 
 describe('признак месяца у записей расписания', () => {
+  it('синтетический снимок даёт точные ключи и числа, включая событие на три месяца', () => {
+    expect(scheduleItems().map((item) => item.keys)).toEqual([
+      ['2026-09'], ['2026-09', '2026-10'], ['2026-10', '2026-11', '2026-12'], ['2027-01'],
+    ]);
+    expect(monthOptions().map(({ value, count }) => [value, count])).toEqual([
+      ['2026-09', 2], ['2026-10', 2], ['2026-11', 1], ['2026-12', 1], ['2027-01', 1],
+    ]);
+  });
   it('у каждой показанной записи непустой список ключей YYYY-MM', () => {
     const broken = scheduleItems()
       .map((item, index) => ({ index, item }))
@@ -208,7 +223,7 @@ describe('список месяцев и ключи записей сходят�
     // Формула ИМЕННО такая. Обе естественные и неверные записать сюда, чтобы их не
     // написали заново:
     //   «сумма = число записей на странице» — красна на исправном коде уже сейчас
-    //     (в данных есть события через границу месяца, id 414 и id 443);
+    //     (контролируемый снимок содержит переходы через одну и две границы);
     //   «сумма = записи + число записей с несколькими ключами» — верна только пока
     //     событие не длиннее двух месяцев; событие на три месяца даст три ключа и
     //     два пересечения, и проверка покраснеет на исправном коде.
@@ -262,4 +277,25 @@ describe('скрипт управления расписанием не выво
   // `@month-whole-key`, `@month-three-months`. Они исполняются внутри гейта
   // публикации (`test:e2e:schedule` в job `e2e-smoke`), а их исполнение стережёт
   // мета-гейт — то есть снятие проверки не оставляет предмет без гейта.
+});
+
+
+describe('исторический dist: неподтверждённые даты не становятся предложениями', () => {
+  it('число статических карточек равно числу будущих подтверждённых записей снимка', () => {
+    expect(existsSync(join(dist, PAGE, 'index.html')), 'основной dist должен быть собран').toBe(true);
+    const entries = getScheduleEntries();
+    expect(entries.length, 'характеризация требует непустой снимок').toBeGreaterThan(0);
+    const expected = entries.filter((entry) => entry.status === 'active'
+      && isBeforeStart(entry, getSnapshotReferenceDate()));
+    const built = readPage(PAGE);
+    const cards = findAll(built, (el) => attr(el, 'data-schedule-item') !== null);
+    expect(cards).toHaveLength(expected.length);
+    // The controlled fixture above proves the nonempty branch even when this
+    // historical snapshot has no confirmed start instants.
+    if (expected.length === 0) {
+      const control = findAll(built, (el) => el.tagName === 'select' && attr(el, 'data-schedule-filter') === 'month')[0];
+      expect(control, 'даже пустой снимок должен доставить контрол месяца').toBeTruthy();
+      expect([...walk(control!)].filter((el) => el.tagName === 'option').map((el) => attr(el, 'value'))).toEqual(['']);
+    }
+  });
 });
