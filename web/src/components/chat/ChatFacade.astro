@@ -353,6 +353,7 @@ const showFacade = config.state === 'address' && !isDemoOutput;
     const mount = document.querySelector('[data-chat-mount]');
     if (!trigger || !mount) return;
     let loaded = false;
+    let openProvider = null;
 
     function focusFirstFocusable(root) {
       if (!root || typeof root.querySelector !== 'function') return false;
@@ -386,24 +387,38 @@ const showFacade = config.state === 'address' && !isDemoOutput;
 
     function openWidget(widget) {
       if (!widget || typeof widget.open !== 'function') return;
-      watchForInterfaceAndFocus();
+      const open = function () {
+        openProvider = function () {
+          watchForInterfaceAndFocus();
+          widget.open();
+        };
+        openProvider();
+      };
       const subscriptionType =
         window.BX && window.BX.LiveChatWidget && window.BX.LiveChatWidget.SubscriptionType
           ? window.BX.LiveChatWidget.SubscriptionType.configLoaded
           : null;
       if (subscriptionType && typeof widget.subscribe === 'function') {
-        widget.subscribe({
-          type: subscriptionType,
-          callback: function () {
-            widget.open();
-          },
-        });
+        widget.subscribe({ type: subscriptionType, callback: open });
       } else {
-        widget.open();
+        open();
       }
     }
 
+    function openSiteButton(buttons) {
+      if (!buttons || typeof buttons.show !== 'function') return;
+      openProvider = function () {
+        watchForInterfaceAndFocus();
+        buttons.show();
+      };
+      openProvider();
+    }
+
     trigger.addEventListener('click', function () {
+      if (openProvider) {
+        openProvider();
+        return;
+      }
       if (loaded) return;
       const src = trigger.getAttribute('data-chat-loader-src');
       if (!src) return;
@@ -417,6 +432,11 @@ const showFacade = config.state === 'address' && !isDemoOutput;
       const script = document.createElement('script');
       script.src = src;
       script.async = true;
+      script.addEventListener('load', function () {
+        if (openProvider) return;
+        const buttons = window.BX && window.BX.SiteButton && window.BX.SiteButton.buttons;
+        openSiteButton(buttons);
+      }, { once: true });
       document.body.appendChild(script);
     });
   })();
