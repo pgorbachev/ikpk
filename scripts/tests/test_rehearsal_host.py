@@ -715,8 +715,7 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
 
             with patch.object(rehearsal_host, "_validate_prepared_web_dependencies"), \
                  patch.object(rehearsal_host, "_run_as_cms", side_effect=run_build):
-                rehearsal_host._build_static({"profile": "staging194",
-                                              "staticReleaseRoot": str(releases),
+                rehearsal_host._build_static({"staticReleaseRoot": str(releases),
                                               "siteBaseUrl": "https://194.226.99.10"}, source,
                     root / "capture", chat_loader_src=rehearsal_host.STAGING194_CHAT_LOADER_SRC)
 
@@ -728,6 +727,16 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
             self.assertEqual(build_environments[0]["CHAT_LOADER_PROFILE"], "staging194-static-main")
             self.assertEqual(build_environments[0]["DEMO_FORMS"], "stub")
             self.assertEqual(build_environments[0]["PAYMENT_ROLE"], "ci")
+
+    def test_static_build_refuses_unapproved_chat_loader_or_non_staging_profile(self):
+        for config, loader in (
+            ({}, "https://attacker.example/loader.js"),
+            ({"profile": "initial-prod"}, rehearsal_host.STAGING194_CHAT_LOADER_SRC),
+        ):
+            with self.subTest(config=config, loader=loader):
+                with self.assertRaisesRegex(rehearsal_host.HostFailure,
+                                            "only staging194 static-main may use the owner-approved chat loader"):
+                    rehearsal_host._build_static(config, Path("/unused"), Path("/unused"), chat_loader_src=loader)
 
     def test_initial_prod_static_build_preserves_chat_loader_for_capture_and_build(self):
         with tempfile.TemporaryDirectory(prefix="ikpk-initial-prod-chat-env-") as temporary:

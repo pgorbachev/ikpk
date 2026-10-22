@@ -1127,6 +1127,9 @@ def _activate_cms(config: dict[str, Any], cms_release: Path, candidate_db: Path,
 def _build_static(config: dict[str, Any], source_root: Path, capture: Path,
                   read_only_paths: Optional[list[Path]] = None,
                   chat_loader_src: Optional[str] = None) -> tuple[Path, str]:
+    if chat_loader_src is not None and (config.get("profile", "staging194") != "staging194"
+                                        or chat_loader_src != STAGING194_CHAT_LOADER_SRC):
+        raise HostFailure("only staging194 static-main may use the owner-approved chat loader")
     web = source_root / "web"
     _validate_prepared_web_dependencies(source_root)
     initial_prod = config.get("profile") == "initial-prod"
@@ -1139,9 +1142,6 @@ def _build_static(config: dict[str, Any], source_root: Path, capture: Path,
         build_script = "build"
         dist_name = "dist"
     else:
-        if chat_loader_src is not None and (config.get("profile") != "staging194"
-                                                or chat_loader_src != STAGING194_CHAT_LOADER_SRC):
-            raise HostFailure("only staging194 static-main may use the owner-approved chat loader")
         capture_environment.update({"DEMO_PROFILE": "demo193", "DEPLOY_MODE": "stand", "PAYMENT_ROLE": "ci",
                                    "DEMO_FORMS": "stub", "CHAT_LOADER_SRC": chat_loader_src or "none",
                                    "CHAT_OFFLINE_MESSAGE": "absent", "DEMO_SITE_URL": config["siteBaseUrl"]})
