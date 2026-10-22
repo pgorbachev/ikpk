@@ -715,7 +715,8 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
 
             with patch.object(rehearsal_host, "_validate_prepared_web_dependencies"), \
                  patch.object(rehearsal_host, "_run_as_cms", side_effect=run_build):
-                rehearsal_host._build_static({"staticReleaseRoot": str(releases),
+                rehearsal_host._build_static({"profile": "staging194",
+                                              "staticReleaseRoot": str(releases),
                                               "siteBaseUrl": "https://194.226.99.10"}, source,
                     root / "capture", chat_loader_src=rehearsal_host.STAGING194_CHAT_LOADER_SRC)
 
@@ -724,6 +725,7 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
             self.assertEqual(len(build_environments), 1)
             self.assertEqual(build_environments[0]["CHAT_LOADER_SRC"],
                              "https://cdn-ru.bitrix24.ru/b35315886/crm/site_button/loader_2_siutnh.js")
+            self.assertEqual(build_environments[0]["CHAT_LOADER_PROFILE"], "staging194-static-main")
             self.assertEqual(build_environments[0]["DEMO_FORMS"], "stub")
             self.assertEqual(build_environments[0]["PAYMENT_ROLE"], "ci")
 

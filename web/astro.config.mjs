@@ -10,6 +10,7 @@ const demoProfile = String(process.env.DEMO_PROFILE ?? '').trim();
 const demoSite = process.env.DEMO_SITE_URL ?? 'https://194.226.99.10';
 const initialProdProfile = process.env.INITIAL_PROD_PROFILE === '1';
 const initialProdChatLoader = 'https://cdn-ru.bitrix24.ru/b35315886/crm/site_button/loader_2_siutnh.js';
+const staging194StaticMainChat = process.env.CHAT_LOADER_PROFILE === 'staging194-static-main';
 if (demoProfile && demoProfile !== 'demo193') {
   throw new Error('DEMO_PROFILE must be the approved demo193 profile');
 }
@@ -20,8 +21,10 @@ if (initialProdProfile && (demoProfile || demoOutput || process.env.DEPLOY_MODE 
   throw new Error('initial production profile requires the production origin/payment runtime without demo flags');
 }
 if (demoProfile === 'demo193') {
+  const expectedDemoChatLoader = staging194StaticMainChat ? initialProdChatLoader : 'none';
   if (demoOutput || process.env.DEMO_FORMS !== 'stub' || process.env.PAYMENT_ROLE !== 'ci' ||
-      process.env.DEPLOY_MODE !== 'stand' || process.env.CHAT_LOADER_SRC !== 'none' ||
+      process.env.DEPLOY_MODE !== 'stand' || process.env.CHAT_LOADER_SRC !== expectedDemoChatLoader ||
+      (process.env.CHAT_LOADER_PROFILE && !staging194StaticMainChat) ||
       process.env.CHAT_OFFLINE_MESSAGE !== 'absent') {
     throw new Error('demo193 profile has unsafe or conflicting build flags');
   }

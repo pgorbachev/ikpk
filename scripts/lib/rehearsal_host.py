@@ -1139,6 +1139,9 @@ def _build_static(config: dict[str, Any], source_root: Path, capture: Path,
         build_script = "build"
         dist_name = "dist"
     else:
+        if chat_loader_src is not None and (config.get("profile") != "staging194"
+                                                or chat_loader_src != STAGING194_CHAT_LOADER_SRC):
+            raise HostFailure("only staging194 static-main may use the owner-approved chat loader")
         capture_environment.update({"DEMO_PROFILE": "demo193", "DEPLOY_MODE": "stand", "PAYMENT_ROLE": "ci",
                                    "DEMO_FORMS": "stub", "CHAT_LOADER_SRC": chat_loader_src or "none",
                                    "CHAT_OFFLINE_MESSAGE": "absent", "DEMO_SITE_URL": config["siteBaseUrl"]})
@@ -1148,8 +1151,11 @@ def _build_static(config: dict[str, Any], source_root: Path, capture: Path,
     _run_as_cms(config, web, [str(web / "node_modules/.bin/tsx"),
         str(web / "scripts/capture-content-snapshot.ts"), *capture_args], timeout=1800,
         environment=capture_environment, read_only_path=read_only_paths)
+    build_environment = dict(capture_environment)
+    if chat_loader_src is not None:
+        build_environment["CHAT_LOADER_PROFILE"] = "staging194-static-main"
     _run_as_cms(config, web, ["/usr/bin/npm", "run", build_script], timeout=1800,
-                environment=capture_environment, read_only_path=read_only_paths)
+                environment=build_environment, read_only_path=read_only_paths)
     dist = web / dist_name
     if not dist.is_dir() or dist.is_symlink():
         raise HostFailure(f"static build did not produce a real {dist_name} directory")
