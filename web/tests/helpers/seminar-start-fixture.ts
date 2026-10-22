@@ -10,7 +10,7 @@ export const AFTER = '2026-10-31T16:00:01Z';
 export const TITLES = ['Граничный семинар', 'Последний сеанс курса', 'Следующий анонс', 'Четвёртый анонс'];
 
 /** Real built routes from controlled content, without changing the pinned fixture. */
-export async function serveSeminarStartFixture() {
+export async function serveSeminarStartFixture(mode: 'start' | 'month' = 'start') {
   const webRoot = resolve(import.meta.dirname, '../..');
   const sourceRoot = join(webRoot, '../fixtures/content-snapshot');
   const source = JSON.parse(readFileSync(join(sourceRoot, 'snapshot.json'), 'utf8'));
@@ -44,6 +44,15 @@ export async function serveSeminarStartFixture() {
     event(61003, 2, '2026-11-02'), event(61004, 0, '2026-11-04'),
     ...Array.from({ length: 23 }, (_, index) => event(61100 + index, 3, `2026-11-${String(index + 5).padStart(2, '0')}`)),
   ];
+  if (mode === 'month') {
+    // A patch in the short month, a strict city/month intersection, a city absent
+    // from October, and >25 November rows keep every old gate branch observable.
+    entries[0] = { ...entries[0], id: 900001, name: TITLES[0] };
+    entries.forEach((entry, index) => {
+      entry.city = { id: index % 2 + 1, name: index % 2 === 0 ? 'Москва' : 'Онлайн' };
+    });
+    entries.push({ ...event(61200, 2, '2026-11-28'), city: { id: 3, name: 'Казань' } });
+  }
   const types = Object.fromEntries(Object.keys(sourceTypes).map((name) => [name, []]));
   Object.assign(types, { institutes: [{ ...institute, images: [] }], course_groups: [{ ...group, images: [] }], seminars, schedule_entries: entries });
   const snapshotRoot = mkdtempSync(join(tmpdir(), 'ikpk-start-snapshot-'));
@@ -77,7 +86,7 @@ export async function serveSeminarStartFixture() {
   if (!address || typeof address === 'string') throw new Error('Fixture did not bind a local port');
   const programPath = `/${institute.slug}/${group.slug}`;
   return {
-    url: `http://127.0.0.1:${address.port}`, programPath,
+    url: `http://127.0.0.1:${address.port}`, programPath, entries, outDir,
     detailPaths: seminars.map((seminar) => `${programPath}/${seminar.slug}`),
     close: async () => { await new Promise<void>((done) => server.close(() => done())); cleanup(); },
   };
