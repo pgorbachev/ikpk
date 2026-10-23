@@ -329,6 +329,7 @@ async function greetingGeometry(page: Page) {
       top: rect.top, bottom: rect.bottom, left: rect.left, right: rect.right,
       height: rect.height, overlaps: overlaps.slice(0, 8),
       containsTrigger: Boolean(trigger && region.contains(trigger)),
+      overlapsTrigger: Boolean(trigger && intersects(trigger.getBoundingClientRect())),
       focusInside: region.contains(document.activeElement),
     };
   }, TRIGGER);
@@ -453,6 +454,7 @@ test.describe('chat entry visibility approved contract', () => {
     const geometry = await greetingGeometry(page);
     expect(geometry, 'the text and close control belong to a greeting panel separate from the chat action').not.toBeNull();
     expect(geometry?.focusInside, 'showing the greeting does not move focus into it').toBe(false);
+    expect(geometry?.overlapsTrigger, 'greeting does not cover the sole chat-opening action').toBe(false);
     expect(seen.toHost(new URL(PROBE_CHAT_LOADER_SRC).hostname), 'showing the local greeting does not request Bitrix').toEqual([]);
   });
 
@@ -481,6 +483,7 @@ test.describe('chat entry visibility approved contract', () => {
         expect(geometry?.top, `${width}px ${position}: panel is within the viewport`).toBeGreaterThanOrEqual(0);
         expect(geometry?.bottom, `${width}px ${position}: panel is within the viewport`).toBeLessThanOrEqual(width === 375 ? 812 : 720);
         expect(geometry?.containsTrigger, `${width}px ${position}: greeting is not a second chat trigger`).toBe(false);
+        expect(geometry?.overlapsTrigger, `${width}px ${position}: greeting does not cover the chat action`).toBe(false);
         expect(geometry?.overlaps, `${width}px ${position}: greeting does not cover visible clipped page text or controls`).toEqual([]);
       }
     }
@@ -501,12 +504,12 @@ test.describe('chat entry visibility approved contract', () => {
     });
     expect(focusStyle, 'the close control has a visible keyboard focus indicator').toBe(true);
     await page.keyboard.press('Enter');
-    await expect(greeting, 'keyboard activation closes the local greeting').toHaveCount(0);
+    await expect(greeting, 'keyboard activation hides the local greeting').toBeHidden();
     await expect(page.locator(TRIGGER), 'closing greeting leaves the chat action available').toBeVisible();
     const port = page.locator('[data-page-scrollport]');
     await port.evaluate((el: HTMLElement) => el.scrollTo({ top: el.scrollHeight, behavior: 'instant' }));
     await page.setViewportSize({ width: 320, height: 720 });
-    await expect(greeting, 'scrolling and viewport changes do not restore the greeting in this document').toHaveCount(0);
+    await expect(greeting, 'scrolling and viewport changes do not restore the greeting in this document').toBeHidden();
     await page.reload();
     await expect(page.getByText(GREETING_TEXT, { exact: true }), 'a new document starts with the greeting again').toBeVisible();
   });
@@ -520,11 +523,11 @@ test.describe('chat entry visibility approved contract', () => {
     expect(seen.toHost(new URL(PROBE_CHAT_LOADER_SRC).hostname), 'no loader request before CTA').toEqual([]);
     await trigger.click();
     await expect(page.locator('[data-chat-stub-panel]'), 'the existing click path opens the guarded provider fixture').toBeVisible();
-    await expect(greeting, 'the local greeting leaves when the chat is activated').toHaveCount(0);
+    await expect(greeting, 'the local greeting is hidden when the chat is activated').toBeHidden();
     expect(seen.toHost(new URL(PROBE_CHAT_LOADER_SRC).hostname), 'the click causes exactly one loader request').toHaveLength(1);
     await page.locator('[data-chat-stub-panel]').getByRole('button', { name: 'Закрыть' }).click();
     await expect(page.locator('[data-chat-stub-panel]')).toHaveCount(0);
-    await expect(greeting, 'closing the provider does not restore local greeting in this document').toHaveCount(0);
+    await expect(greeting, 'closing the provider does not restore local greeting in this document').toBeHidden();
   });
 
   test('payment overlay paints above the greeting and keeps focus inside the dialog', async ({ page }) => {
@@ -539,15 +542,19 @@ test.describe('chat entry visibility approved contract', () => {
     await opener.click();
     const dialog = page.locator(PAYMENT_DIALOG);
     await expect(dialog, 'payment dialog opens above the greeting').toBeVisible();
-    const layered = await page.evaluate((point) => {
-      const root = document.querySelector<HTMLElement>(PAYMENT_ROOT);
-      const dialog = document.querySelector<HTMLElement>(PAYMENT_DIALOG);
-      const hit = document.elementFromPoint(point.x, point.y);
+    const layered = await page.evaluate((args) => {
+      const root = document.querySelector<HTMLElement>(args.root);
+      const dialog = document.querySelector<HTMLElement>(args.dialog);
+      const hit = document.elementFromPoint(args.point.x, args.point.y);
       return {
         overlayCoversGreeting: Boolean(root && hit && root.contains(hit)),
         focusInsideDialog: Boolean(dialog && document.activeElement && dialog.contains(document.activeElement)),
       };
-    }, { x: (greeting!.left + greeting!.right) / 2, y: (greeting!.top + greeting!.bottom) / 2 });
+    }, {
+      root: PAYMENT_ROOT,
+      dialog: PAYMENT_DIALOG,
+      point: { x: (greeting!.left + greeting!.right) / 2, y: (greeting!.top + greeting!.bottom) / 2 },
+    });
     expect(layered.overlayCoversGreeting, 'the payment overlay intercepts the greeting area').toBe(true);
     expect(layered.focusInsideDialog, 'opening payment does not leave focus in or return it to the greeting').toBe(true);
   });
