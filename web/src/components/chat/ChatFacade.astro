@@ -115,7 +115,7 @@ const showFacade = config.state === 'address' && !isDemoOutput;
       const updateViewport = function () {
         const height = viewport ? viewport.height : window.innerHeight;
         const offset = viewport ? viewport.offsetTop : 0;
-        if (lowerZone) lowerZone.toggleAttribute('data-chat-compact', height <= 400);
+        if (lowerZone) lowerZone.toggleAttribute('data-chat-compact', height <= 480);
         const setPixel = function (name, value) {
           const next = Math.max(0, value) + 'px';
           if (document.body.style.getPropertyValue(name) !== next) document.body.style.setProperty(name, next);
