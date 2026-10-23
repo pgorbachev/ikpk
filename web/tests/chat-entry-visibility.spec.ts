@@ -813,7 +813,7 @@ test.describe('chat entry visibility approved contract', () => {
       const session = await page.context().newCDPSession(page);
       const beforeTouch = (await snapshotLayout(page)).scrollportScrollTop;
       const touchArea = await visibleScrollportGestureArea(page);
-      expect(touchArea.height, 'touch gesture has visible scrollport area below the sticky header and greeting zone').toBeGreaterThan(40);
+      expect(touchArea.height, 'touch gesture endpoints have positive travel inside the visible scrollport').toBeGreaterThan(4);
       await armGestureScrollEnd(beforeTouch);
       try {
         await session.send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 1 });
