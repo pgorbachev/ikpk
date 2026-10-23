@@ -740,8 +740,8 @@
     "file": "components/topnav/TopNav.astro",
     "nodeKind": "element",
     "locator": "components/topnav/TopNav.astro:L141:C1:style",
-    "fingerprint": "b2d962e94bab3f4080db1e7d0d896a7943a1d6169a5c7aeaedff34ca3f0d5c4a",
-    "identity": "style|body:9ebfb5d7be61ebce"
+    "fingerprint": "ec5a04df83cc25b8566b3bfd12a5fcb662620727ff488e7be2443e16814103b8",
+    "identity": "style|body:49397867702d4498"
   },
   {
     "slotId": "src:components/topnav/TopNav.astro:L47:C17:svg",
