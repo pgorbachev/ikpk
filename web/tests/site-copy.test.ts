@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { dist, walkHtml, readPage, allPages } from './helpers/dist-pages';
 import { attr, byClass, findAll, hasClass, parseDocument, textOf, walk } from './helpers/dom';
 import type { Element } from './helpers/dom';
-import { getInstitutes, getScheduleEntries, getSnapshotReferenceDate } from '../src/lib/data.js';
+import { getInstitutes, getScheduleEntries, getSeminarBuildNow } from '../src/lib/data.js';
 import { isBeforeStart } from '../src/lib/schedule-window.js';
 
 // ─── Тексты, которые видит посетитель ────────────────────────────────────────
@@ -24,7 +24,7 @@ const CITY_TEL = 'tel:+78126465450';
 const MOBILE_PHONE = '038-77-97';
 const MOBILE_TEL = 'tel:+79810387797';
 const offeredEntries = () => getScheduleEntries().filter(
-  (entry) => entry.status === 'active' && entry.startAt && isBeforeStart(entry, getSnapshotReferenceDate()),
+  (entry) => entry.status === 'active' && entry.startAt && isBeforeStart(entry, getSeminarBuildNow()),
 );
 
 /** Все собранные страницы. Пустой список — «не смогла проверить», а не «дефектов нет». */
