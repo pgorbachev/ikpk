@@ -184,6 +184,9 @@ async function snapshotLayout(page: Page) {
       scrollportEndsBeforeLowerZone: Boolean(scrollport && lowerZone && scrollport.getBoundingClientRect().bottom <= lowerZone.getBoundingClientRect().top + 1),
       greetingFound: Boolean(greetingText && greeting),
       greetingVisible,
+      greetingbox: rect(greeting),
+      greetingContainsTrigger: Boolean(greeting && button && greeting.contains(button)),
+      greetingFocusInside: Boolean(greeting && greeting.contains(document.activeElement)),
       greetingInsideUsefulArea: Boolean(greetingVisible && greetingRect && lowerRect
         && greetingRect.top >= lowerRect.top && greetingRect.bottom <= lowerRect.bottom - safeAreaInset + 1),
       greetingOverlapsButton: Boolean(greetingVisible && greetingRect && button && intersect(greetingRect, button.getBoundingClientRect())),
@@ -329,61 +332,21 @@ async function contrastAndButtonState(page: Page, width: number, theme: 'light' 
   expect.soft(pressed.ratio, `${theme} ${width} pressed: actual caption contrast >= 4.5:1`).toBeGreaterThanOrEqual(4.5);
 }
 
-/** Измеряет собственную плашку по доступному тексту и кнопке закрытия. */
+/** Повторно использует общий layout snapshot для геометрии приветствия. */
 async function greetingGeometry(page: Page) {
-  return page.getByText(GREETING_TEXT, { exact: true }).evaluate((text, triggerSelector) => {
-    const close = [...document.querySelectorAll<HTMLButtonElement>('button')]
-      .find((button) => button.getAttribute('aria-label') === 'Закрыть приветствие');
-    const trigger = document.querySelector(triggerSelector);
-    let region = text.parentElement;
-    while (region && (!close || !region.contains(close) || (trigger && region.contains(trigger))))
-      region = region.parentElement;
-    if (!region) return null;
-    const rect = region.getBoundingClientRect();
-    const panel = { left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom };
-    const intersects = (rect: DOMRect | { left: number; top: number; right: number; bottom: number }) =>
-      rect.left < panel.right && rect.right > panel.left && rect.top < panel.bottom && rect.bottom > panel.top;
-    const port = document.querySelector<HTMLElement>('[data-page-scrollport]');
-    const clip = port?.getBoundingClientRect() ?? new DOMRect(0, 0, innerWidth, innerHeight);
-    const overlaps: string[] = [];
-    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
-    while (walker.nextNode()) {
-      const node = walker.currentNode;
-      if (!node.textContent?.trim() || region.contains(node.parentElement)) continue;
-      const range = document.createRange();
-      range.selectNodeContents(node);
-      for (const rect of range.getClientRects()) {
-        const shown = {
-          left: Math.max(rect.left, clip.left, 0),
-          top: Math.max(rect.top, clip.top, 0),
-          right: Math.min(rect.right, clip.right, innerWidth),
-          bottom: Math.min(rect.bottom, clip.bottom, innerHeight),
-        };
-        if (shown.right > shown.left && shown.bottom > shown.top && intersects(shown)) {
-          overlaps.push(`text:${node.textContent.trim().slice(0, 32)}`);
-          break;
-        }
-      }
-      range.detach();
-    }
-    for (const control of document.querySelectorAll<HTMLElement>('a,button,input,select,textarea,[role="button"]')) {
-      if (region.contains(control) || control.contains(region)) continue;
-      const r = control.getBoundingClientRect();
-      const shown = {
-        left: Math.max(r.left, clip.left, 0), top: Math.max(r.top, clip.top, 0),
-        right: Math.min(r.right, clip.right, innerWidth), bottom: Math.min(r.bottom, clip.bottom, innerHeight),
-      };
-      if (shown.right > shown.left && shown.bottom > shown.top && intersects(shown))
-        overlaps.push(`control:${control.tagName.toLowerCase()}:${control.textContent?.trim().slice(0, 24)}`);
-    }
-    return {
-      top: rect.top, bottom: rect.bottom, left: rect.left, right: rect.right,
-      height: rect.height, overlaps: overlaps.slice(0, 8),
-      containsTrigger: Boolean(trigger && region.contains(trigger)),
-      overlapsTrigger: Boolean(trigger && intersects(trigger.getBoundingClientRect())),
-      focusInside: region.contains(document.activeElement),
-    };
-  }, TRIGGER);
+  const layout = await snapshotLayout(page);
+  if (!layout.greetingFound || !layout.greetingbox) return null;
+  return {
+    top: layout.greetingbox.top,
+    bottom: layout.greetingbox.bottom,
+    left: layout.greetingbox.x,
+    right: layout.greetingbox.right,
+    height: layout.greetingbox.height,
+    overlaps: layout.greetingOverlap,
+    containsTrigger: layout.greetingContainsTrigger,
+    overlapsTrigger: layout.greetingOverlapsButton,
+    focusInside: layout.greetingFocusInside,
+  };
 }
 
 test.describe('chat entry visibility approved contract', () => {
