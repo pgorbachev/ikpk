@@ -170,6 +170,10 @@ const CHAT_LOADER_STUB = `(function () {
   close.textContent = 'Закрыть';
   panel.appendChild(close);
   var opened = false;
+  close.addEventListener('click', function () {
+    panel.remove();
+    opened = false;
+  });
   var widget = {
     open: function () {
       if (opened) return;

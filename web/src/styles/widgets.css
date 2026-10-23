@@ -11,18 +11,133 @@
  */
 
 .chat-facade {
-  /* This body-level sibling is the 80px lower row in the chat page frame. */
+  /* This body-level sibling is the reserved lower row in the chat page frame. */
   position: relative;
   display: flex;
-  align-items: center;
+  flex-direction: column;
+  align-items: stretch;
   justify-content: flex-end;
+  gap: 10px;
   width: 100%;
-  height: calc(80px + env(safe-area-inset-bottom, 0px));
-  padding: 0 1rem env(safe-area-inset-bottom, 0px);
+  min-height: calc(80px + env(safe-area-inset-bottom, 0px));
+  box-sizing: border-box;
+  padding: 10px 1rem env(safe-area-inset-bottom, 0px);
   z-index: 150;
 }
 
+.chat-greeting {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr) 32px;
+  align-items: center;
+  column-gap: 10px;
+  row-gap: 6px;
+  width: 100%;
+  max-width: 480px;
+  align-self: flex-end;
+  box-sizing: border-box;
+  padding: 12px;
+  border: 1px solid var(--border-default);
+  border-radius: 12px;
+  background: var(--surface-raised);
+  color: var(--text-primary);
+  box-shadow: var(--shadow-m);
+}
+
+.chat-greeting[hidden] {
+  display: none;
+}
+
+.chat-greeting > img {
+  grid-column: 1;
+  grid-row: 1;
+  display: block;
+  width: 32px;
+  height: 32px;
+}
+
+.chat-greeting__name {
+  grid-column: 2;
+  grid-row: 1;
+  margin: 0;
+  font-weight: 600;
+}
+
+.chat-greeting__close {
+  grid-column: 3;
+  grid-row: 1;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font: inherit;
+  font-size: 1.5rem;
+  line-height: 1;
+}
+
+.chat-greeting__close:hover {
+  background: var(--surface-subtle);
+  color: var(--text-primary);
+}
+
+.chat-greeting__text {
+  grid-column: 1 / -1;
+  margin: 0;
+  font-size: var(--font-s);
+  line-height: 1.45;
+}
+
+/* Preserve the complete greeting and CTA when a keyboard reduces the visual viewport. */
+.chat-facade[data-chat-compact] {
+  gap: 4px;
+  padding-top: 4px;
+}
+
+.chat-facade[data-chat-compact] .chat-greeting {
+  grid-template-columns: 24px minmax(0, 1fr) 24px;
+  gap: 4px;
+  padding: 4px;
+}
+
+.chat-facade[data-chat-compact] .chat-greeting > img {
+  width: 24px;
+  height: 24px;
+}
+
+.chat-facade[data-chat-compact] .chat-greeting__name {
+  font-size: 14px;
+}
+
+.chat-facade[data-chat-compact] .chat-greeting__close {
+  width: 24px;
+  height: 24px;
+}
+
+.chat-facade[data-chat-compact] .chat-greeting__text {
+  font-size: 12px;
+  line-height: 1.2;
+}
+
+@media (min-width: 768px) {
+  .chat-facade[data-chat-compact] {
+    flex-direction: row;
+    align-items: center;
+    justify-content: flex-end;
+  }
+
+  .chat-facade[data-chat-compact] .chat-greeting,
+  .chat-facade[data-chat-compact] .chat-trigger {
+    align-self: center;
+  }
+}
+
 .chat-trigger {
+  align-self: flex-end;
   display: flex;
   align-items: center;
   justify-content: center;

@@ -31,6 +31,14 @@ const showFacade = config.state === 'address' && !isDemoOutput;
 {
   showFacade && (
     <div data-chat-facade class="chat-facade">
+      <section data-chat-greeting class="chat-greeting" aria-label="Приветствие Веры Рум">
+        <img src="/logo-icon.svg" alt="" aria-hidden="true" width="32" height="32" />
+        <p class="chat-greeting__name">Вера Рум</p>
+        <button type="button" class="chat-greeting__close" aria-label="Закрыть приветствие">
+          <span aria-hidden="true">×</span>
+        </button>
+        <p class="chat-greeting__text">Здравствуйте! Готова помочь вам. Напишите мне, если у вас появились вопросы.</p>
+      </section>
       <button
         type="button"
         data-chat-trigger
@@ -90,12 +98,24 @@ const showFacade = config.state === 'address' && !isDemoOutput;
   // порталу (клиент ещё не передал ключи Bitrix24 — docs/client-requests.md, п. 8);
   // проверить точное соответствие макету портала можно только на живом стенде.
   (function () {
+    const greeting = document.querySelector('[data-chat-greeting]');
+    const closeGreeting = greeting && greeting.querySelector('[aria-label="Закрыть приветствие"]');
+    const hideGreeting = function () {
+      if (!greeting) return;
+      const trigger = document.querySelector('[data-chat-trigger]');
+      if (trigger && greeting.contains(document.activeElement)) trigger.focus({ preventScroll: true });
+      greeting.setAttribute('hidden', '');
+    };
+    if (closeGreeting) closeGreeting.addEventListener('click', hideGreeting);
+
     const pageScrollport = document.querySelector('[data-page-scrollport]');
     if (pageScrollport && document.body.hasAttribute('data-chat-page')) {
       const viewport = window.visualViewport;
+      const lowerZone = document.querySelector('[data-chat-facade]');
       const updateViewport = function () {
         const height = viewport ? viewport.height : window.innerHeight;
         const offset = viewport ? viewport.offsetTop : 0;
+        if (lowerZone) lowerZone.toggleAttribute('data-chat-compact', height <= 480);
         const setPixel = function (name, value) {
           const next = Math.max(0, value) + 'px';
           if (document.body.style.getPropertyValue(name) !== next) document.body.style.setProperty(name, next);
@@ -105,6 +125,9 @@ const showFacade = config.state === 'address' && !isDemoOutput;
         };
         setPixel('--chat-viewport-height', height);
         setPixel('--chat-viewport-offset', offset);
+        if (lowerZone) {
+          document.body.style.setProperty('--chat-lower-zone-height', Math.ceil(lowerZone.getBoundingClientRect().height) + 'px');
+        }
         const portRect = pageScrollport.getBoundingClientRect();
 
         // Popups are children of the sticky header, but the page scrollport clips
@@ -115,24 +138,35 @@ const showFacade = config.state === 'address' && !isDemoOutput;
         const visibleBottom = Math.min(portRect.bottom, offset + height);
         const visibleTop = Math.max(portRect.top, offset);
         document.querySelectorAll('.topnav-menu .dropdown').forEach(function (dropdown) {
-          setPixel('--chat-nav-dropdown-max-height', visibleBottom - dropdown.getBoundingClientRect().top);
+          const dropdownTop = dropdown.getBoundingClientRect().top;
+          setPixel('--chat-nav-dropdown-max-height', visibleBottom - Math.max(visibleTop, dropdownTop));
         });
         const anchorRect = menuAnchor && menuAnchor.getBoundingClientRect();
-        const drawerBelow = anchorRect ? Math.max(0, visibleBottom - anchorRect.bottom - 8) : visibleBottom - visibleTop;
-        const drawerAbove = anchorRect ? Math.max(0, anchorRect.top - visibleTop - 8) : 0;
+        const drawerBelow = anchorRect
+          ? Math.max(0, visibleBottom - Math.max(visibleTop, anchorRect.bottom + 8))
+          : visibleBottom - visibleTop;
+        const drawerAbove = anchorRect
+          ? Math.max(0, Math.min(visibleBottom, anchorRect.top - 8) - visibleTop)
+          : 0;
         const placeDrawerAbove = drawerAbove > drawerBelow;
         setPixel('--chat-drawer-max-height', placeDrawerAbove ? drawerAbove : drawerBelow);
-        setPosition('--chat-drawer-top', placeDrawerAbove ? 'auto' : 'calc(100% + 8px)');
-        setPosition('--chat-drawer-bottom', placeDrawerAbove ? 'calc(100% + 8px)' : 'auto');
+        const drawerGap = placeDrawerAbove
+          ? Math.max(8, anchorRect ? anchorRect.top - visibleBottom : 8)
+          : Math.max(8, anchorRect ? visibleTop - anchorRect.bottom : 8);
+        setPosition('--chat-drawer-top', placeDrawerAbove ? 'auto' : 'calc(100% + ' + drawerGap + 'px)');
+        setPosition('--chat-drawer-bottom', placeDrawerAbove ? 'calc(100% + ' + drawerGap + 'px)' : 'auto');
 
         if (header) {
           const headerRect = header.getBoundingClientRect();
-          const searchBelow = Math.max(0, visibleBottom - headerRect.bottom);
-          const searchAbove = Math.max(0, headerRect.top - visibleTop);
+          const searchBelow = Math.max(0, visibleBottom - Math.max(visibleTop, headerRect.bottom));
+          const searchAbove = Math.max(0, Math.min(visibleBottom, headerRect.top) - visibleTop);
           const placeSearchAbove = searchAbove > searchBelow;
           setPixel('--chat-search-max-height', placeSearchAbove ? searchAbove : searchBelow);
-          setPosition('--chat-search-top', placeSearchAbove ? 'auto' : '100%');
-          setPosition('--chat-search-bottom', placeSearchAbove ? '100%' : 'auto');
+          const searchGap = placeSearchAbove
+            ? Math.max(0, headerRect.top - visibleBottom)
+            : Math.max(0, visibleTop - headerRect.bottom);
+          setPosition('--chat-search-top', placeSearchAbove ? 'auto' : 'calc(100% + ' + searchGap + 'px)');
+          setPosition('--chat-search-bottom', placeSearchAbove ? 'calc(100% + ' + searchGap + 'px)' : 'auto');
         }
 
       };
@@ -319,6 +353,10 @@ const showFacade = config.state === 'address' && !isDemoOutput;
         }
       };
       updateViewport();
+      if (lowerZone && typeof ResizeObserver === 'function') {
+        const lowerZoneObserver = new ResizeObserver(updateViewport);
+        lowerZoneObserver.observe(lowerZone);
+      }
       window.addEventListener('pageshow', function () {
         transitionGeneration += 1;
         traversingHistory = false;
@@ -415,6 +453,7 @@ const showFacade = config.state === 'address' && !isDemoOutput;
     }
 
     trigger.addEventListener('click', function () {
+      hideGreeting();
       if (openProvider) {
         openProvider();
         return;
