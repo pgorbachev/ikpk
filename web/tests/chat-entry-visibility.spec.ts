@@ -14,6 +14,8 @@ const PAYMENT_ROOT = '#payment-dialog-root';
 const PAYMENT_DIALOG = '.payment-dialog';
 const PAYMENT_ENTRY = '[data-payment-entry]';
 const PAYMENT_FORM = '[data-payment-form]';
+const GREETING_TEXT = 'Здравствуйте! Готова помочь вам. Напишите мне, если у вас появились вопросы.';
+const GREETING_CLOSE = 'Закрыть приветствие';
 
 let activeBuild: ProbeBuild;
 let activeSite: StaticSite;
@@ -276,6 +278,62 @@ async function contrastAndButtonState(page: Page, width: number, theme: 'light' 
   expect.soft(pressed.ratio, `${theme} ${width} pressed: actual caption contrast >= 4.5:1`).toBeGreaterThanOrEqual(4.5);
 }
 
+/** Измеряет собственную плашку по доступному тексту и кнопке закрытия. */
+async function greetingGeometry(page: Page) {
+  return page.getByText(GREETING_TEXT, { exact: true }).evaluate((text, triggerSelector) => {
+    const close = [...document.querySelectorAll<HTMLButtonElement>('button')]
+      .find((button) => button.getAttribute('aria-label') === 'Закрыть приветствие');
+    const trigger = document.querySelector(triggerSelector);
+    let region = text.parentElement;
+    while (region && (!close || !region.contains(close) || (trigger && region.contains(trigger))))
+      region = region.parentElement;
+    if (!region) return null;
+    const rect = region.getBoundingClientRect();
+    const panel = { left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom };
+    const intersects = (rect: DOMRect | { left: number; top: number; right: number; bottom: number }) =>
+      rect.left < panel.right && rect.right > panel.left && rect.top < panel.bottom && rect.bottom > panel.top;
+    const port = document.querySelector<HTMLElement>('[data-page-scrollport]');
+    const clip = port?.getBoundingClientRect() ?? new DOMRect(0, 0, innerWidth, innerHeight);
+    const overlaps: string[] = [];
+    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+    while (walker.nextNode()) {
+      const node = walker.currentNode;
+      if (!node.textContent?.trim() || region.contains(node.parentElement)) continue;
+      const range = document.createRange();
+      range.selectNodeContents(node);
+      for (const rect of range.getClientRects()) {
+        const shown = {
+          left: Math.max(rect.left, clip.left, 0),
+          top: Math.max(rect.top, clip.top, 0),
+          right: Math.min(rect.right, clip.right, innerWidth),
+          bottom: Math.min(rect.bottom, clip.bottom, innerHeight),
+        };
+        if (shown.right > shown.left && shown.bottom > shown.top && intersects(shown)) {
+          overlaps.push(`text:${node.textContent.trim().slice(0, 32)}`);
+          break;
+        }
+      }
+      range.detach();
+    }
+    for (const control of document.querySelectorAll<HTMLElement>('a,button,input,select,textarea,[role="button"]')) {
+      if (region.contains(control) || control.contains(region)) continue;
+      const r = control.getBoundingClientRect();
+      const shown = {
+        left: Math.max(r.left, clip.left, 0), top: Math.max(r.top, clip.top, 0),
+        right: Math.min(r.right, clip.right, innerWidth), bottom: Math.min(r.bottom, clip.bottom, innerHeight),
+      };
+      if (shown.right > shown.left && shown.bottom > shown.top && intersects(shown))
+        overlaps.push(`control:${control.tagName.toLowerCase()}:${control.textContent?.trim().slice(0, 24)}`);
+    }
+    return {
+      top: rect.top, bottom: rect.bottom, left: rect.left, right: rect.right,
+      height: rect.height, overlaps: overlaps.slice(0, 8),
+      containsTrigger: Boolean(trigger && region.contains(trigger)),
+      focusInside: region.contains(document.activeElement),
+    };
+  }, TRIGGER);
+}
+
 test.describe('chat entry visibility approved contract', () => {
   test('non-demo payment probe has both real product entry points and keeps the loader lazy until one activation', async ({ page }) => {
     const seen = await protectThirdParties(page);
@@ -376,6 +434,122 @@ test.describe('chat entry visibility approved contract', () => {
         }
       }
     }
+  });
+
+  test('greeting appears immediately with the approved name, exact text, emblem, and no eager loader request', async ({ page }) => {
+    const seen = await protectThirdParties(page);
+    await page.goto(activeUrl('/'));
+    await expect(page.locator(TRIGGER), 'one existing chat entry action is present').toHaveCount(1);
+    await expect(page.getByRole('button', { name: 'Написать нам', exact: true }), 'greeting adds no second chat-opening button').toHaveCount(1);
+    await expect(page.getByText('Вера Рум', { exact: true }), 'the approved greeting name is visible immediately').toBeVisible();
+    const greeting = page.getByText(GREETING_TEXT, { exact: true });
+    await expect(greeting, 'the exact approved greeting is visible before any activation').toBeVisible();
+    const emblem = greeting.locator('xpath=ancestor::*[.//button[@aria-label="Закрыть приветствие"]][1]')
+      .locator('img[src$="/logo-icon.svg"]');
+    await expect(emblem, 'the local compact IKPK emblem is part of the greeting').toHaveCount(1);
+    await expect.poll(() => emblem.evaluate((image: HTMLImageElement) => image.complete && image.naturalWidth > 0),
+      'the emblem asset loads').toBe(true);
+    await expect(page.getByRole('button', { name: GREETING_CLOSE, exact: true }), 'the greeting has a named close control').toBeVisible();
+    const geometry = await greetingGeometry(page);
+    expect(geometry, 'the text and close control belong to a greeting panel separate from the chat action').not.toBeNull();
+    expect(geometry?.focusInside, 'showing the greeting does not move focus into it').toBe(false);
+    expect(seen.toHost(new URL(PROBE_CHAT_LOADER_SRC).hostname), 'showing the local greeting does not request Bitrix').toEqual([]);
+  });
+
+  test('greeting remains visible in the lower zone without covering page content on desktop and mobile widths', async ({ page }) => {
+    await protectThirdParties(page);
+    for (const width of WIDTHS) {
+      await page.setViewportSize({ width, height: width === 375 ? 812 : 720 });
+      await page.goto(activeUrl('/'));
+      const greeting = page.getByText(GREETING_TEXT, { exact: true });
+      const trigger = page.locator(TRIGGER);
+      await expect(greeting, `${width}px: greeting is initially visible`).toBeVisible();
+      await expect(trigger, `${width}px: chat action is initially visible`).toBeInViewport();
+      for (const position of ['middle', 'footer'] as const) {
+        const port = page.locator('[data-page-scrollport]');
+        await expect(port, `${width}px: a real content scrollport is available`).toHaveCount(1);
+        const target = await port.evaluate((el: HTMLElement, where) => where === 'middle'
+          ? Math.floor((el.scrollHeight - el.clientHeight) / 2)
+          : el.scrollHeight - el.clientHeight, position);
+        await port.evaluate((el: HTMLElement, top) => el.scrollTo({ top, behavior: 'instant' }), target);
+        await expect.poll(() => port.evaluate((el: HTMLElement) => el.scrollTop), `${width}px: ${position} scroll settles`)
+          .toBe(target);
+        await expect(greeting, `${width}px ${position}: greeting remains visible`).toBeInViewport();
+        await expect(trigger, `${width}px ${position}: sole chat action remains visible`).toBeInViewport();
+        const geometry = await greetingGeometry(page);
+        expect(geometry, `${width}px ${position}: greeting panel can be measured independently of the chat action`).not.toBeNull();
+        expect(geometry?.top, `${width}px ${position}: panel is within the viewport`).toBeGreaterThanOrEqual(0);
+        expect(geometry?.bottom, `${width}px ${position}: panel is within the viewport`).toBeLessThanOrEqual(width === 375 ? 812 : 720);
+        expect(geometry?.containsTrigger, `${width}px ${position}: greeting is not a second chat trigger`).toBe(false);
+        expect(geometry?.overlaps, `${width}px ${position}: greeting does not cover visible clipped page text or controls`).toEqual([]);
+      }
+    }
+  });
+
+  test('keyboard dismissal persists through scroll and resize until a new document', async ({ page }) => {
+    await protectThirdParties(page);
+    await page.setViewportSize({ width: 375, height: 812 });
+    await page.goto(activeUrl('/'));
+    const greeting = page.getByText(GREETING_TEXT, { exact: true });
+    const close = page.getByRole('button', { name: GREETING_CLOSE, exact: true });
+    await expect(close).toBeVisible();
+    await close.focus();
+    const focusStyle = await close.evaluate((el) => {
+      const style = getComputedStyle(el);
+      return style.outlineStyle !== 'none' && parseFloat(style.outlineWidth) > 0
+        || style.boxShadow !== 'none';
+    });
+    expect(focusStyle, 'the close control has a visible keyboard focus indicator').toBe(true);
+    await page.keyboard.press('Enter');
+    await expect(greeting, 'keyboard activation closes the local greeting').toHaveCount(0);
+    await expect(page.locator(TRIGGER), 'closing greeting leaves the chat action available').toBeVisible();
+    const port = page.locator('[data-page-scrollport]');
+    await port.evaluate((el: HTMLElement) => el.scrollTo({ top: el.scrollHeight, behavior: 'instant' }));
+    await page.setViewportSize({ width: 320, height: 720 });
+    await expect(greeting, 'scrolling and viewport changes do not restore the greeting in this document').toHaveCount(0);
+    await page.reload();
+    await expect(page.getByText(GREETING_TEXT, { exact: true }), 'a new document starts with the greeting again').toBeVisible();
+  });
+
+  test('activating the chat hides the local greeting through provider close', async ({ page }) => {
+    const seen = await protectThirdParties(page);
+    await page.goto(activeUrl('/'));
+    const greeting = page.getByText(GREETING_TEXT, { exact: true });
+    const trigger = page.locator(TRIGGER);
+    await expect(greeting).toBeVisible();
+    expect(seen.toHost(new URL(PROBE_CHAT_LOADER_SRC).hostname), 'no loader request before CTA').toEqual([]);
+    await trigger.click();
+    await expect(page.locator('[data-chat-stub-panel]'), 'the existing click path opens the guarded provider fixture').toBeVisible();
+    await expect(greeting, 'the local greeting leaves when the chat is activated').toHaveCount(0);
+    expect(seen.toHost(new URL(PROBE_CHAT_LOADER_SRC).hostname), 'the click causes exactly one loader request').toHaveLength(1);
+    await page.locator('[data-chat-stub-panel]').getByRole('button', { name: 'Закрыть' }).click();
+    await expect(page.locator('[data-chat-stub-panel]')).toHaveCount(0);
+    await expect(greeting, 'closing the provider does not restore local greeting in this document').toHaveCount(0);
+  });
+
+  test('payment overlay paints above the greeting and keeps focus inside the dialog', async ({ page }) => {
+    await protectThirdParties(page);
+    await page.setViewportSize({ width: 375, height: 812 });
+    await page.goto(activeUrl('/oplata'));
+    await expect(page.getByText(GREETING_TEXT, { exact: true }), 'payment page shows the local greeting before opening the dialog').toBeVisible();
+    const greeting = await greetingGeometry(page);
+    expect(greeting, 'the greeting panel has its own lower-zone box').not.toBeNull();
+    const opener = page.locator(PAYMENT_ENTRY);
+    await expect(opener, 'the existing payment action is present').toHaveCount(1);
+    await opener.click();
+    const dialog = page.locator(PAYMENT_DIALOG);
+    await expect(dialog, 'payment dialog opens above the greeting').toBeVisible();
+    const layered = await page.evaluate((point) => {
+      const root = document.querySelector<HTMLElement>(PAYMENT_ROOT);
+      const dialog = document.querySelector<HTMLElement>(PAYMENT_DIALOG);
+      const hit = document.elementFromPoint(point.x, point.y);
+      return {
+        overlayCoversGreeting: Boolean(root && hit && root.contains(hit)),
+        focusInsideDialog: Boolean(dialog && document.activeElement && dialog.contains(document.activeElement)),
+      };
+    }, { x: (greeting!.left + greeting!.right) / 2, y: (greeting!.top + greeting!.bottom) / 2 });
+    expect(layered.overlayCoversGreeting, 'the payment overlay intercepts the greeting area').toBe(true);
+    expect(layered.focusInsideDialog, 'opening payment does not leave focus in or return it to the greeting').toBe(true);
   });
 
   test('anchor, history, wheel, touch-like scroll, keyboard scroll, and focus reveal stay in the shared scrollport', async ({ page }) => {
