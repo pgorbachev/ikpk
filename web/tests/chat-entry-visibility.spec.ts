@@ -78,11 +78,24 @@ async function installHistoryFragment(page: Page) {
 }
 
 async function snapshotLayout(page: Page) {
-  return page.evaluate((triggerSelector) => {
+  return page.evaluate((args) => {
     const header = document.querySelector('header');
     const main = document.querySelector('main');
     const footer = document.querySelector('footer');
-    const button = document.querySelector<HTMLElement>(triggerSelector);
+    const button = document.querySelector<HTMLElement>(args.triggerSelector);
+    const close = [...document.querySelectorAll<HTMLButtonElement>('button')]
+      .find((candidate) => candidate.getAttribute('aria-label') === args.greetingCloseName);
+    const greetingText = [...document.querySelectorAll<HTMLElement>('body *')].find((el) =>
+      el.textContent?.trim() === args.greetingText
+        && ![...el.children].some((child) => child.textContent?.trim() === args.greetingText),
+    ) ?? null;
+    let greeting = greetingText;
+    while (greeting && (!close || !greeting.contains(close) || (button && greeting.contains(button))))
+      greeting = greeting.parentElement;
+    const greetingRect = greeting?.getBoundingClientRect() ?? null;
+    const greetingStyle = greeting ? getComputedStyle(greeting) : null;
+    const greetingVisible = Boolean(greetingRect && greetingStyle && greetingRect.width > 0 && greetingRect.height > 0
+      && greetingStyle.display !== 'none' && greetingStyle.visibility !== 'hidden' && Number(greetingStyle.opacity) > 0);
     const candidates = [...document.querySelectorAll<HTMLElement>('body *')];
     const scrollport = candidates.find((el) => {
       const style = getComputedStyle(el);
@@ -108,10 +121,11 @@ async function snapshotLayout(page: Page) {
     };
     const clip = scrollport?.getBoundingClientRect() ?? new DOMRect(0, 0, innerWidth, innerHeight);
     const overlaps: string[] = [];
+    const greetingOverlaps: string[] = [];
+    const intersect = (a: { left: number; top: number; right: number; bottom: number }, b: { left: number; top: number; right: number; bottom: number }) =>
+      a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
     if (button) {
       const box = button.getBoundingClientRect();
-      const hit = (r: { left: number; top: number; right: number; bottom: number }) =>
-        r.left < box.right && r.right > box.left && r.top < box.bottom && r.bottom > box.top;
       const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
       while (walker.nextNode()) {
         const node = walker.currentNode;
@@ -120,9 +134,11 @@ async function snapshotLayout(page: Page) {
         range.selectNodeContents(node);
         for (const r of range.getClientRects()) {
           const shown = visibleRect(r, clip);
-          if (shown && hit(shown)) {
-            overlaps.push(`text:${node.textContent.trim().slice(0, 32)}`);
-            break;
+          if (shown) {
+            const description = `text:${node.textContent.trim().slice(0, 32)}`;
+            if (intersect(shown, box) && !overlaps.includes(description)) overlaps.push(description);
+            if (greetingVisible && greetingRect && greeting && !greeting.contains(node.parentElement)
+              && intersect(shown, greetingRect) && !greetingOverlaps.includes(description)) greetingOverlaps.push(description);
           }
         }
         range.detach();
@@ -133,15 +149,30 @@ async function snapshotLayout(page: Page) {
         const style = getComputedStyle(el);
         if (style.display === 'none' || style.visibility === 'hidden' || el.hidden) continue;
         const shown = visibleRect(el.getBoundingClientRect(), clip);
-        if (shown && hit(shown)) overlaps.push(`control:${el.tagName.toLowerCase()}:${el.textContent?.trim().slice(0, 24)}`);
+        if (shown) {
+          const description = `control:${el.tagName.toLowerCase()}:${el.textContent?.trim().slice(0, 24)}`;
+          if (intersect(shown, box)) overlaps.push(description);
+          if (greetingVisible && greetingRect && greeting && !greeting.contains(el) && !el.contains(greeting)
+            && intersect(shown, greetingRect)) greetingOverlaps.push(description);
+        }
       }
     }
+    const insetProbe = document.createElement('div');
+    insetProbe.style.cssText = 'position:fixed;left:-10000px;padding-bottom:env(safe-area-inset-bottom)';
+    document.body.append(insetProbe);
+    const safeAreaInset = parseFloat(getComputedStyle(insetProbe).paddingBottom) || 0;
+    insetProbe.remove();
+    const lowerRect = lowerZone?.getBoundingClientRect() ?? null;
     return {
       scrollport: rect(scrollport),
       scrollportFound: Boolean(scrollport),
       documentScrollHeight: document.documentElement.scrollHeight,
       pageFrameChildren: frame ? [...frame.children].map((el) => el.tagName.toLowerCase()) : [],
       lowerZone: rect(lowerZone ?? null),
+      lowerUsefulHeight: lowerRect ? lowerRect.height - safeAreaInset : null,
+      safeAreaInset,
+      buttonInsideUsefulArea: Boolean(button && lowerRect && button.getBoundingClientRect().top >= lowerRect.top
+        && button.getBoundingClientRect().bottom <= lowerRect.bottom - safeAreaInset),
       button: rect(button),
       buttonParentIsBody: button?.parentElement === document.body,
       buttonInsideScrollport: Boolean(scrollport && button && scrollport.contains(button)),
@@ -151,10 +182,30 @@ async function snapshotLayout(page: Page) {
       documentScrollTop: document.scrollingElement?.scrollTop ?? 0,
       buttonInsideLowerZone: Boolean(lowerZone && button && lowerZone.contains(button)),
       scrollportEndsBeforeLowerZone: Boolean(scrollport && lowerZone && scrollport.getBoundingClientRect().bottom <= lowerZone.getBoundingClientRect().top + 1),
+      greetingFound: Boolean(greetingText && greeting),
+      greetingVisible,
+      greetingInsideUsefulArea: Boolean(greetingVisible && greetingRect && lowerRect
+        && greetingRect.top >= lowerRect.top && greetingRect.bottom <= lowerRect.bottom - safeAreaInset + 1),
+      greetingOverlapsButton: Boolean(greetingVisible && greetingRect && button && intersect(greetingRect, button.getBoundingClientRect())),
+      greetingOverlap: greetingOverlaps.slice(0, 8),
       overlap: overlaps.slice(0, 8),
       rootFont: parseFloat(getComputedStyle(document.documentElement).fontSize),
     };
-  }, TRIGGER);
+  }, { triggerSelector: TRIGGER, greetingText: GREETING_TEXT, greetingCloseName: GREETING_CLOSE });
+}
+
+async function visibleScrollportGestureArea(page: Page) {
+  return page.evaluate(() => {
+    const port = document.querySelector<HTMLElement>('[data-page-scrollport]');
+    if (!port) throw new Error('shared scrollport is missing before gesture');
+    const portRect = port.getBoundingClientRect();
+    const headerBottom = document.querySelector('header')?.getBoundingClientRect().bottom ?? portRect.top;
+    const visualTop = window.visualViewport?.offsetTop ?? 0;
+    const visualBottom = Math.min(innerHeight, visualTop + (window.visualViewport?.height ?? innerHeight));
+    const top = Math.max(portRect.top, headerBottom, visualTop) + 4;
+    const bottom = Math.min(portRect.bottom, visualBottom) - 4;
+    return { x: Math.min(innerWidth - 8, Math.max(8, portRect.left + portRect.width / 2)), top, bottom, height: bottom - top };
+  });
 }
 
 async function contrastAndButtonState(page: Page, width: number, theme: 'light' | 'dark') {
@@ -367,7 +418,7 @@ test.describe('chat entry visibility approved contract', () => {
     }
   });
 
-  test('page flow has one real scrollport and an 80px sibling lower zone without clipped visible overlap', async ({ page }) => {
+  test('page flow has one real scrollport and a dynamic sibling lower zone without clipped visible overlap', async ({ page }) => {
     await protectThirdParties(page);
     const templates = TEMPLATES;
     expect(templates.map(({ name }) => name).filter((name) => TD52.has(name)).sort()).toEqual([...TD52].sort());
@@ -382,11 +433,16 @@ test.describe('chat entry visibility approved contract', () => {
           const before = await snapshotLayout(page);
           expect.soft(before.scrollportFound, `${name} ${width} ${position}: header/main/newsletter/footer share a real scrollport`).toBe(true);
           expect.soft(before.lowerZone, `${name} ${width} ${position}: adjacent lower zone exists`).not.toBeNull();
-          expect.soft(before.lowerZone?.height, `${name} ${width} ${position}: useful lower-zone height is 80 CSS px at zero safe-area`).toBe(80);
+          expect.soft(before.lowerUsefulHeight, `${name} ${width} ${position}: useful lower-zone height is at least 80 CSS px`).toBeGreaterThanOrEqual(80);
           expect.soft(before.buttonParentIsBody, `${name} ${width} ${position}: button is outside the content scrollport`).toBe(false);
           expect.soft(before.buttonInsideScrollport, `${name} ${width} ${position}: button is not inside the content scrollport`).toBe(false);
           expect.soft(before.buttonInsideLowerZone, `${name} ${width} ${position}: button belongs to the separate lower zone`).toBe(true);
           expect.soft(before.scrollportEndsBeforeLowerZone, `${name} ${width} ${position}: scrollport ends before lower zone`).toBe(true);
+          expect.soft(before.greetingFound, `${name} ${width} ${position}: approved greeting is in the lower zone`).toBe(true);
+          expect.soft(before.greetingVisible, `${name} ${width} ${position}: greeting is visible`).toBe(true);
+          expect.soft(before.greetingInsideUsefulArea, `${name} ${width} ${position}: greeting fits above safe-area inset`).toBe(true);
+          expect.soft(before.greetingOverlapsButton, `${name} ${width} ${position}: greeting does not overlap CTA`).toBe(false);
+          expect.soft(before.greetingOverlap, `${name} ${width} ${position}: greeting does not overlap visible clipped page text or controls`).toEqual([]);
           if (position === 'start') await page.evaluate(() => {
             const header = document.querySelector('header');
             const main = document.querySelector('main');
@@ -426,6 +482,11 @@ test.describe('chat entry visibility approved contract', () => {
           await page.waitForTimeout(40);
           const measured = await snapshotLayout(page);
           expect.soft(measured.scrollportFound, `${name} ${width} ${position}: scrolling content is the shared scrollport`).toBe(true);
+          expect.soft(measured.lowerUsefulHeight, `${name} ${width} ${position}: dynamic lower zone retains at least 80 useful px`).toBeGreaterThanOrEqual(80);
+          expect.soft(measured.greetingVisible, `${name} ${width} ${position}: greeting remains visible while scrolling`).toBe(true);
+          expect.soft(measured.greetingInsideUsefulArea, `${name} ${width} ${position}: greeting remains above the safe-area inset`).toBe(true);
+          expect.soft(measured.greetingOverlapsButton, `${name} ${width} ${position}: greeting does not overlap CTA`).toBe(false);
+          expect.soft(measured.greetingOverlap, `${name} ${width} ${position}: greeting does not cover visible clipped page text or controls`).toEqual([]);
           expect.soft(measured.overlap, `${name} ${width} ${position}: no visible clipped text/control intersects the trigger`).toEqual([]);
           expect.soft(measured.documentScrollTop, `${name} ${width} ${position}: document has no competing scroll position`).toBe(0);
           if (position === 'start') expect.soft(measured.scrollportScrollTop, `${name} ${width}: start position resets the shared scrollport`).toBe(0);
@@ -505,7 +566,7 @@ test.describe('chat entry visibility approved contract', () => {
     expect(focusStyle, 'the close control has a visible keyboard focus indicator').toBe(true);
     await page.keyboard.press('Enter');
     await expect(greeting, 'keyboard activation hides the local greeting').toBeHidden();
-    await expect(page.locator(TRIGGER), 'closing greeting leaves the chat action available').toBeVisible();
+    await expect(page.locator(TRIGGER), 'closing greeting returns focus to the available chat action').toBeFocused();
     const port = page.locator('[data-page-scrollport]');
     await port.evaluate((el: HTMLElement) => el.scrollTo({ top: el.scrollHeight, behavior: 'instant' }));
     await page.setViewportSize({ width: 320, height: 720 });
@@ -738,26 +799,37 @@ test.describe('chat entry visibility approved contract', () => {
 
       await resetPort();
       const beforeWheel = (await snapshotLayout(page)).scrollportScrollTop;
+      const wheelArea = await visibleScrollportGestureArea(page);
+      expect(wheelArea.height, 'wheel gesture has visible scrollport area below the sticky header and greeting zone').toBeGreaterThan(0);
       await armGestureScrollEnd(beforeWheel);
+      await page.mouse.move(wheelArea.x, (wheelArea.top + wheelArea.bottom) / 2);
       await page.mouse.wheel(0, 480);
       await expect.poll(async () => (await snapshotLayout(page)).scrollportScrollTop,
         'wheel advances the shared scrollport').toBeGreaterThan(beforeWheel);
       await waitForGestureScrollEnd(beforeWheel, 'wheel gesture settles on the shared scrollport');
+      await expect(page.getByText(GREETING_TEXT, { exact: true }), 'wheel scrolling leaves the greeting visible').toBeVisible();
 
       await resetPort();
       const session = await page.context().newCDPSession(page);
       const beforeTouch = (await snapshotLayout(page)).scrollportScrollTop;
+      const touchArea = await visibleScrollportGestureArea(page);
+      expect(touchArea.height, 'touch gesture has visible scrollport area below the sticky header and greeting zone').toBeGreaterThan(40);
       await armGestureScrollEnd(beforeTouch);
       try {
         await session.send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 1 });
-        await session.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: 180, y: 300, id: 1 }] });
-        for (let y = 280; y >= 100; y -= 20) {
-          await session.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: 180, y, id: 1 }] });
+        const startY = touchArea.bottom - 2;
+        const endY = touchArea.top + 2;
+        await session.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: touchArea.x, y: startY, id: 1 }] });
+        const steps = Math.ceil((startY - endY) / 20);
+        for (let step = 1; step <= steps; step += 1) {
+          const y = startY - ((startY - endY) * step) / steps;
+          await session.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: touchArea.x, y, id: 1 }] });
         }
         await session.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
         await expect.poll(async () => (await snapshotLayout(page)).scrollportScrollTop,
           'trusted CDP touch input advances the shared scrollport').toBeGreaterThan(beforeTouch);
         await waitForGestureScrollEnd(beforeTouch, 'trusted touch gesture settles on the shared scrollport');
+        await expect(page.getByText(GREETING_TEXT, { exact: true }), 'touch scrolling leaves the greeting visible').toBeVisible();
       } finally {
         try {
           await session.send('Emulation.setTouchEmulationEnabled', { enabled: false });
@@ -1186,32 +1258,23 @@ test.describe('chat entry visibility approved contract', () => {
     await page.goto(activeUrl('/'));
     const session = await page.context().newCDPSession(page);
     await session.send('Emulation.setSafeAreaInsetsOverride', { insets: { bottom: 20 } });
-    const measured = await page.evaluate(() => {
-      const facade = document.querySelector<HTMLElement>('[data-chat-facade]')!;
-      const trigger = facade.querySelector<HTMLElement>('[data-chat-trigger]')!;
-      const port = document.querySelector<HTMLElement>('[data-page-scrollport]')!;
-      const rect = facade.getBoundingClientRect();
-      const button = trigger.getBoundingClientRect();
-      const probe = document.createElement('div');
-      probe.style.cssText = 'position:fixed;left:-10000px;padding-bottom:env(safe-area-inset-bottom)';
-      document.body.append(probe);
-      const inset = parseFloat(getComputedStyle(probe).paddingBottom) || 0;
-      probe.remove();
-      return {
-        inset,
-        lowerHeight: rect.height,
-        usefulHeight: rect.height - inset,
-        buttonInsideUsefulArea: button.top >= rect.top && button.bottom <= rect.bottom - inset,
-        portBottom: port.getBoundingClientRect().bottom,
-        lowerTop: rect.top,
-      };
-    });
+    const expanded = await snapshotLayout(page);
+    expect(expanded.safeAreaInset, 'CDP overrides the safe-area inset for this Chromium fixture').toBe(20);
+    expect(expanded.lowerUsefulHeight ?? -Infinity, 'visible greeting expands the useful lower zone beyond its collapsed minimum').toBeGreaterThan(80);
+    expect(expanded.greetingVisible, 'greeting is visible in the expanded lower zone').toBe(true);
+    expect(expanded.greetingInsideUsefulArea, 'expanded greeting remains above the safe-area inset').toBe(true);
+    expect(expanded.buttonInsideUsefulArea, 'capsule remains above the safe-area inset while greeting is visible').toBe(true);
+    expect(expanded.scrollportEndsBeforeLowerZone, 'scrollport ends before the expanded lower zone').toBe(true);
+
+    await page.getByRole('button', { name: GREETING_CLOSE, exact: true }).click();
+    await expect(page.getByText(GREETING_TEXT, { exact: true }), 'dismissal hides greeting before collapsed geometry is measured').toBeHidden();
+    const collapsed = await snapshotLayout(page);
+    expect(collapsed.safeAreaInset, 'safe-area inset remains applied after dismissal').toBe(20);
+    expect(collapsed.lowerUsefulHeight, 'collapsed lower zone returns to its approved 80 CSS px minimum').toBe(80);
+    expect(collapsed.lowerZone?.height, 'collapsed useful zone plus 20px safe-area is 100px overall').toBe(100);
+    expect(collapsed.buttonInsideUsefulArea, 'capsule remains inside the collapsed useful zone').toBe(true);
+    expect(collapsed.scrollportEndsBeforeLowerZone, 'scrollport ends before the collapsed lower zone').toBe(true);
     await session.detach();
-    expect(measured.inset, 'CDP overrides the safe-area inset for this Chromium fixture').toBe(20);
-    expect(measured.lowerHeight, 'safe area is added outside the useful lower-zone height').toBe(100);
-    expect(measured.usefulHeight, 'lower zone retains 80 CSS px above the safe area').toBe(80);
-    expect(measured.buttonInsideUsefulArea, 'capsule remains in the useful 80px portion').toBe(true);
-    expect(measured.portBottom, 'scrollport ends before the full lower zone').toBeLessThanOrEqual(measured.lowerTop + 1);
   });
 
   test('shared scrollport drives the header shadow and the no-IntersectionObserver reviews fallback', async ({ page }) => {
@@ -1278,23 +1341,32 @@ test.describe('chat entry visibility approved contract', () => {
     const pageFieldBeforeShrink = await pageField.evaluate((el) => {
       const rect = el.getBoundingClientRect();
       const port = document.querySelector<HTMLElement>('[data-page-scrollport]')!.getBoundingClientRect();
-      return rect.top >= port.top && rect.bottom <= port.bottom;
+      const headerBottom = document.querySelector('header')?.getBoundingClientRect().bottom ?? port.top;
+      const viewport = window.visualViewport;
+      return rect.top >= Math.max(port.top, headerBottom, viewport?.offsetTop ?? 0)
+        && rect.bottom <= Math.min(port.bottom, (viewport?.offsetTop ?? 0) + (viewport?.height ?? innerHeight));
     });
     expect(pageFieldBeforeShrink, 'focused schedule search field starts inside the lower edge of the scrollport').toBe(true);
     await page.evaluate(() => (window as Window & { __setVisualViewportForTest?: (height: number, offsetTop: number) => void }).__setVisualViewportForTest?.(260, 20));
     await expect.poll(() => pageField.evaluate((el) => {
       const rect = el.getBoundingClientRect();
       const port = document.querySelector<HTMLElement>('[data-page-scrollport]')!.getBoundingClientRect();
-      return rect.top >= port.top && rect.bottom <= port.bottom;
+      const headerBottom = document.querySelector('header')?.getBoundingClientRect().bottom ?? port.top;
+      const viewport = window.visualViewport;
+      return rect.top >= Math.max(port.top, headerBottom, viewport?.offsetTop ?? 0)
+        && rect.bottom <= Math.min(port.bottom, (viewport?.offsetTop ?? 0) + (viewport?.height ?? innerHeight));
     }), 'focused lower page field stays revealed when the visual viewport shrinks').toBe(true);
     const focusedBeforeWheel = await page.evaluate(() => ({
       active: document.activeElement === document.querySelector('[data-schedule-search]'),
       scrollTop: document.querySelector<HTMLElement>('[data-page-scrollport]')!.scrollTop,
     }));
-    await page.mouse.move(200, 120);
+    const wheelArea = await visibleScrollportGestureArea(page);
+    expect(wheelArea.height, 'wheel target remains in visible scrollport below the sticky header and greeting zone').toBeGreaterThan(0);
+    await page.mouse.move(wheelArea.x, (wheelArea.top + wheelArea.bottom) / 2);
     await page.mouse.wheel(0, 300);
     await expect.poll(() => page.locator('[data-page-scrollport]').evaluate((el) => el.scrollTop),
       'wheel scrolling can move away from the focused field').toBeGreaterThan(focusedBeforeWheel.scrollTop);
+    await expect(page.getByText(GREETING_TEXT, { exact: true }), 'wheel scrolling does not dismiss the greeting').toBeVisible();
     expect(await page.evaluate(() => document.activeElement === document.querySelector('[data-schedule-search]')),
       'ordinary scrolling keeps the field focused without snapping the page back').toBe(focusedBeforeWheel.active);
 
