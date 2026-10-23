@@ -31,6 +31,14 @@ const showFacade = config.state === 'address' && !isDemoOutput;
 {
   showFacade && (
     <div data-chat-facade class="chat-facade">
+      <section data-chat-greeting class="chat-greeting" aria-label="Приветствие Веры Рум">
+        <img src="/logo-icon.svg" alt="" aria-hidden="true" width="32" height="32" />
+        <p class="chat-greeting__name">Вера Рум</p>
+        <button type="button" class="chat-greeting__close" aria-label="Закрыть приветствие">
+          <span aria-hidden="true">×</span>
+        </button>
+        <p class="chat-greeting__text">Здравствуйте! Готова помочь вам. Напишите мне, если у вас появились вопросы.</p>
+      </section>
       <button
         type="button"
         data-chat-trigger
@@ -90,10 +98,24 @@ const showFacade = config.state === 'address' && !isDemoOutput;
   // порталу (клиент ещё не передал ключи Bitrix24 — docs/client-requests.md, п. 8);
   // проверить точное соответствие макету портала можно только на живом стенде.
   (function () {
+    const greeting = document.querySelector('[data-chat-greeting]');
+    const closeGreeting = greeting && greeting.querySelector('[aria-label="Закрыть приветствие"]');
+    const hideGreeting = function () {
+      if (!greeting) return;
+      const trigger = document.querySelector('[data-chat-trigger]');
+      if (trigger && greeting.contains(document.activeElement)) trigger.focus({ preventScroll: true });
+      greeting.setAttribute('hidden', '');
+    };
+    if (closeGreeting) closeGreeting.addEventListener('click', hideGreeting);
+
     const pageScrollport = document.querySelector('[data-page-scrollport]');
     if (pageScrollport && document.body.hasAttribute('data-chat-page')) {
       const viewport = window.visualViewport;
+      const lowerZone = document.querySelector('[data-chat-facade]');
       const updateViewport = function () {
+        if (lowerZone) {
+          document.body.style.setProperty('--chat-lower-zone-height', Math.ceil(lowerZone.getBoundingClientRect().height) + 'px');
+        }
         const height = viewport ? viewport.height : window.innerHeight;
         const offset = viewport ? viewport.offsetTop : 0;
         const setPixel = function (name, value) {
@@ -319,6 +341,10 @@ const showFacade = config.state === 'address' && !isDemoOutput;
         }
       };
       updateViewport();
+      if (lowerZone && typeof ResizeObserver === 'function') {
+        const lowerZoneObserver = new ResizeObserver(updateViewport);
+        lowerZoneObserver.observe(lowerZone);
+      }
       window.addEventListener('pageshow', function () {
         transitionGeneration += 1;
         traversingHistory = false;
@@ -415,6 +441,7 @@ const showFacade = config.state === 'address' && !isDemoOutput;
     }
 
     trigger.addEventListener('click', function () {
+      hideGreeting();
       if (openProvider) {
         openProvider();
         return;
