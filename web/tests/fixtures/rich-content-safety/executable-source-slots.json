@@ -44,8 +44,8 @@
     "file": "components/chat/ChatFacade.astro",
     "nodeKind": "element",
     "locator": "components/chat/ChatFacade.astro:L57:C1:script",
-    "fingerprint": "ecb327084070df67cf38fa6921973cd3e78db5a8a3f0df9a45accf4405736e38",
-    "identity": "script|is:inline=empty:|body:748f379bcba0bfd5"
+    "fingerprint": "70df91342f10c7657ff7e9c51427a6e0bcaf4895dd4af6c2dd5ef11c3dd1c534",
+    "identity": "script|is:inline=empty:|body:d484ec55caf1eb25"
   },
   {
     "slotId": "src:components/contacts/ContactShell.astro:L121:C9:svg",
