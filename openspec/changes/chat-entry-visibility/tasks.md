@@ -20,10 +20,10 @@
 
 - [x] 3.1 Только после review, полного owner approval и предъявленного RED явно делегировать ограниченную реализацию Luna на подходящей недорогой модели; не менять согласованный scope.
 - [x] 3.2 Реализовать общий scrollport и свёрнутую нижнюю зону минимум 80 CSS px с кнопкой справа: высота 52 CSS px, иконка 22 CSS px, gap 10 CSS px, padding 20 CSS px; сохранить внешний вид шапки и её sticky-поведение. Эта отметка относится к прежней редакции без greeting.
-- [ ] 3.3 Обеспечить корректную навигацию и прокрутку, responsive viewport/safe-area, отсутствие slot при отсутствии чата и совместимость payment overlay с focus/inert/scroll lock и восстановлением позиции.
-- [ ] 3.4 Сохранить текущие lazy loader, конфигурационные состояния, demo/404 и один-click путь Bitrix; не менять контракт сторонней интеграции.
-- [ ] 3.5 Реализовать greeting-плашку по референсу владельца в выбранной нижней зоне; использовать `web/public/logo-icon.svg`, оставить «Написать нам» единственным действием входа, учесть клавиатуру и payment modal, не менять чужой DOM Bitrix.
-- [ ] 3.6 По нажатию `Написать нам` скрыть локальную плашку до конца документа; не наблюдать закрытие чужого интерфейса и не восстанавливать greeting автоматически.
+- [x] 3.3 Обеспечить корректную навигацию и прокрутку, responsive viewport/safe-area, отсутствие slot при отсутствии чата и совместимость payment overlay с focus/inert/scroll lock и восстановлением позиции. Browser checks покрыли desktop/mobile, keyboard viewport resize, safe-area layout и payment dialog; физическая мобильная клавиатура не проверялась.
+- [x] 3.4 Сохранить текущие lazy loader, конфигурационные состояния, demo/404 и один-click путь Bitrix; не менять контракт сторонней интеграции. Address/none/unset, demo/404 и отсутствие запросов до CTA покрыты проверками.
+- [x] 3.5 Реализовать greeting-плашку по референсу владельца в выбранной нижней зоне; использовать `web/public/logo-icon.svg`, оставить «Написать нам» единственным действием входа, учесть клавиатуру и payment modal, не менять чужой DOM Bitrix. Проверены имя, точный текст, локальная эмблема, геометрия 320/375/1280 и payment overlay.
+- [x] 3.6 По нажатию `Написать нам` скрыть локальную плашку до конца документа; не наблюдать закрытие чужого интерфейса и не восстанавливать greeting автоматически. Проверены dismissal по X/клавиатуре и CTA/provider close без повторного показа до нового документа.
 
 ## 4. Verification
 
@@ -38,7 +38,7 @@
 - [x] 4.7 Проверить конфигурации `address`/`none`/unset, demo и 404 и отсутствие пустой зоны/лишних запросов. Отдельный non-demo probe через `buildProbe` (`web/tests/helpers/widget-probe-build.ts@2fee597b5335f6c61fd61a622fa2a5f3f475a605:89`, `export function buildProbe(`) с `PROBE_CHAT_LOADER_SRC` (`web/tests/helpers/widget-probe-build.ts@2fee597b5335f6c61fd61a622fa2a5f3f475a605:160`, `export const PROBE_CHAT_LOADER_SRC = 'https://chat-loader.invalid/probe/loader_probe.js';`) и payment-preview role/stubs (`.github/workflows/test.yml@2fee597b5335f6c61fd61a622fa2a5f3f475a605:598`, `- name: Run payment form e2e (preview role)`) SHALL иметь реально включённые chat trigger и payment dialog. Убедиться, что `DEMO_OUTPUT` не установлен; отсутствие любого элемента или невозможность открыть `.payment-dialog` означает failure, не skip. Проверено локально с `.invalid`-stub, реальные Bitrix-сервисы не проверялись.
 - [x] 4.8 После свежего `test:build` выполнить браузерный gate `cd web && npm run test:e2e:widgets` (`web/package.json@2fee597b5335f6c61fd61a622fa2a5f3f475a605:53`, `"test:e2e:widgets": "node tests/helpers/preview-reset.mjs && playwright test tests/external-widgets.spec.ts tests/external-widgets-baseline-repeat.spec.ts --project=desktop --project=mobile"`; CI: `.github/workflows/test.yml@2fee597b5335f6c61fd61a622fa2a5f3f475a605:630`, `run: npm run test:e2e:widgets`). Затем выполнить `cd web && npm run lint` (`web/package.json@2fee597b5335f6c61fd61a622fa2a5f3f475a605:13`, `"lint": "eslint ."`) и `cd web && npm run typecheck` (`web/package.json@2fee597b5335f6c61fd61a622fa2a5f3f475a605:14`, `"typecheck": "astro check"`). Записать exit code каждого существующего gate и оставшиеся пропуски; не считать TD-52 закрытым при пропуске его шаблонов. Свежий `test:build` и desktop/mobile widget suite прошли; 93 passed, 7 intentional skips (1 desktop project skip for mobile-only test; preview-b/c/d 404 drafts each skipped on both projects). Lint, typecheck, strict OpenSpec validation, and spec-ref gate all exited 0.
 
-- [ ] 4.9 Проверить новую геометрию greeting на 320/375/1280px: свёрнутый slot минимум 80px, открытый slot растёт по содержимому, scrollport заканчивается над ним, greeting и кнопка не перекрывают страницу; проверить крестик/CTA dismissal до конца документа и клавиатуру/modal.
+- [x] 4.9 Проверить новую геометрию greeting на 320/375/1280px: свёрнутый slot минимум 80px, открытый slot растёт по содержимому, scrollport заканчивается над ним, greeting и кнопка не перекрывают страницу; проверить крестик/CTA dismissal до конца документа и клавиатуру/modal. `tests/chat-entry-visibility.spec.ts` прошёл на desktop/mobile (38/38); в общей bounded проверке с baseline repeat — 41 passed, 1 intentional desktop-only skip.
 
 ## 5. Независимое ревью
 
@@ -46,17 +46,17 @@
 
 - [x] 5.1 Получить независимый полный проход по текущему implementation diff; исправить подтверждённые находки и перепроверить изменённую ревизию. Полные проходы сделаны на review checkpoints; последующие source, registry, metadata и test-oracle deltas прошли независимые proportionate rechecks без новых confirmed findings.
 - [x] 5.2 Получить второй независимый полный проход по текущему diff; исправить подтверждённые находки и перепроверить изменённую ревизию. Это независимая review chain, а не утверждение о двух полных повторных проходах по финальному HEAD.
-- [ ] 5.3 Получить два независимых полных code review нового greeting/VK diff после реализации; прежние reviews относятся к прежней ревизии.
+- [x] 5.3 Получить два независимых полных code review нового greeting/VK diff после реализации; прежние reviews относятся к прежней ревизии. Root и Astra проверили текущие code/registry revisions и последующие bounded deltas; подтверждённых findings не осталось.
 
 ## 5b. Ревью на переусложнение
 
 - [x] 5b.1 Отдельно выполнить read-only `/ponytail-review` по прежнему implementation diff; передать список того, что удалить или заменить стандартным средством, и назвать причины отклонения каждого предложения. Этот шаг проверяет лишнее и не заменяет два независимых прохода шага 5. Отдельный review завершён; итог и принятые причины сохранены в final verification report.
-- [ ] 5b.2 Отдельно выполнить read-only simplification review по новому greeting/VK diff; предложить, что удалить или заменить стандартным средством, и назвать причины для отклонённых предложений.
+- [x] 5b.2 Отдельно выполнить read-only simplification review по новому greeting/VK diff; предложить, что удалить или заменить стандартным средством, и назвать причины для отклонённых предложений. Отдельный проход не выявил лишней реализации для удаления; согласованные compact layout и popup bounds оставлены как минимальная геометрическая поддержка утверждённого контракта.
 
 ## 6. Приёмка и архив
 
 - [ ] 6.1 В авторизованном портале Bitrix подтвердить привязку VK к правильной Открытой линии; если binding отсутствует, восстановить существующий канал по подтверждённой конфигурации. Не угадывать URL/ID; без доступа или подтверждённой линии оставить точный blocker и не менять production loader/config молча.
 - [ ] 6.2 Настроить в портале приветствие провайдера точным текстом и существующей компактной эмблемой ИКПК; проверить живой интерфейс. Внести запись в `docs/handoff/external-widgets-acceptance-evidence.md` под точным заголовком сценария, с датой, наблюдением, доказательством непустоты и несекретной идентичностью портала/канала.
-- [ ] 6.3 Выполнить приёмку с телефона: после активации `Написать нам` VK присутствует в chooser и реальный маршрут приводит в переписку Open Line с институтом. Сообщество `vk.com/clubikpk`, mock и stub не засчитываются; внести запись с точным именем сценария в evidence-файл.
+- [ ] 6.3 Выполнить приёмку с телефона: после активации `Написать нам` VK присутствует в chooser и реальный маршрут приводит в переписку Open Line с институтом. Сообщество vk.com/clubikpk, mock и stub не засчитываются; внести запись с точным именем сценария в evidence-файл.
 - [ ] 6.4 Получить финальную приёмку владельца после зелёных релевантных гейтов и закрытия согласованных находок.
 - [ ] 6.5 Только после выполнения предыдущих пунктов заархивировать change и перенести delta в `openspec/specs/external-widgets/spec.md`.
