@@ -2,7 +2,7 @@
 import BaseLayout from '../../layouts/BaseLayout.astro';
 import Breadcrumbs from '../../components/Breadcrumbs.astro';
 import CourseGroupSeminarItem from '../../components/course-groups/CourseGroupSeminarItem.astro';
-import { cleanBodyHtml, getInstitutes, getCourseGroups, getScheduleEntries, getSeminars, getSnapshotReferenceDate } from '../../lib/data';
+import { cleanBodyHtml, getInstitutes, getCourseGroups, getScheduleEntries, getSeminars, getSeminarBuildNow } from '../../lib/data';
 import { calendarDay, compareNearest, isBeforeStart } from '../../lib/schedule-window';
 import { formatScheduleDateRange } from '../../lib/home';
 import RichContent from '../../components/RichContent.astro';
@@ -33,10 +33,10 @@ const seminars = getSeminars(courseGroup.legacy_id);
 
 // Ближайшая дата по каждому семинару (Q11): на странице программы — только она,
 // весь список запланированного живёт на странице семинара.
-const today = getSnapshotReferenceDate();
+const today = getSeminarBuildNow();
 const activeEntries = getScheduleEntries().filter((entry) => entry.status === 'active');
 const datesBySeminar = new Map<string, { startAt: string; dateLabel: string }[]>();
-const currentYear = today.slice(0, 4);
+const currentYear = new Intl.DateTimeFormat('en', { timeZone: 'Europe/Moscow', year: 'numeric' }).format(today);
 for (const seminar of seminars) {
   datesBySeminar.set(seminar.slug, activeEntries
     .filter((entry) => entry.seminar?.slug === seminar.slug && isBeforeStart(entry, today))

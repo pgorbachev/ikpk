@@ -55,8 +55,10 @@ export function initStartVisibility(): void {
       card?.querySelectorAll<HTMLElement>('[data-start-empty]').forEach((fallback) => { fallback.hidden = Boolean(next); });
       const action = card?.querySelector<HTMLAnchorElement>('.course-group-seminar-cta');
       if (action) {
-        action.textContent = next ? 'Записаться на семинар' : 'Подробнее о семинаре';
-        action.removeAttribute('aria-label');
+        const label = next ? 'Записаться на семинар' : 'Подробнее о семинаре';
+        const name = card?.querySelector<HTMLElement>('.course-group-seminar-title')?.textContent?.trim();
+        action.textContent = label;
+        action.setAttribute('aria-label', name ? `${label} ${name}` : label);
       }
     }
     document.dispatchEvent(new Event('seminar-offers-updated'));

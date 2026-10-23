@@ -10,7 +10,7 @@ import {
   getScheduleEntries,
   getTeachers,
   cleanBodyHtml,
-  stripLegacySeminarTail, getSnapshotReferenceDate,
+  stripLegacySeminarTail, getSeminarBuildNow,
   teacherPageHref,
 } from '../../../lib/data';
 import type { CourseGroup, Institute, Seminar } from '../../../lib/data';
@@ -44,7 +44,7 @@ const { seminar, courseGroup, institute } = Astro.props as {
 };
 
 // Dated offers expire at start; the description and route remain available.
-const today = getSnapshotReferenceDate();
+const today = getSeminarBuildNow();
 const schedule = getScheduleEntries().filter(
   (e) => e.seminar?.slug === seminar.slug && e.status === 'active' && isBeforeStart(e, today)
 );

@@ -5,7 +5,8 @@ import { join } from 'node:path';
 
 const WEB_ROOT = join(import.meta.dirname, '../..');
 const SNAPSHOT_SOURCE = join(WEB_ROOT, '..', 'fixtures', 'content-snapshot');
-const REFERENCE_DATE = '2026-09-15';
+const SNAPSHOT_REFERENCE_DATE = '2026-09-14';
+const BUILD_DATE = '2026-09-15';
 
 type Snapshot = {
   referenceDate: string;
@@ -86,7 +87,7 @@ export function buildSeminarDatesFixture() {
   fixtureTypes.course_groups = [pages.group];
   fixtureTypes.seminars = [pages.planned, pages.empty, pages.nextYear];
   fixtureTypes.schedule_entries = [
-    // Already started on the reference date: ongoing rows must not be offered.
+    // Started before the build date: ongoing rows must not be offered.
     scheduleEntry(pages, 465, 'active', '2026-09-10', '2026-09-20', 'Дальний конец'),
     // Other started sessions stay excluded even while their end date is future.
     scheduleEntry(pages, 90, 'active', '2026-09-10', '2026-09-18', 'Якорный город'),
@@ -112,7 +113,7 @@ export function buildSeminarDatesFixture() {
   const outDir = join(buildRoot, 'dist');
   writeFileSync(
     join(fixtureRoot, 'snapshot.json'),
-    `${JSON.stringify({ ...source, referenceDate: REFERENCE_DATE, content: { types: fixtureTypes } })}\n`,
+    `${JSON.stringify({ ...source, referenceDate: SNAPSHOT_REFERENCE_DATE, content: { types: fixtureTypes } })}\n`,
   );
   copyFileSync(join(SNAPSHOT_SOURCE, 'collapsible_panels.json'), join(fixtureRoot, 'collapsible_panels.json'));
 
@@ -121,7 +122,7 @@ export function buildSeminarDatesFixture() {
     cwd: WEB_ROOT,
     encoding: 'utf8',
     timeout: 120_000,
-    env: { ...process.env, CONTENT_SNAPSHOT_DIR: fixtureRoot },
+    env: { ...process.env, CONTENT_SNAPSHOT_DIR: fixtureRoot, SEMINAR_BUILD_NOW: `${BUILD_DATE}T09:00:00+03:00` },
   });
   if (result.error || result.status !== 0) {
     rmSync(fixtureRoot, { recursive: true, force: true });

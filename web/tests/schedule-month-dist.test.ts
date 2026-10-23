@@ -4,7 +4,7 @@ import { join } from 'path';
 import { dist, readPage } from './helpers/dist-pages';
 import { buildSeminarDatesFixture } from './helpers/seminar-dates-fixture';
 import { attr, findAll, walk } from './helpers/dom';
-import { getScheduleEntries, getSnapshotReferenceDate } from '../src/lib/data';
+import { getScheduleEntries, getSeminarBuildNow } from '../src/lib/data';
 import { isBeforeStart } from '../src/lib/schedule-window';
 
 // ─── Гейт по собранному dist: месяц доставляется разметкой ────────────────────
@@ -286,7 +286,7 @@ describe('исторический dist: неподтверждённые дат
     const entries = getScheduleEntries();
     expect(entries.length, 'характеризация требует непустой снимок').toBeGreaterThan(0);
     const expected = entries.filter((entry) => entry.status === 'active'
-      && isBeforeStart(entry, getSnapshotReferenceDate()));
+      && isBeforeStart(entry, getSeminarBuildNow()));
     const built = readPage(PAGE);
     const cards = findAll(built, (el) => attr(el, 'data-schedule-item') !== null);
     expect(cards).toHaveLength(expected.length);

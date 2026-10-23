@@ -96,7 +96,9 @@ test('program retains course description but drops final started date and advanc
   await expect(finished).toBeVisible();
   await expect(finished.locator('[data-testid="seminar-nearest-date"]:visible')).toHaveCount(0);
   await expect(finished.locator(`a[href="${fixture.detailPaths[1]}"]`).first()).toBeVisible();
+  await expect(finished.locator('.course-group-seminar-cta')).toHaveAttribute('aria-label', `Подробнее о семинаре ${TITLES[1]}`);
   await expect(seminarCard(page, TITLES[0]).locator('[data-testid="seminar-nearest-date"]')).toContainText('4 ноя');
+  await expect(seminarCard(page, TITLES[0]).locator('.course-group-seminar-cta')).toHaveAttribute('aria-label', `Записаться на семинар ${TITLES[0]}`);
 });
 test('seminar route retains description and only offers the future session', async ({ page }) => {
   await open(page, fixture.detailPaths[0], AFTER);

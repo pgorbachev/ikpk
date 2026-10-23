@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { readPage } from './helpers/dist-pages';
 import { attr, findAll, textOf, walk } from './helpers/dom';
 import { buildSeminarDatesFixture } from './helpers/seminar-dates-fixture';
-import { getCourseGroups, getInstitutes, getScheduleEntries, getSeminars, getSnapshotReferenceDate } from '../src/lib/data';
+import { getCourseGroups, getInstitutes, getScheduleEntries, getSeminars, getSeminarBuildNow } from '../src/lib/data';
 import { isBeforeStart } from '../src/lib/schedule-window';
 
 const MOBILE_HREF = 'tel:+79810387797';
@@ -48,7 +48,7 @@ describe('исторический снимок: страницы без буд�
   it('сохраняет карточки описаний и контакты менеджера на каждой пустой странице', () => {
     const institutes = getInstitutes();
     const entries = getScheduleEntries().filter((entry) => entry.status === 'active'
-      && isBeforeStart(entry, getSnapshotReferenceDate()));
+      && isBeforeStart(entry, getSeminarBuildNow()));
     let checked = 0;
     for (const group of getCourseGroups()) {
       const institute = institutes.find((item) => item.slug === group.institute_legacy_id);

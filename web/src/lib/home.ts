@@ -6,7 +6,7 @@ import {
   getSeminars,
   getCourseGroups,
   getArticles,
-  getSnapshotReferenceDate,
+  getSeminarBuildNow,
   formatPrice,
   teacherPageHref,
   type ScheduleEntry,
@@ -134,7 +134,7 @@ export function seminarTeacherLabel(refs: SeminarTeacherRef[] | undefined): stri
  * dates — предложения, дата начала которых по МСК ещё не наступила.
  * cities — населённые пункты без «Онлайн».
  */
-export function getCatalogStats(now: Date = new Date(getSnapshotReferenceDate())) {
+export function getCatalogStats(now: Date = getSeminarBuildNow()) {
   const schedule = getScheduleEntries().filter(
     (e) => e.status === 'active' && e.startAt && isBeforeStart(e, now)
   );
@@ -164,7 +164,7 @@ export function getCatalogStats(now: Date = new Date(getSnapshotReferenceDate())
  * Уже начавшиеся отфильтровываются: строка «Ближайший семинар» — про набор,
  * к началу которого ещё можно приехать.
  */
-export function getUpcomingSeminars(limit = 3, now: Date = new Date(getSnapshotReferenceDate())): UpcomingSeminar[] {
+export function getUpcomingSeminars(limit = 3, now: Date = getSeminarBuildNow()): UpcomingSeminar[] {
   const instituteByName = new Map(getInstitutes().map((i) => [i.name, i.slug]));
   const teachers = getTeachers();
 
