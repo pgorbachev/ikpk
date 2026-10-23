@@ -344,36 +344,36 @@
     "identity": "style|body:71aa7fc0dcb8bca4"
   },
   {
-    "slotId": "src:components/home/sections/News.astro:L134:C1:script",
+    "slotId": "src:components/home/sections/News.astro:L139:C1:script",
     "file": "components/home/sections/News.astro",
     "nodeKind": "element",
-    "locator": "components/home/sections/News.astro:L134:C1:script",
-    "fingerprint": "1f4f8d79ee814d96c936f823d2ff06ceae91a64ffdb9e4d592137578ba3dd24c",
-    "identity": "script|body:7edde442e5505427"
+    "locator": "components/home/sections/News.astro:L139:C1:script",
+    "fingerprint": "9b30df6dbd6e6a5f2b7950e07177b75e6dad4684a1a4a24f1179ba4c6220466d",
+    "identity": "script|body:05f71e1a2d9691ae"
   },
   {
-    "slotId": "src:components/home/sections/News.astro:L17:C11:svg",
+    "slotId": "src:components/home/sections/News.astro:L19:C11:svg",
     "file": "components/home/sections/News.astro",
     "nodeKind": "element",
-    "locator": "components/home/sections/News.astro:L17:C11:svg",
-    "fingerprint": "fc6508477cfe6a0a28610260f2c1770e35b51b92d88153e6586c51df339f7926",
+    "locator": "components/home/sections/News.astro:L19:C11:svg",
+    "fingerprint": "8ce87ca5f85fa3dad4f685d5d856a3bb51f36f4671f91297056e7e44f53086ed",
     "identity": "svg|aria-hidden=quoted:true|class=quoted:news-nav-icon|fill=quoted:none|viewBox=quoted:0 0 20 20"
   },
   {
-    "slotId": "src:components/home/sections/News.astro:L42:C11:svg",
+    "slotId": "src:components/home/sections/News.astro:L44:C11:svg",
     "file": "components/home/sections/News.astro",
     "nodeKind": "element",
-    "locator": "components/home/sections/News.astro:L42:C11:svg",
-    "fingerprint": "ad414d956c7a9e7557ab224cafddc4784fa0d1211c314344bcd340647e1b1ef1",
+    "locator": "components/home/sections/News.astro:L44:C11:svg",
+    "fingerprint": "fd11fee77448775626760925de501b831b1a252bece4f1d3fd46ec9806416084",
     "identity": "svg|aria-hidden=quoted:true|class=quoted:news-nav-icon|fill=quoted:none|viewBox=quoted:0 0 20 20"
   },
   {
-    "slotId": "src:components/home/sections/News.astro:L51:C1:style",
+    "slotId": "src:components/home/sections/News.astro:L53:C1:style",
     "file": "components/home/sections/News.astro",
     "nodeKind": "element",
-    "locator": "components/home/sections/News.astro:L51:C1:style",
-    "fingerprint": "da0cc88ad3802f4695dc7ae84a78d5b2d347527637eac8900cfc86281d2fc4fc",
-    "identity": "style|body:0d672d6c6bc3ac6f"
+    "locator": "components/home/sections/News.astro:L53:C1:style",
+    "fingerprint": "208bd3c2212aeab151694bb9346eb6999f0b82b219f77f7c16198301e3b02dbb",
+    "identity": "style|body:f74f1c1acddcf00c"
   },
   {
     "slotId": "src:components/home/sections/PlaceholderNote.astro:L11:C1:style",
@@ -740,8 +740,8 @@
     "file": "components/topnav/TopNav.astro",
     "nodeKind": "element",
     "locator": "components/topnav/TopNav.astro:L141:C1:style",
-    "fingerprint": "b6434293678238a2c11c1d0ffcca85edad3748b9e3247792890842f59c520ed9",
-    "identity": "style|body:b89d07c334cc64e0"
+    "fingerprint": "b2d962e94bab3f4080db1e7d0d896a7943a1d6169a5c7aeaedff34ca3f0d5c4a",
+    "identity": "style|body:9ebfb5d7be61ebce"
   },
   {
     "slotId": "src:components/topnav/TopNav.astro:L47:C17:svg",
@@ -936,6 +936,14 @@
     "identity": "style|body:aa2b0302ae81eb06"
   },
   {
+    "slotId": "src:pages/knigi-i-uchebnye-materialy.astro:L38:C1:style",
+    "file": "pages/knigi-i-uchebnye-materialy.astro",
+    "nodeKind": "element",
+    "locator": "pages/knigi-i-uchebnye-materialy.astro:L38:C1:style",
+    "fingerprint": "003a660d99a13788715983378a6049d55cbe6010c816a0c0ac582545901fff3c",
+    "identity": "style|body:adc71ce778c52958"
+  },
+  {
     "slotId": "src:pages/kontakty.astro:L72:C1:style",
     "file": "pages/kontakty.astro",
     "nodeKind": "element",
@@ -1064,11 +1072,11 @@
     "identity": "style|body:aa2b0302ae81eb06"
   },
   {
-    "slotId": "src:pages/sitemap.astro:L94:C1:style",
+    "slotId": "src:pages/sitemap.astro:L95:C1:style",
     "file": "pages/sitemap.astro",
     "nodeKind": "element",
-    "locator": "pages/sitemap.astro:L94:C1:style",
-    "fingerprint": "01d3eee30e0706e73eb788169f860f0fa4ea9d6f1da797305793cf4296136cc9",
+    "locator": "pages/sitemap.astro:L95:C1:style",
+    "fingerprint": "1a9ad6dbfc2c294bbf2f08807c8d18baa0ed2c4e175f489fa54bc7a1d0ca092f",
     "identity": "style|body:a5a70f423abc1970"
   },
   {

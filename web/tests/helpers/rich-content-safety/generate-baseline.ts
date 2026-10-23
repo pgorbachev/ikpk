@@ -19,6 +19,7 @@ import {
 } from './ast-sinks.js';
 import { loadLockfile, subtreeLockfileNodes } from './lockfile-graph.js';
 import { assertCleanGitWorktree } from './git-clean.js';
+import { HOME_OFFER_IDS } from '../../../src/lib/book-offers.js';
 
 function loadEntity<T>(name: string): T {
   return JSON.parse(readFileSync(join(CONTENT_JSON_DIR, name), 'utf-8')) as T;
@@ -45,8 +46,9 @@ export async function generateBaselineArtifacts(): Promise<void> {
   );
   const articles = loadEntity<{ slug: string }[]>('articles.json');
   const institutes = loadEntity<{ slug: string }[]>('institutes.json');
-  const news = loadEntity<unknown[]>('news.json');
+  const news = loadEntity<{ id: number }[]>('news.json');
   const promotions = loadEntity<unknown[]>('promotions.json');
+  const homeOfferIds = new Set<number>(Object.values(HOME_OFFER_IDS));
 
   const lookup = { courseGroups, seminars, teachers };
   const htmlHits = discovered.htmlBearing.filter((h) => matchJsonSelector(h));
@@ -70,7 +72,7 @@ export async function generateBaselineArtifacts(): Promise<void> {
     courseGroups,
     seminars,
     teachers,
-    newsCount: news.length,
+    newsCount: news.filter((item) => homeOfferIds.has(item.id)).length,
     promotionsCount: promotions.length,
   });
 

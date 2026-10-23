@@ -272,8 +272,21 @@ const target = (link: { external?: boolean }) => (link.external ? '_blank' : und
     .topnav-logo-desc { display: none; }
     .topnav-bar { gap: 0.6rem; }
     .topnav-menu > ul { gap: 0.15rem; }
-    .topnav-link { padding: 0.5rem 0.35rem; }
+    .topnav-link { padding: 0.5rem 0.25rem; }
     .topnav-cta { padding: 0.5rem 0.7rem; }
+  }
+
+  @media (min-width: 901px) and (max-width: 1360px) {
+    .topnav-bar { gap: 0.4rem; padding-inline: 0.75rem; }
+    .topnav-menu > ul { gap: 0; align-items: center; }
+    .topnav-link[href='/knigi-i-uchebnye-materialy'] {
+      width: 6.5rem;
+      padding-block: 0.25rem;
+      white-space: normal;
+      line-height: 1.05;
+      text-align: center;
+      justify-content: center;
+    }
   }
 
   @media (max-width: 1180px) {

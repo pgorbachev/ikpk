@@ -2,6 +2,7 @@ import { spawnSync } from 'node:child_process';
 import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { HOME_OFFER_IDS } from '../../src/lib/book-offers';
 
 const WEB_ROOT = join(import.meta.dirname, '../..');
 const SNAPSHOT_SOURCE = join(WEB_ROOT, '..', 'fixtures', 'content-snapshot');
@@ -86,6 +87,9 @@ export function buildSeminarDatesFixture() {
   fixtureTypes.institutes = [pages.institute];
   fixtureTypes.course_groups = [pages.group];
   fixtureTypes.seminars = [pages.planned, pages.empty, pages.nextYear];
+  // Главная страница требует эти редакционные карточки и в урезанной сборке.
+  const homeOfferIds = new Set<number>(Object.values(HOME_OFFER_IDS));
+  fixtureTypes.news = (types.news as { id: number }[]).filter((item) => homeOfferIds.has(item.id));
   fixtureTypes.schedule_entries = [
     // Started before the build date: ongoing rows must not be offered.
     scheduleEntry(pages, 465, 'active', '2026-09-10', '2026-09-20', 'Дальний конец'),

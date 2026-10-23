@@ -26,7 +26,7 @@ export const primaryNav: NavItem[] = [
     ],
   },
   { label: 'Расписание', href: '/raspisanie-i-tseny' },
-  { label: 'Магазин', href: 'https://kinezio.shop/', external: true, rel: 'noopener noreferrer' },
+  { label: 'Книги и учебные материалы', href: '/knigi-i-uchebnye-materialy' },
   { label: 'Статьи', href: '/statyi' },
   {
     label: 'Об институте',

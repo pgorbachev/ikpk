@@ -53,6 +53,7 @@ export default defineConfig({
       'tests/article-list-controls.build.test.ts',
       'tests/cms-catalog-pages.build.test.ts',
       'tests/article-page-date.build.test.ts',
+      'tests/books-offers.build.test.ts',
     ],
   },
 });

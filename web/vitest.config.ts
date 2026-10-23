@@ -79,6 +79,8 @@ export default defineConfig({
       // (change cms-content-authoring-and-migration).
       'tests/cms-catalog-pages.build.test.ts',
       'tests/article-page-date.build.test.ts',
+      // Предмет — собранные страницы книг и предложений (vitest.build.config.ts).
+      'tests/books-offers.build.test.ts',
       // Рендер компонента через Astro Container API — отдельная конфигурация
       // (vitest.render.config.ts), потому что `.astro` требует vite-плагина Astro.
       'tests/schedule-filters.render.test.ts',

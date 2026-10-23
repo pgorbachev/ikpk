@@ -331,7 +331,7 @@
         "paths": [
           "/"
         ],
-        "count": 4
+        "count": 2
       },
       "demo": {
         "paths": [
@@ -341,7 +341,7 @@
           "/preview/modular",
           "/preview/d"
         ],
-        "count": 20
+        "count": 10
       }
     },
     {
