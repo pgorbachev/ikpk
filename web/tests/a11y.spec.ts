@@ -42,13 +42,16 @@ test.describe('Accessibility', () => {
         `${path}: страница не отдалась — axe проверил бы страницу 404, а не шаблон`,
       ).toBe(200);
 
-      // Предмет датированного шаблона — заполненная панель расписания. Пустая
-      // проходит axe всегда, поэтому её отсутствие объявляется отказом проверки.
+      // Исторический снимок не содержит редакторских подтверждений времени.
+      // Заполненную панель с подтверждёнными датами проверяет отдельная
+      // контролируемая сборка в seminar-layout-a11y.spec.ts.
       if (name === 'seminar-dated') {
-        expect(
-          await page.locator('[data-seminar-schedule-card]').count(),
-          `${path}: в расписании нет ни одной записи — axe проверил бы пустую панель`,
-        ).toBeGreaterThan(0);
+        const cards = page.locator('[data-seminar-schedule-card]:visible');
+        if (await cards.count() === 0) {
+          await expect(page.locator('[data-testid="seminar-schedule-empty"]')).toBeVisible();
+        } else {
+          await expect(cards.first()).toBeVisible();
+        }
       }
 
       const results = await new AxeBuilder({ page })

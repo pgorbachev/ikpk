@@ -16,14 +16,16 @@
  * Приём подсмотрен у Institute for Functional Medicine: дата — первый элемент, а
  * не подпись в подвале карточки, и отсутствие цены не ломает раскладку.
  */
+import StartVisibility from '../../StartVisibility.astro';
 import { getUpcomingSeminars } from '../../../lib/home';
 import { registrationHref } from '../../../lib/forms';
 
-const [next] = getUpcomingSeminars(1);
+const candidates = getUpcomingSeminars(Infinity);
 ---
 
-{next && (
-  <section class="event-line-section">
+<div data-start-list data-start-limit="1">
+{candidates.map((next, i) => (
+  <section data-start-offer data-start-at={next.startAt} hidden={i > 0} class="event-line-section">
     <div class="container">
       <div class="event-line" data-event-line>
         <div class="event-line-facts">
@@ -45,7 +47,9 @@ const [next] = getUpcomingSeminars(1);
       </div>
     </div>
   </section>
-)}
+))}
+</div>
+<StartVisibility />
 
 <style>
   .event-line-section {

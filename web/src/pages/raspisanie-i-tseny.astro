@@ -2,8 +2,8 @@
 import SchedulePage from '../components/schedule/SchedulePage.astro';
 import BaseLayout from '../layouts/BaseLayout.astro';
 import Breadcrumbs from '../components/Breadcrumbs.astro';
-import { formatPrice, getInstitutes, getPage, getScheduleEntries, getSnapshotReferenceDate, getTeachers, teacherPageHref } from '../lib/data';
-import { calendarDay, calendarDayDate, isCurrentOrFuture } from '../lib/schedule-window';
+import { formatPrice, getInstitutes, getPage, getScheduleEntries, getSeminarBuildNow, getTeachers, teacherPageHref } from '../lib/data';
+import { calendarDay, calendarDayDate, isBeforeStart } from '../lib/schedule-window';
 import { monthKeys, monthOptions } from '../lib/schedule-months';
 import { registrationHref } from '../lib/forms';
 import { publicScheduleTitle } from '../lib/schedule-public-title';
@@ -58,10 +58,11 @@ function formatDurationLabel(startAt: string, endAt: string, duration: string | 
   return `${formatCalendarDate(startAt)} - ${formatCalendarDate(endAt)} - ${dayLabel} (${hoursLabel})`;
 }
 
-const todayDate = getSnapshotReferenceDate();
+const todayDate = getSeminarBuildNow();
+const todayCalendarDay = calendarDay(todayDate.toISOString());
 const entries = getScheduleEntries()
-  // По последнему дню события, а не по первому: многодневных записей 60 из 63.
-  .filter((entry) => entry.status === 'active' && isCurrentOrFuture(entry, todayDate))
+  // Build-time offers use the current clock; the browser advances this boundary.
+  .filter((entry) => entry.status === 'active' && isBeforeStart(entry, todayDate))
   .sort((a, b) => calendarDay(a.startAt).localeCompare(calendarDay(b.startAt)));
 
 const instituteByName = new Map(institutes.map((institute) => [institute.name, institute]));
@@ -85,7 +86,7 @@ const visibleCities = entries
 // актуальности: список получается объединением уже отсечённых ключей, поэтому месяца
 // без записей в нём быть не может, а ключа без месяца — тоже. Опорная дата — уже
 // вычисленный `todayDate`; второй вычислитель «сегодня» здесь не заводится.
-const visibleMonths = monthOptions(entries, todayDate);
+const visibleMonths = monthOptions(entries, todayCalendarDay);
 
 const visiblePrograms = entries
   .map((entry) => {
@@ -126,6 +127,7 @@ const items = entries.map((entry) => {
   ].join(' ').toLowerCase();
 
   return {
+    startAt: entry.startAt,
     additionalText: entry.additionalText || '',
     cityName: entry.city?.name || 'Уточняется',
     citySlug: slugify(entry.city?.name || 'unknown'),
@@ -135,7 +137,7 @@ const items = entries.map((entry) => {
     imageUrl: entry.image?.url || '',
     instituteName: entry.institute.name,
     instituteSlug,
-    months: monthKeys(entry, todayDate),
+    months: monthKeys(entry, todayCalendarDay),
     priceLabel: entry.isFree === true ? 'Бесплатно' : formatPrice(entry.newPrice),
     programName: entry.program.name,
     programSlug: entry.program.slug,

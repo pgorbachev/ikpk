@@ -6,18 +6,19 @@ import {
   getSeminars,
   getCourseGroups,
   getArticles,
-  getSnapshotReferenceDate,
+  getSeminarBuildNow,
   formatPrice,
   teacherPageHref,
   type ScheduleEntry,
   type SeminarTeacherRef,
   type Teacher,
 } from './data.js';
-import { calendarDayDate, isCurrentOrFuture, isUpcomingStart } from './schedule-window';
+import { calendarDayDate, isBeforeStart } from './schedule-window';
 import { publicScheduleTitle } from './schedule-public-title';
 
 export interface UpcomingSeminar {
   id: number;
+  startAt: string;
   title: string;
   href: string;
   instituteName: string;
@@ -130,13 +131,12 @@ export function seminarTeacherLabel(refs: SeminarTeacherRef[] | undefined): stri
 
 /**
  * Живые счётчики каталога — для modular-hero и маршрутов.
- * dates — текущие и будущие по последнему дню (`isCurrentOrFuture`).
+ * dates — предложения, дата начала которых по МСК ещё не наступила.
  * cities — населённые пункты без «Онлайн».
  */
-export function getCatalogStats(now: Date = new Date(getSnapshotReferenceDate())) {
-  const today = now.toISOString().slice(0, 10);
+export function getCatalogStats(now: Date = getSeminarBuildNow()) {
   const schedule = getScheduleEntries().filter(
-    (e) => e.status === 'active' && e.startAt && isCurrentOrFuture(e, today)
+    (e) => e.status === 'active' && e.startAt && isBeforeStart(e, now)
   );
   const cityNames = [
     ...new Set(
@@ -162,19 +162,16 @@ export function getCatalogStats(now: Date = new Date(getSnapshotReferenceDate())
 /**
  * Ближайшие активные семинары с назначенной датой, отсортированные по дате.
  * Уже начавшиеся отфильтровываются: строка «Ближайший семинар» — про набор,
- * к началу которого ещё можно приехать. Идущие события остаются на странице
- * расписания (`isCurrentOrFuture`).
+ * к началу которого ещё можно приехать.
  */
-export function getUpcomingSeminars(limit = 3, now: Date = new Date(getSnapshotReferenceDate())): UpcomingSeminar[] {
+export function getUpcomingSeminars(limit = 3, now: Date = getSeminarBuildNow()): UpcomingSeminar[] {
   const instituteByName = new Map(getInstitutes().map((i) => [i.name, i.slug]));
   const teachers = getTeachers();
-  const today = now.toISOString().slice(0, 10);
 
   return getScheduleEntries()
-    // По первому дню, не по последнему: иначе 20 сентября «ближайшим» остаётся
-    // CST-2, начавшийся 17-го. Сравнение — `isUpcomingStart` в schedule-window.ts.
-    .filter((e) => e.status === 'active' && e.startAt && isUpcomingStart(e, today))
-    .sort((a, b) => a.startAt.localeCompare(b.startAt))
+    // Start-day boundary shared by the server render and browser.
+    .filter((e) => e.status === 'active' && e.startAt && isBeforeStart(e, now))
+    .sort((a, b) => calendarDayDate(a.startAt).getTime() - calendarDayDate(b.startAt).getTime() || a.id - b.id)
     .slice(0, limit)
     .map((e: ScheduleEntry): UpcomingSeminar => {
       const instituteSlug = instituteByName.get(e.institute.name);
@@ -186,6 +183,7 @@ export function getUpcomingSeminars(limit = 3, now: Date = new Date(getSnapshotR
       const start = calendarDayDate(e.startAt);
       return {
         id: e.id,
+        startAt: e.startAt,
         title: publicScheduleTitle(e),
         href,
         instituteName: e.institute.name,

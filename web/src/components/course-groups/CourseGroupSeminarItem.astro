@@ -1,14 +1,16 @@
 ---
+import StartVisibility from '../StartVisibility.astro';
 import type { Seminar } from '../../lib/data';
 import { MANAGER_PHONE, MANAGER_PHONE_HREF } from '../../lib/navigation';
 
 interface Props {
   seminar: Seminar;
   href: string;
-  nearestDate?: string | null;
+  dateCandidates?: { startAt: string; dateLabel: string }[];
 }
 
-const { seminar, href, nearestDate = null } = Astro.props as Props;
+const { seminar, href, dateCandidates = [] } = Astro.props as Props;
+const nearestDate = dateCandidates[0]?.dateLabel ?? null;
 
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -30,25 +32,22 @@ const lead = description ? clipLead(description) : '';
 
 <article class="course-group-seminar-item" data-testid="course-group-seminar-card">
   <div class="cgs-date-row">
-    {nearestDate ? (
-      <span class="cgs-chip" data-testid="seminar-nearest-date">{nearestDate}</span>
-    ) : (
-      <>
-        <span class="cgs-chip cgs-chip--muted" data-testid="seminar-date-fallback">Даты пока не назначены</span>
-        <a class="cgs-phone" href={MANAGER_PHONE_HREF}>уточняйте у менеджера: {MANAGER_PHONE}</a>
-      </>
-    )}
+    <span class="cgs-chip" data-testid="seminar-nearest-date" data-start-nearest={JSON.stringify(dateCandidates)} hidden={!nearestDate}>{nearestDate}</span>
+    <span class="cgs-chip cgs-chip--muted" data-start-empty hidden={Boolean(nearestDate)} data-testid="seminar-date-fallback">Даты пока не назначены</span>
+    <a class="cgs-phone" data-start-empty hidden={Boolean(nearestDate)} href={MANAGER_PHONE_HREF}>уточняйте у менеджера: {MANAGER_PHONE}</a>
   </div>
   <a href={href} class="course-group-seminar-main" aria-label={`Семинар "${seminar.name}"`}>
     <h2 class="course-group-seminar-title">{seminar.name}</h2>
     {lead && <p class="course-group-seminar-excerpt">{lead}</p>}
   </a>
   <div class="course-group-seminar-actions">
-    <a href={href} class="course-group-seminar-cta" aria-label={`Записаться на семинар ${seminar.name}`}>
-      Записаться на семинар
+    <a href={href} class="course-group-seminar-cta" aria-label={`${nearestDate ? 'Записаться на семинар' : 'Подробнее о семинаре'} ${seminar.name}`}>
+      {nearestDate ? 'Записаться на семинар' : 'Подробнее о семинаре'}
     </a>
   </div>
 </article>
+
+<StartVisibility />
 
 <style>
   /* Ближайшая дата семинара (D3/Q11): верхняя строка карточки. */

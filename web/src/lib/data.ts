@@ -91,6 +91,15 @@ export function getSnapshotReferenceDate(): string {
   return loadSnapshot().referenceDate;
 }
 
+/** Clock for dated offers rendered into static HTML. Snapshot age must not keep old offers visible. */
+export function getSeminarBuildNow(): Date {
+  const override = process.env.SEMINAR_BUILD_NOW;
+  if (!override) return new Date();
+  const instant = new Date(override);
+  if (Number.isNaN(instant.getTime())) throw new Error(`Invalid SEMINAR_BUILD_NOW: ${override}`);
+  return instant;
+}
+
 export function getSnapshotIdentity(): { fingerprint?: string; snapshotId?: string; referenceDate: string } {
   const snap = loadSnapshot();
   return { fingerprint: snap.fingerprint, snapshotId: snap.snapshotId, referenceDate: snap.referenceDate };

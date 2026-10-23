@@ -5,6 +5,7 @@ import { loadPinnedSnapshot, loadPinnedType } from './helpers/pinned-snapshot';
 
 test.beforeEach(async ({ page }) => {
   await installThirdPartyGuard(page);
+  await page.clock.install({ time: new Date(`${loadPinnedSnapshot().referenceDate}T00:00:00Z`) });
 });
 
 // ─── Расписание на странице семинара: перенос вверх (D3, вариант C) ──────────
@@ -25,10 +26,10 @@ test.beforeEach(async ({ page }) => {
 // зелёными они были бы ровно потому, что их никто не выполняет
 // (`browser-test-gating.test.ts`, признанный долг).
 //
-// Ни одна страница здесь не захардкожена. Число дат у семинара меняется само от
-// хода времени: `isCurrentOrFuture` отбрасывает прошедшие. Поэтому страницы
-// ВЫБИРАЮТСЯ по данным, а перегруз колонки, которого в данных может не оказаться,
-// создаётся мутацией DOM, а не ожиданием подходящего семинара.
+// Страницы выбираются по закреплённому снимку. Отдельная изолированная сборка
+// подтверждает время начала его дат только для проверки раскладки, а браузерные
+// часы стоят на referenceDate снимка. В рабочем CMS и снимке подтверждений нет.
+// Перегруз колонки создаётся мутацией DOM.
 //
 // Сущности читаются из закреплённого снимка, а не через `src/lib/data`:
 // `data.ts` тянет `media-manifest.json`, а трансформер Playwright импорт JSON без
@@ -142,7 +143,9 @@ const NO_DATES = PAGES.find((page) => page.dates === 0 && page.described);
  * вырождается в «блока нет», а это не успех.
  */
 async function openSeminar(page: Page, path: string): Promise<void> {
-  const response = await page.goto(path);
+  const fixtureUrl = process.env.IKPK_LAYOUT_FIXTURE_URL;
+  if (!fixtureUrl) throw new Error('Controlled layout fixture was not built');
+  const response = await page.goto(`${fixtureUrl}${path}`);
   expect(response?.status(), `${path}: страница не отдалась — проверять было нечего`).toBe(200);
   await expect(page.locator(SCHEDULE), `${path}: блока расписания нет`).toBeVisible();
 }

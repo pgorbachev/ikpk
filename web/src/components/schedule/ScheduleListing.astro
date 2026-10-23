@@ -2,6 +2,7 @@
 import ScheduleEventCard from './ScheduleEventCard.astro';
 
 interface ScheduleItem {
+  startAt: string;
   additionalText: string;
   cityName: string;
   citySlug: string;
@@ -43,6 +44,8 @@ const { items } = Astro.props as Props;
   {items.map((card) => (
     <div
       class="schedule-card-item"
+      data-start-offer
+      data-start-at={card.startAt}
       data-schedule-item
       data-institute={card.instituteSlug}
       data-program={card.programSlug}

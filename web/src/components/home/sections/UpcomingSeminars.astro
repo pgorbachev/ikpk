@@ -1,19 +1,20 @@
 ---
 // Ближайшие семинары — реальные данные (schedule_entries), сортировка по дате,
 // прошедшие отфильтрованы по дате сборки.
+import StartVisibility from '../../StartVisibility.astro';
 import { getUpcomingSeminars } from '../../../lib/home';
-const seminars = getUpcomingSeminars(3);
+const seminars = getUpcomingSeminars(Infinity);
 ---
 {seminars.length > 0 && (
-  <section id="upcoming" class="upcoming section section-alt" data-reveal>
+  <section data-start-list data-start-limit="3" id="upcoming" class="upcoming section section-alt" data-reveal>
     <div class="container">
       <div class="upcoming-head">
         <h2 class="section-title">Ближайшие семинары</h2>
         <a href="/raspisanie-i-tseny" class="upcoming-all">Всё расписание →</a>
       </div>
       <div class="upcoming-grid">
-        {seminars.map((s) => (
-          <article class="upcoming-card">
+        {seminars.map((s, i) => (
+          <article data-start-offer data-start-at={s.startAt} hidden={i >= 3} class="upcoming-card">
             <span class="upcoming-date">{s.dateLabel} · {s.cityName}</span>
             <h3 class="upcoming-title"><a href={s.href}>{s.title}</a></h3>
             <span class="upcoming-meta">{s.instituteName}</span>
@@ -27,6 +28,8 @@ const seminars = getUpcomingSeminars(3);
     </div>
   </section>
 )}
+
+<StartVisibility />
 
 <style>
   /* Шапка с заголовком и ссылкой справа. Заголовок обязан быть по центру СЕКЦИИ, а не по

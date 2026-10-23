@@ -3,13 +3,14 @@
  * Modular: сетка ближайших дат; первая карточка выделена рамкой (§7.4).
  * Изображения событий не используем — все стоковые.
  */
+import StartVisibility from '../../StartVisibility.astro';
 import { getUpcomingSeminars } from '../../../lib/home';
 
-const seminars = getUpcomingSeminars(6);
+const seminars = getUpcomingSeminars(Infinity);
 ---
 
 {seminars.length > 0 && (
-  <section id="upcoming" class="up-mod section" data-upcoming="modular">
+  <section data-start-list data-start-limit="6" id="upcoming" class="up-mod section" data-upcoming="modular">
     <div class="container">
       <div class="up-mod-head">
         <h2 class="section-title">Ближайшие даты</h2>
@@ -17,7 +18,7 @@ const seminars = getUpcomingSeminars(6);
       </div>
       <div class="up-mod-grid">
         {seminars.map((s, i) => (
-          <article class:list={['up-mod-card', { featured: i === 0 }]} data-upcoming-card={i === 0 ? 'featured' : undefined}>
+          <article data-start-offer data-start-at={s.startAt} hidden={i >= 6} class:list={['up-mod-card', { featured: i === 0 }]} data-upcoming-card={i === 0 ? 'featured' : undefined}>
             <div class="up-mod-date" aria-hidden="true">
               <span class="up-mod-day">{s.dayLabel}</span>
               <span class="up-mod-month">{s.monthLabel}</span>
@@ -38,6 +39,8 @@ const seminars = getUpcomingSeminars(6);
     </div>
   </section>
 )}
+
+<StartVisibility />
 
 <style>
   /* Шапка с заголовком и ссылкой справа. Заголовок обязан быть по центру СЕКЦИИ, а не по

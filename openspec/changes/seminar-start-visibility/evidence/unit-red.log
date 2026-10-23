@@ -1,0 +1,177 @@
+
+ RUN  v4.1.11 /private/tmp/ikpk-seminar-start-red-20261022/web
+
+ × tests/seminar-start-visibility.test.ts > seminar exact start boundary > one second before with unchanged one-day startAt=endAt 7ms
+   → schedule-window must expose the approved pure isBeforeStart(entry, now) contract: expected undefined to be type of 'function'
+ × tests/seminar-start-visibility.test.ts > seminar exact start boundary > one millisecond before with unchanged one-day startAt=endAt 1ms
+   → schedule-window must expose the approved pure isBeforeStart(entry, now) contract: expected undefined to be type of 'function'
+ × tests/seminar-start-visibility.test.ts > seminar exact start boundary > at equality with unchanged one-day startAt=endAt 1ms
+   → schedule-window must expose the approved pure isBeforeStart(entry, now) contract: expected undefined to be type of 'function'
+ × tests/seminar-start-visibility.test.ts > seminar exact start boundary > one millisecond after with unchanged one-day startAt=endAt 1ms
+   → schedule-window must expose the approved pure isBeforeStart(entry, now) contract: expected undefined to be type of 'function'
+ × tests/seminar-start-visibility.test.ts > seminar exact start boundary > one second after with unchanged one-day startAt=endAt 1ms
+   → schedule-window must expose the approved pure isBeforeStart(entry, now) contract: expected undefined to be type of 'function'
+ × tests/seminar-start-visibility.test.ts > seminar exact start boundary > compares the instant independently of the visitor offset: 2026-10-22T19:00:00+03:00 1ms
+   → schedule-window must expose the approved pure isBeforeStart(entry, now) contract: expected undefined to be type of 'function'
+ × tests/seminar-start-visibility.test.ts > seminar exact start boundary > compares the instant independently of the visitor offset: 2026-10-22T09:00:00-07:00 0ms
+   → schedule-window must expose the approved pure isBeforeStart(entry, now) contract: expected undefined to be type of 'function'
+ × tests/seminar-start-visibility.test.ts > seminar exact start boundary > hides a multi-day event from offers on its second day 0ms
+   → schedule-window must expose the approved pure isBeforeStart(entry, now) contract: expected undefined to be type of 'function'
+ × tests/seminar-start-visibility.test.ts > seminar exact start boundary > keeps the future session of the same seminar when its earlier session starts 1ms
+   → schedule-window must expose the approved pure isBeforeStart(entry, now) contract: expected undefined to be type of 'function'
+ × tests/seminar-start-visibility.test.ts > publication rejects unresolved seminar start time > requires confirmation for today even when legacy midnight is past: 2026-10-22T00:01:00Z 2ms
+   → today's midnight placeholder and text are not a confirmed start: expected true to be false // Object.is equality
+ × tests/seminar-start-visibility.test.ts > publication rejects unresolved seminar start time > requires confirmation for today even when legacy midnight is past: 2026-10-22T23:59:00Z 2ms
+   → today's midnight placeholder and text are not a confirmed start: expected true to be false // Object.is equality
+ × tests/seminar-start-visibility.test.ts > publication rejects unresolved seminar start time > rejects future text-only time and identifies the record 1ms
+   → expected true to be false // Object.is equality
+ × tests/seminar-start-visibility.test.ts > publication rejects unresolved seminar start time > rejects missing date and identifies the record 0ms
+   → expected true to be false // Object.is equality
+ × tests/seminar-start-visibility.test.ts > publication rejects unresolved seminar start time > rejects missing instant and identifies the record 0ms
+   → expected true to be false // Object.is equality
+ × tests/seminar-start-visibility.test.ts > publication rejects unresolved seminar start time > rejects missing zone and identifies the record 0ms
+   → expected true to be false // Object.is equality
+ × tests/seminar-start-visibility.test.ts > publication rejects unresolved seminar start time > rejects invalid zone and identifies the record 0ms
+   → expected true to be false // Object.is equality
+ × tests/seminar-start-visibility.test.ts > publication rejects unresolved seminar start time > rejects invalid instant and identifies the record 0ms
+   → expected true to be false // Object.is equality
+ × tests/seminar-start-visibility.test.ts > publication rejects unresolved seminar start time > rejects instant without explicit offset and identifies the record 0ms
+   → expected true to be false // Object.is equality
+ × tests/seminar-start-visibility.test.ts > publication rejects unresolved seminar start time > rejects rescheduled calendar date and identifies the record 1ms
+   → expected true to be false // Object.is equality
+ × tests/seminar-start-visibility.test.ts > publication rejects unresolved seminar start time > rejects changed instant on another local date and identifies the record 0ms
+   → expected true to be false // Object.is equality
+ × tests/seminar-start-visibility.test.ts > publication rejects unresolved seminar start time > rejects changed zone makes local date disagree and identifies the record 0ms
+   → expected true to be false // Object.is equality
+ ✓ tests/seminar-start-visibility.test.ts > publication rejects unresolved seminar start time > accepts explicit Moscow time without changing one-day calendar boundaries 0ms
+ ✓ tests/seminar-start-visibility.test.ts > publication rejects unresolved seminar start time > validates the displayed normalized date rather than the UTC date prefix 19ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 21 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/seminar-start-visibility.test.ts > seminar exact start boundary > one second before with unchanged one-day startAt=endAt
+ FAIL  tests/seminar-start-visibility.test.ts > seminar exact start boundary > one millisecond before with unchanged one-day startAt=endAt
+ FAIL  tests/seminar-start-visibility.test.ts > seminar exact start boundary > at equality with unchanged one-day startAt=endAt
+ FAIL  tests/seminar-start-visibility.test.ts > seminar exact start boundary > one millisecond after with unchanged one-day startAt=endAt
+ FAIL  tests/seminar-start-visibility.test.ts > seminar exact start boundary > one second after with unchanged one-day startAt=endAt
+AssertionError: schedule-window must expose the approved pure isBeforeStart(entry, now) contract: expected undefined to be type of 'function'
+
+Expected: "function"
+Received: "undefined"
+
+ ❯ beforeStart tests/seminar-start-visibility.test.ts:20:6
+     18|   const predicate = (scheduleWindow as Record<string, unknown>).isBefo…
+     19|   expect(predicate, 'schedule-window must expose the approved pure isB…
+     20|     .toBeTypeOf('function');
+       |      ^
+     21|   return (predicate as (entry: Entry, now: string) => boolean)(entry, …
+     22| }
+ ❯ tests/seminar-start-visibility.test.ts:45:12
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/21]⎯
+
+ FAIL  tests/seminar-start-visibility.test.ts > seminar exact start boundary > compares the instant independently of the visitor offset: 2026-10-22T19:00:00+03:00
+ FAIL  tests/seminar-start-visibility.test.ts > seminar exact start boundary > compares the instant independently of the visitor offset: 2026-10-22T09:00:00-07:00
+AssertionError: schedule-window must expose the approved pure isBeforeStart(entry, now) contract: expected undefined to be type of 'function'
+
+Expected: "function"
+Received: "undefined"
+
+ ❯ beforeStart tests/seminar-start-visibility.test.ts:20:6
+     18|   const predicate = (scheduleWindow as Record<string, unknown>).isBefo…
+     19|   expect(predicate, 'schedule-window must expose the approved pure isB…
+     20|     .toBeTypeOf('function');
+       |      ^
+     21|   return (predicate as (entry: Entry, now: string) => boolean)(entry, …
+     22| }
+ ❯ tests/seminar-start-visibility.test.ts:49:14
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/21]⎯
+
+ FAIL  tests/seminar-start-visibility.test.ts > seminar exact start boundary > hides a multi-day event from offers on its second day
+AssertionError: schedule-window must expose the approved pure isBeforeStart(entry, now) contract: expected undefined to be type of 'function'
+
+Expected: "function"
+Received: "undefined"
+
+ ❯ beforeStart tests/seminar-start-visibility.test.ts:20:6
+     18|   const predicate = (scheduleWindow as Record<string, unknown>).isBefo…
+     19|   expect(predicate, 'schedule-window must expose the approved pure isB…
+     20|     .toBeTypeOf('function');
+       |      ^
+     21|   return (predicate as (entry: Entry, now: string) => boolean)(entry, …
+     22| }
+ ❯ tests/seminar-start-visibility.test.ts:54:12
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/21]⎯
+
+ FAIL  tests/seminar-start-visibility.test.ts > seminar exact start boundary > keeps the future session of the same seminar when its earlier session starts
+AssertionError: schedule-window must expose the approved pure isBeforeStart(entry, now) contract: expected undefined to be type of 'function'
+
+Expected: "function"
+Received: "undefined"
+
+ ❯ beforeStart tests/seminar-start-visibility.test.ts:20:6
+     18|   const predicate = (scheduleWindow as Record<string, unknown>).isBefo…
+     19|   expect(predicate, 'schedule-window must expose the approved pure isB…
+     20|     .toBeTypeOf('function');
+       |      ^
+     21|   return (predicate as (entry: Entry, now: string) => boolean)(entry, …
+     22| }
+ ❯ tests/seminar-start-visibility.test.ts:62:39
+ ❯ tests/seminar-start-visibility.test.ts:62:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/21]⎯
+
+ FAIL  tests/seminar-start-visibility.test.ts > publication rejects unresolved seminar start time > requires confirmation for today even when legacy midnight is past: 2026-10-22T00:01:00Z
+ FAIL  tests/seminar-start-visibility.test.ts > publication rejects unresolved seminar start time > requires confirmation for today even when legacy midnight is past: 2026-10-22T23:59:00Z
+AssertionError: today's midnight placeholder and text are not a confirmed start: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ tests/seminar-start-visibility.test.ts:76:93
+     74|       delete legacy.startTimeZone;
+     75|       const result = validateSnapshotContract(snapshot([legacy]));
+     76|       expect(result.ok, 'today\'s midnight placeholder and text are no…
+       |                                                                                             ^
+     77|       expect(result.violations.some((violation) => violation.recordId …
+     78|     });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/21]⎯
+
+ FAIL  tests/seminar-start-visibility.test.ts > publication rejects unresolved seminar start time > rejects future text-only time and identifies the record
+ FAIL  tests/seminar-start-visibility.test.ts > publication rejects unresolved seminar start time > rejects missing date and identifies the record
+ FAIL  tests/seminar-start-visibility.test.ts > publication rejects unresolved seminar start time > rejects missing instant and identifies the record
+ FAIL  tests/seminar-start-visibility.test.ts > publication rejects unresolved seminar start time > rejects missing zone and identifies the record
+ FAIL  tests/seminar-start-visibility.test.ts > publication rejects unresolved seminar start time > rejects invalid zone and identifies the record
+ FAIL  tests/seminar-start-visibility.test.ts > publication rejects unresolved seminar start time > rejects invalid instant and identifies the record
+ FAIL  tests/seminar-start-visibility.test.ts > publication rejects unresolved seminar start time > rejects instant without explicit offset and identifies the record
+ FAIL  tests/seminar-start-visibility.test.ts > publication rejects unresolved seminar start time > rejects rescheduled calendar date and identifies the record
+ FAIL  tests/seminar-start-visibility.test.ts > publication rejects unresolved seminar start time > rejects changed instant on another local date and identifies the record
+ FAIL  tests/seminar-start-visibility.test.ts > publication rejects unresolved seminar start time > rejects changed zone makes local date disagree and identifies the record
+AssertionError: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ tests/seminar-start-visibility.test.ts:93:23
+     91|   ])('rejects %s and identifies the record', (_label, entry) => {
+     92|     const result = validateSnapshotContract(snapshot([entry]));
+     93|     expect(result.ok).toBe(false);
+       |                       ^
+     94|     expect(result.violations.some((violation) => violation.recordId ==…
+     95|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/21]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  21 failed | 2 passed (23)
+   Start at  23:17:42
+   Duration  513ms (transform 110ms, setup 81ms, import 91ms, tests 39ms, environment 0ms)

@@ -4,9 +4,19 @@
 // строка ближайшего семинара (реальные дата/город/цена) и реальное фото
 // практики вместо абстрактной иллюстрации.
 import { CTA_HREF } from '../../../lib/navigation';
+import StartVisibility from '../../StartVisibility.astro';
 import { getUpcomingSeminars } from '../../../lib/home';
 
-const next = getUpcomingSeminars(1)[0];
+const candidates = getUpcomingSeminars(Infinity);
+const next = candidates[0];
+const heroCandidates = candidates.map((candidate) => ({
+  startAt: candidate.startAt,
+  title: candidate.title,
+  href: candidate.href,
+  dateLabel: candidate.dateLabel,
+  cityName: candidate.cityName,
+  priceLabel: candidate.priceLabel,
+}));
 // Визуал hero — нейтральный брендовый плейсхолдер: реального фото занятия
 // (преподаватель + участники + мануальная практика) у нас пока нет,
 // запрошено у заказчика (docs/client-requests.md). Тёмный видео-thumbnail
@@ -31,7 +41,7 @@ const next = getUpcomingSeminars(1)[0];
       </ul>
 
       {next && (
-        <a class="hero-d-next" href={next.href}>
+        <a data-start-hero={JSON.stringify(heroCandidates)} class="hero-d-next" href={next.href}>
           <span class="hero-d-next-label">Ближайший семинар</span>
           {/* Название есть в данных (`title` в lib/home.ts), но в разметку не
               попадало: строка «14–16 авг · Санкт-Петербург · 45 000 ₽» не
@@ -45,7 +55,7 @@ const next = getUpcomingSeminars(1)[0];
 
       <div class="hero-d-actions">
         <a href={CTA_HREF} class="btn btn-primary" data-cta="hero">Подобрать программу</a>
-        <a href="#upcoming" class="btn btn-outline">Ближайшие семинары</a>
+        {next && <a data-start-upcoming-action href="#upcoming" class="btn btn-outline">Ближайшие семинары</a>}
       </div>
     </div>
 
@@ -65,6 +75,8 @@ const next = getUpcomingSeminars(1)[0];
     </div>
   </div>
 </section>
+
+<StartVisibility />
 
 <style>
   .hero-d { background: linear-gradient(135deg, #f2f8f2 0%, #e6f0e7 100%); }

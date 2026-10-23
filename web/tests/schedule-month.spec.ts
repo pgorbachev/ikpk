@@ -1,15 +1,26 @@
 import { test, expect, type Page } from '@playwright/test';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { isCurrentOrFuture } from '../src/lib/schedule-window';
-import { loadPinnedSnapshot, loadPinnedType } from './helpers/pinned-snapshot';
+import { isBeforeStart } from '../src/lib/schedule-window';
+import { BEFORE } from './helpers/seminar-start-fixture';
 // Псевдоним, а не прямое имя: параметр `monthKeys` уже занят в `syntheticMarkup` и
 // `mountSynthetic`, и тень над импортом читалась бы как одно и то же.
 import { monthKeys as monthKeysOf } from '../src/lib/schedule-months';
 import { installThirdPartyGuard } from './helpers/third-party-guard';
 
+let fixture: { url: string; outDir: string; entries: SnapshotEntry[] };
+test.beforeAll(() => {
+  if (!process.env.IKPK_MONTH_FIXTURE) throw new Error('Controlled month fixture was not built');
+  fixture = JSON.parse(process.env.IKPK_MONTH_FIXTURE);
+  PAGE = `${fixture.url}/raspisanie-i-tseny`;
+  expect(liveEntryCount(BEFORE)).toBeGreaterThan(PAGE_SIZE);
+  expect(strictPairInData(BEFORE)).toBe(true);
+  expect(schedulePatches().length).toBeGreaterThan(0);
+});
+
 test.beforeEach(async ({ page }) => {
   await installThirdPartyGuard(page);
+  await page.clock.setFixedTime(new Date(BEFORE));
 });
 
 // ─── Браузерные проверки фильтра расписания по месяцу ────────────────────────
@@ -19,7 +30,8 @@ test.beforeEach(async ({ page }) => {
 // сервере» (сценарий про заплатки), «Проверка месяца обязана исполняться в гейте
 // публикации».
 //
-// Файл КРАСНЫЙ по замыслу: контрола месяца на странице ещё нет.
+// Сборка использует подтверждённый синтетический снимок и фиксированное время.
+// Ожидания, HTML и скрипт управления происходят из одного снимка и одной сборки.
 //
 // Файл исполняется workflow `Tests` — через `npm run test:e2e:schedule`, вписанный
 // в job `e2e-smoke` рядом с `test:e2e:catalog`. Положить эти проверки в
@@ -31,7 +43,7 @@ test.beforeEach(async ({ page }) => {
 // в ложное падение при первом обновлении данных, а сценарий без подходящего
 // предмета обязан сказать «проверять было нечего», а не отчитаться об успехе.
 
-const PAGE = '/raspisanie-i-tseny';
+let PAGE = '/raspisanie-i-tseny';
 const MONTH = '[data-schedule-filter="month"]';
 const INSTITUTE = '[data-schedule-filter="institute"]';
 const PROGRAM = '[data-schedule-filter="program"]';
@@ -65,6 +77,7 @@ async function openSchedule(page: Page): Promise<Entry[]> {
   const entries = await readEntries(page, ITEM);
   expect(entries.length, 'на странице нет ни одной записи расписания — проверять было нечего')
     .toBeGreaterThan(0);
+  expect(entries.length, 'built page must contain every confirmed future fixture entry').toBe(liveEntryCount(BEFORE));
   return entries;
 }
 
@@ -111,26 +124,11 @@ interface SchedulePatch extends SnapshotEntry {
   name: string;
 }
 
-/**
- * Живые записи расписания по ДАННЫМ на дату `today`: склейка снапшота с заплатками,
- * пропущенная через то же окно актуальности, что и страница.
- *
- * Зачем второй счёт, если содержимое страницы видно глазами: ветки `@month-pagination`
- * и `@month-city` выбираются по странице, и они обязаны отличать «предмета мало
- * законно, события прошли» от «предмет потеряли». Первое видно только сверкой с
- * данными.
- *
- * Почему снапшот читается напрямую, а не через `src/lib/data.ts`: тот модуль тянет
- * `import.meta.env` (через `html-cleaner` → `forms`), которого в прогоне Playwright
- * нет вовсе — импорт падает на `forms.ts:22`. Окно и склейка с заплатками берутся из
- * тех же модулей, что у страницы (`schedule-window`, `модуль заплаток`), поэтому
- * расходиться со сборкой может только правило склейки — и на этом ветка покраснеет,
- * а не промолчит.
- */
+/** Expected offers from the exact source used by the controlled build. */
 function liveSnapshotEntries(today: string): SnapshotEntry[] {
-  const base = loadPinnedType<SnapshotEntry[]>('schedule_entries');
-  expect(base.length, 'закреплённый снимок расписания пуст — считать нечего').toBeGreaterThan(0);
-  return base.filter((entry) => entry.status === 'active' && isCurrentOrFuture(entry, today));
+  const base = fixture.entries;
+  expect(base.length, 'контролируемый снимок расписания пуст — считать нечего').toBeGreaterThan(0);
+  return base.filter((entry) => entry.status === 'active' && isBeforeStart(entry, today));
 }
 
 /** Сколько записей обязано быть на странице на дату `today`. */
@@ -147,13 +145,13 @@ const liveEntryCount = (today: string): number => liveSnapshotEntries(today).len
  * Города здесь группируются по ИМЕНИ, а страница — по слагу
  * (`slugify` в `raspisanie-i-tseny.astro`; модуля у неё нет, и копировать функцию сюда
  * значило бы завести второй носитель правила). Группировки совпадают, пока слаги
- * различны и город есть у каждой записи; на сегодняшних данных это так (6 имён → 6
- * слагов, записей без города 0), но проверка на это НЕ полагается: ветка сверяет число
+ * различны и город есть у каждой записи; в контролируемом снимке это так (3 имени → 3
+ * слага, записей без города 0), но проверка на это НЕ полагается: ветка сверяет число
  * групп на странице с числом имён в данных и краснеет при расхождении.
  */
 function strictPairInData(today: string): boolean {
   const entries = liveSnapshotEntries(today).map((entry) => ({
-    months: monthKeysOf(entry, today),
+    months: monthKeysOf(entry, today.slice(0, 10)),
     city: entry.city?.name ?? '',
   }));
   const months = [...new Set(entries.flatMap((entry) => entry.months))];
@@ -173,7 +171,7 @@ const liveCityNames = (today: string): Set<string> =>
 
 /** Бывшие записи-заплатки: в снимке с id >= 900000 (раньше жили в модуль заплаток). */
 function schedulePatches(): SchedulePatch[] {
-  return loadPinnedType<SnapshotEntry[]>('schedule_entries').filter(
+  return fixture.entries.filter(
     (entry): entry is SchedulePatch =>
       Number(entry.id) >= 900000 && typeof entry.name === 'string' && entry.name.length > 0,
   );
@@ -234,31 +232,12 @@ test.describe('выбор месяца сужает выдачу', () => {
       expect(alien.map((e) => e.title), 'выдача не является пересечением месяца и города').toEqual([]);
     };
 
-    // Требование закрывает синтетический сценарий `@month-city-synthetic`; здесь —
-    // характеризация живого набора, и от хода времени она зависеть не должна.
-    // Ветка выбирается по СТРАНИЦЕ, а не по дате в тексте теста, — тем же приёмом и по
-    // той же причине, что в `@month-supplement` и `@month-pagination`.
-    //
-    // ДАТА ИСЧЕЗНОВЕНИЯ ПРЕДМЕТА: 2027-05-24. Вычислена, а не оценена: склейка снапшота
-    // `закреплённый снимок (schedule_entries)` с `schedulePatches()` по ключу
-    // `slug:startAt`, затем `status === 'active'` и `isCurrentOrFuture`, затем
-    // `monthKeys` — те же модули, которыми пользуется сборка, — перебором календарных
-    // дат. Строгая пара есть по 2027-05-23 включительно (живых 6: май — 2 записи в
-    // Петербурге и 1 в Москве); с 2027-05-24 живых 4, и в каждом живом месяце остаётся
-    // ровно один город, то есть строгой пары нет ни одной. Срок и лечение — в TD-25.
-    //
-    // ВТОРАЯ ДАТА: 2027-06-07. С неё живых записей 2, обе в `2027-09` и обе в Москве —
-    // один месяц и один город на всю страницу, и тогда обратная ветка ниже вакуумна:
-    // оба её наблюдения зелены при полностью выключенных фильтрах. Окно вакуумности
-    // 2027-06-07 … 2027-09-17; с 2027-09-18 живых ноль и краснеет весь файл (TD-21).
-    // Падать нельзя: ложное красное в гейте публикации дороже ложного зелёного. `skip`
-    // нельзя тоже: помеченный тест в собранном наборе виден, но выполняемым не
-    // считается, и мета-гейт покраснел бы по метке `@month-city`.
+    // The fixture guarantees a strict pair. Losing it must fail against the source.
     if (narrowing === undefined) {
       // Строгой пары на странице нет. Это законно, только если её нет и по данным; если
       // по данным она есть, значит записи потеряны или испорчен признак города — и тогда
       // ветка краснеет.
-      const today = loadPinnedSnapshot().referenceDate;
+      const today = BEFORE;
       expect(
         strictPairInData(today),
         `на странице нет пары «месяц + город» с пересечением строго меньше каждого из двух множеств, а по снапшоту и окну актуальности на ${today} такая пара есть — записи потеряны`,
@@ -384,33 +363,14 @@ test.describe('месяц и остальное управление', () => {
     const entries = await openSchedule(page);
     const months = await offeredMonths(page);
 
-    // Требование закрывает синтетический сценарий `@month-pagination-return`; здесь —
-    // характеризация живого набора, и от хода времени она зависеть не должна.
-    // Ветка выбирается по СТРАНИЦЕ, а не по дате в тексте теста, — тем же приёмом и по
-    // той же причине, что в `@month-supplement`: предмет «страниц больше одной»
-    // исчезает от хода времени, а не от дефекта.
-    //
-    // ДАТА ИСЧЕЗНОВЕНИЯ ПРЕДМЕТА: 2026-11-24. Вычислена, а не оценена: склейка снапшота
-    // `закреплённый снимок (schedule_entries)` (63 записи) с `schedulePatches()` по
-    // тому же ключу `slug:startAt`, что у страницы, затем отбор `status === 'active'` и
-    // `isCurrentOrFuture` из `schedule-window` — того же вывода о времени, которым
-    // пользуется сборка, — перебором календарных дат. Живых: 2026-08-12 — 64,
-    // 2026-11-23 — 26 (последний день, когда предмет есть), 2026-11-24 — ровно 25, то
-    // есть «больше 25» перестаёт выполняться на исправном коде, внутри единственного
-    // прогона, который держит публикацию. Вторая дата того же счёта — 2027-09-18, когда
-    // живых ноль: там падает не эта ветка, а `openSchedule` целиком, и так и задумано
-    // (пустое расписание — дефект продукта, а не исчезнувший предмет сценария). Обе даты
-    // и лечение — в TD-21.
-    // Падать нельзя: ложное красное в гейте публикации дороже ложного зелёного. `skip`
-    // нельзя тоже: помеченный тест в собранном наборе виден, но выполняемым не
-    // считается, и мета-гейт покраснел бы по метке `@month-pagination`.
+    // The fixture has more than one page; compare against its source if rows vanish.
     if (entries.length <= PAGE_SIZE) {
       // Страница одна, скрывать нечего — но ветка не пустая, а утверждает наблюдаемое с
       // двух сторон. Первое: столько записей и должно быть по данным; если по снапшоту и
       // окну живых больше страницы, значит записи потеряны, и ветка краснеет. Второе:
       // при одной странице пагинации не должно быть ни до выбора месяца, ни после, ни
       // после сброса — это ловит обратный дефект, «пагинация показана всегда».
-      const today = loadPinnedSnapshot().referenceDate;
+      const today = BEFORE;
       const live = liveEntryCount(today);
       expect(
         live,
@@ -448,7 +408,7 @@ test.describe('месяц и остальное управление', () => {
 
     // Идентификатора записи в разметке нет вовсе, поэтому заплатка узнаётся по
     // заголовку из своего источника. «Месяц только с заплаткой» проверить нельзя:
-    // обе приходятся на октябрь 2026, где ещё 12 обычных записей.
+    // в октябре рядом с ней есть обычное проведение.
     const present = schedulePatches()
       .map((supplement) => ({
         title: supplement.name,
@@ -457,37 +417,16 @@ test.describe('месяц и остальное управление', () => {
       }))
       .find((candidate) => candidate.entry && months.includes(candidate.key));
 
-    // Требование закрывает синтетический сценарий `@month-supplement-synthetic`; здесь —
-    // характеризация живого набора, и от хода времени она зависеть не должна.
-    //
-    // Ветка выбирается по СТРАНИЦЕ, а не по дате в тексте теста, и обе ветки —
-    // настоящие проверки.
-    //
-    // Почему не «падать, если заплаток нет».
-    //
-    // ДАТА ИСЧЕЗНОВЕНИЯ ПРЕДМЕТА: 2026-10-09. Вычислена, а не оценена: обе заплатки
-    // однодневные (`startAt` = `endAt` = 2026-10-01 и 2026-10-08), окно актуальности
-    // держит запись до её последнего дня ВКЛЮЧИТЕЛЬНО (`isCurrentOrFuture` из
-    // `schedule-window` — тот же вывод о времени, которым пользуется сборка), поэтому
-    // первый день, когда в окне не остаётся ни одной, — следующий за поздней из двух.
-    // Счёт перебором дат: 2026-10-08 — в окне 1 заплатка, 2026-10-09 — ни одной.
-    // Дальше предмет исчезает от хода времени, а не от дефекта, и проверка начала бы
-    // стабильно краснеть ВНУТРИ единственного прогона, который держит публикацию.
-    // Ложное красное в гейте публикации дороже ложного зелёного (AGENTS.md), поэтому
-    // «проверять было нечего» здесь не тот выход. Срок и лечение — в TD-20.
-    //
-    // Почему не `skip`. Помеченный тест в собранном наборе виден, но выполняемым не
-    // считается, и мета-гейт покраснел бы по метке `@month-supplement`. Два гейта
-    // поймали бы друг друга.
+    // The confirmed fixture patch is future at BEFORE; losing it must fail.
     if (present === undefined) {
       // Заплатки, достижимой выбором своего месяца, на странице нет. Это законно, только
       // если окно отсекло все; если хотя бы одна ещё в окне, значит её потеряли — и тогда
       // ветка краснеет, называя расхождение ДВУМЯ числами: сколько заплаток наблюдается
       // на странице и сколько обязано быть по данным на опорную дату.
-      const today = loadPinnedSnapshot().referenceDate;
+      const today = BEFORE;
       const titles = new Set(entries.map((entry) => entry.title));
       const onPage = schedulePatches().filter((supplement) => titles.has(supplement.name));
-      const stillInWindow = schedulePatches().filter((supplement) => isCurrentOrFuture(supplement, today));
+      const stillInWindow = schedulePatches().filter((supplement) => isBeforeStart(supplement, today));
       expect(
         stillInWindow.map((supplement) => supplement.name),
         `на странице заплаток ${onPage.length}, а по данным и окну актуальности на ${today} обязано быть ${stillInWindow.length} — запись потеряна:\n${stillInWindow.map((s) => s.name).join('\n')}`,
@@ -574,6 +513,7 @@ test.describe('контрол месяца доступен', () => {
     // Своя страница — свой guard: guard из `beforeEach` стоит на странице фикстуры и об
     // этой ничего не знает.
     await installThirdPartyGuard(staticPage);
+    await staticPage.clock.setFixedTime(new Date(BEFORE));
     const response = await staticPage.goto(PAGE);
     expect(response?.status(), `${PAGE}: страница не отдалась без JavaScript — измерять нечего`).toBe(200);
     await expect(staticPage.locator(MONTH), 'без JavaScript контрол месяца выглядит рабочим').toBeDisabled();
@@ -620,19 +560,16 @@ test.describe('контрол месяца доступен', () => {
 // исполняется над разметкой, которую мы задаём сами. Производственный код при этом
 // не меняется вовсе.
 //
-// Зачем так: сброс на первую страницу на реальных данных НЕНАБЛЮДАЕМ — самый
-// населённый месяц даёт 15 записей при 25 на странице, и зажим
-// `currentPage = Math.min(currentPage, pageCount)` приводит к первой странице даже
-// без сброса. Браузерный тест по данным зелен и при сломанном поведении, то есть был
-// бы ложным свидетельством, а негативная мутация «убрать сброс» не покраснела бы и
-// объявила бы гейт декоративным.
+// Отдельная разметка задаёт точные порядковые номера и граничные комбинации:
+// сброс страницы, совпадение полного ключа месяца, пустой список и отсутствие контрола.
+// Скрипт берётся из той же контролируемой сборки, что и браузерные сценарии выше.
 //
 // Цена честная: набор воспроизводит контракт разметки и при её изменении протухнет.
 // Поэтому он опирается на те же признаки, что и проверки выше, — расхождение
 // проявится падением, а не молчанием.
 
 const distPage = (): string =>
-  readFileSync(join(import.meta.dirname, '..', 'dist', 'raspisanie-i-tseny', 'index.html'), 'utf-8');
+  readFileSync(join(fixture.outDir, 'raspisanie-i-tseny', 'index.html'), 'utf-8');
 
 function controlsScriptText(): string {
   const block = distPage().match(/<script\b[^>]*\bdata-schedule-controls\b[^>]*>([\s\S]*?)<\/script>/i);
@@ -813,12 +750,7 @@ test.describe('синтетический набор', () => {
   });
 
   test('пагинация скрывается выбором месяца и возвращается сбросом @month-pagination-return', async ({ page }) => {
-    // Требование «выбор месяца убирает пагинацию, сброс её возвращает» закрывается ЗДЕСЬ,
-    // а не проверкой по реальным данным: та требует больше 25 живых записей, а их число
-    // убывает от хода времени — на 2026-11-24 живых остаётся ровно 25, и предмет исчезает
-    // (TD-21). Здесь набор задаётся сам, поэтому от календаря сценарий не зависит вовсе.
-    // Рассуждение спеки про сброс страницы («на реальных данных ненаблюдаемо ⇒ фикстуры»)
-    // относится к половине «возвращается» дословно.
+    // Изолированная проверка скрипта дополняет проверку реальной собранной страницы.
     const many = Array.from({ length: 30 }, (_, i) => ({
       months: ['2026-11'],
       title: `Ноябрь ${String(i + 1).padStart(2, '0')}`,

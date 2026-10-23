@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import * as data from '../src/lib/data.js';
 import { formatPrice, getScheduleEntries, normalizeScheduleEntry } from '../src/lib/data.js';
 import { formatScheduleDateRange, getCatalogStats, getUpcomingSeminars } from '../src/lib/home.js';
-import { isCurrentOrFuture } from '../src/lib/schedule-window.js';
+import { isBeforeStart, isCurrentOrFuture } from '../src/lib/schedule-window.js';
 
 /** ru-RU кладёт неразрывный пробел в «не число» и в тысячи — сравниваем видимый текст. */
 const visible = (value: string): string => value.replace(/\s+/g, ' ').trim();
@@ -252,8 +252,9 @@ describe('ближайшие семинары — ещё не начавшиес
     vi.spyOn(data, 'getScheduleEntries').mockReturnValue([row]);
     vi.spyOn(data, 'getInstitutes').mockReturnValue([{ legacy_id: '1', legacy_url: '', name: 'Институт', slug: 'institut', seo_title: '', seo_description: '', description_html: '', description_text: '', images: [] }]);
     vi.spyOn(data, 'getSnapshotReferenceDate').mockReturnValue('2024-09-23');
-    const upcoming = getUpcomingSeminars(1, new Date('2024-09-23T12:00:00.000Z'));
+    const upcoming = getUpcomingSeminars(1, new Date('2024-09-22T20:59:59.000Z'));
     expect(upcoming[0]?.dayLabel).toBe('23');
+    expect(getUpcomingSeminars(1, new Date('2024-09-22T21:00:00.000Z'))).toEqual([]);
   });
 
   it('опора: CST-2 17–20 сентября в снимке ещё идёт 20-го', () => {
@@ -277,11 +278,11 @@ describe('ближайшие семинары — ещё не начавшиес
     expect(nextEntry!.startAt.slice(0, 10) >= TODAY, `${next!.title} уже начался к ${TODAY}`).toBe(true);
   });
 
-  it('счётчик дат каталога по-прежнему держит идущее событие до последнего дня', () => {
+  it('счётчик дат каталога учитывает только ещё не начавшиеся сеансы', () => {
     const current = getScheduleEntries().filter(
-      (entry) => entry.status === 'active' && entry.startAt && isCurrentOrFuture(entry, TODAY),
+      (entry) => entry.status === 'active' && entry.startAt && isBeforeStart(entry, now),
     );
-    expect(current.some((entry) => entry.id === CST2_SEP)).toBe(true);
+    expect(current.some((entry) => entry.id === CST2_SEP)).toBe(false);
     expect(getCatalogStats(now).dates).toBe(current.length);
   });
 });
