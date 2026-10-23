@@ -40,12 +40,12 @@
     "identity": "style|body:8ab61f23308a314e"
   },
   {
-    "slotId": "src:components/chat/ChatFacade.astro:L49:C1:script",
+    "slotId": "src:components/chat/ChatFacade.astro:L57:C1:script",
     "file": "components/chat/ChatFacade.astro",
     "nodeKind": "element",
-    "locator": "components/chat/ChatFacade.astro:L49:C1:script",
-    "fingerprint": "304a188338a10b61aee5b6a4f9716bea7947e4aad86dea3497674af99fa51c41",
-    "identity": "script|is:inline=empty:|body:3b91aae924e61b00"
+    "locator": "components/chat/ChatFacade.astro:L57:C1:script",
+    "fingerprint": "ecb327084070df67cf38fa6921973cd3e78db5a8a3f0df9a45accf4405736e38",
+    "identity": "script|is:inline=empty:|body:748f379bcba0bfd5"
   },
   {
     "slotId": "src:components/contacts/ContactShell.astro:L121:C9:svg",
