@@ -3,6 +3,7 @@ import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync,
 import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { extname, join, resolve, sep } from 'node:path';
+import { HOME_OFFER_IDS } from '../../src/lib/book-offers';
 
 export const BEFORE = '2026-10-30T20:59:59Z';
 export const AFTER = '2026-10-30T21:00:01Z';
@@ -57,11 +58,13 @@ export async function serveSeminarStartFixture(mode: 'start' | 'month' | 'layout
   const layoutEntries = sourceTypes.schedule_entries;
   const entries = mode === 'layout' ? layoutEntries : syntheticEntries;
   const seminars = mode === 'layout' ? sourceTypes.seminars : syntheticSeminars;
+  const homeOfferIds = new Set<number>(Object.values(HOME_OFFER_IDS));
   const types = mode === 'layout'
     ? { ...sourceTypes, schedule_entries: entries }
     : { ...Object.fromEntries(Object.keys(sourceTypes).map((name) => [name, []])),
         institutes: [{ ...institute, images: [] }], course_groups: [{ ...group, images: [] }],
-        seminars, schedule_entries: entries };
+        seminars, schedule_entries: entries,
+        news: sourceTypes.news.filter((item) => homeOfferIds.has(Number(item.id))) };
   const snapshotRoot = mkdtempSync(join(tmpdir(), 'ikpk-start-snapshot-'));
   mkdirSync(join(webRoot, '.astro'), { recursive: true });
   const buildRoot = mkdtempSync(join(webRoot, '.astro/ikpk-start-build-'));
