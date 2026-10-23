@@ -136,11 +136,11 @@
     "identity": "svg|fill=quoted:none|viewBox=quoted:0 0 24 24"
   },
   {
-    "slotId": "src:components/course-groups/CourseGroupSeminarItem.astro:L53:C1:style",
+    "slotId": "src:components/course-groups/CourseGroupSeminarItem.astro:L52:C1:style",
     "file": "components/course-groups/CourseGroupSeminarItem.astro",
     "nodeKind": "element",
-    "locator": "components/course-groups/CourseGroupSeminarItem.astro:L53:C1:style",
-    "fingerprint": "ed05965f6226d403b79641b877c0635c87e1e1656949374e0d70ec2f8ada6cf8",
+    "locator": "components/course-groups/CourseGroupSeminarItem.astro:L52:C1:style",
+    "fingerprint": "7fabe04a6e888a126eed983033d5ec6b9d3d49de5b2d49d181d37f12ab93aa8a",
     "identity": "style|body:a46d6650aafc400b"
   },
   {
@@ -264,19 +264,19 @@
     "identity": "style|body:510b52f6a2697471"
   },
   {
-    "slotId": "src:components/home/sections/EventLine.astro:L50:C1:style",
+    "slotId": "src:components/home/sections/EventLine.astro:L54:C1:style",
     "file": "components/home/sections/EventLine.astro",
     "nodeKind": "element",
-    "locator": "components/home/sections/EventLine.astro:L50:C1:style",
-    "fingerprint": "ccd417ca5ad16e0a4679ea98bfe416682998bba5118dc444837eb199ab22d07c",
+    "locator": "components/home/sections/EventLine.astro:L54:C1:style",
+    "fingerprint": "15cfbef8be2d0caf128d64518ff693df68e8e187f646c6dfd27b88ae282b2f07",
     "identity": "style|body:f8d9650a27a51d4c"
   },
   {
-    "slotId": "src:components/home/sections/EventTeacher.astro:L67:C1:style",
+    "slotId": "src:components/home/sections/EventTeacher.astro:L70:C1:style",
     "file": "components/home/sections/EventTeacher.astro",
     "nodeKind": "element",
-    "locator": "components/home/sections/EventTeacher.astro:L67:C1:style",
-    "fingerprint": "b674ed043e8f096a7e427d8b7c7db27d871797f372e735293469f0b50b1a71f8",
+    "locator": "components/home/sections/EventTeacher.astro:L70:C1:style",
+    "fingerprint": "b93685ba35f690c51483a6ede3148ac1c5c7fe4f447d64233fa265843fbf2b7c",
     "identity": "style|body:63e295e292d72fe1"
   },
   {
@@ -304,11 +304,11 @@
     "identity": "style|body:1a345e867bb189d0"
   },
   {
-    "slotId": "src:components/home/sections/HeroHybrid.astro:L69:C1:style",
+    "slotId": "src:components/home/sections/HeroHybrid.astro:L81:C1:style",
     "file": "components/home/sections/HeroHybrid.astro",
     "nodeKind": "element",
-    "locator": "components/home/sections/HeroHybrid.astro:L69:C1:style",
-    "fingerprint": "148f25b9470c494dd51b3c799ad84620f31999d56f58cc2dff12f92ca0d3f53f",
+    "locator": "components/home/sections/HeroHybrid.astro:L81:C1:style",
+    "fingerprint": "bd2f7face71c6df8d5a65698f1f67603913b5749607446d951c3041524e080a5",
     "identity": "style|body:299406ffececa94a"
   },
   {
@@ -472,27 +472,27 @@
     "identity": "style|body:174dc77c6e68215f"
   },
   {
-    "slotId": "src:components/home/sections/UpcomingModular.astro:L42:C1:style",
+    "slotId": "src:components/home/sections/UpcomingModular.astro:L45:C1:style",
     "file": "components/home/sections/UpcomingModular.astro",
     "nodeKind": "element",
-    "locator": "components/home/sections/UpcomingModular.astro:L42:C1:style",
-    "fingerprint": "3885c5f389ce612231b9ce8c979f34358273edab8a172d1d4a911c65661b9b96",
+    "locator": "components/home/sections/UpcomingModular.astro:L45:C1:style",
+    "fingerprint": "f94c9879a859ecba7bd0ad93c2f9f6eae4148163a2da9baaf0e91e93aaf0ded7",
     "identity": "style|body:e83c5624a8bc4e94"
   },
   {
-    "slotId": "src:components/home/sections/UpcomingSeminars.astro:L31:C1:style",
+    "slotId": "src:components/home/sections/UpcomingSeminars.astro:L34:C1:style",
     "file": "components/home/sections/UpcomingSeminars.astro",
     "nodeKind": "element",
-    "locator": "components/home/sections/UpcomingSeminars.astro:L31:C1:style",
-    "fingerprint": "823a470cfe3487ad95aa8d74af11e54c252e7601b0c2455b2c06ce8d86e6f1ca",
+    "locator": "components/home/sections/UpcomingSeminars.astro:L34:C1:style",
+    "fingerprint": "2287893bbabc0731b484e0ba3dd2967ada73ee190ddc227b5f8b4fa6b252b74a",
     "identity": "style|body:ed91b5ca94c488f4"
   },
   {
-    "slotId": "src:components/home/sections/UpcomingTable.astro:L45:C1:style",
+    "slotId": "src:components/home/sections/UpcomingTable.astro:L48:C1:style",
     "file": "components/home/sections/UpcomingTable.astro",
     "nodeKind": "element",
-    "locator": "components/home/sections/UpcomingTable.astro:L45:C1:style",
-    "fingerprint": "5fd6d64c8e8333344cd3c1eca60586a922e1f8c8c888e2d01185af3eee64aab6",
+    "locator": "components/home/sections/UpcomingTable.astro:L48:C1:style",
+    "fingerprint": "811289168d2e4932e81a2fb3f037cd4ddb34536db8d8e9b09d063a44f6eb4312",
     "identity": "style|body:b045f1f7fb8135af"
   },
   {
@@ -580,8 +580,8 @@
     "file": "components/schedule/ScheduleControlsScript.astro",
     "nodeKind": "element",
     "locator": "components/schedule/ScheduleControlsScript.astro:L1:C1:script",
-    "fingerprint": "ba39dca6d159e019cc35ade2915f8a4aed9450f3400e8cdf5d2d8063cbc794bf",
-    "identity": "script|data-schedule-controls=empty:|is:inline=empty:|body:e495a96844a87ed5"
+    "fingerprint": "41daf9fce365becad1aa0f1ee0e0cf432333cbd33b9a92141ce2a465b0a270c3",
+    "identity": "script|data-schedule-controls=empty:|is:inline=empty:|body:329e8733a2d4f0ee"
   },
   {
     "slotId": "src:components/schedule/ScheduleEventCard.astro:L123:C1:style",
@@ -600,19 +600,19 @@
     "identity": "style|body:ceefe2fc7f5d4db1"
   },
   {
-    "slotId": "src:components/schedule/ScheduleListing.astro:L76:C1:style",
+    "slotId": "src:components/schedule/ScheduleListing.astro:L79:C1:style",
     "file": "components/schedule/ScheduleListing.astro",
     "nodeKind": "element",
-    "locator": "components/schedule/ScheduleListing.astro:L76:C1:style",
-    "fingerprint": "a737a50792b76b2724efdc460cb0fcfeb4992545f443d62837e6239aff7b2403",
+    "locator": "components/schedule/ScheduleListing.astro:L79:C1:style",
+    "fingerprint": "10521d2a47b6f4fbc791c28fe62166b2def4eaa3e62613c999ec937e00ea432e",
     "identity": "style|body:2f46246c39ee8d50"
   },
   {
-    "slotId": "src:components/schedule/SchedulePage.astro:L61:C1:style",
+    "slotId": "src:components/schedule/SchedulePage.astro:L64:C1:style",
     "file": "components/schedule/SchedulePage.astro",
     "nodeKind": "element",
-    "locator": "components/schedule/SchedulePage.astro:L61:C1:style",
-    "fingerprint": "49623660d1c5679d1b929c2d1b4ed3c9ccf7ea88d39c3d25acc8d988075c9c54",
+    "locator": "components/schedule/SchedulePage.astro:L64:C1:style",
+    "fingerprint": "3a742126e05fec5fc15ce96b53918c0a112095dc4f6d84263b60f44c4173dfc6",
     "identity": "style|body:4ad37e3d7d7cd38c"
   },
   {
@@ -632,11 +632,11 @@
     "identity": "style|body:d137e5eeb8a156c0"
   },
   {
-    "slotId": "src:components/seminars/SeminarSchedulePanel.astro:L160:C1:style",
+    "slotId": "src:components/seminars/SeminarSchedulePanel.astro:L162:C1:style",
     "file": "components/seminars/SeminarSchedulePanel.astro",
     "nodeKind": "element",
-    "locator": "components/seminars/SeminarSchedulePanel.astro:L160:C1:style",
-    "fingerprint": "a18a33117bacae8dacc293249bedd8b8bb3c288bc7f2da1f9fa9047a17ad5775",
+    "locator": "components/seminars/SeminarSchedulePanel.astro:L162:C1:style",
+    "fingerprint": "f661f25a0d6300c548cab2aee08e225a42f35d59b59fc7fd0c85e55f6c379333",
     "identity": "style|body:6d08ab9809844292"
   },
   {
@@ -678,6 +678,22 @@
     "locator": "components/social-marks/YoutubeMark.astro:L4:C1:svg",
     "fingerprint": "1819c4214f000b6dcfcb43510ee05b812515d3cebcb2c3b42d5aaa4b1a4576cd",
     "identity": "svg|aria-hidden=quoted:true|viewBox=quoted:0 0 28.57 20|xmlns=quoted:http://www.w3.org/2000/svg"
+  },
+  {
+    "slotId": "src:components/StartVisibility.astro:L1:C1:script",
+    "file": "components/StartVisibility.astro",
+    "nodeKind": "element",
+    "locator": "components/StartVisibility.astro:L1:C1:script",
+    "fingerprint": "31609c1464a7bdcb31d4329ddedb41ae90392bffeebffe1913c3ea7d9e5f6498",
+    "identity": "script|body:038d7f28a40ad402"
+  },
+  {
+    "slotId": "src:components/StartVisibility.astro:L5:C1:style",
+    "file": "components/StartVisibility.astro",
+    "nodeKind": "element",
+    "locator": "components/StartVisibility.astro:L5:C1:style",
+    "fingerprint": "b513a55281c9ce5695a4cc43c1dd9a5c921c4aaea0b2cbb93c30bec100ad86b7",
+    "identity": "style|is:global=empty:|body:22443e1b3bdd7f42"
   },
   {
     "slotId": "src:components/topnav/HeaderTools.astro:L106:C1:script",
@@ -848,19 +864,19 @@
     "identity": "style|body:15f715eb525f64ac"
   },
   {
-    "slotId": "src:pages/[institute]/[courseGroup].astro:L219:C1:style",
+    "slotId": "src:pages/[institute]/[courseGroup].astro:L215:C1:style",
     "file": "pages/[institute]/[courseGroup].astro",
     "nodeKind": "element",
-    "locator": "pages/[institute]/[courseGroup].astro:L219:C1:style",
-    "fingerprint": "cd03818c73823fdffa1995d99ef5148abe5aa4c25716a3924508c231ab51e1dd",
+    "locator": "pages/[institute]/[courseGroup].astro:L215:C1:style",
+    "fingerprint": "47ed5be7ec204fcb203051ac044bc5e66cf0c6bfd23378d9eeeecf8768228127",
     "identity": "style|body:8370d74f6937862f"
   },
   {
-    "slotId": "src:pages/[institute]/[courseGroup]/[seminar].astro:L187:C1:style",
+    "slotId": "src:pages/[institute]/[courseGroup]/[seminar].astro:L185:C1:style",
     "file": "pages/[institute]/[courseGroup]/[seminar].astro",
     "nodeKind": "element",
-    "locator": "pages/[institute]/[courseGroup]/[seminar].astro:L187:C1:style",
-    "fingerprint": "4aaa384647cd3a1326093ebe0b5c958534167ad4086df49e0d6e80e24f4533ca",
+    "locator": "pages/[institute]/[courseGroup]/[seminar].astro:L185:C1:style",
+    "fingerprint": "6cf7d1d956d5b9fd0193f639f744dfba8b30d7e6014fda7c428ba8b6bd4bc8d5",
     "identity": "style|body:a476247d401743c9"
   },
   {
