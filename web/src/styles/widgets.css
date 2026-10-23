@@ -123,6 +123,19 @@
   line-height: 1.2;
 }
 
+@media (min-width: 768px) {
+  .chat-facade[data-chat-compact] {
+    flex-direction: row;
+    align-items: center;
+    justify-content: flex-end;
+  }
+
+  .chat-facade[data-chat-compact] .chat-greeting,
+  .chat-facade[data-chat-compact] .chat-trigger {
+    align-self: center;
+  }
+}
+
 .chat-trigger {
   align-self: flex-end;
   display: flex;

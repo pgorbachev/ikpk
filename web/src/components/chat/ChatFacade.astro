@@ -138,24 +138,35 @@ const showFacade = config.state === 'address' && !isDemoOutput;
         const visibleBottom = Math.min(portRect.bottom, offset + height);
         const visibleTop = Math.max(portRect.top, offset);
         document.querySelectorAll('.topnav-menu .dropdown').forEach(function (dropdown) {
-          setPixel('--chat-nav-dropdown-max-height', visibleBottom - dropdown.getBoundingClientRect().top);
+          const dropdownTop = dropdown.getBoundingClientRect().top;
+          setPixel('--chat-nav-dropdown-max-height', visibleBottom - Math.max(visibleTop, dropdownTop));
         });
         const anchorRect = menuAnchor && menuAnchor.getBoundingClientRect();
-        const drawerBelow = anchorRect ? Math.max(0, visibleBottom - anchorRect.bottom - 8) : visibleBottom - visibleTop;
-        const drawerAbove = anchorRect ? Math.max(0, anchorRect.top - visibleTop - 8) : 0;
+        const drawerBelow = anchorRect
+          ? Math.max(0, visibleBottom - Math.max(visibleTop, anchorRect.bottom + 8))
+          : visibleBottom - visibleTop;
+        const drawerAbove = anchorRect
+          ? Math.max(0, Math.min(visibleBottom, anchorRect.top - 8) - visibleTop)
+          : 0;
         const placeDrawerAbove = drawerAbove > drawerBelow;
         setPixel('--chat-drawer-max-height', placeDrawerAbove ? drawerAbove : drawerBelow);
-        setPosition('--chat-drawer-top', placeDrawerAbove ? 'auto' : 'calc(100% + 8px)');
-        setPosition('--chat-drawer-bottom', placeDrawerAbove ? 'calc(100% + 8px)' : 'auto');
+        const drawerGap = placeDrawerAbove
+          ? Math.max(8, anchorRect ? anchorRect.top - visibleBottom : 8)
+          : Math.max(8, anchorRect ? visibleTop - anchorRect.bottom : 8);
+        setPosition('--chat-drawer-top', placeDrawerAbove ? 'auto' : 'calc(100% + ' + drawerGap + 'px)');
+        setPosition('--chat-drawer-bottom', placeDrawerAbove ? 'calc(100% + ' + drawerGap + 'px)' : 'auto');
 
         if (header) {
           const headerRect = header.getBoundingClientRect();
-          const searchBelow = Math.max(0, visibleBottom - headerRect.bottom);
-          const searchAbove = Math.max(0, headerRect.top - visibleTop);
+          const searchBelow = Math.max(0, visibleBottom - Math.max(visibleTop, headerRect.bottom));
+          const searchAbove = Math.max(0, Math.min(visibleBottom, headerRect.top) - visibleTop);
           const placeSearchAbove = searchAbove > searchBelow;
           setPixel('--chat-search-max-height', placeSearchAbove ? searchAbove : searchBelow);
-          setPosition('--chat-search-top', placeSearchAbove ? 'auto' : '100%');
-          setPosition('--chat-search-bottom', placeSearchAbove ? '100%' : 'auto');
+          const searchGap = placeSearchAbove
+            ? Math.max(0, headerRect.top - visibleBottom)
+            : Math.max(0, visibleTop - headerRect.bottom);
+          setPosition('--chat-search-top', placeSearchAbove ? 'auto' : 'calc(100% + ' + searchGap + 'px)');
+          setPosition('--chat-search-bottom', placeSearchAbove ? 'calc(100% + ' + searchGap + 'px)' : 'auto');
         }
 
       };
