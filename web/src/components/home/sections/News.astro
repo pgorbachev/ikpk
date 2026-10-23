@@ -3,15 +3,17 @@
 // Заголовок переименован по просьбе заказчика (D21 списка после демо 2026-08-19):
 // секция «Акции и скидки» при этом остаётся отдельной, слияния не было.
 import MediaCard from '../../ui/MediaCard.astro';
-import { getNews, cleanBodyHtml, relForExternalUrl } from '../../../lib/data';
+import { cleanBodyHtml, relForExternalUrl } from '../../../lib/data';
+import { getHomeOffers } from '../../../lib/book-offers';
 import RichContent from '../../RichContent.astro';
 
-const news = getNews();
+const news = getHomeOffers();
 ---
 {news.length > 0 && (
   <section class="section section-alt" data-reveal>
     <div class="container">
       <h2 class="section-title">Предложения</h2>
+      <p class="books-link"><a href="/knigi-i-uchebnye-materialy">Книги и учебные материалы</a></p>
       <div class="news-slider" data-news-slider>
         <button type="button" class="news-nav-btn" aria-label="Предыдущий слайд" data-news-prev>
           <svg class="news-nav-icon" viewBox="0 0 20 20" fill="none" aria-hidden="true">
@@ -50,6 +52,7 @@ const news = getNews();
 
 <style>
   .section-alt { background-color: var(--color-light-300); }
+  .books-link { margin: -0.5rem 0 1.5rem; }
 
   .news-slider {
     display: flex;
@@ -91,6 +94,8 @@ const news = getNews();
     justify-content: center;
     transition: background-color 0.15s, border-color 0.15s, color 0.15s;
   }
+
+  .news-nav-btn[hidden] { display: none; }
 
   .news-nav-btn:hover {
     background: #f5f5f5;
@@ -151,6 +156,7 @@ const news = getNews();
     const render = () => {
       if (slides.length === 0) return;
       const visibleCount = Math.min(getVisibleCount(), slides.length);
+      prevBtn.hidden = nextBtn.hidden = slides.length <= visibleCount;
       track.style.setProperty('--news-visible', String(visibleCount));
       track.setAttribute('data-start-index', String(startIndex));
       track.setAttribute('data-visible-count', String(visibleCount));

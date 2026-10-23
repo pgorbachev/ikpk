@@ -57,11 +57,16 @@ export async function serveSeminarStartFixture(mode: 'start' | 'month' | 'layout
   const layoutEntries = sourceTypes.schedule_entries;
   const entries = mode === 'layout' ? layoutEntries : syntheticEntries;
   const seminars = mode === 'layout' ? sourceTypes.seminars : syntheticSeminars;
+  // Keep the two required homepage cards in this otherwise minimal snapshot.
+  // Importing book-offers here loads the full data module during Playwright
+  // test discovery, before its JSON loader is available.
+  const homeOfferIds = new Set<number>([53, 49]);
   const types = mode === 'layout'
     ? { ...sourceTypes, schedule_entries: entries }
     : { ...Object.fromEntries(Object.keys(sourceTypes).map((name) => [name, []])),
         institutes: [{ ...institute, images: [] }], course_groups: [{ ...group, images: [] }],
-        seminars, schedule_entries: entries };
+        seminars, schedule_entries: entries,
+        news: sourceTypes.news.filter((item) => homeOfferIds.has(Number(item.id))) };
   const snapshotRoot = mkdtempSync(join(tmpdir(), 'ikpk-start-snapshot-'));
   mkdirSync(join(webRoot, '.astro'), { recursive: true });
   const buildRoot = mkdtempSync(join(webRoot, '.astro/ikpk-start-build-'));

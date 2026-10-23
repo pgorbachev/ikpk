@@ -1,0 +1,47 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import Breadcrumbs from '../components/Breadcrumbs.astro';
+import { getBookMarketplaceLinks } from '../lib/book-offers';
+
+const marketplaces = getBookMarketplaceLinks();
+---
+
+<BaseLayout title="Книги и учебные материалы — ИКПК" description="Книжные новинки издательского дома ИКПК, акции и ссылки на площадки продавца.">
+  <div class="container">
+    <Breadcrumbs items={[{ label: 'Книги и учебные материалы' }]} />
+
+    <section class="section">
+      <h1 class="page-title">Книги и учебные материалы</h1>
+      <p>Издательский дом ИКПК выпускает книги и учебные материалы. Продавец книг — ИП Пилявский Д.С.</p>
+
+      <div class="grid grid-2 book-links">
+        <a class="card book-link" href="https://kinezio.shop/novinki/" target="_blank" rel="noopener noreferrer">
+          <h2>Новинки книг</h2>
+          <p>Открыть каталог продавца на внешнем сайте</p>
+        </a>
+        <a class="card book-link" href="/aktsii-i-skidki">
+          <h2>Sale</h2>
+          <p>Акции и скидки</p>
+        </a>
+      </div>
+
+      <h2>Книги на торговых площадках</h2>
+      <ul class="marketplace-links">
+        {marketplaces.map(({ label, href }) => (
+          <li><a href={href} target="_blank" rel="noopener noreferrer">Перейти на {label} — внешний сайт продавца</a></li>
+        ))}
+      </ul>
+    </section>
+  </div>
+</BaseLayout>
+
+<style>
+  .page-title { margin-bottom: 1rem; }
+  .book-links { margin: 2rem 0; }
+  .book-link { display: block; padding: 1.5rem; color: inherit; text-decoration: none; }
+  .book-link:hover { text-decoration: none; }
+  .book-link h2 { margin-bottom: 0.5rem; color: var(--color-dark-700); }
+  .book-link p { margin: 0; color: var(--color-gray-600); }
+  .marketplace-links { margin-top: 1rem; padding-left: 1.5rem; }
+  .marketplace-links li { margin-bottom: 0.5rem; }
+</style>

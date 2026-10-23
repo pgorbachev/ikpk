@@ -895,8 +895,8 @@ Astro доступен только второй, и приём в проект�
    отдельной закоммиченной фикстурой: `web/tests/rich-content-baseline.test.ts:237`, `slotIds реестра вывода совпадает`. Обновление одной без другой
    роняет проверку;
 5. **инструментов ТОЖЕ два, и порядок между ними обязателен.** Инвентарь слотов пишет один генератор
-   — `web/tests/helpers/rich-content-safety/generate-baseline.ts:101`, `writeJson('executable-source-slots.json', executableSlots);` — а вхождения пишет другой; при этом первый
-   записывает реестр с **пустым** списком вхождений: `web/tests/helpers/rich-content-safety/generate-baseline.ts:118`, `occurrences: [] as { slotId: string;`.
+   — `web/tests/helpers/rich-content-safety/generate-baseline.ts:103`, `writeJson('executable-source-slots.json', executableSlots);` — а вхождения пишет другой; при этом первый
+   записывает реестр с **пустым** списком вхождений: `web/tests/helpers/rich-content-safety/generate-baseline.ts:120`, `occurrences: [] as { slotId: string;`.
    Значит запуск в обратном порядке стирает все вхождения. Формулировка «обновить назначенным
    инструментом» в единственном числе скрывала эту процедуру целиком;
 6. **генерация отказывается работать на грязном дереве, а собранных деревьев ей достаточно ОДНОГО — и
