@@ -113,11 +113,9 @@ const showFacade = config.state === 'address' && !isDemoOutput;
       const viewport = window.visualViewport;
       const lowerZone = document.querySelector('[data-chat-facade]');
       const updateViewport = function () {
-        if (lowerZone) {
-          document.body.style.setProperty('--chat-lower-zone-height', Math.ceil(lowerZone.getBoundingClientRect().height) + 'px');
-        }
         const height = viewport ? viewport.height : window.innerHeight;
         const offset = viewport ? viewport.offsetTop : 0;
+        if (lowerZone) lowerZone.toggleAttribute('data-chat-compact', height <= 400);
         const setPixel = function (name, value) {
           const next = Math.max(0, value) + 'px';
           if (document.body.style.getPropertyValue(name) !== next) document.body.style.setProperty(name, next);
@@ -127,6 +125,9 @@ const showFacade = config.state === 'address' && !isDemoOutput;
         };
         setPixel('--chat-viewport-height', height);
         setPixel('--chat-viewport-offset', offset);
+        if (lowerZone) {
+          document.body.style.setProperty('--chat-lower-zone-height', Math.ceil(lowerZone.getBoundingClientRect().height) + 'px');
+        }
         const portRect = pageScrollport.getBoundingClientRect();
 
         // Popups are children of the sticky header, but the page scrollport clips

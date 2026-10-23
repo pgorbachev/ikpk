@@ -92,6 +92,37 @@
   line-height: 1.45;
 }
 
+/* Preserve the complete greeting and CTA when a keyboard reduces the visual viewport. */
+.chat-facade[data-chat-compact] {
+  gap: 4px;
+  padding-top: 4px;
+}
+
+.chat-facade[data-chat-compact] .chat-greeting {
+  grid-template-columns: 24px minmax(0, 1fr) 24px;
+  gap: 4px;
+  padding: 4px;
+}
+
+.chat-facade[data-chat-compact] .chat-greeting > img {
+  width: 24px;
+  height: 24px;
+}
+
+.chat-facade[data-chat-compact] .chat-greeting__name {
+  font-size: 14px;
+}
+
+.chat-facade[data-chat-compact] .chat-greeting__close {
+  width: 24px;
+  height: 24px;
+}
+
+.chat-facade[data-chat-compact] .chat-greeting__text {
+  font-size: 12px;
+  line-height: 1.2;
+}
+
 .chat-trigger {
   align-self: flex-end;
   display: flex;
