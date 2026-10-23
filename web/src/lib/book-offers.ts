@@ -1,20 +1,35 @@
 import { getNews, type NewsItem } from './data';
 
-// Редакционные записи закреплённого снимка: новинка и Sale.
+// На исходном снимке это были записи news #53 и #49. Текущий CMS-снимок
+// может не содержать старые ID, поэтому у карточек есть короткий резервный текст.
 export const HOME_OFFER_IDS = { book: 53, sale: 49 } as const;
 
-function requiredNews(id: number): NewsItem {
-  const item = getNews().find((news) => news.id === id);
-  if (!item) throw new Error(`В снимке контента нет записи news #${id}`);
-  return item;
-}
+const fallbackBook: NewsItem = {
+  id: HOME_OFFER_IDS.book,
+  priority: 0,
+  name: 'Новая книга',
+  image: { url: '', id: '' },
+  description: '<p>Ручные лимфатические техники для мануальных терапевтов в области ортопедии.</p>',
+  createdAt: '',
+  link: '',
+};
 
-export function getHomeOffers(): NewsItem[] {
+const fallbackSale: NewsItem = {
+  id: HOME_OFFER_IDS.sale,
+  priority: 1,
+  name: 'Sale',
+  image: { url: '', id: '' },
+  description: '<p>Актуальные акции и скидки института и магазина.</p>',
+  createdAt: '',
+  link: '',
+};
+
+export function getHomeOffers(news = getNews()): NewsItem[] {
   return [{
-    ...requiredNews(HOME_OFFER_IDS.book),
+    ...(news.find((item) => item.id === HOME_OFFER_IDS.book) ?? fallbackBook),
     link: 'https://kinezio.shop/product/ruchnye-limfaticheskie-tehniki-dlya-manualnyh-terapevtov-v-oblasti-ortopedii/',
   }, {
-    ...requiredNews(HOME_OFFER_IDS.sale),
+    ...(news.find((item) => item.id === HOME_OFFER_IDS.sale) ?? fallbackSale),
     name: 'Sale',
     link: '/aktsii-i-skidki',
   }];
