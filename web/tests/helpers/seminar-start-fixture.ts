@@ -74,7 +74,13 @@ export async function serveSeminarStartFixture(mode: 'start' | 'month' | 'layout
   copyFileSync(join(sourceRoot, 'collapsible_panels.json'), join(snapshotRoot, 'collapsible_panels.json'));
   const built = spawnSync(process.execPath, [join(webRoot, 'node_modules/astro/bin/astro.mjs'), 'build', '--outDir', outDir], {
     cwd: webRoot, encoding: 'utf8', timeout: 120_000,
-    env: { ...process.env, CONTENT_SNAPSHOT_DIR: snapshotRoot },
+    env: {
+      ...process.env,
+      CONTENT_SNAPSHOT_DIR: snapshotRoot,
+      SEMINAR_BUILD_NOW: mode === 'layout'
+        ? `${source.referenceDate}T09:00:00+03:00`
+        : '2026-10-30T09:00:00+03:00',
+    },
   });
   if (built.error || built.status !== 0) {
     cleanup();
