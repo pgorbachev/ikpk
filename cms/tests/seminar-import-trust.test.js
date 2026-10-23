@@ -619,11 +619,6 @@ describe('доверенный перенос в собранном Strapi', { t
     createdSeminar: 'trust-reimport-created-seminar',
     entryOfCreatedSeminar: 'trust-reimport-entry-of-created-seminar',
   };
-  const confirmedStart = {
-    startsAtInstant: '2026-12-01T07:00:00.000Z',
-    startTimeZone: 'Europe/Moscow',
-    startTimeConfirmed: true,
-  };
   let importRun;
   let fixtures;
 
@@ -645,7 +640,7 @@ describe('доверенный перенос в собранном Strapi', { t
     const host = await createPublishedSeminar({ name: 'Семинар снятого проведения' });
     const unpublishedEntry = await entries.create({
       status: 'published',
-      data: { seminar: host.documentId, city: 'Прежний город', entry_status: 'active', legacy_id: ids.unpublishedEntry, ...dates, ...confirmedStart },
+      data: { seminar: host.documentId, city: 'Прежний город', entry_status: 'active', legacy_id: ids.unpublishedEntry, ...dates },
     });
     await entries.unpublish({ documentId: unpublishedEntry.documentId });
 
@@ -653,7 +648,7 @@ describe('доверенный перенос в собранном Strapi', { t
     const hidden = await createPublishedSeminar({ name: 'Снятый семинар проведения' });
     const entryOfUnpublished = await entries.create({
       status: 'published',
-      data: { seminar: hidden.documentId, city: 'Прежний город', entry_status: 'active', legacy_id: ids.entryOfUnpublished, ...dates, ...confirmedStart },
+      data: { seminar: hidden.documentId, city: 'Прежний город', entry_status: 'active', legacy_id: ids.entryOfUnpublished, ...dates },
     });
     await seminars.unpublish({ documentId: hidden.documentId });
 
@@ -664,7 +659,7 @@ describe('доверенный перенос в собранном Strapi', { t
     // Опубликованное проведение опубликованного семинара.
     const publishedEntry = await entries.create({
       status: 'published',
-      data: { seminar: published.documentId, city: 'Прежний город', entry_status: 'active', legacy_id: ids.publishedEntry, ...dates, ...confirmedStart },
+      data: { seminar: published.documentId, city: 'Прежний город', entry_status: 'active', legacy_id: ids.publishedEntry, ...dates },
     });
 
     // Опубликованное проведение семинара, которого в CMS ещё нет: этот прогон его СОЗДАСТ
@@ -673,7 +668,7 @@ describe('доверенный перенос в собранном Strapi', { t
     const placeholderHost = await createPublishedSeminar({ name: 'Заглушка до переноса' });
     const entryOfCreatedSeminar = await entries.create({
       status: 'published',
-      data: { seminar: placeholderHost.documentId, city: 'Прежний город', entry_status: 'active', legacy_id: ids.entryOfCreatedSeminar, ...dates, ...confirmedStart },
+      data: { seminar: placeholderHost.documentId, city: 'Прежний город', entry_status: 'active', legacy_id: ids.entryOfCreatedSeminar, ...dates },
     });
 
     fixtures = { host, hidden, entryOfUnpublished, published, publishedEntry, entryOfCreatedSeminar };
@@ -772,8 +767,6 @@ describe('доверенный перенос в собранном Strapi', { t
     const { published } = await versions(ENTRY, ids.publishedEntry);
     assert.equal(published.length, 1, `опубликованная версия пропала:\n${output}`);
     assert.equal(published[0].city, 'Новый город');
-    assert.equal(published[0].startsAtInstant, confirmedStart.startsAtInstant);
-    assert.equal(published[0].startTimeConfirmed, true, 'повторный перенос сбросил подтверждение редактора');
   });
 
   test('повторный перенос опубликованного проведения семинара, созданного в этом же прогоне, обновляет опубликованную версию', async () => {

@@ -13,10 +13,10 @@ const norm = (value: unknown): string => textOf(value).replace(/\s+/g, ' ').trim
 const inCard = (card: Parameters<typeof textOf>[0], testid: string) =>
   [...walk(card)].filter((el) => attr(el, 'data-testid') === testid && attr(el, 'hidden') === null);
 
-/** Built routes, with explicit synthetic confirmed starts rather than guessed times
- * for the historical snapshot. The fixture contains both nearest-date and fallback
+/** Built routes with controlled calendar dates.
+ * The fixture contains both nearest-date and fallback
  * branches, an already started multi-day session and a next-year session. */
-describe('страница программы: ближайшая подтверждённая дата и отсутствие дат', () => {
+describe('страница программы: ближайшая будущая дата и отсутствие дат', () => {
   let fixture: ReturnType<typeof buildSeminarDatesFixture>;
   beforeAll(() => { fixture = buildSeminarDatesFixture(); }, 150_000);
   afterAll(() => fixture?.close());
@@ -26,7 +26,7 @@ describe('страница программы: ближайшая подтвер
     const html = readFileSync(join(outDir, pages.institute.slug, pages.group.slug, 'index.html'), 'utf8');
     const cards = findAll(html, (el) => attr(el, 'data-testid') === 'course-group-seminar-card');
     expect(cards).toHaveLength(3);
-    for (const [seminar, expected] of [[pages.planned, '15 сен'], [pages.nextYear, '5 янв 2027'], [pages.empty, null]] as const) {
+    for (const [seminar, expected] of [[pages.planned, '30 сен – 2 окт'], [pages.nextYear, '5 янв 2027'], [pages.empty, null]] as const) {
       const card = cards.find((el) => [...walk(el)].some((child) => child.tagName === 'h2' && norm(child) === seminar.name.replace(/\s+/g, ' ').trim()));
       expect(card, seminar.name).toBeTruthy();
       const shown = inCard(card!, 'seminar-nearest-date').map(norm);
@@ -43,8 +43,8 @@ describe('страница программы: ближайшая подтвер
 });
 
 /** Characterize the ordinary built snapshot separately; it may legitimately have
- * no confirmed offers. The controlled build above always proves both branches. */
-describe('исторический снимок: страницы без будущих подтверждённых сеансов', () => {
+ * no future offers. The controlled build above always proves both branches. */
+describe('исторический снимок: страницы без будущих сеансов', () => {
   it('сохраняет карточки описаний и контакты менеджера на каждой пустой странице', () => {
     const institutes = getInstitutes();
     const entries = getScheduleEntries().filter((entry) => entry.status === 'active'

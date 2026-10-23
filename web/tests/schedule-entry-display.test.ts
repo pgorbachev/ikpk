@@ -6,7 +6,6 @@ import * as data from '../src/lib/data.js';
 import { formatPrice, getScheduleEntries, normalizeScheduleEntry } from '../src/lib/data.js';
 import { formatScheduleDateRange, getCatalogStats, getUpcomingSeminars } from '../src/lib/home.js';
 import { isBeforeStart, isCurrentOrFuture } from '../src/lib/schedule-window.js';
-import { startTimeFingerprint } from '../../cms/src/seminar-management/start-time.js';
 
 /** ru-RU кладёт неразрывный пробел в «не число» и в тысячи — сравниваем видимый текст. */
 const visible = (value: string): string => value.replace(/\s+/g, ' ').trim();
@@ -231,23 +230,6 @@ describe('ближайшие семинары — ещё не начавшиес
   const now = new Date(`${TODAY}T12:00:00.000Z`);
   const CST2_SEP = 377;
 
-  function confirmedSessions(): data.ScheduleEntry[] {
-    const source = getScheduleEntries().find((entry) => entry.id === CST2_SEP);
-    expect(source, 'в закреплённом снимке нет CST-2 id 377').toBeTruthy();
-    const past = {
-      ...source!, startsAtInstant: '2026-09-17T16:00:00Z',
-      startTimeZone: 'Europe/Moscow', startTimeConfirmed: true,
-    };
-    const future = {
-      ...source!, id: 9002, startAt: '2026-09-22', endAt: '2026-09-22',
-      startsAtInstant: '2026-09-22T16:00:00Z', startTimeZone: 'Europe/Moscow',
-      startTimeConfirmed: true,
-    };
-    return [past, future].map((entry) => ({
-      ...entry, startTimeConfirmation: startTimeFingerprint(entry) ?? undefined,
-    }));
-  }
-
   afterEach(() => vi.restoreAllMocks());
 
   it('форматирует SQL-дни летней и зимней Nicosia-полночи в московский календарь', () => {
@@ -261,20 +243,18 @@ describe('ближайшие семинары — ещё не начавшиес
       seminar: { id: 9001, name: 'Проверка календаря', slug: 'proverka-kalendarya' },
       institute: { id: 1, name: 'Институт', shortname: 'ИКПК' },
       startAt: '2024-09-22T21:00:00.000Z', endAt: '2024-09-22T21:00:00.000Z',
-      startsAtInstant: '2024-09-23T16:00:00Z', startTimeZone: 'Europe/Moscow',
-      startTimeConfirmed: true,
       teachers: [], image: null, isFree: false, isEventCollection: false,
       description: null, oldPrice: 0, newPrice: 12000,
       city: { id: 1, name: 'Москва' },
       program: { id: 1, slug: 'programma', name: 'Программа' },
       additionalText: '', duration: '8', registrationFormLink: '',
     };
-    row.startTimeConfirmation = startTimeFingerprint(row)!;
     vi.spyOn(data, 'getScheduleEntries').mockReturnValue([row]);
     vi.spyOn(data, 'getInstitutes').mockReturnValue([{ legacy_id: '1', legacy_url: '', name: 'Институт', slug: 'institut', seo_title: '', seo_description: '', description_html: '', description_text: '', images: [] }]);
     vi.spyOn(data, 'getSnapshotReferenceDate').mockReturnValue('2024-09-23');
-    const upcoming = getUpcomingSeminars(1, new Date('2024-09-23T12:00:00.000Z'));
+    const upcoming = getUpcomingSeminars(1, new Date('2024-09-22T20:59:59.000Z'));
     expect(upcoming[0]?.dayLabel).toBe('23');
+    expect(getUpcomingSeminars(1, new Date('2024-09-22T21:00:00.000Z'))).toEqual([]);
   });
 
   it('опора: CST-2 17–20 сентября в снимке ещё идёт 20-го', () => {
@@ -289,23 +269,20 @@ describe('ближайшие семинары — ещё не начавшиес
   });
 
   it('уже начавшийся семинар не занимает строку «Ближайший семинар»', () => {
-    const sessions = confirmedSessions();
-    vi.spyOn(data, 'getScheduleEntries').mockReturnValue(sessions);
     const upcoming = getUpcomingSeminars(20, now);
     expect(upcoming.map((item) => item.id), 'CST-2 17–20 сентября остался ближайшим').not.toContain(CST2_SEP);
 
     const next = upcoming[0];
     expect(next, 'после фильтра не осталось ни одного будущего семинара').toBeTruthy();
-    const nextEntry = sessions.find((entry) => entry.id === next!.id);
+    const nextEntry = getScheduleEntries().find((entry) => entry.id === next!.id);
     expect(nextEntry!.startAt.slice(0, 10) >= TODAY, `${next!.title} уже начался к ${TODAY}`).toBe(true);
   });
 
   it('счётчик дат каталога учитывает только ещё не начавшиеся сеансы', () => {
-    const sessions = confirmedSessions();
-    vi.spyOn(data, 'getScheduleEntries').mockReturnValue(sessions);
-    expect(sessions.some((entry) => entry.id === CST2_SEP && isCurrentOrFuture(entry, TODAY))).toBe(true);
-    const future = sessions.filter((entry) => isBeforeStart(entry, now));
-    expect(future.map((entry) => entry.id)).toEqual([9002]);
-    expect(getCatalogStats(now).dates).toBe(future.length);
+    const current = getScheduleEntries().filter(
+      (entry) => entry.status === 'active' && entry.startAt && isBeforeStart(entry, now),
+    );
+    expect(current.some((entry) => entry.id === CST2_SEP)).toBe(false);
+    expect(getCatalogStats(now).dates).toBe(current.length);
   });
 });

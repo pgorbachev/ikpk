@@ -94,7 +94,7 @@ function metaLine(entry: ScheduleEntry): string {
           const href = registrationHref(entry.registrationFormLink) || '/raspisanie-i-tseny';
           const external = isExternalFormHref(href);
           return (
-            <li data-start-offer data-starts-at-instant={entry.startsAtInstant} data-start-time-zone={entry.startTimeZone} data-start-time-confirmed={String(entry.startTimeConfirmed === true)} class="seminar-schedule-entry" data-seminar-schedule-card>
+            <li data-start-offer data-start-at={entry.startAt} class="seminar-schedule-entry" data-seminar-schedule-card>
               {/*
                 Каждая дата — своя часть, тире между ними остаётся точкой переноса, а
                 внутри части неразрывны только год и «г.». Иначе диапазон рвётся посреди

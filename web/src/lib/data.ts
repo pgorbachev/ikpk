@@ -251,10 +251,6 @@ export interface ScheduleEntry {
   name: string;
   seminar: { id: number; name: string; slug: string };
   institute: { id: number; name: string; shortname: string };
-  startsAtInstant?: string;
-  startTimeZone?: string;
-  startTimeConfirmed?: boolean;
-  startTimeConfirmation?: string;
   startAt: string;
   endAt: string;
   teachers: { id: number | string; fullName: string }[];

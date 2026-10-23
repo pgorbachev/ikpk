@@ -7,7 +7,6 @@
 //
 // Три требования, восемь сценариев. Соответствие «сценарий → тест» — в отчёте сессии.
 
-import { startTimeFingerprint } from '../../cms/src/seminar-management/start-time';
 import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -106,7 +105,6 @@ function dataset(over: Record<string, StubCollection> = {}): Record<string, Stub
   const scheduleEntries = Array.from({ length: 3 }, (_, i) => ({
     ...without(base('ev', i + 1, `Событие ${i + 1}`), 'slug'),
     startAt: `2026-09-0${i + 1}T00:00:00.000Z`,
-    startsAtInstant: null, startTimeZone: null, startTimeConfirmed: false, startTimeConfirmation: null,
     endAt: `2026-09-0${i + 2}T00:00:00.000Z`,
     city: 'Санкт-Петербург',
     price: 5000,
@@ -724,10 +722,6 @@ describe('синтетическая CMS проекция сохраняет п�
     const event = source['schedule-entries'].records[0]!;
     event.startAt = '2099-01-01T00:00:00.000Z';
     event.endAt = '2099-01-02T00:00:00.000Z';
-    event.startsAtInstant = '2099-01-01T16:00:00.000Z';
-    event.startTimeZone = 'Europe/Moscow';
-    event.startTimeConfirmed = true;
-    event.startTimeConfirmation = startTimeFingerprint(event);
     event.entry_status = 'active';
     event.image = media(1);
     event.isEventCollection = true;
@@ -1043,29 +1037,4 @@ describe('съём понимает формы данных установлен
     expect(run.status).not.toBe(0);
     expect(run.output).toMatch(/поля CMS без решения: teachers\.mystery/s);
   });
-});
-
-it.each(['missing', 'stale'])('live capture refuses %s exact-start confirmation and does not write a snapshot', async (mode) => {
-  const source = dataset();
-  const entry = source['schedule-entries'].records[0];
-  entry.startAt = '2099-01-01T00:00:00.000Z';
-  entry.endAt = entry.startAt;
-  entry.startsAtInstant = '2099-01-01T16:00:00.000Z';
-  entry.startTimeZone = 'Europe/Moscow';
-  entry.startTimeConfirmed = true;
-  entry.startTimeConfirmation = startTimeFingerprint(entry);
-  if (mode === 'missing') {
-    entry.startsAtInstant = null;
-  } else {
-    entry.startsAtInstant = '2099-01-01T17:00:00.000Z';
-  }
-  const cms = await stub({ 'schedule-entries': source['schedule-entries'] });
-  const dir = outDir();
-  try {
-    const run = await runCapture({ CMS_URL: cms.url, CONTENT_SNAPSHOT_DIR: dir });
-    expect(run.status, run.output).not.toBe(0);
-    expect(run.output).toMatch(/unconfirmed-start-time/);
-    expect(run.output).toMatch(/Примеры: 1:/);
-    expect(existsSync(join(dir, 'snapshot.json'))).toBe(false);
-  } finally { rmSync(dir, { recursive: true, force: true }); }
 });

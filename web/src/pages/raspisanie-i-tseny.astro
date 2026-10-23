@@ -126,9 +126,7 @@ const items = entries.map((entry) => {
   ].join(' ').toLowerCase();
 
   return {
-    startsAtInstant: entry.startsAtInstant,
-    startTimeZone: entry.startTimeZone,
-    startTimeConfirmed: entry.startTimeConfirmed,
+    startAt: entry.startAt,
     additionalText: entry.additionalText || '',
     cityName: entry.city?.name || 'Уточняется',
     citySlug: slugify(entry.city?.name || 'unknown'),

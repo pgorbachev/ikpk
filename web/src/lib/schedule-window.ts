@@ -1,7 +1,4 @@
 export interface ScheduleWindowEntry {
-  startsAtInstant?: string;
-  startTimeZone?: string;
-  startTimeConfirmed?: boolean;
   startAt?: string;
   endAt?: string;
   /**
@@ -14,11 +11,15 @@ export interface ScheduleWindowEntry {
   id?: number | string;
 }
 
-/** Exact offer boundary. Invalid or unresolved times never become offers. */
+/** Start of the public calendar day in Moscow. Imported startAt stores a day, not a start hour. */
+export function startBoundary(entry: ScheduleWindowEntry): number {
+  const day = calendarDay(entry.startAt);
+  return day ? Date.parse(`${day}T00:00:00+03:00`) : Number.NaN;
+}
+
+/** A dated offer ends when its start day begins in Moscow. */
 export function isBeforeStart(entry: ScheduleWindowEntry, now: string | Date | number): boolean {
-  if (!entry.startsAtInstant || !entry.startTimeZone || entry.startTimeConfirmed !== true
-    || !/(?:Z|[+-]\d{2}:\d{2})$/.test(entry.startsAtInstant)) return false;
-  const start = Date.parse(entry.startsAtInstant);
+  const start = startBoundary(entry);
   const current = typeof now === 'number' ? now : new Date(now).getTime();
   return Number.isFinite(start) && Number.isFinite(current) && current < start;
 }

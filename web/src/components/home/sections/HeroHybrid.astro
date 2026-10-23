@@ -10,9 +10,7 @@ import { getUpcomingSeminars } from '../../../lib/home';
 const candidates = getUpcomingSeminars(Infinity);
 const next = candidates[0];
 const heroCandidates = candidates.map((candidate) => ({
-  startsAtInstant: candidate.startsAtInstant,
-  startTimeZone: candidate.startTimeZone,
-  startTimeConfirmed: candidate.startTimeConfirmed,
+  startAt: candidate.startAt,
   title: candidate.title,
   href: candidate.href,
   dateLabel: candidate.dateLabel,

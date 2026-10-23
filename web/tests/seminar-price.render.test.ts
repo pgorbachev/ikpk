@@ -14,9 +14,6 @@ it('schedule page prints Nicosia-local-midnight SQL dates under UTC', async () =
     ...data.getScheduleEntries()[0],
     startAt: '2024-09-22T21:00:00.000Z',
     endAt: '2024-09-22T21:00:00.000Z',
-    startsAtInstant: '2024-09-23T10:00:00.000Z',
-    startTimeZone: 'Asia/Nicosia',
-    startTimeConfirmed: true,
     status: 'active',
   };
   vi.spyOn(data, 'getScheduleEntries').mockReturnValue([entry]);
@@ -73,9 +70,6 @@ describe('стоимость платного семинара: главная, 
       isFree,
       startAt: '2026-11-14T00:00:00.000Z',
       endAt: '2026-11-15T00:00:00.000Z',
-      startsAtInstant: '2026-11-14T10:00:00.000Z',
-      startTimeZone: 'Europe/Moscow',
-      startTimeConfirmed: true,
       status: 'active',
     };
     vi.spyOn(data, 'getScheduleEntries').mockReturnValue([entry]);

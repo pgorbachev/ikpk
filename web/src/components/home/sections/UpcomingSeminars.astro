@@ -14,7 +14,7 @@ const seminars = getUpcomingSeminars(Infinity);
       </div>
       <div class="upcoming-grid">
         {seminars.map((s, i) => (
-          <article data-start-offer data-starts-at-instant={s.startsAtInstant} data-start-time-zone={s.startTimeZone} data-start-time-confirmed={String(s.startTimeConfirmed === true)} hidden={i >= 3} class="upcoming-card">
+          <article data-start-offer data-start-at={s.startAt} hidden={i >= 3} class="upcoming-card">
             <span class="upcoming-date">{s.dateLabel} · {s.cityName}</span>
             <h3 class="upcoming-title"><a href={s.href}>{s.title}</a></h3>
             <span class="upcoming-meta">{s.instituteName}</span>

@@ -27,7 +27,7 @@ async function expectNextHome(page: Page) {
   await expect(page.locator('.upcoming-card:visible').filter({ hasText: TITLES[1] })).toHaveCount(0);
 }
 
-test('control: confirmed sessions and last month are offered before start', async ({ page }) => {
+test('control: dated sessions and last month are offered before Moscow midnight', async ({ page }) => {
   await open(page, '/', BEFORE);
   await expect(page.locator('.hero-d-next')).toContainText(TITLES[0]);
   await page.goto(`${fixture.url}/raspisanie-i-tseny`);

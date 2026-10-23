@@ -35,7 +35,7 @@ const seminars = getSeminars(courseGroup.legacy_id);
 // весь список запланированного живёт на странице семинара.
 const today = getSnapshotReferenceDate();
 const activeEntries = getScheduleEntries().filter((entry) => entry.status === 'active');
-const datesBySeminar = new Map<string, { startsAtInstant?: string; startTimeZone?: string; startTimeConfirmed?: boolean; dateLabel: string }[]>();
+const datesBySeminar = new Map<string, { startAt: string; dateLabel: string }[]>();
 const currentYear = today.slice(0, 4);
 for (const seminar of seminars) {
   datesBySeminar.set(seminar.slug, activeEntries
@@ -44,7 +44,7 @@ for (const seminar of seminars) {
     .map((entry) => {
       const year = calendarDay(entry.endAt || entry.startAt).slice(0, 4);
       const label = formatScheduleDateRange(entry.startAt, entry.endAt);
-      return { startsAtInstant: entry.startsAtInstant, startTimeZone: entry.startTimeZone, startTimeConfirmed: entry.startTimeConfirmed,
+      return { startAt: entry.startAt,
         dateLabel: year && year !== currentYear ? `${label} ${year}` : label };
     }));
 }

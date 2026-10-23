@@ -3,7 +3,6 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { isBeforeStart } from '../src/lib/schedule-window';
 import { BEFORE } from './helpers/seminar-start-fixture';
-import { startTimeFingerprint, startTimeFieldsError } from '../../cms/src/seminar-management/start-time';
 // Псевдоним, а не прямое имя: параметр `monthKeys` уже занят в `syntheticMarkup` и
 // `mountSynthetic`, и тень над импортом читалась бы как одно и то же.
 import { monthKeys as monthKeysOf } from '../src/lib/schedule-months';
@@ -14,11 +13,6 @@ test.beforeAll(() => {
   if (!process.env.IKPK_MONTH_FIXTURE) throw new Error('Controlled month fixture was not built');
   fixture = JSON.parse(process.env.IKPK_MONTH_FIXTURE);
   PAGE = `${fixture.url}/raspisanie-i-tseny`;
-  for (const entry of fixture.entries) {
-    expect(startTimeFieldsError(entry)).toBeNull();
-    expect(entry.startTimeConfirmed).toBe(true);
-    expect(entry.startTimeConfirmation).toBe(startTimeFingerprint(entry));
-  }
   expect(liveEntryCount(BEFORE)).toBeGreaterThan(PAGE_SIZE);
   expect(strictPairInData(BEFORE)).toBe(true);
   expect(schedulePatches().length).toBeGreaterThan(0);
@@ -120,10 +114,6 @@ interface SnapshotEntry {
   status?: string;
   startAt?: string;
   endAt?: string;
-  startsAtInstant?: string;
-  startTimeZone?: string;
-  startTimeConfirmed?: boolean;
-  startTimeConfirmation?: string;
   seminar?: { slug?: string };
   city?: { name?: string } | null;
 }

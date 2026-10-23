@@ -61,10 +61,6 @@ const seminarFields = [
 const scheduleFields = [
   'name',
   'startAt',
-  'startsAtInstant',
-  'startTimeZone',
-  'startTimeConfirmed',
-  'startTimeConfirmation',
   'endAt',
   'image',
   'city',

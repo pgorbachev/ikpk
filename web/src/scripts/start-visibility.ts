@@ -1,4 +1,4 @@
-import { isBeforeStart, type ScheduleWindowEntry } from '../lib/schedule-window';
+import { isBeforeStart, startBoundary, type ScheduleWindowEntry } from '../lib/schedule-window';
 
 type Candidate = ScheduleWindowEntry & {
   title?: string; href?: string; dateLabel?: string; cityName?: string; priceLabel?: string;
@@ -13,9 +13,7 @@ export function initStartVisibility(): void {
     .map((element) => ({ element, entries: JSON.parse(element.dataset.startNearest!) as Candidate[] }));
   if (!offers.length && !heroes.length && !dates.length) return;
   const entryFor = (element: HTMLElement): ScheduleWindowEntry => ({
-    startsAtInstant: element.dataset.startsAtInstant,
-    startTimeZone: element.dataset.startTimeZone,
-    startTimeConfirmed: element.dataset.startTimeConfirmed === 'true',
+    startAt: element.dataset.startAt,
   });
   const entries = [...offers.map(entryFor), ...heroes.flatMap(({ entries }) => entries), ...dates.flatMap(({ entries }) => entries)];
   let timer: ReturnType<typeof setTimeout>;
@@ -62,7 +60,7 @@ export function initStartVisibility(): void {
       }
     }
     document.dispatchEvent(new Event('seminar-offers-updated'));
-    const future = entries.map((entry) => Date.parse(entry.startsAtInstant ?? '')).filter((start) => start > now);
+    const future = entries.map(startBoundary).filter((start) => start > now);
     if (future.length) timer = setTimeout(refresh, Math.min(Math.min(...future) - now, 2_147_483_647));
   };
   window.addEventListener('focus', refresh);

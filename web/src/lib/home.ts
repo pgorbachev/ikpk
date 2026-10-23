@@ -18,9 +18,7 @@ import { publicScheduleTitle } from './schedule-public-title';
 
 export interface UpcomingSeminar {
   id: number;
-  startsAtInstant?: string;
-  startTimeZone?: string;
-  startTimeConfirmed?: boolean;
+  startAt: string;
   title: string;
   href: string;
   instituteName: string;
@@ -133,7 +131,7 @@ export function seminarTeacherLabel(refs: SeminarTeacherRef[] | undefined): stri
 
 /**
  * Живые счётчики каталога — для modular-hero и маршрутов.
- * dates — предложения, чей точный момент начала ещё не наступил.
+ * dates — предложения, дата начала которых по МСК ещё не наступила.
  * cities — населённые пункты без «Онлайн».
  */
 export function getCatalogStats(now: Date = new Date(getSnapshotReferenceDate())) {
@@ -171,9 +169,9 @@ export function getUpcomingSeminars(limit = 3, now: Date = new Date(getSnapshotR
   const teachers = getTeachers();
 
   return getScheduleEntries()
-    // Exact UTC boundary shared by the server render and browser.
+    // Start-day boundary shared by the server render and browser.
     .filter((e) => e.status === 'active' && e.startAt && isBeforeStart(e, now))
-    .sort((a, b) => Date.parse(a.startsAtInstant!) - Date.parse(b.startsAtInstant!) || a.id - b.id)
+    .sort((a, b) => calendarDayDate(a.startAt).getTime() - calendarDayDate(b.startAt).getTime() || a.id - b.id)
     .slice(0, limit)
     .map((e: ScheduleEntry): UpcomingSeminar => {
       const instituteSlug = instituteByName.get(e.institute.name);
@@ -185,9 +183,7 @@ export function getUpcomingSeminars(limit = 3, now: Date = new Date(getSnapshotR
       const start = calendarDayDate(e.startAt);
       return {
         id: e.id,
-        startsAtInstant: e.startsAtInstant,
-        startTimeZone: e.startTimeZone,
-        startTimeConfirmed: e.startTimeConfirmed,
+        startAt: e.startAt,
         title: publicScheduleTitle(e),
         href,
         instituteName: e.institute.name,

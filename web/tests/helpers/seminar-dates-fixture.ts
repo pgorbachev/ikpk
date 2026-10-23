@@ -2,7 +2,6 @@ import { spawnSync } from 'node:child_process';
 import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { startTimeFingerprint } from '../../../cms/src/seminar-management/start-time';
 
 const WEB_ROOT = join(import.meta.dirname, '../..');
 const SNAPSHOT_SOURCE = join(WEB_ROOT, '..', 'fixtures', 'content-snapshot');
@@ -57,9 +56,6 @@ function scheduleEntry(
     institute: { id: 1, name: page.institute.name, shortname: page.institute.name },
     startAt: `${startAt}T00:00:00.000Z`,
     endAt: `${endAt}T00:00:00.000Z`,
-    startsAtInstant: `${startAt}T16:00:00Z`,
-    startTimeZone: 'Europe/Moscow',
-    startTimeConfirmed: true,
     teachers: [],
     image: null,
     isFree: true,
@@ -73,7 +69,7 @@ function scheduleEntry(
     duration: '',
     registrationFormLink: '/registration-fixture',
   };
-  return { ...entry, startTimeConfirmation: startTimeFingerprint(entry) };
+  return entry;
 }
 
 export function buildSeminarDatesFixture() {

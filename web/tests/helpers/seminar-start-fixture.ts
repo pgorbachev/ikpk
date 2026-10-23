@@ -3,10 +3,9 @@ import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync,
 import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { extname, join, resolve, sep } from 'node:path';
-import { startTimeFingerprint } from '../../../cms/src/seminar-management/start-time';
 
-export const BEFORE = '2026-10-31T15:59:59Z';
-export const AFTER = '2026-10-31T16:00:01Z';
+export const BEFORE = '2026-10-30T20:59:59Z';
+export const AFTER = '2026-10-30T21:00:01Z';
 export const TITLES = ['Граничный семинар', 'Последний сеанс курса', 'Следующий анонс', 'Четвёртый анонс'];
 
 /** Real built routes from controlled content, without changing the pinned fixture. */
@@ -31,13 +30,12 @@ export async function serveSeminarStartFixture(mode: 'start' | 'month' | 'layout
       id, status: 'active', name: `fixture-${id}`, seminar: { id: seminarIndex + 1, name: TITLES[seminarIndex], slug: syntheticSeminars[seminarIndex].slug },
       institute: { id: 1, name: institute.name, shortname: 'ИКПК' },
       startAt: `${date}T00:00:00.000Z`, endAt: `${end}T00:00:00.000Z`,
-      startsAtInstant: `${date}T16:00:00Z`, startTimeZone: 'Europe/Moscow', startTimeConfirmed: true,
       teachers: [], image: null, isFree: true, isEventCollection: false, description: null,
       oldPrice: 0, newPrice: 0, city: { id: 1, name: 'Онлайн' },
       program: { id: 1, slug: group.slug, name: group.name },
       additionalText: `Сеанс ${id}`, duration: '8', registrationFormLink: `/registration-fixture-${id}`,
     };
-    return { ...entry, startTimeConfirmation: startTimeFingerprint(entry) };
+    return entry;
   };
   const syntheticEntries = [
     event(61001, 0, '2026-10-31', '2026-11-02'), event(61002, 1, '2026-10-31'),
@@ -54,17 +52,9 @@ export async function serveSeminarStartFixture(mode: 'start' | 'month' | 'layout
     syntheticEntries.push({ ...event(61200, 2, '2026-11-28'), city: { id: 3, name: 'Казань' } });
   }
   // Existing layout and accessibility gates need the historical mix of 7, 1 and
-  // 0 date panels. Confirm only in a throwaway test snapshot; editorial CMS data
+  // 0 date panels. Use only a throwaway test snapshot; editorial CMS data
   // and the pinned production snapshot remain untouched.
-  const layoutEntries = sourceTypes.schedule_entries.map((raw) => {
-    if (raw.status !== 'active' || typeof raw.startAt !== 'string') return raw;
-    const date = raw.startAt.slice(0, 10);
-    const confirmed = {
-      ...raw, startsAtInstant: `${date}T09:00:00Z`, startTimeZone: 'Europe/Moscow',
-      startTimeConfirmed: true,
-    };
-    return { ...confirmed, startTimeConfirmation: startTimeFingerprint(confirmed) };
-  });
+  const layoutEntries = sourceTypes.schedule_entries;
   const entries = mode === 'layout' ? layoutEntries : syntheticEntries;
   const seminars = mode === 'layout' ? sourceTypes.seminars : syntheticSeminars;
   const types = mode === 'layout'
@@ -78,7 +68,7 @@ export async function serveSeminarStartFixture(mode: 'start' | 'month' | 'layout
   const outDir = join(buildRoot, 'dist');
   const cleanup = () => { rmSync(snapshotRoot, { recursive: true, force: true }); rmSync(buildRoot, { recursive: true, force: true }); };
   writeFileSync(join(snapshotRoot, 'snapshot.json'), JSON.stringify({
-    ...source, referenceDate: mode === 'layout' ? source.referenceDate : '2026-10-31',
+    ...source, referenceDate: mode === 'layout' ? source.referenceDate : '2026-10-30',
     content: { ...source.content, types },
   }));
   copyFileSync(join(sourceRoot, 'collapsible_panels.json'), join(snapshotRoot, 'collapsible_panels.json'));

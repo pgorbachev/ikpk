@@ -358,42 +358,6 @@ describe('семинары в собранном Strapi', { timeout: 360000 }, (
     assert.ok(matchingIds.publishedAt);
   });
 
-  test('подтверждение точного начала сохраняется и сбрасывается при переносе часа, зоны и даты', async () => {
-    const seminars = app.documents('api::seminar.seminar');
-    const entries = app.documents('api::schedule-entry.schedule-entry');
-    const seminar = await seminars.create({ data: { name: 'Точное начало' } });
-    const created = await entries.create({ data: {
-      seminar: seminar.documentId, city: 'Москва', entry_status: 'active',
-      startAt: '2099-10-22T00:00:00.000Z', endAt: '2099-10-22T00:00:00.000Z',
-      startsAtInstant: '2099-10-22T16:00:00.000Z', startTimeZone: 'Europe/Moscow',
-      startTimeConfirmed: true,
-    } });
-    assert.equal(created.startTimeConfirmed, true);
-    assert.match(created.startTimeConfirmation, /^[a-f0-9]{64}$/);
-    assert.equal(created.startAt, created.endAt);
-    for (const patch of [
-      { startsAtInstant: '2099-10-22T17:00:00.000Z' },
-      { startTimeZone: 'Europe/Nicosia' },
-      { startAt: '2099-10-23T00:00:00.000Z', endAt: '2099-10-23T00:00:00.000Z', startsAtInstant: '2099-10-23T17:00:00.000Z' },
-    ]) {
-      const old = await entries.findOne({ documentId: created.documentId });
-      const changed = await entries.update({ documentId: created.documentId, data: { ...patch, startTimeConfirmed: true, startTimeConfirmation: old.startTimeConfirmation } });
-      assert.equal(changed.startTimeConfirmed, false);
-      assert.equal(changed.startTimeConfirmation, null);
-      await assert.rejects(() => entries.publish({ documentId: created.documentId }), /Подтвердите начало/);
-      const confirmed = await entries.update({ documentId: created.documentId, data: { startTimeConfirmed: true } });
-      assert.equal(confirmed.startTimeConfirmed, true);
-      assert.notEqual(confirmed.startTimeConfirmation, old.startTimeConfirmation);
-      await entries.publish({ documentId: created.documentId });
-    }
-    const clone = await entries.clone({ documentId: created.documentId });
-    assert.equal(clone.entries[0].startTimeConfirmed, false);
-    assert.equal(clone.entries[0].startTimeConfirmation, null);
-    await assert.rejects(() => entries.update({ documentId: created.documentId, status: 'published', data: {
-      startsAtInstant: '2099-10-23T18:00:00.000Z', startTimeConfirmed: true,
-    } }), /Подтвердите начало/);
-  });
-
   test('список выбора по HTTP содержит свободное проведение и не содержит чужое', async () => {
     const seminars = app.documents('api::seminar.seminar');
     const entries = app.documents('api::schedule-entry.schedule-entry');

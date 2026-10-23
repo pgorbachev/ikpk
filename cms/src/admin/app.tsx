@@ -18,14 +18,6 @@ export default {
   },
   register(app: StrapiApp) {
     app.customFields.register({
-      name: 'start-time-confirmation',
-      type: 'boolean',
-      intlLabel: { id: 'start-time-confirmation.label', defaultMessage: 'Время начала проверено' },
-      components: {
-        Input: () => import('./components/StartTimeConfirmation') as Promise<{ default: ComponentType }>,
-      },
-    });
-    app.customFields.register({
       name: 'wall-clock-datetime',
       type: 'datetime',
       intlLabel: { id: 'wall-clock-datetime.label', defaultMessage: 'Дата и время' },
