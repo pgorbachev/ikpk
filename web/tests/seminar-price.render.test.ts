@@ -18,6 +18,7 @@ it('schedule page prints Nicosia-local-midnight SQL dates under UTC', async () =
   };
   vi.spyOn(data, 'getScheduleEntries').mockReturnValue([entry]);
   vi.spyOn(data, 'getSnapshotReferenceDate').mockReturnValue('2024-09-23');
+  vi.spyOn(data, 'getSeminarBuildNow').mockReturnValue(new Date('2024-09-22T20:00:00.000Z'));
   const container = await AstroContainer.create({ astroConfig: { site: 'https://ikpk.su' } });
   const html = await container.renderToString(SchedulePage, {
     request: new Request('https://ikpk.su/raspisanie-i-tseny'),
