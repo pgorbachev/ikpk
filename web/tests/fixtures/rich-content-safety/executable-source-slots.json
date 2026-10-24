@@ -304,11 +304,11 @@
     "identity": "style|body:1a345e867bb189d0"
   },
   {
-    "slotId": "src:components/home/sections/HeroHybrid.astro:L81:C1:style",
+    "slotId": "src:components/home/sections/HeroHybrid.astro:L82:C1:style",
     "file": "components/home/sections/HeroHybrid.astro",
     "nodeKind": "element",
-    "locator": "components/home/sections/HeroHybrid.astro:L81:C1:style",
-    "fingerprint": "bd2f7face71c6df8d5a65698f1f67603913b5749607446d951c3041524e080a5",
+    "locator": "components/home/sections/HeroHybrid.astro:L82:C1:style",
+    "fingerprint": "825377ccd56ded0e39e4f9c53105c772f0b889bac22a7ddc5f3692b86ff5aca5",
     "identity": "style|body:299406ffececa94a"
   },
   {
@@ -600,11 +600,11 @@
     "identity": "style|body:ceefe2fc7f5d4db1"
   },
   {
-    "slotId": "src:components/schedule/ScheduleListing.astro:L79:C1:style",
+    "slotId": "src:components/schedule/ScheduleListing.astro:L80:C1:style",
     "file": "components/schedule/ScheduleListing.astro",
     "nodeKind": "element",
-    "locator": "components/schedule/ScheduleListing.astro:L79:C1:style",
-    "fingerprint": "10521d2a47b6f4fbc791c28fe62166b2def4eaa3e62613c999ec937e00ea432e",
+    "locator": "components/schedule/ScheduleListing.astro:L80:C1:style",
+    "fingerprint": "10c14a9359acb7d1cb5c2d2e63eae257368c64fffc6a256eeb15c4ef4a85e5e2",
     "identity": "style|body:2f46246c39ee8d50"
   },
   {
