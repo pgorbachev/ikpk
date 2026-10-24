@@ -936,12 +936,12 @@
     "identity": "style|body:aa2b0302ae81eb06"
   },
   {
-    "slotId": "src:pages/knigi-i-uchebnye-materialy.astro:L38:C1:style",
+    "slotId": "src:pages/knigi-i-uchebnye-materialy.astro:L54:C1:style",
     "file": "pages/knigi-i-uchebnye-materialy.astro",
     "nodeKind": "element",
-    "locator": "pages/knigi-i-uchebnye-materialy.astro:L38:C1:style",
-    "fingerprint": "003a660d99a13788715983378a6049d55cbe6010c816a0c0ac582545901fff3c",
-    "identity": "style|body:adc71ce778c52958"
+    "locator": "pages/knigi-i-uchebnye-materialy.astro:L54:C1:style",
+    "fingerprint": "d2511c90d976dfe1a9f186e2bb54376b93084ffde94aa60a7de473607fd9af8f",
+    "identity": "style|body:1e2a6eff5926afbb"
   },
   {
     "slotId": "src:pages/kontakty.astro:L72:C1:style",
