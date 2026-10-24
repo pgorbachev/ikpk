@@ -15,7 +15,6 @@ import {
   MANAGER_HOURS_VALUE,
   OWN_METRIKA_ID,
   REVIEWS_WIDGET_HOST,
-  SEL_CHAT_FACADE,
   SEL_CHAT_MOUNT,
   SEL_CHAT_TRIGGER,
   SEL_REVIEWS_SECTION,
@@ -30,9 +29,9 @@ import {
  * конфигурации.
  *
  * Причина не в удобстве. У боевой сборки одно состояние конфигурации, и спека объявляет
- * публикуемыми ДВА состояния с разным обликом страницы: в состоянии «отсутствие объявлено
- * явно» фасада чата нет целиком. Значит набор, идущий по `dist`, терял бы предмет почти
- * весь — кнопка вызова, фокус, перекрытие, доступность нашей кнопки — ровно в том
+ * публикуемыми ДВА состояния с разным обликом страницы: при выключенном чате нет ни
+ * SDK-launcher, ни клавиатурного helper. Значит набор, идущий по `dist`, терял бы предмет
+ * почти весь — нативная геометрия, фокус helper, перекрытие — ровно в том
  * состоянии, которое спека называет законным. Это тот же шаблон «законное состояние и
  * зелёный гейт недостижимы одновременно», от которого требования этой возможности и
  * переписывались. Пробная сборка снимает зависимость от того, что кто-то объявил в дереве.
@@ -398,49 +397,72 @@ test.describe('без скриптов секция даёт ссылку, а н
 
 // ─── Фасад чата ──────────────────────────────────────────────────────────────
 
-test.describe('чат: наша кнопка, чужой интерфейс по нажатию', () => {
+test.describe('чат: native Bitrix entry and keyboard helper', () => {
   test.describe.configure({ timeout: 60_000 });
 
-  test('кнопка вызова есть до исполнения стороннего скрипта и доступна с клавиатуры', async ({ page }) => {
+  test('keyboard helper is hidden until focus and has the approved accessible name', async ({ page }) => {
     const seen = await guard(page);
     await page.goto(url('/'));
     const trigger = page.locator(`[${SEL_CHAT_TRIGGER}]`);
     await expect(trigger, 'нашей кнопки вызова чата в разметке нет').toHaveCount(1);
-    await expect(trigger).toBeVisible();
-
-    expect(seen.toHost(LOADER_HOST), 'сторонний загрузчик исполнился до нажатия').toEqual([]);
+    const visualState = async () => trigger.evaluate((el) => {
+      const r = el.getBoundingClientRect();
+      const style = getComputedStyle(el);
+      let left = Math.max(0, r.left);
+      let top = Math.max(0, r.top);
+      let right = Math.min(innerWidth, r.right);
+      let bottom = Math.min(innerHeight, r.bottom);
+      let visible = style.display !== 'none' && style.visibility !== 'hidden' && Number(style.opacity) > 0;
+      for (let parent = el.parentElement; parent && visible; parent = parent.parentElement) {
+        const parentStyle = getComputedStyle(parent);
+        if (parentStyle.display === 'none' || parentStyle.visibility === 'hidden' || Number(parentStyle.opacity) === 0) {
+          visible = false;
+          break;
+        }
+        if (/(hidden|clip|scroll|auto)/.test(`${parentStyle.overflowX} ${parentStyle.overflowY}`)) {
+          const clip = parent.getBoundingClientRect();
+          left = Math.max(left, clip.left);
+          top = Math.max(top, clip.top);
+          right = Math.min(right, clip.right);
+          bottom = Math.min(bottom, clip.bottom);
+        }
+      }
+      return visible && right - left > 2 && bottom - top > 2;
+    });
+    await expect.poll(visualState, 'unfocused keyboard helper is not a visible permanent CTA').toBe(false);
+    expect(seen.toHost(LOADER_HOST), 'SDK executes once during ordinary page load').toHaveLength(1);
 
     // Доступность с клавиатуры проверяется ФОКУСОМ и доступным именем, а не наличием
     // `tabindex`: `div` с `tabindex` фокусируется, но по Enter ничего не делает.
     await trigger.focus();
     await expect(trigger, 'кнопка вызова не принимает фокус').toBeFocused();
+    await expect.poll(visualState, 'keyboard focus makes the helper visually readable').toBe(true);
     const name = await trigger.evaluate((el) => el.getAttribute('aria-label') ?? el.textContent ?? '');
     expect(name.trim().length, 'у кнопки вызова нет доступного имени').toBeGreaterThan(0);
   });
 
-  test('сторонних запросов до нажатия нет, и простой браузера триггером не является', async ({ page }) => {
+  test('normal load runs one SDK request and leaves native chooser closed after browser idle', async ({ page }) => {
     const seen = await guard(page);
     await page.goto(url('/'));
     await expect(page.locator(`[${SEL_CHAT_TRIGGER}]`), 'кнопки вызова нет — предмета нет').toHaveCount(1);
 
-    // Простой браузера триггером НЕ является, и это проверяется временем: измерение
-    // бюджетов производительности хука перехвата не имеет вовсе, простой внутри него
-    // наступает, и «отложенный до простоя» скрипт исполнился бы там на всех четырёх
-    // шаблонах против бюджета времени блокировки.
+    // Idle must not open a chooser or execute the already loaded SDK again.
     await page.waitForLoadState('load');
     await page.waitForTimeout(4000);
     expect(
       seen.toHost(LOADER_HOST),
-      'загрузчик исполнился без нажатия: простой браузера сработал как триггер',
-    ).toEqual([]);
+      'обычная загрузка должна выполнить SDK ровно один раз',
+    ).toHaveLength(1);
+    await expect(page.locator('[data-chat-stub-chooser]'), 'idle does not open native chooser').toHaveCount(0);
   });
 
-  test('нажатие исполняет загрузчик, и фокус уходит внутрь появившегося интерфейса', async ({ page }) => {
-    await guard(page);
+  test('explicit helper action opens native chooser without moving focus into provider DOM', async ({ page }) => {
+    const seen = await guard(page);
     await page.goto(url('/'));
     const trigger = page.locator(`[${SEL_CHAT_TRIGGER}]`);
     await expect(trigger, 'кнопки вызова нет — нажимать нечего').toHaveCount(1);
     await trigger.focus();
+    await expect(trigger).toBeVisible();
     await trigger.click();
 
     // Место появления интерфейса портала НЕ документировано (справка Bitrix24 не
@@ -450,74 +472,38 @@ test.describe('чат: наша кнопка, чужой интерфейс по
     const panel = page.locator('[data-chat-stub-panel]');
     await expect(
       panel,
-      'подставной интерфейс не появился: либо загрузчик не исполнился, либо наш код не ' +
-        'вызвал widget.open() по документированному контракту (onBitrixLiveChat → ' +
-        'subscribe(configLoaded) → open())',
+      'helper activation did not open the native chooser through the measured site-button path',
     ).toHaveCount(1);
-
-    const inside = await page.evaluate(() => {
-      const panel = document.querySelector('[data-chat-stub-panel]');
-      return panel !== null && document.activeElement !== null && panel.contains(document.activeElement);
-    });
-    expect(
-      inside,
-      'фокус не внутри появившегося интерфейса: уничтожение элемента с фокусом уводит его ' +
-        'в начало документа',
-    ).toBe(true);
+    await expect(trigger, 'helper remains the focus owner until Escape is handled').toBeFocused();
+    expect(seen.toHost(LOADER_HOST), 'helper action does not fetch a second SDK').toHaveLength(1);
   });
 
-  test('кнопка открывает список каналов CRM site-button и повторно раскрывает его без второй загрузки', async ({ page }) => {
-    const seen = await guard(page, {
-      // Публичный CRM site_button loader создаёт BX.SiteButton, но не посылает
-      // onBitrixLiveChat. `buttons.show()` раскрывает штатный список каналов.
-      chatLoaderBody: `(function () {
-        var chooser = document.createElement('div');
-        chooser.setAttribute('data-site-button-chooser', '');
-        chooser.setAttribute('role', 'dialog');
-        chooser.hidden = true;
-        var channel = document.createElement('button');
-        channel.textContent = 'Telegram';
-        var close = document.createElement('button');
-        close.textContent = 'Закрыть';
-        close.addEventListener('click', function () { chooser.hidden = true; });
-        chooser.appendChild(channel);
-        chooser.appendChild(close);
-        document.body.appendChild(chooser);
-        window.BX = window.BX || {};
-        window.BX.SiteButton = {
-          buttons: {
-            show: function () {
-              chooser.hidden = false;
-              chooser.setAttribute('data-open-count', String(Number(chooser.getAttribute('data-open-count') || 0) + 1));
-            }
-          }
-        };
-      })();`,
-    });
+  test('native launcher opens chooser repeatedly after greeting close without another SDK request', async ({ page }) => {
+    const seen = await guard(page);
     await page.goto(url('/'));
-    const trigger = page.locator(`[${SEL_CHAT_TRIGGER}]`);
-    await trigger.click();
-
-    const chooser = page.locator('[data-site-button-chooser]');
-    await expect(chooser, 'первое нажатие должно раскрыть штатный chooser после ленивой загрузки site_button').toBeVisible();
-    await expect(chooser).toHaveAttribute('data-open-count', '1');
-    await chooser.getByRole('button', { name: 'Закрыть' }).click();
-    await expect(chooser, 'штатное закрытие должно скрыть chooser перед повторным открытием').toBeHidden();
-
-    await trigger.click();
-    await expect(chooser, 'повторное нажатие должно снова раскрыть chooser').toBeVisible();
-    await expect(chooser).toHaveAttribute('data-open-count', '2');
-    expect(seen.toHost(LOADER_HOST), 'повторное нажатие повторно загрузило внешний loader').toHaveLength(1);
+    const chooser = page.locator('[data-chat-stub-chooser]');
+    await expect(chooser, 'ordinary load leaves chooser closed').toHaveCount(0);
+    expect(seen.toHost(LOADER_HOST), 'loader already ran on normal page load').toHaveLength(1);
+    await page.locator('[data-chat-stub-greeting-close]').click();
+    const launcher = page.locator('[data-chat-stub-launcher]');
+    await expect(launcher, 'provider created a launcher').toBeVisible();
+    await launcher.click();
+    await expect(chooser, 'native launcher opens provider chooser').toBeVisible();
+    await page.locator('[data-chat-stub-chooser-close]').click();
+    await expect(chooser).toHaveCount(0);
+    await launcher.click();
+    await expect(chooser, 'native launcher reopens chooser after close').toBeVisible();
+    expect(seen.toHost(LOADER_HOST), 'reopening chooser does not fetch SDK again').toHaveLength(1);
   });
 
   test('загрузчик не ответил — панель не появляется, а телефоны в подвале видны', async ({ page }) => {
     // Наша гарантия при неответившем стороннем загрузчике — подвал, и только он. Прежняя
     // редакция спеки обещала здесь ещё и часы работы; сужение названо ею прямо.
-    await guard(page, { chatLoaderBody: '' });
+    const seen = await guard(page, { chatLoaderBody: '' });
     await page.goto(url('/'));
     const trigger = page.locator(`[${SEL_CHAT_TRIGGER}]`);
     await expect(trigger, 'кнопки вызова нет — предмета нет').toHaveCount(1);
-    await trigger.click();
+    expect(seen.toHost(LOADER_HOST), 'SDK request is attempted once during normal load').toHaveLength(1);
     await page.waitForTimeout(1000);
     await expect(
       page.locator('[data-chat-stub-panel]'),
@@ -542,7 +528,7 @@ test.describe('чат: наша кнопка, чужой интерфейс по
       'на главной появился блок часов работы менеджера: спека такой блок запрещает — он не ' +
         'нарисован ни в одном утверждённом варианте',
     ).toHaveCount(0);
-    await expect(page.locator(`[${SEL_CHAT_FACADE}]`), 'фасада чата нет — предмета нет').toHaveCount(1);
+    await expect(page.locator('[data-chat-greeting]'), 'сайт не рисует копию приветствия').toHaveCount(0);
   });
 });
 
@@ -715,13 +701,13 @@ test.describe('кнопка чата не перекрывает содержи�
       // ничего не перекрывается по построению.
       expect(response?.status(), `${path}: страница не отдалась — проверялась бы 404`).toBe(200);
 
-      const trigger = page.locator(`[${SEL_CHAT_TRIGGER}]`);
-      await expect(trigger, `${path}: кнопки вызова нет — перекрывать нечем`).toHaveCount(1);
-      await expect(trigger).toBeVisible();
+      await page.locator('[data-chat-stub-greeting-close]').click();
+      const launcher = page.locator('[data-chat-stub-launcher]');
+      await expect(launcher, `${path}: provider launcher отсутствует`).toBeVisible();
 
-      const overlaps = await page.evaluate((triggerAttr) => {
-        const button = document.querySelector(`[${triggerAttr}]`) as HTMLElement | null;
-        if (button === null) return { interactive: ['кнопки нет'], text: [] as string[] };
+      const overlaps = await page.evaluate((launcherAttr) => {
+        const button = document.querySelector(`[${launcherAttr}]`) as HTMLElement | null;
+        if (button === null) return { interactive: ['native launcher missing'], text: [] as string[] };
         const box = button.getBoundingClientRect();
         const header = document.querySelector('header');
         const main = document.querySelector('main');
@@ -790,7 +776,7 @@ test.describe('кнопка чата не перекрывает содержи�
           range.detach();
         }
         return { interactive, text, scrollportFound: scrollport !== null };
-      }, SEL_CHAT_TRIGGER);
+      }, 'data-chat-stub-launcher');
 
       expect(
         overlaps.scrollportFound,
@@ -809,15 +795,11 @@ test.describe('кнопка чата не перекрывает содержи�
   }
 
   test('точка вне элементов управления в нижней зоне не активирует чат', async ({ page }) => {
-    // Нижняя зона теперь занимает всю ширину строки и может попасть под выбранную
-    // свободную точку. Проверяем поведение этой точки: она не относится к кнопке и
-    // не должна загружать или открывать чат.
+    // Выбираем свободную точку вне всех контролов и вне измеренного launcher: обычная
+    // загрузка SDK уже произошла, поэтому клик не должен повторно открывать chooser.
     const seen = await guard(page);
     await page.goto(url('/'));
-    await expect(page.locator(`[${SEL_CHAT_FACADE}]`), 'фасада чата нет — предмета нет').toHaveCount(1);
-
     const landed = await page.evaluate((selectors) => {
-      const facade = document.querySelector(`[${selectors.facade}]`);
       const step = 20;
       const interactive = 'a, button, summary, input, select, textarea, label, [role="button"]';
       for (let y = innerHeight - step; y > 0; y -= step)
@@ -825,17 +807,21 @@ test.describe('кнопка чата не перекрывает содержи�
           const el = document.elementFromPoint(x, y);
           if (el === null) continue;
           if (el.closest(interactive)) continue;
+          if (el.closest(`[${selectors.launcher}]`)) continue;
           return {
             x, y,
-            inFacade: facade !== null && facade.contains(el),
+            inNativeLauncher: Boolean(el.closest(`[${selectors.launcher}]`)),
             inTrigger: Boolean(el.closest(`[${selectors.trigger}]`)),
             tag: el.tagName.toLowerCase(),
           };
         }
       return null;
-    }, { facade: SEL_CHAT_FACADE, trigger: SEL_CHAT_TRIGGER });
+    }, { launcher: 'data-chat-stub-launcher', trigger: SEL_CHAT_TRIGGER });
 
     expect(landed, 'ни одной неинтерактивной точки не нашлось — перебор проверить нечем').not.toBeNull();
+    expect(landed!.inNativeLauncher,
+      `свободная точка (${landed!.x}, ${landed!.y}) попала в launcher (${landed!.tag})`,
+    ).toBe(false);
     expect(
       landed!.inTrigger,
       `точка вне контролов (${landed!.x}, ${landed!.y}) попала в триггер чата (${landed!.tag})`,
@@ -843,6 +829,6 @@ test.describe('кнопка чата не перекрывает содержи�
     const before = seen.toHost(LOADER_HOST);
     await page.mouse.click(landed!.x, landed!.y);
     await expect(page.locator('[data-chat-stub-panel]'), 'blank lower-zone click does not open the chat').toHaveCount(0);
-    expect(seen.toHost(LOADER_HOST), 'blank lower-zone click does not load the chat script').toEqual(before);
+    expect(seen.toHost(LOADER_HOST), 'blank lower-zone click does not reload the chat script').toEqual(before);
   });
 });

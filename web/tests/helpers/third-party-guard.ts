@@ -73,9 +73,8 @@ export interface GuardOptions {
    */
   reviewsWidgetBody?: string;
   /**
-   * Тело подставного загрузчика чата. По умолчанию — скрипт, вставляющий фокусируемый
-   * интерфейс в объявленную нами точку монтирования: сценарий про фокус опирается на
-   * ПОДСТАВНОЙ интерфейс, живого в браузерных прогонах нет по требованию о перехвате.
+   * Тело подставного загрузчика чата. По умолчанию — изолированный stub измеренной
+   * геометрии нативного launcher и provider overlay; он не доказывает live-portal acceptance.
    */
   chatLoaderBody?: string;
   /** Адрес загрузчика чата: перехватывается по хосту и пути, а не угадывается. */
@@ -142,49 +141,80 @@ const METRIKA_TAG_STUB = `(function () {
 })();`;
 
 /**
- * Подставной загрузчик чата.
- *
- * ЭМУЛИРУЕТ ДОКУМЕНТИРОВАННЫЙ КОНТРАКТ портала (справка Bitrix24, «advanced widget
- * settings»), а не наивное «сам создаёт панель»: настоящий загрузчик стреляет глобальным
- * `onBitrixLiveChat` с `event.detail.widget`, а `widget.open()`/`widget.subscribe({ type:
- * BX.LiveChatWidget.SubscriptionType.configLoaded, callback })` — единственные
- * документированные способы дождаться готовности и показать интерфейс. Прежняя редакция
- * этого подставного ответа обходила и открытие, и событие — панель появлялась и получала
- * фокус сама, поэтому наш код проверялся не за то, что он делает, а за то, что делает мок.
- *
- * Панель вставляется в `document.body`, А НЕ в `[data-chat-mount]`: у портала нет
- * документированного способа указать контейнер и нет метода узнать, куда он вставил
- * интерфейс, — подставной ответ не должен подтверждать предположение, которого нет в
- * официальном контракте и которое настоящий портал может не выполнять.
+ * Isolated browser stub for the measured native launcher contract. Its fixed 66×66
+ * launcher at right/bottom 50px and provider overlay z-indexes represent the captured
+ * Bitrix geometry used by this repository's tests. This is test scaffolding only: it
+ * does not attest to a live portal greeting, chooser channels, or VK Open Line.
  */
 const CHAT_LOADER_STUB = `(function () {
-  window.BX = window.BX || {};
-  window.BX.LiveChatWidget = window.BX.LiveChatWidget || { SubscriptionType: { configLoaded: 'configLoaded' } };
-  var panel = document.createElement('div');
-  panel.setAttribute('role', 'dialog');
-  panel.setAttribute('aria-label', 'Подставной интерфейс чата');
-  panel.setAttribute('data-chat-stub-panel', '');
-  panel.tabIndex = -1;
-  var close = document.createElement('button');
-  close.type = 'button';
-  close.textContent = 'Закрыть';
-  panel.appendChild(close);
+  var style = document.createElement('style');
+  style.textContent = '[data-chat-stub-launcher]{position:fixed!important;box-sizing:border-box!important;' +
+    'right:50px!important;bottom:50px!important;width:66px!important;height:66px!important;border-radius:50%;' +
+    'background:#16a765;color:#fff;z-index:10150!important;cursor:pointer}' +
+    '[data-chat-stub-greeting]{position:fixed!important;box-sizing:border-box!important;right:40px!important;' +
+    'bottom:126px!important;z-index:10100!important;max-width:min(320px,calc(100vw - 32px));padding:16px;' +
+    'background:#fff;color:#111;box-shadow:0 2px 12px #0004}' +
+    '[data-chat-stub-overlay]{position:fixed!important;inset:0!important;z-index:10100!important;' +
+    'background:rgba(0,0,0,.18);pointer-events:auto}' +
+    '[data-chat-stub-wrapper]{position:fixed!important;inset:0!important;z-index:10150!important;pointer-events:none}' +
+    '[data-chat-stub-chooser]{position:fixed!important;right:0!important;bottom:0!important;' +
+    'width:min(360px,100vw);height:min(560px,100vh);box-sizing:border-box;padding:18px;' +
+    'background:#fff;color:#111;box-shadow:0 2px 16px #0005;pointer-events:auto}';
+  document.head.appendChild(style);
+  var wrapper = document.createElement('div');
+  wrapper.setAttribute('data-chat-stub-wrapper', '');
+  wrapper.setAttribute('aria-hidden', 'true');
+  wrapper.hidden = true;
+  var launcher = document.createElement('div');
+  launcher.setAttribute('data-chat-stub-launcher', '');
+  launcher.textContent = '';
+  var greeting = document.createElement('div');
+  greeting.setAttribute('data-chat-stub-greeting', '');
+  greeting.textContent = 'Подставное приветствие Bitrix';
+  var greetingClose = document.createElement('span');
+  greetingClose.setAttribute('data-chat-stub-greeting-close', '');
+  greetingClose.textContent = ' ×';
+  greeting.appendChild(greetingClose);
+  var chooser = document.createElement('div');
+  chooser.setAttribute('data-chat-stub-chooser', '');
+  chooser.setAttribute('data-chat-stub-panel', '');
+  var nativePlaceholder = document.createElement('a');
+  nativePlaceholder.setAttribute('data-chat-stub-native-placeholder', '');
+  nativePlaceholder.setAttribute('href', '#');
+  var chooserClose = document.createElement('div');
+  chooserClose.setAttribute('data-chat-stub-chooser-close', '');
+  chooserClose.className = 'b24-widget-button-inner-item b24-widget-button-close';
+  chooserClose.textContent = '×';
+  chooser.append(nativePlaceholder, chooserClose);
   var opened = false;
-  close.addEventListener('click', function () {
-    panel.remove();
-    opened = false;
-  });
-  var widget = {
-    open: function () {
-      if (opened) return;
-      opened = true;
-      document.body.appendChild(panel);
-    },
-    subscribe: function (options) {
-      if (options && typeof options.callback === 'function') options.callback();
-    },
+  var open = function () {
+    if (opened) return;
+    opened = true;
+    wrapper.hidden = false;
+    wrapper.removeAttribute('aria-hidden');
+    wrapper.appendChild(chooser);
+    overlay.hidden = false;
+    document.body.appendChild(overlay);
   };
-  window.dispatchEvent(new CustomEvent('onBitrixLiveChat', { detail: { widget: widget } }));
+  var closeChooser = function () {
+    overlay.remove();
+    wrapper.hidden = true;
+    wrapper.setAttribute('aria-hidden', 'true');
+    chooser.remove();
+    opened = false;
+  };
+  chooserClose.addEventListener('click', closeChooser);
+  launcher.addEventListener('click', open);
+  greetingClose.addEventListener('click', function () { greeting.remove(); });
+  var overlay = document.createElement('div');
+  overlay.setAttribute('data-chat-stub-overlay', '');
+  overlay.hidden = true;
+  document.body.append(greeting, wrapper, launcher);
+  window.BX = window.BX || {};
+  window.BX.SiteButton = window.BX.SiteButton || {};
+  var buttons = { show: open };
+  Object.defineProperty(buttons, 'isShown', { enumerable: true, get: function () { return opened; } });
+  window.BX.SiteButton.buttons = buttons;
 })();`;
 
 export async function installThirdPartyGuard(
