@@ -28,8 +28,7 @@ const news = getHomeOffers();
                 title={item.name}
                 image={item.image?.url}
                 imageAlt={item.id === HOME_OFFER_IDS.book ? 'Обложка книги «Ручные лимфатические техники»' : item.name}
-                imageRatio="3 / 2"
-                imageFit={item.id === HOME_OFFER_IDS.book ? 'contain' : 'cover'}
+                imageRatio="3 / 2" imageFit={item.id === HOME_OFFER_IDS.book ? 'contain' : 'cover'}
                 target="_blank"
                 rel={[...new Set(['noopener', ...(relForExternalUrl(item.link) ?? [])])].join(' ')}
                 className="news-card"
