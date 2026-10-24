@@ -732,16 +732,16 @@
     "file": "components/topnav/TopNav.astro",
     "nodeKind": "element",
     "locator": "components/topnav/TopNav.astro:L112:C1:script",
-    "fingerprint": "924a4c741aafda80df511c8f0172914fee8410b3afc48839f93fe9fb6b37f3ff",
-    "identity": "script|body:410e623148ec3ee6"
+    "fingerprint": "5c52a4fa580d6bdd90d34d5915a2d2eb09c380ab40011cff231f9773adbdde16",
+    "identity": "script|body:78b89215b8245ba4"
   },
   {
     "slotId": "src:components/topnav/TopNav.astro:L141:C1:style",
     "file": "components/topnav/TopNav.astro",
     "nodeKind": "element",
     "locator": "components/topnav/TopNav.astro:L141:C1:style",
-    "fingerprint": "cba761c8b7faab1ca80d752e410f9c36eb045019554bbc56e9a74a1900aa5ad5",
-    "identity": "style|body:6963d8a94a688949"
+    "fingerprint": "291f23a5e5336bfaa749f0100c8de1c766b6ce3656f1826eb0d1239ba734706c",
+    "identity": "style|body:476e7f19f5f5a105"
   },
   {
     "slotId": "src:components/topnav/TopNav.astro:L47:C17:svg",
