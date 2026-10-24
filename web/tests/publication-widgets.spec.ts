@@ -65,8 +65,16 @@ test('candidate SDK loads on page entry, preserves review geometry, and uses iso
 test('candidate overlays leave critical controls reachable on actual templates', async ({ page }) => {
   test.setTimeout(120_000);
   let controls = 0;
+  const chatLoaderSrc = candidate().chatLoaderSrc;
   for (const route of actualTemplates()) {
     await page.goto(route);
+    if (chatLoaderSrc) {
+      const greeting = page.locator('[data-chat-stub-greeting]');
+      await expect(greeting, 'configured provider greeting is present before checking background controls').toBeVisible();
+      await greeting.locator('[data-chat-stub-greeting-close]').click();
+      await expect(greeting, 'the provider greeting closes through its own control').toHaveCount(0);
+      await expect(page.locator('[data-chat-stub-launcher]'), 'closing the greeting leaves the native launcher available').toBeVisible();
+    }
     const targets = page.locator('main a.btn, main button:enabled, main input, main select:enabled, .newsletter-signup-button, .seminar-register-link');
     for (const control of await targets.all()) {
       if (!await control.isVisible()) continue;
