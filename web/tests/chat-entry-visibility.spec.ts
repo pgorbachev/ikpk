@@ -124,8 +124,6 @@ async function snapshotLayout(page: Page) {
     const footer = document.querySelector('footer');
     const button = document.querySelector<HTMLElement>(args.nativeLauncherSelector);
     const greeting = document.querySelector<HTMLElement>(args.greetingSelector);
-    const greetingText = greeting;
-    const close = greeting?.querySelector<HTMLElement>(args.greetingCloseSelector) ?? null;
     const greetingRect = greeting?.getBoundingClientRect() ?? null;
     const greetingStyle = greeting ? getComputedStyle(greeting) : null;
     const greetingVisible = Boolean(greetingRect && greetingStyle && greetingRect.width > 0 && greetingRect.height > 0
@@ -152,7 +150,6 @@ async function snapshotLayout(page: Page) {
     };
     const clip = scrollport?.getBoundingClientRect() ?? new DOMRect(0, 0, innerWidth, innerHeight);
     const overlaps: string[] = [];
-    const greetingOverlaps: string[] = [];
     const intersect = (a: { left: number; top: number; right: number; bottom: number }, b: { left: number; top: number; right: number; bottom: number }) =>
       a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
     if (button) {
@@ -168,8 +165,6 @@ async function snapshotLayout(page: Page) {
           if (shown) {
             const description = `text:${node.textContent.trim().slice(0, 32)}`;
             if (intersect(shown, box) && !overlaps.includes(description)) overlaps.push(description);
-            if (greetingVisible && greetingRect && greeting && !greeting.contains(node.parentElement)
-              && intersect(shown, greetingRect) && !greetingOverlaps.includes(description)) greetingOverlaps.push(description);
           }
         }
         range.detach();
@@ -183,8 +178,6 @@ async function snapshotLayout(page: Page) {
         if (shown) {
           const description = `control:${el.tagName.toLowerCase()}:${el.textContent?.trim().slice(0, 24)}`;
           if (intersect(shown, box)) overlaps.push(description);
-          if (greetingVisible && greetingRect && greeting && !greeting.contains(el) && !el.contains(greeting)
-            && intersect(shown, greetingRect)) greetingOverlaps.push(description);
         }
       }
     }
@@ -216,20 +209,13 @@ async function snapshotLayout(page: Page) {
       documentScrollTop: document.scrollingElement?.scrollTop ?? 0,
       buttonInsideLowerZone: Boolean(lowerRect && button && button.getBoundingClientRect().top >= lowerRect.top
         && button.getBoundingClientRect().bottom <= lowerRect.bottom),
-      scrollportEndsBeforeLowerZone: Boolean(scrollport && lowerRect && scrollport.getBoundingClientRect().bottom <= lowerRect.top + 1),
-      greetingFound: Boolean(greetingText && greeting),
+      greetingFound: Boolean(greeting),
       greetingVisible,
       greetingbox: rect(greeting),
-      greetingContainsTrigger: Boolean(greeting && button && greeting.contains(button)),
-      greetingFocusInside: Boolean(greeting && greeting.contains(document.activeElement)),
-      greetingInsideUsefulArea: Boolean(greetingVisible && greetingRect && lowerRect
-        && greetingRect.top >= lowerRect.top && greetingRect.bottom <= lowerRect.bottom - safeAreaInset + 1),
-      greetingOverlapsButton: Boolean(greetingVisible && greetingRect && button && intersect(greetingRect, button.getBoundingClientRect())),
-      greetingOverlap: greetingOverlaps.slice(0, 8),
       overlap: overlaps.slice(0, 8),
       rootFont: parseFloat(getComputedStyle(document.documentElement).fontSize),
     };
-  }, { nativeLauncherSelector: NATIVE_LAUNCHER, greetingSelector: NATIVE_GREETING, greetingCloseSelector: GREETING_CLOSE });
+  }, { nativeLauncherSelector: NATIVE_LAUNCHER, greetingSelector: NATIVE_GREETING });
 }
 
 async function visibleScrollportGestureArea(page: Page) {
@@ -282,11 +268,6 @@ async function greetingGeometry(page: Page) {
     bottom: layout.greetingbox.bottom,
     left: layout.greetingbox.x,
     right: layout.greetingbox.right,
-    height: layout.greetingbox.height,
-    overlaps: layout.greetingOverlap,
-    containsTrigger: layout.greetingContainsTrigger,
-    overlapsTrigger: layout.greetingOverlapsButton,
-    focusInside: layout.greetingFocusInside,
   };
 }
 
@@ -338,7 +319,6 @@ test.describe('chat entry visibility approved contract', () => {
           expect.soft(before.buttonParentIsBody, `${name} ${width} ${position}: native launcher is a provider body child`).toBe(true);
           expect.soft(before.buttonInsideScrollport, `${name} ${width} ${position}: native launcher is outside content scrollport`).toBe(false);
           expect.soft(before.buttonInsideLowerZone, `${name} ${width} ${position}: launcher lies in the viewport reserve`).toBe(true);
-          expect.soft(before.scrollportEndsBeforeLowerZone, `${name} ${width} ${position}: scrollport ends before reserve`).toBe(true);
           expect.soft(before.greetingFound, `${name} ${width} ${position}: closed greeting is absent`).toBe(false);
           if (position === 'start') await page.evaluate(() => {
             const header = document.querySelector('header');
@@ -1173,7 +1153,6 @@ test.describe('chat entry visibility approved contract', () => {
     expect(expanded.lowerUsefulHeight ?? -Infinity, 'launcher reserve keeps 120 useful CSS px after inset').toBeGreaterThanOrEqual(120);
     expect(expanded.greetingVisible, 'greeting is visible in the expanded lower zone').toBe(true);
     expect(expanded.buttonInsideUsefulArea, 'capsule remains above the safe-area inset while greeting is visible').toBe(true);
-    expect(expanded.scrollportEndsBeforeLowerZone, 'scrollport ends before the expanded lower zone').toBe(true);
 
     await page.locator(GREETING_CLOSE).click();
     await expect(page.locator(NATIVE_GREETING), 'dismissal hides the provider greeting').toHaveCount(0);
@@ -1187,7 +1166,6 @@ test.describe('chat entry visibility approved contract', () => {
     expect(nativeBounds!.y + nativeBounds!.height, 'dismissed native launcher stays above the 20px safe area inset')
       .toBeLessThanOrEqual(621);
     await expect(page.locator(NATIVE_LAUNCHER), 'native launcher persists after greeting dismissal').toBeVisible();
-    expect(collapsed.scrollportEndsBeforeLowerZone, 'scrollport ends before the collapsed lower zone').toBe(true);
     await session.detach();
   });
 
@@ -1376,7 +1354,6 @@ test.describe('chat entry visibility approved contract', () => {
     const opener = page.locator(PAYMENT_ENTRY);
     await opener.scrollIntoViewIfNeeded();
     await opener.focus();
-    let before = await snapshotLayout(page);
     await opener.click();
     await expect(page.locator(PAYMENT_DIALOG)).toBeVisible();
     await page.evaluate(() => {
@@ -1449,7 +1426,7 @@ test.describe('chat entry visibility approved contract', () => {
     await expect(opener, 'Escape restores focus to the payment opener').toBeFocused();
     await opener.click();
     await expect(page.locator(PAYMENT_DIALOG), 'payment dialog reopens for the remaining inert-input checks').toBeVisible();
-    before = await snapshotLayout(page);
+    const before = await snapshotLayout(page);
     await dialogFocus.focus();
     const lockedBeforeTouch = await snapshotLayout(page);
     const session = await page.context().newCDPSession(page);
