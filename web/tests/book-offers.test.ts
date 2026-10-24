@@ -10,7 +10,7 @@ describe('homepage book offers across CMS snapshots', () => {
       '/aktsii-i-skidki',
     ]);
     expect(offers.every(({ description }) => Boolean(description))).toBe(true);
-    expect(offers.map(({ image }) => image.url)).toEqual(['', '']);
+    expect(offers.map(({ image }) => image.url)).toEqual(['/books/lymphatic-book.jpg', '/books/sale.jpg']);
   });
 
   it('uses editorial content from the snapshot when a legacy card exists', () => {
@@ -19,5 +19,14 @@ describe('homepage book offers across CMS snapshots', () => {
     expect(offers[0].description).toBe('<p>Обновлённое описание</p>');
     expect(offers[0].image.url).toBe('/media/uploads/book.webp');
     expect(offers[1]).toEqual(sale);
+  });
+
+  it('fills a missing legacy image while preserving any CMS image that is present', () => {
+    const [book, sale] = getHomeOffers([]);
+    const offers = getHomeOffers([
+      { ...book, image: { url: '', id: '' } },
+      { ...sale, image: { url: '/media/uploads/sale.webp', id: 'sale' } },
+    ]);
+    expect(offers.map(({ image }) => image.url)).toEqual(['/books/lymphatic-book.jpg', '/media/uploads/sale.webp']);
   });
 });
