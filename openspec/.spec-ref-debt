@@ -31,6 +31,7 @@ openspec/changes/article-list-pagination/proposal.md :: scripts/bootstrap-vps.sh
 openspec/changes/article-list-pagination/proposal.md :: shared/
 openspec/changes/article-list-pagination/specs/article-catalog/spec.md :: web/tests/parity-audit.spec.ts:191
 openspec/changes/article-list-pagination/tasks.md :: shared/
+openspec/changes/chat-entry-visibility/specs/external-widgets/spec.md :: main@b44e600fb55dfbf529ee615375c154b94b29e08e
 openspec/changes/cms-address-switch-and-migration/tasks.md :: collapsible_panels.json
 openspec/changes/cms-content-authoring-and-migration/design.md :: main@cdb023a09baf99e199c509524dc4c88612ba0010
 openspec/changes/cms-content-authoring-and-migration/design.md :: static_pages.json
