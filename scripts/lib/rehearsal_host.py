@@ -1762,6 +1762,20 @@ def _static_main_snapshot_inputs_sha256(snapshot_root: Path) -> str:
     return digest.hexdigest()
 
 
+def _static_main_capture_projection_sha256(source_root: Path, uid: int, gid: int) -> str:
+    digest = hashlib.sha256()
+    for relative in (Path("web/scripts/lib/content-field-map.ts"),
+                     Path("web/scripts/capture-content-snapshot.ts")):
+        path = source_root / relative
+        info = path.lstat()
+        if (not stat.S_ISREG(info.st_mode) or info.st_nlink != 1
+                or info.st_uid != uid or info.st_gid != gid):
+            raise HostFailure("selected capture projection source is missing or unsafe")
+        digest.update(relative.as_posix().encode() + b"\0")
+        digest.update(bytes.fromhex(sha256_file(path)))
+    return digest.hexdigest()
+
+
 def _assert_owned_tree(root: Path, uid: int, gid: int, *, sealed: bool) -> None:
     if root.is_symlink() or not root.is_dir() or root.resolve(strict=True) != root:
         raise HostFailure("reused capture or snapshot root is missing, non-canonical, or unsafe")
@@ -1788,9 +1802,11 @@ def _verify_reusable_static_capture(config: dict[str, Any], state: RehearsalStat
     rows = _static_main_rows(state, capture_operation_id)
     start = _static_main_start(rows)
     prepared = _static_main_prepared(rows)
-    terminal = next((row for row in rows if row.get("record") in
-                     ("static-main-committed", "static-main-recovered")), None)
+    terminal = next((row for row in reversed(rows) if row.get("record") in
+                     ("static-main-committed", "static-main-recovered", "static-main-rolled-back",
+                      "static-main-rollback-intent", "static-main-rollback-completed")), None)
     if (not start or not prepared or not terminal
+            or terminal.get("record") not in ("static-main-committed", "static-main-recovered")
             or start.get("operationId") != capture_operation_id
             or prepared.get("operationId") != capture_operation_id
             or terminal.get("operationId") != capture_operation_id
@@ -1824,17 +1840,9 @@ def _verify_reusable_static_capture(config: dict[str, Any], state: RehearsalStat
         raise HostFailure("selected capture operation directory has unsafe ownership or permissions")
     _assert_owned_tree(capture, user.pw_uid, user.pw_gid, sealed=True)
     _assert_owned_tree(original_snapshot, user.pw_uid, user.pw_gid, sealed=False)
-    mapping_relative = Path("web/scripts/lib/content-field-map.ts")
-    old_mapping = old_source_root / mapping_relative
-    new_mapping = source_root / mapping_relative
-    for mapping in (old_mapping, new_mapping):
-        info = mapping.lstat()
-        if (not stat.S_ISREG(info.st_mode) or info.st_nlink != 1
-                or info.st_uid != user.pw_uid or info.st_gid != user.pw_gid):
-            raise HostFailure("selected capture field mapping is missing or unsafe")
-    mapping_digest = sha256_file(new_mapping)
-    if sha256_file(old_mapping) != mapping_digest:
-        raise HostFailure("current CMS field mapping differs from the selected capture source")
+    mapping_digest = _static_main_capture_projection_sha256(source_root, user.pw_uid, user.pw_gid)
+    if _static_main_capture_projection_sha256(old_source_root, user.pw_uid, user.pw_gid) != mapping_digest:
+        raise HostFailure("current CMS capture projection differs from the selected capture source")
 
     script = r'''import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
@@ -1873,7 +1881,6 @@ process.stdout.write(JSON.stringify({ manifest: verified.manifest, proof: verifi
     return {"capture": capture, "sourceRoot": old_source_root, "snapshotRoot": original_snapshot,
             "snapshotId": snapshot["snapshotId"], "referenceDate": snapshot["referenceDate"],
             "reusedCapture": reference, "mappingDigest": mapping_digest,
-            "snapshotTreeSha256": _tree_sha256(original_snapshot),
             "snapshotInputsSha256": _static_main_snapshot_inputs_sha256(original_snapshot),
             "manifest": manifest}
 
@@ -1927,7 +1934,6 @@ def _static_main_prepare(config: dict[str, Any], state: RehearsalState, operatio
                       "captureMappingSha256": reusable["mappingDigest"],
                       "snapshotId": reusable["snapshotId"],
                       "referenceDate": reusable["referenceDate"],
-                      "snapshotTreeSha256": reusable["snapshotTreeSha256"],
                       "snapshotInputsSha256": reusable["snapshotInputsSha256"]})
     state._append(start)
     operation_root = source_root / ".staging193-rehearsal" / operation_id
@@ -1948,7 +1954,13 @@ def _static_main_prepare(config: dict[str, Any], state: RehearsalState, operatio
         snapshot_target = source_root / "web/.snapshot"
         if snapshot_target.exists() or snapshot_target.is_symlink():
             raise HostFailure("new static-main source already contains snapshot input")
-        shutil.copytree(reusable["snapshotRoot"], snapshot_target, copy_function=shutil.copy2)
+        snapshot_target.mkdir(mode=0o750)
+        for source_input in _static_main_snapshot_inputs(reusable["snapshotRoot"]):
+            destination = snapshot_target / source_input.relative_to(reusable["snapshotRoot"])
+            if source_input.is_dir():
+                shutil.copytree(source_input, destination, copy_function=shutil.copy2)
+            else:
+                shutil.copy2(source_input, destination)
         for path in [snapshot_target, *snapshot_target.rglob("*")]:
             if path.is_symlink():
                 raise HostFailure("materialized reused snapshot contains a symlink")
@@ -1964,8 +1976,6 @@ def _static_main_prepare(config: dict[str, Any], state: RehearsalState, operatio
             raise HostFailure("materialized reused snapshot differs from the original bytes")
         _assert_owned_tree(snapshot_target, user.pw_uid, user.pw_gid, sealed=False)
         protected_paths.extend([capture, reusable["snapshotRoot"], *snapshot_input_paths])
-        _run_as_cms(config, source_root, ["/usr/bin/test", "-r", str(snapshot_target / "snapshot.json")],
-                    timeout=30, read_only_path=protected_paths)
     _prepare_static_web_dependencies(config, source_root, protected_paths)
     if reusable is not None:
         verifier = source_root / "scripts/lib/verify-reused-staging193-snapshot.ts"
@@ -2008,7 +2018,6 @@ def _static_main_prepare(config: dict[str, Any], state: RehearsalState, operatio
         prepared_record.update({"reusedCapture": reusable["reusedCapture"],
                                 "captureMappingSha256": reusable["mappingDigest"],
                                 "referenceDate": reusable["referenceDate"],
-                                "snapshotTreeSha256": reusable["snapshotTreeSha256"],
                                 "snapshotInputsSha256": reusable["snapshotInputsSha256"]})
     state._append(prepared_record)
     return {"operationId": operation_id, "sourceSha": source_sha, "phase": "browser-check-required",

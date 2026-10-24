@@ -1156,6 +1156,40 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
 
 
 class StaticMainAdmissionTests(unittest.TestCase):
+    def test_capture_projection_digest_binds_field_map_and_snapshot_transformer(self):
+        import os
+        with tempfile.TemporaryDirectory(prefix="ikpk-capture-projection-") as temporary:
+            root = Path(temporary)
+            old, new = root / "old", root / "new"
+            for source in (old, new):
+                (source / "web/scripts/lib").mkdir(parents=True)
+                (source / "web/scripts/lib/content-field-map.ts").write_text("export const fields = {};", encoding="utf-8")
+                (source / "web/scripts/capture-content-snapshot.ts").write_text("export const transform = 1;", encoding="utf-8")
+            original = rehearsal_host._static_main_capture_projection_sha256(old, os.getuid(), os.getgid())
+            self.assertEqual(original,
+                rehearsal_host._static_main_capture_projection_sha256(new, os.getuid(), os.getgid()))
+            (new / "web/scripts/capture-content-snapshot.ts").write_text("export const transform = 2;", encoding="utf-8")
+            self.assertNotEqual(original,
+                rehearsal_host._static_main_capture_projection_sha256(new, os.getuid(), os.getgid()))
+
+    def test_reuse_refuses_capture_operation_with_later_rollback_state(self):
+        for later_record in ("static-main-rollback-intent", "static-main-rollback-completed",
+                             "static-main-rolled-back"):
+            with self.subTest(later_record=later_record), tempfile.TemporaryDirectory(
+                    prefix="ikpk-reuse-terminal-state-") as temporary:
+                state = RehearsalState(Path(temporary))
+                state._append({"version": 1, "record": "static-main-start", "operationKind": "static-main",
+                    "operationId": "capture-op", "sourceSha": "a" * 40, "cmsFingerprint": {"cms": "same"}})
+                state._append({"version": 1, "record": "static-main-prepared", "operationKind": "static-main",
+                    "operationId": "capture-op", "sourceSha": "a" * 40, "cmsFingerprint": {"cms": "same"}})
+                state._append({"version": 1, "record": "static-main-committed", "operationKind": "static-main",
+                    "operationId": "capture-op", "sourceSha": "a" * 40})
+                state._append({"version": 1, "record": later_record, "operationKind": "static-main",
+                    "operationId": "capture-op", "sourceSha": "a" * 40})
+                with self.assertRaisesRegex(rehearsal_host.HostFailure, "prepared terminal staging194"):
+                    rehearsal_host._verify_reusable_static_capture({}, state, "capture-op", Path("/unused"),
+                        {"cms": "same"}, [])
+
     def _committed_static_main_fixture(self, root: Path, current_name="candidate"):
         releases = root / "releases"
         releases.mkdir()
@@ -1305,6 +1339,98 @@ class StaticMainAdmissionTests(unittest.TestCase):
             self.assertRegex(failure, "capture|reuse|operation")
             snapshot.assert_not_called()
             create_capture.assert_not_called()
+
+    def test_static_main_reuses_prior_day_snapshot_without_creating_capture_and_protects_inputs(self):
+        import os
+        import types
+        with tempfile.TemporaryDirectory(prefix="ikpk-static-main-reuse-positive-") as temporary:
+            root = Path(temporary)
+            release_root, static_root, state_dir = root / "releases", root / "static", root / "state"
+            release_root.mkdir(); static_root.mkdir(); state_dir.mkdir()
+            old_static = static_root / "old"
+            old_static.mkdir()
+            (old_static / "index.html").write_text("old", encoding="utf-8")
+            pointer = root / "current-static"
+            pointer.symlink_to(old_static)
+            source_sha, new_op, old_sha, capture_op = "a" * 40, "new-main-op", "b" * 40, "old-capture-op"
+            source_root = release_root / f"{source_sha}-{new_op}"
+            source_root.mkdir()
+            (source_root / "web").mkdir()
+            provenance = {"sourceSha": source_sha, "ref": "refs/heads/main"}
+            (source_root / ".ikpk-rehearsal-ci.json").write_text(json.dumps(provenance), encoding="utf-8")
+            old_source = release_root / f"{old_sha}-{capture_op}"
+            old_source.mkdir()
+            old_capture = old_source / ".staging193-rehearsal" / capture_op / "capture"
+            old_capture.mkdir(parents=True)
+            (old_capture / "manifest.json").write_text("sealed capture manifest", encoding="utf-8")
+            old_snapshot = old_source / "web/.snapshot"
+            (old_snapshot / "media").mkdir(parents=True)
+            snapshot_bytes = json.dumps({"snapshotId": "snap:previous-day", "referenceDate": "2026-10-23"}).encode()
+            (old_snapshot / "snapshot.json").write_bytes(snapshot_bytes)
+            (old_snapshot / "media/sha256-media").write_bytes(b"original media bytes")
+            snapshot_id = "snap:previous-day"
+            bundle_digest = "c" * 64
+            reference = {"operationId": capture_op, "sourceSha": old_sha, "bundleDigest": bundle_digest}
+            reusable = {"capture": old_capture, "sourceRoot": old_source, "snapshotRoot": old_snapshot,
+                "snapshotId": snapshot_id, "referenceDate": "2026-10-23", "reusedCapture": reference,
+                "mappingDigest": "d" * 64,
+                "snapshotInputsSha256": rehearsal_host._static_main_snapshot_inputs_sha256(old_snapshot)}
+            config = {"profile": "staging194", "staticMainReleasePolicy": "ci-only-approved",
+                "releaseRoot": str(release_root), "staticReleaseRoot": str(static_root),
+                "currentStatic": str(pointer), "stateDir": str(state_dir), "cmsUser": "cms",
+                "cmsDatabase": str(root / "live.sqlite"),
+                "mediaRoots": [{"prefix": "/uploads/", "path": str(root / "uploads")}]}
+            Path(config["cmsDatabase"]).write_bytes(b"live database")
+            Path(config["mediaRoots"][0]["path"]).mkdir()
+            built = root / "built"
+            built.mkdir()
+            release = static_root / f"{source_sha}-{new_op}"
+
+            def store_static(_config, commit, operation, _built, digest):
+                release.mkdir()
+                (release / "release.json").write_text(json.dumps({"commit": commit, "operationId": operation,
+                    "snapshotId": snapshot_id, "staticTreeSha256": digest, "reusedCapture": reference}),
+                    encoding="utf-8")
+                return release
+
+            state = RehearsalState(state_dir)
+            verifier_output = json.dumps({"snapshotId": snapshot_id, "referenceDate": "2026-10-23",
+                "bundleDigest": bundle_digest})
+            with patch.object(rehearsal_host, "_validate_static_main_admission"), \
+                 patch.object(rehearsal_host, "_static_main_cms_fingerprint", return_value={"cms": "same"}), \
+                 patch.object(rehearsal_host, "_static_main_protected_paths", return_value=[]), \
+                 patch.object(rehearsal_host, "_verify_reusable_static_capture", return_value=reusable), \
+                 patch.object(rehearsal_host.pwd, "getpwnam", return_value=types.SimpleNamespace(
+                     pw_uid=os.getuid(), pw_gid=os.getgid())), \
+                 patch.object(rehearsal_host, "_readonly_database_snapshot") as sqlite_snapshot, \
+                 patch.object(rehearsal_host, "_create_capture_bundle") as create_capture, \
+                 patch.object(rehearsal_host, "_prepare_static_web_dependencies") as prepare_web, \
+                 patch.object(rehearsal_host, "_run_as_cms", return_value=verifier_output) as run_as_cms, \
+                 patch.object(rehearsal_host, "_build_static", return_value=(built, "e" * 64)) as build_static, \
+                 patch.object(rehearsal_host, "_store_static", side_effect=store_static):
+                result = rehearsal_host._static_main_prepare(config, state, new_op, source_sha, provenance,
+                    reuse_capture_operation_id=capture_op)
+
+            self.assertEqual(result["snapshotId"], snapshot_id)
+            self.assertEqual(result["phase"], "browser-check-required")
+            self.assertEqual((source_root / "web/.snapshot/snapshot.json").read_bytes(), snapshot_bytes)
+            self.assertEqual((old_snapshot / "snapshot.json").read_bytes(), snapshot_bytes)
+            sqlite_snapshot.assert_not_called()
+            create_capture.assert_not_called()
+            self.assertTrue(build_static.call_args.kwargs["reuse_snapshot"])
+            self.assertEqual(build_static.call_args.kwargs["operation_id"], new_op)
+            self.assertEqual(build_static.call_args.kwargs["reused_capture"], reference)
+            prepared = rehearsal_host._static_main_prepared(rehearsal_host._static_main_rows(state, new_op))
+            self.assertEqual(prepared["reusedCapture"], reference)
+            self.assertEqual(prepared["referenceDate"], "2026-10-23")
+            protected = {path.resolve() for path in prepare_web.call_args.args[2]}
+            materialized = source_root / "web/.snapshot"
+            self.assertIn(old_capture.resolve(), protected)
+            self.assertIn(old_snapshot.resolve(), protected)
+            self.assertIn((materialized / "snapshot.json").resolve(), protected)
+            self.assertIn((materialized / "media").resolve(), protected)
+            self.assertNotIn(materialized.resolve(), protected)
+            self.assertEqual(run_as_cms.call_args.kwargs["read_only_path"], build_static.call_args.kwargs["read_only_paths"])
 
     def test_static_main_preparation_is_static_only_and_does_not_move_current(self):
         import types

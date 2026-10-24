@@ -73,6 +73,7 @@ export function readInitialProductionSnapshot(snapshotDir: string, treeDir: stri
       !digest(proof.schemaDigest) || !digest(proof.databaseDigest) || !digest(proof.mediaManifestDigest) ||
       proof.bundleDigest !== createHash('sha256').update(captureBytes).digest('hex') ||
       release.commit !== sourceSha || release.operationId !== capture.operationId ||
+      'reusedCapture' in release ||
       release.snapshotId !== snapshot.snapshotId || release.staticTreeSha256 !== treeDigest ||
       process.env.PUBLICATION_SNAPSHOT_ID !== snapshot.snapshotId) {
     throw new Error('initial production candidate does not match the admitted source, capture, and release');
