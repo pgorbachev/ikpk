@@ -407,6 +407,20 @@ def browser_check(source_sha: str, operation_id: str, static_digest: str, archiv
                 release.get("staticTreeSha256") != static_digest):
             raise Refusal("off-host static candidate release declaration does not match the admitted bytes")
         proof = snapshot.get("captureProof") if isinstance(snapshot, dict) else None
+        bundle_digest = hashlib.sha256(capture_bytes).hexdigest()
+        reused_capture = release.get("reusedCapture")
+        same_capture_operation = (capture.get("operationId") == operation_id
+                                  and capture.get("sourceSha") == source_sha)
+        if profile == "initial-prod":
+            capture_reference_matches = same_capture_operation and "reusedCapture" not in release
+        elif same_capture_operation:
+            capture_reference_matches = "reusedCapture" not in release
+        else:
+            capture_reference_matches = (isinstance(reused_capture, dict)
+                and set(reused_capture) == {"operationId", "sourceSha", "bundleDigest"}
+                and reused_capture.get("operationId") == capture.get("operationId")
+                and reused_capture.get("sourceSha") == capture.get("sourceSha")
+                and reused_capture.get("bundleDigest") == bundle_digest)
         if profile == "initial-prod":
             proof_matches = (isinstance(proof, dict) and snapshot.get("sourcePolicy") == "initial-production"
                 and snapshot.get("sourceAge") == "source-bound"
@@ -424,15 +438,14 @@ def browser_check(source_sha: str, operation_id: str, static_digest: str, archiv
             proof_matches = (isinstance(proof, dict) and snapshot.get("sourcePolicy") == "demo-publication-only"
                 and snapshot.get("sourceAge") == "untracked"
                 and snapshot.get("origin", {}).get("sourceId") == "demo193-cms"
-                and proof.get("captureId") == operation_id and capture.get("sourceId") == "demo193-cms"
-                and capture.get("sourceSha") == source_sha)
-        if (not proof_matches or snapshot.get("snapshotId") != release.get("snapshotId")
+                and proof.get("captureId") == capture.get("operationId") and capture.get("sourceId") == "demo193-cms")
+        if (not proof_matches or not capture_reference_matches or snapshot.get("snapshotId") != release.get("snapshotId")
                 or snapshot.get("origin", {}).get("kind") != "server-db"
-                or proof.get("captureId") != operation_id or capture.get("operationId") != operation_id
+                or proof.get("captureId") != capture.get("operationId")
                 or proof.get("schemaDigest") != capture.get("schemaDigest")
                 or proof.get("databaseDigest") != capture.get("databaseSha256")
                 or proof.get("mediaManifestDigest") != capture.get("mediaManifestSha256")
-                or proof.get("bundleDigest") != hashlib.sha256(capture_bytes).hexdigest()):
+                or proof.get("bundleDigest") != bundle_digest):
             raise Refusal("off-host candidate snapshot is not the sealed CMS capture for this release")
 
         class QuietHandler(http.server.SimpleHTTPRequestHandler):
@@ -538,6 +551,9 @@ def invoke(args: argparse.Namespace) -> None:
             separators=(",", ":")).encode()).decode("ascii")
         common = ["static-main", "--operation-id", args.operation_id, "--source-sha", args.source_sha,
                   "--provenance-b64", provenance_b64]
+        reuse_capture_operation_id = getattr(args, "reuse_capture_operation_id", None)
+        if reuse_capture_operation_id is not None:
+            common.extend(["--reuse-capture-operation-id", reuse_capture_operation_id])
         archive, archive_sha256 = make_archive(args.source_sha, admitted_run)
         prepared = parse_host_json(ssh_remote(common + ["--archive-sha256", archive_sha256],
                                               input_bytes=archive))
@@ -609,6 +625,8 @@ def main(argv: Optional[list[str]] = None) -> int:
             command.add_argument("--reason")
         if action not in ("recover", "static-main-recover"):
             command.add_argument("--source-sha", required=True)
+        if action == "static-main":
+            command.add_argument("--reuse-capture-operation-id")
     args = parser.parse_args(argv)
     try:
         invoke(args)

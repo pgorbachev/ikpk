@@ -32,24 +32,34 @@ class OperatorAdmissionTests(unittest.TestCase):
         self.jobs = [{"name": name, "status": "completed", "conclusion": "success"} for name in JOBS]
 
     def _browser_candidate(self, root, manifest_source_sha=SHA, capture_operation_id="capture-op",
-                           build_operation_id=None, reused_capture_reference=None):
+                           build_operation_id=None, reused_capture_reference=None, profile="staging194"):
         operation_id = capture_operation_id
         build_operation_id = build_operation_id or operation_id
         snapshot_id = "snapshot-demo"
-        manifest = {"version": 1, "host": "194.226.99.10", "siteUrl": "https://194.226.99.10",
-                    "sourceId": "demo193-cms", "operationId": operation_id,
+        production = profile == "initial-prod"
+        manifest = {"version": 1, "host": "89.111.184.196" if production else "194.226.99.10",
+                    "siteUrl": "https://ikpk.su" if production else "https://194.226.99.10",
+                    "sourceId": "initial-prod-server-db" if production else "demo193-cms",
+                    "operationId": operation_id,
                     "sourceSha": manifest_source_sha, "capturedAt": "2026-10-22T10:00:00.000Z",
                     "schemaDigest": "schema-digest", "databaseSha256": "database-digest",
                     "mediaManifestSha256": "media-digest"}
+        if production:
+            manifest.update({"profile": "initial-prod", "runId": 123, "attempt": 1})
         manifest_bytes = json.dumps(manifest, separators=(",", ":")).encode()
-        snapshot = {"sourcePolicy": "demo-publication-only", "sourceAge": "untracked",
-                    "origin": {"kind": "server-db", "sourceId": "demo193-cms"},
+        snapshot = {"sourcePolicy": "initial-production" if production else "demo-publication-only",
+                    "sourceAge": "source-bound" if production else "untracked",
+                    "origin": {"kind": "server-db", "sourceId": "initial-prod-server-db" if production else "demo193-cms"},
                     "snapshotId": snapshot_id,
                     "captureProof": {"version": 1, "method": "quiesced-sqlite-backup",
-                        "sourceId": "demo193-cms", "captureId": operation_id,
+                        "sourceId": "initial-prod-server-db" if production else "demo193-cms",
+                        "captureId": operation_id,
                         "schemaDigest": "schema-digest", "databaseDigest": "database-digest",
                         "mediaManifestDigest": "media-digest",
                         "bundleDigest": hashlib.sha256(manifest_bytes).hexdigest()}}
+        if production:
+            snapshot["captureProof"].update({"targetHost": "89.111.184.196", "siteUrl": "https://ikpk.su",
+                "sourceSha": manifest_source_sha, "runId": 123, "attempt": 1})
         static_root = Path(root) / "static"
         snapshot_root = Path(root) / "snapshot"
         static_root.mkdir()
@@ -166,6 +176,25 @@ class OperatorAdmissionTests(unittest.TestCase):
                  patch.object(staging193.threading, "Thread", return_value=MagicMock()), \
                  self.assertRaises(staging193.Refusal):
                 staging193.browser_check(SHA, build_operation_id, digest, archive)
+
+    def test_initial_prod_browser_check_rejects_reused_capture_reference(self):
+        with tempfile.TemporaryDirectory(prefix="ikpk-browser-production-reuse-ref-") as temporary:
+            root = Path(temporary)
+            (root / "web/node_modules/.bin").mkdir(parents=True)
+            (root / "web/node_modules/.bin/playwright").touch()
+            operation_id, digest, archive = self._browser_candidate(root,
+                capture_operation_id=staging193.INITIAL_PROD_OPERATION_ID,
+                build_operation_id=staging193.INITIAL_PROD_OPERATION_ID,
+                reused_capture_reference={"operationId": staging193.INITIAL_PROD_OPERATION_ID,
+                    "sourceSha": SHA, "bundleDigest": "0" * 64}, profile="initial-prod")
+            with patch.object(staging193, "ROOT", root), \
+                 patch.object(staging193.socketserver, "ThreadingTCPServer") as server, \
+                 patch.object(staging193.subprocess, "run") as run, \
+                 self.assertRaises(staging193.Refusal):
+                staging193.browser_check(SHA, operation_id, digest, archive, profile="initial-prod",
+                    admitted_run={"runId": 123, "attempt": 1})
+            server.assert_not_called()
+            run.assert_not_called()
 
     def test_static_main_cli_accepts_explicit_reuse_capture_operation_id(self):
         with patch.object(staging193, "invoke") as invoke:

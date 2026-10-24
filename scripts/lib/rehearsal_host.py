@@ -1126,7 +1126,10 @@ def _activate_cms(config: dict[str, Any], cms_release: Path, candidate_db: Path,
 
 def _build_static(config: dict[str, Any], source_root: Path, capture: Path,
                   read_only_paths: Optional[list[Path]] = None,
-                  chat_loader_src: Optional[str] = None) -> tuple[Path, str]:
+                  chat_loader_src: Optional[str] = None,
+                  operation_id: Optional[str] = None,
+                  reused_capture: Optional[dict[str, str]] = None,
+                  reuse_snapshot: bool = False) -> tuple[Path, str]:
     if chat_loader_src is not None and (config.get("profile", "staging194") != "staging194"
                                         or chat_loader_src != STAGING194_CHAT_LOADER_SRC):
         raise HostFailure("only staging194 static-main may use the owner-approved chat loader")
@@ -1148,9 +1151,10 @@ def _build_static(config: dict[str, Any], source_root: Path, capture: Path,
         capture_args = ["--server-capture", str(capture)]
         build_script = "build:demo193"
         dist_name = "dist-demo193"
-    _run_as_cms(config, web, [str(web / "node_modules/.bin/tsx"),
-        str(web / "scripts/capture-content-snapshot.ts"), *capture_args], timeout=1800,
-        environment=capture_environment, read_only_path=read_only_paths)
+    if not reuse_snapshot:
+        _run_as_cms(config, web, [str(web / "node_modules/.bin/tsx"),
+            str(web / "scripts/capture-content-snapshot.ts"), *capture_args], timeout=1800,
+            environment=capture_environment, read_only_path=read_only_paths)
     build_environment = dict(capture_environment)
     if chat_loader_src is not None:
         build_environment["CHAT_LOADER_PROFILE"] = "staging194-static-main"
@@ -1172,9 +1176,11 @@ def _build_static(config: dict[str, Any], source_root: Path, capture: Path,
                 or proof.get("attempt") != source_identity.get("attempt")
                 or proof.get("targetHost") != INITIAL_PROD_HOST or proof.get("siteUrl") != "https://ikpk.su"):
             raise HostFailure("initial-prod capture proof differs from exact source/run/target admission")
-    release = {"commit": source_identity["sourceSha"], "operationId": capture.parent.name,
+    release = {"commit": source_identity["sourceSha"], "operationId": operation_id or capture.parent.name,
                "snapshotId": snapshot.get("snapshotId"),
                "staticTreeSha256": _tree_sha256(dist)}
+    if reused_capture is not None:
+        release["reusedCapture"] = reused_capture
     if not isinstance(release["snapshotId"], str) or not release["snapshotId"].startswith("snap:"):
         raise HostFailure("static candidate snapshot ID is missing")
     durable_json(dist / "release.json", release)
@@ -1677,8 +1683,204 @@ def _static_main_prepared(rows: list[dict[str, Any]]) -> dict[str, Any]:
     return next((row for row in rows if row.get("record") == "static-main-prepared"), {})
 
 
+def _static_main_capture_root(config: dict[str, Any], rows: list[dict[str, Any]],
+                              source_sha: str, operation_id: str) -> Path:
+    start = _static_main_start(rows)
+    prepared = _static_main_prepared(rows)
+    if (not start or not prepared or start.get("sourceSha") != source_sha
+            or prepared.get("sourceSha") != source_sha):
+        raise HostFailure("static-main capture has no matching prepared operation")
+    reference = start.get("reusedCapture")
+    if reference is None:
+        return _candidate_root(config, source_sha, operation_id) / ".staging193-rehearsal" / operation_id / "capture"
+    if (not isinstance(reference, dict) or set(reference) != {"operationId", "sourceSha", "bundleDigest"}
+            or prepared.get("reusedCapture") != reference
+            or not isinstance(reference.get("operationId"), str)
+            or not isinstance(reference.get("sourceSha"), str)
+            or not isinstance(reference.get("bundleDigest"), str)):
+        raise HostFailure("static-main reused capture reference differs from its durable preparation")
+    try:
+        RehearsalState._validate_identity(reference["operationId"], reference["sourceSha"])
+    except RehearsalRefusal as error:
+        raise HostFailure("static-main reused capture reference has an invalid identity") from error
+    if not SHA256_RE.fullmatch(reference["bundleDigest"]):
+        raise HostFailure("static-main reused capture reference has an invalid bundle digest")
+    capture = (_candidate_root(config, reference["sourceSha"], reference["operationId"])
+               / ".staging193-rehearsal" / reference["operationId"] / "capture")
+    old_source_root = capture.parents[2]
+    if (old_source_root.parent != Path(config["releaseRoot"]).resolve(strict=True)
+            or old_source_root.is_symlink() or old_source_root.resolve(strict=True) != old_source_root):
+        raise HostFailure("static-main reused capture escaped the configured operation store")
+    for parent in (capture.parents[1], capture.parents[0], capture):
+        if parent.is_symlink() or parent.resolve(strict=True) != parent:
+            raise HostFailure("static-main reused capture path contains a symlink")
+    manifest_path = capture / "manifest.json"
+    if capture.is_symlink() or not capture.is_dir() or manifest_path.is_symlink() or not manifest_path.is_file():
+        raise HostFailure("static-main selected sealed capture is unavailable")
+    if sha256_file(manifest_path) != reference["bundleDigest"]:
+        raise HostFailure("static-main selected sealed capture manifest changed after preparation")
+    user = pwd.getpwnam(config["cmsUser"])
+    _assert_owned_tree(capture, user.pw_uid, user.pw_gid, sealed=True)
+    return capture
+
+
+def _static_main_snapshot_inputs(snapshot_root: Path) -> list[Path]:
+    snapshot = snapshot_root / "snapshot.json"
+    if snapshot.is_symlink() or not snapshot.is_file():
+        raise HostFailure("reused snapshot is missing its snapshot.json input")
+    paths = [snapshot]
+    for name in ("collapsible_panels.json", "url_map.csv"):
+        path = snapshot_root / name
+        if path.is_symlink():
+            raise HostFailure("reused snapshot metadata contains a symlink")
+        if path.exists():
+            if not path.is_file():
+                raise HostFailure("reused snapshot metadata is not a regular file")
+            paths.append(path)
+    media = snapshot_root / "media"
+    if media.is_symlink() or not media.is_dir():
+        raise HostFailure("reused snapshot is missing its immutable media store")
+    paths.append(media)
+    return paths
+
+
+def _static_main_snapshot_inputs_sha256(snapshot_root: Path) -> str:
+    digest = hashlib.sha256()
+    for root in _static_main_snapshot_inputs(snapshot_root):
+        paths = [root, *sorted(root.rglob("*"), key=lambda item: item.relative_to(snapshot_root).as_posix())] \
+            if root.is_dir() else [root]
+        for path in paths:
+            info = path.lstat()
+            if stat.S_ISLNK(info.st_mode) or not (stat.S_ISDIR(info.st_mode) or stat.S_ISREG(info.st_mode)):
+                raise HostFailure("reused snapshot input contains an unsafe filesystem object")
+            if stat.S_ISREG(info.st_mode) and info.st_nlink != 1:
+                raise HostFailure("reused snapshot input contains a multiply linked file")
+            name = path.relative_to(snapshot_root).as_posix().encode()
+            digest.update(name + b"\0")
+            if stat.S_ISREG(info.st_mode):
+                digest.update(bytes.fromhex(sha256_file(path)))
+    return digest.hexdigest()
+
+
+def _assert_owned_tree(root: Path, uid: int, gid: int, *, sealed: bool) -> None:
+    if root.is_symlink() or not root.is_dir() or root.resolve(strict=True) != root:
+        raise HostFailure("reused capture or snapshot root is missing, non-canonical, or unsafe")
+    for path in (root, *root.rglob("*")):
+        info = path.lstat()
+        if info.st_uid != uid or info.st_gid != gid:
+            raise HostFailure("reused capture or snapshot is not owned by the configured CMS user")
+        if stat.S_ISLNK(info.st_mode):
+            raise HostFailure("reused capture or snapshot contains a symlink")
+        if stat.S_ISDIR(info.st_mode):
+            if sealed and info.st_mode & 0o222:
+                raise HostFailure("reused capture bundle contains a writable directory")
+        elif stat.S_ISREG(info.st_mode):
+            if info.st_nlink != 1 or (sealed and info.st_mode & 0o222):
+                raise HostFailure("reused capture contains a writable or multiply linked file")
+        else:
+            raise HostFailure("reused capture or snapshot contains an unsupported filesystem object")
+
+
+def _verify_reusable_static_capture(config: dict[str, Any], state: RehearsalState,
+                                    capture_operation_id: str, source_root: Path,
+                                    cms_fingerprint: dict[str, Any],
+                                    protected_paths: list[Path]) -> dict[str, Any]:
+    rows = _static_main_rows(state, capture_operation_id)
+    start = _static_main_start(rows)
+    prepared = _static_main_prepared(rows)
+    terminal = next((row for row in rows if row.get("record") in
+                     ("static-main-committed", "static-main-recovered")), None)
+    if (not start or not prepared or not terminal
+            or start.get("operationId") != capture_operation_id
+            or prepared.get("operationId") != capture_operation_id
+            or terminal.get("operationId") != capture_operation_id
+            or start.get("sourceSha") != prepared.get("sourceSha")
+            or start.get("sourceSha") != terminal.get("sourceSha")
+            or not SHA_RE.fullmatch(start.get("sourceSha", ""))):
+        raise HostFailure("selected capture is not a prepared terminal staging194 static-main operation")
+    if prepared.get("cmsFingerprint") != start.get("cmsFingerprint"):
+        raise HostFailure("selected capture operation has inconsistent CMS fingerprint evidence")
+    if start.get("cmsFingerprint") != cms_fingerprint:
+        raise HostFailure("current CMS fingerprint differs from the selected terminal capture")
+
+    release_root = Path(config["releaseRoot"]).resolve(strict=True)
+    old_source_root = _candidate_root(config, start["sourceSha"], capture_operation_id)
+    if (old_source_root.parent != release_root or old_source_root.is_symlink()
+            or not old_source_root.is_dir() or old_source_root.resolve(strict=True) != old_source_root):
+        raise HostFailure("selected capture candidate is outside the configured operation store")
+    old_operation_root = old_source_root / ".staging193-rehearsal" / capture_operation_id
+    capture = old_operation_root / "capture"
+    original_snapshot = old_source_root / "web/.snapshot"
+    old_rehearsal_root = old_source_root / ".staging193-rehearsal"
+    for path in (old_rehearsal_root, old_operation_root, capture,
+                 old_source_root / "web", original_snapshot):
+        if path.is_symlink() or not path.is_dir() or path.resolve(strict=True) != path:
+            raise HostFailure("selected capture path is missing, non-canonical, or unsafe")
+
+    user = pwd.getpwnam(config["cmsUser"])
+    old_operation_info = old_operation_root.lstat()
+    if (old_operation_info.st_uid != user.pw_uid or old_operation_info.st_gid != user.pw_gid
+            or old_operation_info.st_mode & 0o077):
+        raise HostFailure("selected capture operation directory has unsafe ownership or permissions")
+    _assert_owned_tree(capture, user.pw_uid, user.pw_gid, sealed=True)
+    _assert_owned_tree(original_snapshot, user.pw_uid, user.pw_gid, sealed=False)
+    mapping_relative = Path("web/scripts/lib/content-field-map.ts")
+    old_mapping = old_source_root / mapping_relative
+    new_mapping = source_root / mapping_relative
+    for mapping in (old_mapping, new_mapping):
+        info = mapping.lstat()
+        if (not stat.S_ISREG(info.st_mode) or info.st_nlink != 1
+                or info.st_uid != user.pw_uid or info.st_gid != user.pw_gid):
+            raise HostFailure("selected capture field mapping is missing or unsafe")
+    mapping_digest = sha256_file(new_mapping)
+    if sha256_file(old_mapping) != mapping_digest:
+        raise HostFailure("current CMS field mapping differs from the selected capture source")
+
+    script = r'''import { createHash } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
+const [verifierPath, captureRoot, schemaRoot] = process.argv.slice(1);
+const { verifyStaging193Bundle } = await import(pathToFileURL(verifierPath));
+const verified = verifyStaging193Bundle(captureRoot, schemaRoot);
+const captureBytes = readFileSync(join(captureRoot, 'manifest.json'));
+process.stdout.write(JSON.stringify({ manifest: verified.manifest, proof: verified.proof,
+  bundleDigest: createHash('sha256').update(captureBytes).digest('hex') }));
+'''
+    verifier_path = source_root / "scripts/lib/staging193-capture-bundle.mjs"
+    node = config.get("nodeBinary", "/usr/bin/node")
+    try:
+        result = _run_as_cms(config, source_root,
+            [node, "--input-type=module", "-e", script, str(verifier_path), str(capture),
+             str(source_root / "cms/src")], timeout=300,
+            read_only_path=[*protected_paths, capture, original_snapshot])
+        verified = json.loads(result)
+        manifest = verified["manifest"]
+    except HostFailure as error:
+        raise HostFailure(f"selected sealed capture or snapshot failed verification: {error}") from error
+    except (OSError, ValueError, KeyError) as error:
+        raise HostFailure("selected sealed capture or snapshot could not be verified") from error
+    snapshot = json.loads((original_snapshot / "snapshot.json").read_text(encoding="utf-8"))
+    if (manifest.get("operationId") != capture_operation_id
+            or manifest.get("sourceSha") != start["sourceSha"]
+            or manifest.get("host") != TARGET_HOST
+            or manifest.get("siteUrl") != "https://194.226.99.10"
+            or manifest.get("sourceId") != "demo193-cms"
+            or snapshot.get("snapshotId") != prepared.get("snapshotId")):
+        raise HostFailure("selected capture manifest does not match its terminal staging194 operation")
+    reference = {"operationId": capture_operation_id, "sourceSha": start["sourceSha"],
+                 "bundleDigest": verified["bundleDigest"]}
+    return {"capture": capture, "sourceRoot": old_source_root, "snapshotRoot": original_snapshot,
+            "snapshotId": snapshot["snapshotId"], "referenceDate": snapshot["referenceDate"],
+            "reusedCapture": reference, "mappingDigest": mapping_digest,
+            "snapshotTreeSha256": _tree_sha256(original_snapshot),
+            "snapshotInputsSha256": _static_main_snapshot_inputs_sha256(original_snapshot),
+            "manifest": manifest}
+
+
 def _static_main_prepare(config: dict[str, Any], state: RehearsalState, operation_id: str,
-                         source_sha: str, provenance: dict[str, Any]) -> dict[str, Any]:
+                         source_sha: str, provenance: dict[str, Any],
+                         reuse_capture_operation_id: Optional[str] = None) -> dict[str, Any]:
     _validate_static_main_admission(config, source_sha, provenance)
     if state._read_marker() is not None:
         raise HostFailure("static-main refuses to run while a CMS maintenance marker exists")
@@ -1686,6 +1888,10 @@ def _static_main_prepare(config: dict[str, Any], state: RehearsalState, operatio
     if rows:
         if _static_main_prepared(rows):
             prepared = _static_main_prepared(rows)
+            start = _static_main_start(rows)
+            selected_capture = (start.get("reusedCapture") or {}).get("operationId")
+            if selected_capture != reuse_capture_operation_id:
+                raise HostFailure("static-main retry changed its selected capture operation")
             return {"operationId": operation_id, "sourceSha": source_sha, "phase": "browser-check-required",
                     "staticTreeSha256": prepared["staticTreeSha256"], "snapshotId": prepared["snapshotId"]}
         raise HostFailure("static-main operation has incomplete durable state; use static-main-recover")
@@ -1703,37 +1909,108 @@ def _static_main_prepare(config: dict[str, Any], state: RehearsalState, operatio
     old_static = _current_target(Path(config["currentStatic"]))
     old_tree = _tree_sha256(old_static)
     cms_fingerprint = _static_main_cms_fingerprint(config)
+    protected_paths = _static_main_protected_paths(config)
+    reusable = None
+    if reuse_capture_operation_id is not None:
+        try:
+            RehearsalState._validate_identity(reuse_capture_operation_id)
+        except RehearsalRefusal as error:
+            raise HostFailure("selected capture operation ID has invalid characters") from error
+        reusable = _verify_reusable_static_capture(config, state, reuse_capture_operation_id,
+            source_root, cms_fingerprint, protected_paths)
     start = {"version": 1, "record": "static-main-start", "operationKind": "static-main",
              "operationId": operation_id, "sourceSha": source_sha, "provenance": provenance,
              "oldStaticPath": str(old_static), "oldStaticTreeSha256": old_tree,
              "cmsFingerprint": cms_fingerprint, "configSha256": _config_sha256(config)}
+    if reusable is not None:
+        start.update({"reusedCapture": reusable["reusedCapture"],
+                      "captureMappingSha256": reusable["mappingDigest"],
+                      "snapshotId": reusable["snapshotId"],
+                      "referenceDate": reusable["referenceDate"],
+                      "snapshotTreeSha256": reusable["snapshotTreeSha256"],
+                      "snapshotInputsSha256": reusable["snapshotInputsSha256"]})
     state._append(start)
     operation_root = source_root / ".staging193-rehearsal" / operation_id
     operation_root.mkdir(mode=0o700, parents=True, exist_ok=False)
     user = pwd.getpwnam(config["cmsUser"])
     os.chown(operation_root, user.pw_uid, user.pw_gid)
     os.chmod(operation_root, 0o700)
-    protected_paths = _static_main_protected_paths(config)
-    database_snapshot = _readonly_database_snapshot(config, operation_root)
-    os.chown(database_snapshot, user.pw_uid, user.pw_gid)
-    capture = _create_capture_bundle(config, operation_id, source_sha, source_root, database_snapshot,
-                                     read_only_paths=protected_paths)
-    manifest = json.loads((capture / "manifest.json").read_text(encoding="utf-8"))
-    if manifest.get("sourceSha") != source_sha or manifest.get("operationId") != operation_id:
-        raise HostFailure("static-main sealed CMS capture is not bound to this main source")
+    if reusable is None:
+        database_snapshot = _readonly_database_snapshot(config, operation_root)
+        os.chown(database_snapshot, user.pw_uid, user.pw_gid)
+        capture = _create_capture_bundle(config, operation_id, source_sha, source_root, database_snapshot,
+                                         read_only_paths=protected_paths)
+        manifest = json.loads((capture / "manifest.json").read_text(encoding="utf-8"))
+        if manifest.get("sourceSha") != source_sha or manifest.get("operationId") != operation_id:
+            raise HostFailure("static-main sealed CMS capture is not bound to this main source")
+    else:
+        capture = reusable["capture"]
+        snapshot_target = source_root / "web/.snapshot"
+        if snapshot_target.exists() or snapshot_target.is_symlink():
+            raise HostFailure("new static-main source already contains snapshot input")
+        shutil.copytree(reusable["snapshotRoot"], snapshot_target, copy_function=shutil.copy2)
+        for path in [snapshot_target, *snapshot_target.rglob("*")]:
+            if path.is_symlink():
+                raise HostFailure("materialized reused snapshot contains a symlink")
+            os.chown(path, user.pw_uid, user.pw_gid, follow_symlinks=False)
+            if path.is_dir():
+                os.chmod(path, 0o750 if path == snapshot_target else 0o550)
+            elif path.is_file():
+                os.chmod(path, 0o440)
+            else:
+                raise HostFailure("materialized reused snapshot contains an unsupported object")
+        snapshot_input_paths = _static_main_snapshot_inputs(snapshot_target)
+        if _static_main_snapshot_inputs_sha256(snapshot_target) != reusable["snapshotInputsSha256"]:
+            raise HostFailure("materialized reused snapshot differs from the original bytes")
+        _assert_owned_tree(snapshot_target, user.pw_uid, user.pw_gid, sealed=False)
+        protected_paths.extend([capture, reusable["snapshotRoot"], *snapshot_input_paths])
+        _run_as_cms(config, source_root, ["/usr/bin/test", "-r", str(snapshot_target / "snapshot.json")],
+                    timeout=30, read_only_path=protected_paths)
     _prepare_static_web_dependencies(config, source_root, protected_paths)
+    if reusable is not None:
+        verifier = source_root / "scripts/lib/verify-reused-staging193-snapshot.ts"
+        tsx = source_root / "web/node_modules/.bin/tsx"
+        verified_snapshot = _run_as_cms(config, source_root,
+            [str(tsx), str(verifier), str(capture), str(snapshot_target),
+             str(source_root / "cms/src"), reuse_capture_operation_id,
+             reusable["reusedCapture"]["sourceSha"], reusable["snapshotId"]], timeout=300,
+            read_only_path=protected_paths)
+        try:
+            snapshot_proof = json.loads(verified_snapshot)
+        except ValueError as error:
+            raise HostFailure("reused snapshot verifier returned invalid evidence") from error
+        if (snapshot_proof.get("snapshotId") != reusable["snapshotId"]
+                or snapshot_proof.get("referenceDate") != reusable["referenceDate"]
+                or snapshot_proof.get("bundleDigest") != reusable["reusedCapture"]["bundleDigest"]):
+            raise HostFailure("reused snapshot verifier disagrees with durable capture evidence")
     built, digest = _build_static(config, source_root, capture, read_only_paths=protected_paths,
-                                  chat_loader_src=STAGING194_CHAT_LOADER_SRC)
+                                  chat_loader_src=STAGING194_CHAT_LOADER_SRC, operation_id=operation_id,
+                                  reused_capture=reusable["reusedCapture"] if reusable else None,
+                                  reuse_snapshot=reusable is not None)
+    if (reusable is not None
+            and _static_main_snapshot_inputs_sha256(source_root / "web/.snapshot")
+            != reusable["snapshotInputsSha256"]):
+        raise HostFailure("static-main build changed reused snapshot identity bytes")
     if (_current_target(Path(config["currentStatic"])) != old_static
             or _tree_sha256(old_static) != old_tree):
         raise HostFailure("static-main old static release changed during candidate preparation")
     release = _store_static(config, source_sha, operation_id, built, digest)
     release_info = json.loads((release / "release.json").read_text(encoding="utf-8"))
-    if release_info.get("commit") != source_sha or release_info.get("operationId") != operation_id:
+    if (release_info.get("commit") != source_sha or release_info.get("operationId") != operation_id
+            or release_info.get("reusedCapture") != (reusable["reusedCapture"] if reusable else None)):
         raise HostFailure("static-main release declaration differs from the admitted main source")
-    state._append({"version": 1, "record": "static-main-prepared", "operationKind": "static-main",
-                   "operationId": operation_id, "sourceSha": source_sha, "staticTreeSha256": digest,
-                   "snapshotId": release_info.get("snapshotId"), "cmsFingerprint": cms_fingerprint})
+    prepared_record = {"version": 1, "record": "static-main-prepared", "operationKind": "static-main",
+                       "operationId": operation_id, "sourceSha": source_sha, "staticTreeSha256": digest,
+                       "snapshotId": release_info.get("snapshotId"), "cmsFingerprint": cms_fingerprint}
+    if reusable is not None:
+        if release_info.get("snapshotId") != reusable["snapshotId"]:
+            raise HostFailure("static-main reused snapshot ID changed during build")
+        prepared_record.update({"reusedCapture": reusable["reusedCapture"],
+                                "captureMappingSha256": reusable["mappingDigest"],
+                                "referenceDate": reusable["referenceDate"],
+                                "snapshotTreeSha256": reusable["snapshotTreeSha256"],
+                                "snapshotInputsSha256": reusable["snapshotInputsSha256"]})
+    state._append(prepared_record)
     return {"operationId": operation_id, "sourceSha": source_sha, "phase": "browser-check-required",
             "staticTreeSha256": digest, "snapshotId": release_info.get("snapshotId")}
 
@@ -1870,7 +2147,7 @@ def _static_main_commit(config: dict[str, Any], state: RehearsalState, operation
                             "--max-time", "15", url], timeout=20)
             if response.stdout.strip() != "200":
                 raise HostFailure(f"static-main served route probe failed: {url}")
-        capture_root = _candidate_root(config, source_sha, operation_id) / ".staging193-rehearsal" / operation_id / "capture"
+        capture_root = _static_main_capture_root(config, rows, source_sha, operation_id)
         media_doc = json.loads((capture_root / "media-manifest.json").read_text(encoding="utf-8"))
         media_inventory = media_doc.get("media") if isinstance(media_doc, dict) else None
         if not isinstance(media_inventory, list) or not media_inventory:
@@ -1907,7 +2184,8 @@ def _static_main_export(config: dict[str, Any], state: RehearsalState, operation
     release = Path(config["staticReleaseRoot"]) / f"{source_sha}-{operation_id}"
     candidate = _candidate_root(config, source_sha, operation_id)
     snapshot = candidate / "web/.snapshot/snapshot.json"
-    capture_manifest = candidate / ".staging193-rehearsal" / operation_id / "capture/manifest.json"
+    capture_root = _static_main_capture_root(config, rows, source_sha, operation_id)
+    capture_manifest = capture_root / "manifest.json"
     for required in (snapshot, capture_manifest):
         if required.is_symlink() or not required.is_file():
             raise HostFailure("static-main sealed snapshot proof is unavailable")
@@ -2234,7 +2512,8 @@ def dispatch(args: argparse.Namespace) -> dict[str, Any]:
                 return _static_main_commit(config, state, args.operation_id, args.source_sha,
                                            provenance, args.browser_digest)
             if rows:
-                return _static_main_prepare(config, state, args.operation_id, args.source_sha, provenance)
+                return _static_main_prepare(config, state, args.operation_id, args.source_sha, provenance,
+                                            args.reuse_capture_operation_id)
             if not SHA256_RE.fullmatch(args.archive_sha256 or ""):
                 raise HostFailure("static-main source archive SHA-256 is required before preparation")
             archive_bytes = sys.stdin.buffer.read()
@@ -2243,7 +2522,8 @@ def dispatch(args: argparse.Namespace) -> dict[str, Any]:
             source_root = _extract_source_archive(config, args.source_sha, args.operation_id, archive_bytes,
                                                   args.archive_sha256, provenance, "refs/heads/main")
             del archive_bytes
-            return _static_main_prepare(config, state, args.operation_id, args.source_sha, provenance)
+            return _static_main_prepare(config, state, args.operation_id, args.source_sha, provenance,
+                                        args.reuse_capture_operation_id)
         if args.action == "export-static-main":
             return {"_bytes": _static_main_export(config, state, args.operation_id, args.source_sha)}
         if args.action == "static-main-recover":
@@ -2293,6 +2573,8 @@ def main(argv: Optional[list[str]] = None) -> int:
                 command.add_argument("--offhost-sha256")
             else:
                 command.add_argument("--browser-digest")
+            if name == "static-main":
+                command.add_argument("--reuse-capture-operation-id")
         else:
             command.add_argument("--browser-digest")
     for name in ("export-backup", "export-static", "export-static-main", "recover", "static-main-recover", "status"):

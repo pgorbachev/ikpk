@@ -1220,6 +1220,7 @@ class StaticMainAdmissionTests(unittest.TestCase):
 
     def test_static_main_host_cli_accepts_explicit_reuse_capture_operation_id(self):
         with patch.object(rehearsal_host, "dispatch") as dispatch:
+            dispatch.return_value = {"phase": "browser-check-required"}
             result = rehearsal_host.main(["static-main", "--operation-id", "new-build",
                 "--source-sha", "a" * 40, "--provenance-b64", "e30=",
                 "--reuse-capture-operation-id", "sealed-capture"])
