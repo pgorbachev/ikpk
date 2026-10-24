@@ -16,7 +16,7 @@ const candidates = getUpcomingSeminars(Infinity);
  const dim = next.teacherPhoto ? getAssetDimensions(next.teacherPhoto) : undefined;
  const ctaHref = registrationHref(next.registrationFormLink) || next.href;
  return (
-  <section data-start-offer data-start-at={next.startAt} hidden={i > 0} class="event-teacher-section" data-event-teacher>
+  <section data-start-offer data-start-at={next.startAt} data-start-note={next.additionalText} hidden={i > 0} class="event-teacher-section" data-event-teacher>
     <div class="container">
       <article class="event-teacher">
         <div class="event-teacher-date">

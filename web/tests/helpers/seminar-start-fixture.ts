@@ -39,7 +39,8 @@ export async function serveSeminarStartFixture(mode: 'start' | 'month' | 'layout
   };
   const syntheticEntries = [
     event(61001, 0, '2026-10-31', '2026-11-02'), event(61002, 1, '2026-10-31'),
-    event(61003, 2, '2026-11-02'), event(61004, 0, '2026-11-04'),
+    event(61003, 2, '2026-11-02'),
+    { ...event(61004, 0, '2026-11-04'), additionalText: 'Сеанс 61004. Начало в 18:00' },
     ...Array.from({ length: 23 }, (_, index) => event(61100 + index, 3, `2026-11-${String(index + 5).padStart(2, '0')}`)),
   ];
   if (mode === 'month') {

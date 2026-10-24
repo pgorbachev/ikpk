@@ -54,6 +54,19 @@ test('open home removes offers at exact equality without reload', async ({ page 
   await expect(page.locator('.hero-d-next')).toContainText(TITLES[0]);
   await page.clock.runFor(1_000); await expectNextHome(page);
 });
+test('stated 18:00 start keeps the home offer until 18:00 Moscow time', async ({ page }) => {
+  await open(page, '/', '2026-11-04T14:59:59Z');
+  await expect(page.locator('.hero-d-next-value')).toContainText('4 ноя');
+  await page.clock.runFor(1_000);
+  await expect(page.locator('.hero-d-next-value')).not.toContainText('4 ноя');
+});
+test('stated 18:00 start updates the schedule without a reload', async ({ page }) => {
+  await open(page, '/raspisanie-i-tseny', '2026-11-04T14:59:59Z');
+  const offer = page.locator('[data-schedule-item]').filter({ hasText: 'Сеанс 61004' });
+  await expect(offer).toBeVisible();
+  await page.clock.runFor(1_000);
+  await expect(offer).toBeHidden();
+});
 test('focus and visibility resume reconcile home after a missed timer', async ({ page }) => {
   await open(page, '/', BEFORE);
   await expect(page.locator('.hero-d-next')).toContainText(TITLES[0]);

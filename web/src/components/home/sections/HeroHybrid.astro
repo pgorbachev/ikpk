@@ -11,6 +11,7 @@ const candidates = getUpcomingSeminars(Infinity);
 const next = candidates[0];
 const heroCandidates = candidates.map((candidate) => ({
   startAt: candidate.startAt,
+  additionalText: candidate.additionalText,
   title: candidate.title,
   href: candidate.href,
   dateLabel: candidate.dateLabel,

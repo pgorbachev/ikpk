@@ -19,6 +19,7 @@ import { publicScheduleTitle } from './schedule-public-title';
 export interface UpcomingSeminar {
   id: number;
   startAt: string;
+  additionalText: string;
   title: string;
   href: string;
   instituteName: string;
@@ -184,6 +185,7 @@ export function getUpcomingSeminars(limit = 3, now: Date = getSeminarBuildNow())
       return {
         id: e.id,
         startAt: e.startAt,
+        additionalText: e.additionalText || '',
         title: publicScheduleTitle(e),
         href,
         instituteName: e.institute.name,

@@ -25,7 +25,7 @@ const candidates = getUpcomingSeminars(Infinity);
 
 <div data-start-list data-start-limit="1">
 {candidates.map((next, i) => (
-  <section data-start-offer data-start-at={next.startAt} hidden={i > 0} class="event-line-section">
+  <section data-start-offer data-start-at={next.startAt} data-start-note={next.additionalText} hidden={i > 0} class="event-line-section">
     <div class="container">
       <div class="event-line" data-event-line>
         <div class="event-line-facts">
