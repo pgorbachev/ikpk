@@ -28,7 +28,7 @@ const seminars = getUpcomingSeminars(Infinity);
           </thead>
           <tbody>
             {seminars.map((s, i) => (
-              <tr data-start-offer data-start-at={s.startAt} hidden={i >= 6}>
+              <tr data-start-offer data-start-at={s.startAt} data-start-note={s.additionalText} hidden={i >= 6}>
                 <td>{s.dateLabel}</td>
                 <td>{s.cityName}</td>
                 <td><a href={s.href}>{s.title}</a></td>

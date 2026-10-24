@@ -1,6 +1,7 @@
 export interface ScheduleWindowEntry {
   startAt?: string;
   endAt?: string;
+  additionalText?: string | null;
   /**
    * Город события: в снимке — объект с именем, в схеме CMS может стать строкой, а в
    * данных встречается `null` (поле необязательное). Все три формы принимаются здесь, а
@@ -11,13 +12,20 @@ export interface ScheduleWindowEntry {
   id?: number | string;
 }
 
-/** Start of the public calendar day in Moscow. Imported startAt stores a day, not a start hour. */
+/** Imported startAt stores a day; an explicit "Начало в HH:MM" note supplies its Moscow hour. */
 export function startBoundary(entry: ScheduleWindowEntry): number {
   const day = calendarDay(entry.startAt);
-  return day ? Date.parse(`${day}T00:00:00+03:00`) : Number.NaN;
+  if (!day) return Number.NaN;
+  const matches = Array.from((entry.additionalText ?? '').matchAll(/(?:^|[^\p{L}\p{N}])начало\s+в\s+(\d{1,2})[:-](\d{2})(?!\d)/giu));
+  const hour = matches.length === 1 ? Number(matches[0][1]) : Number.NaN;
+  const minute = matches.length === 1 ? Number(matches[0][2]) : Number.NaN;
+  const time = hour >= 0 && hour <= 23 && minute >= 0 && minute <= 59
+    ? `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`
+    : '00:00';
+  return Date.parse(`${day}T${time}:00+03:00`);
 }
 
-/** A dated offer ends when its start day begins in Moscow. */
+/** A dated offer ends when its stated start hour begins in Moscow, or at midnight without one. */
 export function isBeforeStart(entry: ScheduleWindowEntry, now: string | Date | number): boolean {
   const start = startBoundary(entry);
   const current = typeof now === 'number' ? now : new Date(now).getTime();

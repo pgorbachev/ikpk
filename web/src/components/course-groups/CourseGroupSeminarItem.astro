@@ -6,7 +6,7 @@ import { MANAGER_PHONE, MANAGER_PHONE_HREF } from '../../lib/navigation';
 interface Props {
   seminar: Seminar;
   href: string;
-  dateCandidates?: { startAt: string; dateLabel: string }[];
+  dateCandidates?: { startAt: string; additionalText: string; dateLabel: string }[];
 }
 
 const { seminar, href, dateCandidates = [] } = Astro.props as Props;

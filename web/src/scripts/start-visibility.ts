@@ -14,6 +14,7 @@ export function initStartVisibility(): void {
   if (!offers.length && !heroes.length && !dates.length) return;
   const entryFor = (element: HTMLElement): ScheduleWindowEntry => ({
     startAt: element.dataset.startAt,
+    additionalText: element.dataset.startNote,
   });
   const entries = [...offers.map(entryFor), ...heroes.flatMap(({ entries }) => entries), ...dates.flatMap(({ entries }) => entries)];
   let timer: ReturnType<typeof setTimeout>;
