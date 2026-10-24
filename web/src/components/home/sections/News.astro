@@ -4,7 +4,7 @@
 // секция «Акции и скидки» при этом остаётся отдельной, слияния не было.
 import MediaCard from '../../ui/MediaCard.astro';
 import { cleanBodyHtml, relForExternalUrl } from '../../../lib/data';
-import { getHomeOffers } from '../../../lib/book-offers';
+import { getHomeOffers, HOME_OFFER_IDS } from '../../../lib/book-offers';
 import RichContent from '../../RichContent.astro';
 
 const news = getHomeOffers();
@@ -27,8 +27,9 @@ const news = getHomeOffers();
                 href={item.link}
                 title={item.name}
                 image={item.image?.url}
-                imageAlt={item.name}
+                imageAlt={item.id === HOME_OFFER_IDS.book ? 'Обложка книги «Ручные лимфатические техники»' : item.name}
                 imageRatio="3 / 2"
+                imageFit={item.id === HOME_OFFER_IDS.book ? 'contain' : 'cover'}
                 target="_blank"
                 rel={[...new Set(['noopener', ...(relForExternalUrl(item.link) ?? [])])].join(' ')}
                 className="news-card"
