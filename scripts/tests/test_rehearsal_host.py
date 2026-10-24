@@ -1156,6 +1156,64 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
 
 
 class StaticMainAdmissionTests(unittest.TestCase):
+    def test_static_main_reuses_only_matching_sealed_database(self):
+        with tempfile.TemporaryDirectory(prefix="ikpk-static-main-reuse-") as temporary:
+            root = Path(temporary)
+            static = root / "static"
+            static.mkdir()
+            source = root / "sources"
+            source.mkdir()
+            sha_value, operation = "a" * 40, "old-main-op"
+            release = static / "old"
+            release.mkdir()
+            (release / "release.json").write_text(json.dumps({"commit": sha_value,
+                "operationId": operation, "snapshotId": "snap:old"}), encoding="utf-8")
+            capture = source / f"{sha_value}-{operation}" / ".staging193-rehearsal" / operation / "capture"
+            capture.mkdir(parents=True)
+            database = capture / "database.sqlite"
+            connection = sqlite3.connect(database)
+            connection.execute("CREATE TABLE seminar (title TEXT)")
+            connection.execute("INSERT INTO seminar VALUES ('unchanged')")
+            connection.commit()
+            connection.close()
+            media = capture / "media-manifest.json"
+            media.write_text('{"media": []}\n', encoding="utf-8")
+            manifest = capture / "manifest.json"
+            manifest.write_text(json.dumps({"operationId": operation, "sourceSha": sha_value,
+                "databaseSha256": rehearsal_host.sha256_file(database),
+                "mediaManifestSha256": rehearsal_host.sha256_file(media)}), encoding="utf-8")
+            state_root = root / "state"
+            state_root.mkdir()
+            state = RehearsalState(state_root)
+            fingerprint = {"databaseFiles": {"database": "same", "-wal": None},
+                           "uploadsTreeSha256": "same"}
+            digest = rehearsal_host._tree_sha256(release)
+            for record, extra in (("static-main-start", {"cmsFingerprint": fingerprint}),
+                                  ("static-main-prepared", {"snapshotId": "snap:old",
+                                                            "staticTreeSha256": digest,
+                                                            "captureManifestSha256": rehearsal_host.sha256_file(manifest),
+                                                            "captureDatabaseSha256": rehearsal_host.sha256_file(database),
+                                                            "captureMediaManifestSha256": rehearsal_host.sha256_file(media)}),
+                                  ("static-main-committed", {"staticTreeSha256": digest})):
+                state._append({"version": 1, "operationKind": "static-main", "record": record,
+                    "operationId": operation, "sourceSha": sha_value, **extra})
+            config = {"releaseRoot": str(source)}
+            reusable = rehearsal_host._reusable_static_main_database(config, state, release, digest, fingerprint)
+            self.assertEqual(reusable, (database.resolve(), rehearsal_host.sha256_file(database), operation))
+            self.assertIsNone(rehearsal_host._reusable_static_main_database(
+                config, state, release, digest, {**fingerprint, "uploadsTreeSha256": "changed"}))
+            connection = sqlite3.connect(database)
+            connection.execute("INSERT INTO seminar VALUES ('tampered')")
+            connection.commit()
+            connection.close()
+            manifest.write_text(json.dumps({**json.loads(manifest.read_text(encoding="utf-8")),
+                "databaseSha256": rehearsal_host.sha256_file(database)}), encoding="utf-8")
+            self.assertIsNone(rehearsal_host._reusable_static_main_database(
+                config, state, release, digest, fingerprint))
+            manifest.write_text('[]', encoding="utf-8")
+            self.assertIsNone(rehearsal_host._reusable_static_main_database(
+                config, state, release, digest, fingerprint))
+
     def _committed_static_main_fixture(self, root: Path, current_name="candidate"):
         releases = root / "releases"
         releases.mkdir()
@@ -1264,6 +1322,8 @@ class StaticMainAdmissionTests(unittest.TestCase):
                 return snapshot
             def make_capture(_config, operation_id, source_sha, source_root, _database, **_kwargs):
                 capture.mkdir(parents=True)
+                (capture / "database.sqlite").write_bytes(_database.read_bytes())
+                (capture / "media-manifest.json").write_text('{"media": []}', encoding="utf-8")
                 (capture / "manifest.json").write_text(json.dumps({"sourceSha": source_sha,
                     "operationId": operation_id}), encoding="utf-8")
                 return capture

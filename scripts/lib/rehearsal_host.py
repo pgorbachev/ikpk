@@ -17,6 +17,7 @@ import pwd
 import re
 import shutil
 import shlex
+import sqlite3
 import stat
 import subprocess
 import sys
@@ -1647,6 +1648,58 @@ def _readonly_database_snapshot(config: dict[str, Any], operation_root: Path) ->
     return target
 
 
+def _reusable_static_main_database(config: dict[str, Any], state: RehearsalState,
+                                   old_static: Path, old_tree: str,
+                                   cms_fingerprint: dict[str, Any]) -> tuple[Path, str, str] | None:
+    """Reuse a sealed database capture only while its entire CMS input fingerprint matches."""
+    try:
+        release = json.loads((old_static / "release.json").read_text(encoding="utf-8"))
+        old_sha, old_op = release["commit"], release["operationId"]
+        if (not isinstance(old_sha, str) or not SHA_RE.fullmatch(old_sha)
+                or not isinstance(old_op, str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}", old_op)):
+            return None
+        rows = _static_main_rows(state, old_op)
+        start = _static_main_start(rows)
+        prepared = _static_main_prepared(rows)
+        committed = next((row for row in rows if row.get("record") == "static-main-committed"), None)
+        if (not committed or start.get("sourceSha") != old_sha
+                or start.get("cmsFingerprint") != cms_fingerprint
+                or prepared.get("snapshotId") != release.get("snapshotId")
+                or prepared.get("staticTreeSha256") != old_tree
+                or committed.get("sourceSha") != old_sha
+                or committed.get("staticTreeSha256") != old_tree):
+            return None
+        capture = _candidate_root(config, old_sha, old_op) / ".staging193-rehearsal" / old_op / "capture"
+        if capture.is_symlink() or not capture.is_dir():
+            return None
+        database = capture / "database.sqlite"
+        media_manifest = capture / "media-manifest.json"
+        manifest_path = capture / "manifest.json"
+        if any(path.is_symlink() or not path.is_file() for path in (database, media_manifest, manifest_path)):
+            return None
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        if (not isinstance(manifest, dict)
+                or not SHA256_RE.fullmatch(prepared.get("captureManifestSha256") or "")
+                or not SHA256_RE.fullmatch(prepared.get("captureDatabaseSha256") or "")
+                or not SHA256_RE.fullmatch(prepared.get("captureMediaManifestSha256") or "")
+                or sha256_file(manifest_path) != prepared["captureManifestSha256"]
+                or manifest.get("operationId") != old_op or manifest.get("sourceSha") != old_sha
+                or manifest.get("databaseSha256") != prepared["captureDatabaseSha256"]
+                or manifest.get("databaseSha256") != sha256_file(database)
+                or manifest.get("mediaManifestSha256") != prepared["captureMediaManifestSha256"]
+                or manifest.get("mediaManifestSha256") != sha256_file(media_manifest)):
+            return None
+        connection = sqlite3.connect(f"file:{database}?mode=ro", uri=True)
+        try:
+            if connection.execute("PRAGMA integrity_check").fetchone()[0] != "ok":
+                return None
+        finally:
+            connection.close()
+        return database, manifest["databaseSha256"], old_op
+    except (OSError, ValueError, KeyError, TypeError, sqlite3.DatabaseError):
+        return None
+
+
 def _prepare_static_web_dependencies(config: dict[str, Any], source_root: Path,
                                      protected_paths: list[Path]) -> Path:
     web = source_root / "web"
@@ -1703,10 +1756,13 @@ def _static_main_prepare(config: dict[str, Any], state: RehearsalState, operatio
     old_static = _current_target(Path(config["currentStatic"]))
     old_tree = _tree_sha256(old_static)
     cms_fingerprint = _static_main_cms_fingerprint(config)
+    reused_capture = _reusable_static_main_database(config, state, old_static, old_tree, cms_fingerprint)
     start = {"version": 1, "record": "static-main-start", "operationKind": "static-main",
              "operationId": operation_id, "sourceSha": source_sha, "provenance": provenance,
              "oldStaticPath": str(old_static), "oldStaticTreeSha256": old_tree,
-             "cmsFingerprint": cms_fingerprint, "configSha256": _config_sha256(config)}
+             "cmsFingerprint": cms_fingerprint, "configSha256": _config_sha256(config),
+             "captureSource": "reused" if reused_capture else "new",
+             "reusedCaptureOperationId": reused_capture[2] if reused_capture else None}
     state._append(start)
     operation_root = source_root / ".staging193-rehearsal" / operation_id
     operation_root.mkdir(mode=0o700, parents=True, exist_ok=False)
@@ -1714,16 +1770,29 @@ def _static_main_prepare(config: dict[str, Any], state: RehearsalState, operatio
     os.chown(operation_root, user.pw_uid, user.pw_gid)
     os.chmod(operation_root, 0o700)
     protected_paths = _static_main_protected_paths(config)
-    database_snapshot = _readonly_database_snapshot(config, operation_root)
-    os.chown(database_snapshot, user.pw_uid, user.pw_gid)
+    database_snapshot = reused_capture[0] if reused_capture else _readonly_database_snapshot(config, operation_root)
+    if not reused_capture:
+        os.chown(database_snapshot, user.pw_uid, user.pw_gid)
     capture = _create_capture_bundle(config, operation_id, source_sha, source_root, database_snapshot,
                                      read_only_paths=protected_paths)
     manifest = json.loads((capture / "manifest.json").read_text(encoding="utf-8"))
     if manifest.get("sourceSha") != source_sha or manifest.get("operationId") != operation_id:
         raise HostFailure("static-main sealed CMS capture is not bound to this main source")
+    if reused_capture and sha256_file(capture / "database.sqlite") != reused_capture[1]:
+        raise HostFailure("static-main reused database changed while sealing the new capture")
+    capture_digests = {
+        "captureManifestSha256": sha256_file(capture / "manifest.json"),
+        "captureDatabaseSha256": sha256_file(capture / "database.sqlite"),
+        "captureMediaManifestSha256": sha256_file(capture / "media-manifest.json"),
+    }
     _prepare_static_web_dependencies(config, source_root, protected_paths)
     built, digest = _build_static(config, source_root, capture, read_only_paths=protected_paths,
                                   chat_loader_src=STAGING194_CHAT_LOADER_SRC)
+    if any(sha256_file(capture / name) != capture_digests[key]
+           for name, key in (("manifest.json", "captureManifestSha256"),
+                             ("database.sqlite", "captureDatabaseSha256"),
+                             ("media-manifest.json", "captureMediaManifestSha256"))):
+        raise HostFailure("static-main sealed capture changed during candidate build")
     if (_current_target(Path(config["currentStatic"])) != old_static
             or _tree_sha256(old_static) != old_tree):
         raise HostFailure("static-main old static release changed during candidate preparation")
@@ -1733,7 +1802,8 @@ def _static_main_prepare(config: dict[str, Any], state: RehearsalState, operatio
         raise HostFailure("static-main release declaration differs from the admitted main source")
     state._append({"version": 1, "record": "static-main-prepared", "operationKind": "static-main",
                    "operationId": operation_id, "sourceSha": source_sha, "staticTreeSha256": digest,
-                   "snapshotId": release_info.get("snapshotId"), "cmsFingerprint": cms_fingerprint})
+                   "snapshotId": release_info.get("snapshotId"), "cmsFingerprint": cms_fingerprint,
+                   **capture_digests})
     return {"operationId": operation_id, "sourceSha": source_sha, "phase": "browser-check-required",
             "staticTreeSha256": digest, "snapshotId": release_info.get("snapshotId")}
 
