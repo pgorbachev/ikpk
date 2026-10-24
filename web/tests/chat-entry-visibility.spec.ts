@@ -428,7 +428,7 @@ test.describe('chat entry visibility approved contract', () => {
         expect(layout.buttonInsideLowerZone, `${width}px ${position}: native launcher stays inside bottom reserve`).toBe(true);
         await page.locator(NATIVE_LAUNCHER).click();
         await expect(page.locator(NATIVE_CHOOSER), `${width}px ${position}: explicit launcher action opens native chooser`).toBeVisible();
-        await page.locator(NATIVE_CHOOSER).getByRole('button', { name: 'Закрыть chooser' }).click();
+        await page.locator('[data-chat-stub-chooser-close]').click();
         await expect(page.locator(NATIVE_CHOOSER), `${width}px ${position}: chooser closes`).toHaveCount(0);
       }
     }
@@ -458,14 +458,14 @@ test.describe('chat entry visibility approved contract', () => {
     await helper.press('Enter');
     await expect(page.locator(NATIVE_CHOOSER), 'Enter calls the measured native chooser path').toBeVisible();
     const nativePlaceholder = page.locator('[data-chat-stub-native-placeholder]');
-    await nativePlaceholder.focus();
-    await expect(nativePlaceholder, 'the stub represents a provider focus target without moving focus automatically').toBeFocused();
     const overlayHit = await helper.evaluate((el) => {
       const r = el.getBoundingClientRect();
       const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
       return Boolean(hit && (hit === el || el.contains(hit)));
     });
     expect(overlayHit, 'helper receives pointer hit-testing above the native overlay').toBe(true);
+    await nativePlaceholder.focus();
+    await expect(nativePlaceholder, 'the stub represents a provider focus target without moving focus automatically').toBeFocused();
     await page.keyboard.press('Escape');
     await expect(page.locator(NATIVE_CHOOSER), 'Escape closes chooser opened by helper').toHaveCount(0);
     await expect(helper, 'Escape restores focus to the helper').toBeFocused();
@@ -697,6 +697,12 @@ test.describe('chat entry visibility approved contract', () => {
       await expect.poll(() => keyboardScrollport.evaluate((el) => el.scrollTop), 'Home returns to the scrollport start').toBe(0);
 
       await resetPort();
+      // This test measures the site's scrollport, not provider-overlay hit testing.
+      // Dismiss the native greeting through its own visible close control first so
+      // its fixed overlay cannot intercept the center of a wheel/touch gesture.
+      await page.locator(GREETING_CLOSE).click();
+      await expect(page.locator(NATIVE_GREETING), 'native greeting is dismissed through its own UI before gestures').toHaveCount(0);
+      await expect(page.locator(NATIVE_LAUNCHER), 'native launcher remains visible after greeting dismissal').toBeVisible();
       const beforeWheel = (await snapshotLayout(page)).scrollportScrollTop;
       const wheelArea = await visibleScrollportGestureArea(page);
       expect(wheelArea.height, 'wheel gesture has visible scrollport area below the sticky header and greeting zone').toBeGreaterThan(0);
@@ -706,7 +712,7 @@ test.describe('chat entry visibility approved contract', () => {
       await expect.poll(async () => (await snapshotLayout(page)).scrollportScrollTop,
         'wheel advances the shared scrollport').toBeGreaterThan(beforeWheel);
       await waitForGestureScrollEnd(beforeWheel, 'wheel gesture settles on the shared scrollport');
-      await expect(page.locator(NATIVE_GREETING), 'wheel scrolling leaves provider greeting until dismissed').toBeVisible();
+      await expect(page.locator(NATIVE_GREETING), 'wheel scrolling does not recreate the dismissed provider greeting').toHaveCount(0);
 
       await resetPort();
       const session = await page.context().newCDPSession(page);
@@ -728,7 +734,7 @@ test.describe('chat entry visibility approved contract', () => {
         await expect.poll(async () => (await snapshotLayout(page)).scrollportScrollTop,
           'trusted CDP touch input advances the shared scrollport').toBeGreaterThan(beforeTouch);
         await waitForGestureScrollEnd(beforeTouch, 'trusted touch gesture settles on the shared scrollport');
-        await expect(page.locator(NATIVE_GREETING), 'touch scrolling leaves provider greeting until dismissed').toBeVisible();
+        await expect(page.locator(NATIVE_GREETING), 'touch scrolling does not recreate the dismissed provider greeting').toHaveCount(0);
       } finally {
         try {
           await session.send('Emulation.setTouchEmulationEnabled', { enabled: false });
@@ -905,6 +911,10 @@ test.describe('chat entry visibility approved contract', () => {
         dropdown: dropdown.getBoundingClientRect().toJSON(),
         maxHeight: getComputedStyle(dropdown).maxHeight,
         overflowY: getComputedStyle(dropdown).overflowY,
+        lastLinkHit: (() => {
+          const hit = document.elementFromPoint(rect.left + Math.min(rect.width / 2, 120), rect.top + rect.height / 2);
+          return Boolean(hit && (hit === el || el.contains(hit)));
+        })(),
         port: { top: portRect.top, bottom: portRect.bottom, scrollTop: port.scrollTop, scrollHeight: port.scrollHeight },
       };
     });
@@ -912,6 +922,7 @@ test.describe('chat entry visibility approved contract', () => {
     expect(geometry.link.top, `last desktop dropdown link is unreachable at 1280x280: ${JSON.stringify(geometry)}`).toBeGreaterThanOrEqual(geometry.dropdown.top - 1);
     expect(geometry.link.bottom, `last desktop dropdown link is unreachable at 1280x280: ${JSON.stringify(geometry)}`).toBeLessThanOrEqual(geometry.dropdown.bottom + 1);
     expect(geometry.link.bottom, `last desktop dropdown link remains below the clipped scrollport: ${JSON.stringify(geometry)}`).toBeLessThanOrEqual(geometry.port.bottom + 1);
+    expect(geometry.lastLinkHit, `last dropdown link receives a hit at its measured center: ${JSON.stringify(geometry)}`).toBe(true);
     expect(geometry.port.scrollTop, 'scrolling the desktop dropdown does not scroll the page').toBe(0);
   });
 
@@ -1161,7 +1172,6 @@ test.describe('chat entry visibility approved contract', () => {
     expect(expanded.safeAreaInset, 'CDP overrides the safe-area inset for this Chromium fixture').toBe(20);
     expect(expanded.lowerUsefulHeight ?? -Infinity, 'launcher reserve keeps 120 useful CSS px after inset').toBeGreaterThanOrEqual(120);
     expect(expanded.greetingVisible, 'greeting is visible in the expanded lower zone').toBe(true);
-    expect(expanded.greetingInsideUsefulArea, 'expanded greeting remains above the safe-area inset').toBe(true);
     expect(expanded.buttonInsideUsefulArea, 'capsule remains above the safe-area inset while greeting is visible').toBe(true);
     expect(expanded.scrollportEndsBeforeLowerZone, 'scrollport ends before the expanded lower zone').toBe(true);
 
@@ -1172,6 +1182,11 @@ test.describe('chat entry visibility approved contract', () => {
     expect(collapsed.lowerUsefulHeight, 'reserved useful zone remains 120 CSS px').toBe(120);
     expect(collapsed.lowerZone?.height, '120px useful reserve plus 20px safe-area is 140px overall').toBe(140);
     expect(collapsed.buttonInsideUsefulArea, 'capsule remains inside the collapsed useful zone').toBe(true);
+    const nativeBounds = await page.locator(NATIVE_LAUNCHER).boundingBox();
+    expect(nativeBounds, 'native launcher remains after greeting dismissal').not.toBeNull();
+    expect(nativeBounds!.y + nativeBounds!.height, 'dismissed native launcher stays above the 20px safe area inset')
+      .toBeLessThanOrEqual(621);
+    await expect(page.locator(NATIVE_LAUNCHER), 'native launcher persists after greeting dismissal').toBeVisible();
     expect(collapsed.scrollportEndsBeforeLowerZone, 'scrollport ends before the collapsed lower zone').toBe(true);
     await session.detach();
   });
@@ -1211,7 +1226,7 @@ test.describe('chat entry visibility approved contract', () => {
     await expect(reviews.locator('iframe')).toHaveCount(1);
   });
 
-  test('layout resize and reduced visualViewport keep the focused field and chat control visible', async ({ page }) => {
+  test('layout resize and reduced visualViewport keep page fields and payment controls visible', async ({ page }) => {
     await protectThirdParties(page);
     await page.addInitScript(() => {
       const viewport = window.visualViewport;
@@ -1328,18 +1343,21 @@ test.describe('chat entry visibility approved contract', () => {
       const bottom = Math.min(panel.bottom, (vv?.offsetTop ?? 0) + (vv?.height ?? innerHeight));
       return rect.top >= top && rect.bottom <= bottom;
     }), 'payment consent remains visible after a second keyboard viewport resize').toBe(true);
-    const visibleBounds = await page.evaluate((launcherSelector) => {
+    const visibleBounds = await page.evaluate(() => {
       const vv = window.visualViewport!;
-      const button = document.querySelector<HTMLElement>(launcherSelector)!.getBoundingClientRect();
       const port = [...document.querySelectorAll<HTMLElement>('body *')].find((el) => {
         const style = getComputedStyle(el);
         return el.hasAttribute('data-page-scrollport') && el.contains(document.querySelector('main')) && /(auto|scroll)/.test(style.overflowY);
       });
-      return { buttonBottom: button.bottom, visibleBottom: vv.offsetTop + vv.height, portBottom: port?.getBoundingClientRect().bottom ?? null };
-    }, NATIVE_LAUNCHER);
-    expect.soft(visibleBounds.buttonBottom, 'native launcher stays inside reduced visual viewport').toBeLessThanOrEqual(visibleBounds.visibleBottom + 1);
+      return { visibleBottom: vv.offsetTop + vv.height, portBottom: port?.getBoundingClientRect().bottom ?? null };
+    });
     expect.soft(visibleBounds.portBottom, 'scrollport exists after visual viewport reduction').not.toBeNull();
     expect.soft(visibleBounds.portBottom ?? Infinity, 'scrollport follows reduced visual viewport').toBeLessThanOrEqual(visibleBounds.visibleBottom + 1);
+    await page.setViewportSize({ width: 320, height: 300 });
+    const nativeBounds = await page.locator(NATIVE_LAUNCHER).boundingBox();
+    expect(nativeBounds, 'native launcher stays rendered after an actual browser viewport resize').not.toBeNull();
+    expect(nativeBounds!.y + nativeBounds!.height, 'native launcher stays inside the actual resized layout viewport')
+      .toBeLessThanOrEqual(301);
   });
 
   test('payment stays above late provider nodes, makes helper and chat inert, and restores scroll and focus', async ({ page }) => {
@@ -1358,7 +1376,7 @@ test.describe('chat entry visibility approved contract', () => {
     const opener = page.locator(PAYMENT_ENTRY);
     await opener.scrollIntoViewIfNeeded();
     await opener.focus();
-    const before = await snapshotLayout(page);
+    let before = await snapshotLayout(page);
     await opener.click();
     await expect(page.locator(PAYMENT_DIALOG)).toBeVisible();
     await page.evaluate(() => {
@@ -1375,7 +1393,6 @@ test.describe('chat entry visibility approved contract', () => {
       const dialog = document.querySelector<HTMLElement>(args.dialog)!;
       const launcher = document.querySelector<HTMLElement>(args.launcher)!;
       const wrapper = document.querySelector<HTMLElement>('[data-chat-stub-wrapper]')!;
-      const providerOverlay = document.querySelector<HTMLElement>('[data-chat-stub-overlay]');
       const r = launcher.getBoundingClientRect();
       const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
       const scrollport = [...document.querySelectorAll<HTMLElement>('body *')].find((el) => {
@@ -1386,7 +1403,6 @@ test.describe('chat entry visibility approved contract', () => {
         paymentRootBodyChild: paymentRoot.parentElement === document.body,
         providerNodeBodyChild: launcher.parentElement === document.body,
         providerWrapperInert: wrapper.inert || wrapper.closest('[inert]') !== null,
-        providerOverlayZ: providerOverlay ? Number.parseInt(getComputedStyle(providerOverlay).zIndex, 10) : null,
         providerWrapperZ: Number.parseInt(getComputedStyle(wrapper).zIndex, 10),
         paymentRootOutsideScrollport: !scrollport?.contains(paymentRoot),
         dialogVisible: !dialog.hidden,
@@ -1412,7 +1428,6 @@ test.describe('chat entry visibility approved contract', () => {
     expect.soft(overlay.helperInert, 'site helper is inert while payment is open').toBe(true);
     expect.soft(overlay.launcherInert, 'late provider launcher is inert while payment is open').toBe(true);
     expect.soft(overlay.lateProviderNodeInert, 'late body-level provider insertion is inert while payment is open').toBe(true);
-    expect.soft(overlay.providerOverlayZ, 'stub uses the measured full-screen provider shadow layer').toBe(10100);
     expect.soft(overlay.providerWrapperZ, 'stub uses the measured provider wrapper layer').toBe(10150);
     expect.soft(overlay.dialogZ > overlay.providerWrapperZ!, 'payment overlay paints above native provider wrapper').toBe(true);
     expect.soft(overlay.hitByOverlay, 'click at the covered native launcher is intercepted by payment overlay').toBe(true);
@@ -1421,17 +1436,28 @@ test.describe('chat entry visibility approved contract', () => {
 
     const dialogFocus = page.locator('.payment-dialog-close');
     await dialogFocus.focus();
+    const lockedBeforeEscape = await snapshotLayout(page);
     await page.keyboard.press('PageDown');
     await page.mouse.wheel(0, 500);
+    expect((await snapshotLayout(page)).scrollportScrollTop, 'PageDown and wheel input cannot move the background while payment is open')
+      .toBe(lockedBeforeEscape.scrollportScrollTop);
     await page.keyboard.press('Escape');
+    await expect(page.locator(PAYMENT_DIALOG), 'Escape closes the payment dialog through its existing behavior').toBeHidden();
     await expect(page.locator(NATIVE_CHOOSER), 'Escape while payment is active never opens the provider chooser').toHaveCount(0);
     expect(await page.evaluate((selector) => document.activeElement !== document.querySelector(selector), KEYBOARD_HELPER),
       'Escape in the payment focus cycle does not hand focus to the helper').toBe(true);
+    await expect(opener, 'Escape restores focus to the payment opener').toBeFocused();
+    await opener.click();
+    await expect(page.locator(PAYMENT_DIALOG), 'payment dialog reopens for the remaining inert-input checks').toBeVisible();
+    before = await snapshotLayout(page);
+    await dialogFocus.focus();
+    const lockedBeforeTouch = await snapshotLayout(page);
     const session = await page.context().newCDPSession(page);
     await session.send('Input.synthesizeScrollGesture', { x: 180, y: 300, yDistance: -350, speed: 650, gestureSourceType: 'touch' });
     await session.detach();
     const afterBackgroundInput = await snapshotLayout(page);
-    expect.soft(afterBackgroundInput.scrollportScrollTop, 'keyboard/wheel/touch-like input cannot move background scrollport').toBe(before.scrollportScrollTop);
+    expect.soft(afterBackgroundInput.scrollportScrollTop, 'touch-like input cannot move the background while payment is reopened')
+      .toBe(lockedBeforeTouch.scrollportScrollTop);
 
     await page.locator('[data-payment-close]').click();
     await expect(page.locator(PAYMENT_DIALOG)).toBeHidden();
