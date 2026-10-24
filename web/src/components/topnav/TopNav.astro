@@ -116,7 +116,7 @@ const target = (link: { external?: boolean }) => (link.external ? '_blank' : und
     if (header && bar) {
       const reflow = () => {
         const rootSize = parseFloat(getComputedStyle(document.documentElement).fontSize);
-        header.classList.toggle('topnav-text-reflow', window.innerWidth > 939 && bar.clientWidth < 58.75 * rootSize);
+        header.classList.toggle('topnav-text-reflow', window.innerWidth > 1023 && bar.clientWidth < 58.75 * rootSize);
       };
       // The bar is capped at 1240px even on wider viewports. Observe height too:
       // a root-font change grows it while its width remains fixed. The condition
@@ -267,7 +267,7 @@ const target = (link: { external?: boolean }) => (link.external ? '_blank' : und
 
   /* Шапка ужимается — иначе с длинной подписью CTA ей не хватает ширины и она
      уезжает по горизонтали (замерено: 140 px переполнения при 1181, 61 при 1280).
-     Отдаём в том же порядке, в каком шапка уже отдаёт место ниже 940: сначала
+     Отдаём в том же порядке, в каком шапка уже отдаёт место ниже 1024: сначала
      дескриптор под логотипом, затем внутренние отступы меню и кнопки. Номер
      приоритетнее подписи под лого: телефон просил заказчик, дескриптор — наше
      добавление.
@@ -287,7 +287,7 @@ const target = (link: { external?: boolean }) => (link.external ? '_blank' : und
     .topnav-cta { padding: 0.5rem 0.7rem; }
   }
 
-  @media (min-width: 940px) and (max-width: 1360px) {
+  @media (min-width: 1024px) and (max-width: 1360px) {
     .topnav-bar { gap: 0.4rem; padding-inline: 0.75rem; }
     .topnav-menu > ul { gap: 0; align-items: center; }
     .topnav-menu > ul > li + li { padding-left: 0.35rem; }
@@ -297,7 +297,7 @@ const target = (link: { external?: boolean }) => (link.external ? '_blank' : und
     .topnav-phones { display: none; }
   }
 
-  @media (max-width: 939px) {
+  @media (max-width: 1023px) {
     .topnav-menu, .topnav-phones { display: none; }
     /* дескриптор под лого не помещается рядом с CTA+бургером на узком
        мобильном — прячем, чтобы шапка не распирала вьюпорт */
@@ -363,9 +363,9 @@ const target = (link: { external?: boolean }) => (link.external ? '_blank' : und
   /* На узком мобильном подпись CTA не влезает в строку рядом с логотипом,
      инструментами и бургером: до этой правки шапке требовалось 407 CSS-px при
      вьюпорте 375, и уезжали ВСЕ страницы сайта. Кнопке разрешено переносить
-     подпись на две строки. Блок отдельный и идёт ПОСЛЕ ≤939 намеренно: правила
+     подпись на две строки. Блок отдельный и идёт ПОСЛЕ ≤1023 намеренно: правила
      мобильного меню живут в том блоке, и любое вложение их сюда оставило бы
-     зону 431–939 без навигации вовсе. */
+     зону 431–1023 без навигации вовсе. */
   @media (max-width: 430px) {
     /* Сжатие включаем ТОЛЬКО здесь. В базовом правиле `min-width: 0` снимает у
        блока действий пол в min-content, и раскладка поджимает кнопку даже там,

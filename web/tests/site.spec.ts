@@ -458,16 +458,18 @@ test.describe('Мобильное меню', () => {
 // Предмет — «у посетителя есть чем перейти на другую страницу»: видна либо
 // ссылка горизонтального меню, либо ссылка в панели, которую открывает бургер.
 //
-// Переполнение по горизонтали проверяется отдельно ниже: при 901–939 px
-// показывается мобильная панель, а с 940 px помещается горизонтальное меню.
+// Переполнение по горизонтали проверяется отдельно ниже: мобильная панель
+// остаётся до 1023 px, а горизонтальное меню включается с 1024 px.
 //
 // В сетке есть 810 — ширина профиля `iPad (gen 7)`. Функционально её проверяет
 // `compat.spec.ts`, но тот живёт в nightly и публикацию не блокирует; здесь она
 // нужна, чтобы планшет был прикрыт и внутри обязательного прогона.
-const NAV_WIDTHS = [375, 430, 431, 600, 768, 810, 900, 901, 939, 940, 1100, 1280];
+const NAV_WIDTHS = [
+  375, 430, 431, 600, 768, 810, 900, 901, 939, 940, 1023, 1024, 1100, 1280,
+];
 
-test('узкая десктопная шапка не обрезает действия справа', async ({ page }) => {
-  for (const width of [901, 920, 939, 940]) {
+test('шапка не переполняет вьюпорт на границах мобильного и desktop-меню', async ({ page }) => {
+  for (const width of [901, 939, 940, 1023, 1024]) {
     await page.setViewportSize({ width, height: 800 });
     await page.goto('/raspisanie-i-tseny');
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - innerWidth);
@@ -484,6 +486,16 @@ test.describe('Навигация видима на любой ширине', ()
 
       const menuVisible = await page.locator('.topnav-menu').isVisible();
       const burgerVisible = await page.locator('.topnav-mobile').isVisible();
+      expect(
+        menuVisible,
+        `${width}px: desktop-меню включено на неверной границе`,
+      ).toBe(width >= 1024);
+      if (menuVisible) {
+        const booksLink = page.locator(
+          '.topnav-menu a[aria-label="Книги и учебные материалы"]',
+        );
+        await expect(booksLink, `${width}px: краткая подпись «Книги»`).toHaveText('Книги');
+      }
       expect(
         menuVisible || burgerVisible,
         `на ${width}px не видно ни горизонтального меню, ни бургера — перейти некуда`,
