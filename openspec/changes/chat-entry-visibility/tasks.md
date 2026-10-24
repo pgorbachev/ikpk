@@ -1,62 +1,40 @@
-## 1. Planning gate
+## Историческая редакция: локальное greeting и CTA (заменена)
 
-- [x] 1.1 Подготовить и проверить full-page mockup реального snapshot расписания на ширинах 320 и 375 CSS px: начало, середина и подвал; сохранить оба варианта для сравнения.
-- [x] 1.2 Получить выбор владельца 21.10.2026: вариант «Внизу в свободной зоне» с отдельной зоной 80 CSS px.
-- [x] 1.3 Синхронизировать прежние proposal, design, delta spec, review record и placement notes под выбранную нижнюю зону; сохранить HTML mockups побайтно. Это относится к редакции до greeting/VK.
-- [x] 1.4 Провести независимый полный проход прежней ревизии proposal/design/delta spec и закрыть подтверждённые находки: полный проход root и отдельный проход Astra. Это не покрывает добавленные теперь greeting/VK.
-- [x] 1.5 Провести второй независимый полный проход прежней ревизии; checklist-only перепроверки относились к её исправлениям и не являются review текущего расширения.
-- [x] 1.6 Получить owner approval прежней редакции 21.10.2026; оно не распространяется на greeting, динамическую нижнюю зону или VK из текущей редакции.
-- [x] 1.7 Провести два независимых полных spec review текущей редакции root и Astra; закрыть согласованные findings. Итоговые review-хэши: proposal `089d5fa8c27224fc6948e3c6e9f60dd7869a76953a0ce2a56cf874e1abff2f8a`, design `460c942c00927b8f6e874b3356374a31acdbfdf3fe507b032a6030b76ae637d7`, tasks до записи approval `64989829008e5e47a90a91880e6d00039f7c4ecacfecb3ef44eceed23cdf20d7`, delta `28285a72387a66bbbfbac84ece41e6b6a79bf1d3169a38f1668ab3cfdf1bd54e`.
-- [x] 1.8 Получить owner approval 2026-10-23 текущих proposal, design и delta spec для реализации и выкладки на стенд 194; это approval относится к указанным выше reviewed-хэшам, а не к code/portal acceptance.
+Реализация, тесты и ревью отмеченные ниже для локальной плашки и подписанной CTA были завершены. Эти отметки — только историческое свидетельство; они не подтверждают native-контракт этой редакции. Настройки greeting и реальный маршрут VK оставались открытыми и остаются такими в пунктах 5.1–5.2.
 
-## 2. RED до реализации
+- [x] H.1 Реализация и ревью локального greeting, подписанной CTA и scrollport завершены; поведение заменено решением native-first.
+- [ ] H.2 Приёмка greeting и реального VK Open Line в портале Bitrix не завершена; перенесена в пункты ниже.
 
-- [ ] 2.1 В отдельной сессии предъявить красные проверки по утверждённой спеки до изменения production-кода: anchors/deep links; back/forward и scroll restoration для общего scrollport; wheel/touch/keyboard; focus-reveal ссылок и полей.
-- [ ] 2.2 Добавить RED-сценарии оплаты: PaymentForm overlay вне scrollport; диалог выше зоны и чата; focus/inert; wheel/touch/keyboard scroll lock; сохранение и возврат scrollTop и фокуса на opener; поля остаются доступны при mobile visual viewport/keyboard resize.
-- [ ] 2.3 Проверить, что ChatFacade сохранён sibling там, где этого требует существующая inert-логика; один click happy path и ноль запросов до него; покрыть `address`/`none`/unset, demo и 404 без пустого slot.
-- [x] 2.4 Добавить RED-сценарии точного текста/эмблемы и немедленного показа greeting, динамической зоны, видимости при прокрутке desktop/mobile, единственной кнопки входа, закрытия крестиком или нажатием без самовосстановления до конца текущего документа, клавиатурной доступности и отсутствия Bitrix-запросов до нажатия. Красные Playwright-сценарии добавлены; реализация не входит в эту отметку.
+## 1. Ревью плана
 
-## 3. Ограниченная реализация
+- [ ] 1.1 Root выполняет независимый полный проход этой native-first редакции и подтверждает применимость delta к текущему baseline до начала тестов.
 
-- [x] 3.1 Только после review, полного owner approval и предъявленного RED явно делегировать ограниченную реализацию Luna на подходящей недорогой модели; не менять согласованный scope.
-- [x] 3.2 Реализовать общий scrollport и свёрнутую нижнюю зону минимум 80 CSS px с кнопкой справа: высота 52 CSS px, иконка 22 CSS px, gap 10 CSS px, padding 20 CSS px; сохранить внешний вид шапки и её sticky-поведение. Эта отметка относится к прежней редакции без greeting.
-- [x] 3.3 Обеспечить корректную навигацию и прокрутку, responsive viewport/safe-area, отсутствие slot при отсутствии чата и совместимость payment overlay с focus/inert/scroll lock и восстановлением позиции. Browser checks покрыли desktop/mobile, keyboard viewport resize, safe-area layout и payment dialog; физическая мобильная клавиатура не проверялась.
-- [x] 3.4 Сохранить текущие lazy loader, конфигурационные состояния, demo/404 и один-click путь Bitrix; не менять контракт сторонней интеграции. Address/none/unset, demo/404 и отсутствие запросов до CTA покрыты проверками.
-- [x] 3.5 Реализовать greeting-плашку по референсу владельца в выбранной нижней зоне; использовать `web/public/logo-icon.svg`, оставить «Написать нам» единственным действием входа, учесть клавиатуру и payment modal, не менять чужой DOM Bitrix. Проверены имя, точный текст, локальная эмблема, геометрия 320/375/1280 и payment overlay.
-- [x] 3.6 По нажатию `Написать нам` скрыть локальную плашку до конца документа; не наблюдать закрытие чужого интерфейса и не восстанавливать greeting автоматически. Проверены dismissal по X/клавиатуре и CTA/provider close без повторного показа до нового документа.
+## 2. RED-тесты в чистой сессии
 
-## 4. Verification
+- [ ] 2.1 В отдельной чистой сессии обновить существующие widget-тесты: ожидается одна обычная загрузка SDK и отсутствие автооткрытия chooser; предъявить красный прогон до реализации.
+- [ ] 2.2 Сохранить регрессионные проверки конфигурации, demo/404/no-chat, размеров 320×720/375×812/1280×720, видимости и неперекрытия закрытой кнопки, прокрутки/history/focus, payment stacking/inert/keyboard и performance budgets. Не пропускать шаблон из-за устаревшей проверки локальной карточки.
+- [ ] 2.3 Разделять тесты со stub/harness и живую приёмку провайдера; stub не доказывает реальное поведение Bitrix или VK.
 
-Отметки 4.1–4.8 относятся к предыдущей редакции без greeting и динамической высоты нижней зоны; они не подтверждают новую геометрию или настройки провайдера.
+## 3. Реализация другим исполнителем
 
-- [x] 4.1 Сначала выполнить свежий build gate `cd web && npm run test:build` (`web/package.json@2fee597b5335f6c61fd61a622fa2a5f3f475a605:17`, `"test:build": "npm run build && vitest run --config vitest.build.config.ts"`). Этот прогон обязателен перед браузерными проверками, чтобы Playwright не читал устаревший `dist`.
-- [x] 4.2 Проверить размеры и контраст кнопки и реальную геометрию no-overlap на общем перечне шаблонов в начале, середине и у подвала при 1280×720, 375×812 и 320×720; включить без skip все семь TD-52 шаблонов `home`, `course`, `seminar`, `seminar-dated`, `kontakty`, `statyi`, `raspisanie`.
-- [x] 4.3 Геометрический oracle считать только по видимым clipped text rects (`Range.getClientRects()` пересечённые с реальным scrollport) и видимым controls; не засчитывать спрятанный клипом текст как видимый и не пропускать реально перекрытые фрагменты/контролы.
-- [x] 4.4 Проверить anchors/deep links, историю back/forward, URL/hash и scroll restoration; отдельно проверить wheel, touch, keyboard и focus-reveal в scrollport на всех контрольных ширинах. Проверено локально на desktop/mobile browser; touch — CDP synthetic gesture.
-- [x] 4.5 Проверить resize/orientation и экранную клавиатуру через layout и visual viewport: кнопка остаётся видимой в safe-area, фокусируемые поля доступны, нижняя зона их не перекрывает. Проверено test-only visualViewport resize; physical mobile keyboard и ненулевой hardware safe-area не подтверждались.
-- [x] 4.6 Проверить payment dialog вне scrollport: overlay выше чата, фон и чат inert, фон не скроллится, scrollTop страницы сохраняется и восстанавливается, фокус возвращается opener; поля внутри панели остаются доступными.
-- [x] 4.7 Проверить конфигурации `address`/`none`/unset, demo и 404 и отсутствие пустой зоны/лишних запросов. Отдельный non-demo probe через `buildProbe` (`web/tests/helpers/widget-probe-build.ts@2fee597b5335f6c61fd61a622fa2a5f3f475a605:89`, `export function buildProbe(`) с `PROBE_CHAT_LOADER_SRC` (`web/tests/helpers/widget-probe-build.ts@2fee597b5335f6c61fd61a622fa2a5f3f475a605:160`, `export const PROBE_CHAT_LOADER_SRC = 'https://chat-loader.invalid/probe/loader_probe.js';`) и payment-preview role/stubs (`.github/workflows/test.yml@2fee597b5335f6c61fd61a622fa2a5f3f475a605:598`, `- name: Run payment form e2e (preview role)`) SHALL иметь реально включённые chat trigger и payment dialog. Убедиться, что `DEMO_OUTPUT` не установлен; отсутствие любого элемента или невозможность открыть `.payment-dialog` означает failure, не skip. Проверено локально с `.invalid`-stub, реальные Bitrix-сервисы не проверялись.
-- [x] 4.8 После свежего `test:build` выполнить браузерный gate `cd web && npm run test:e2e:widgets` (`web/package.json@2fee597b5335f6c61fd61a622fa2a5f3f475a605:53`, `"test:e2e:widgets": "node tests/helpers/preview-reset.mjs && playwright test tests/external-widgets.spec.ts tests/external-widgets-baseline-repeat.spec.ts --project=desktop --project=mobile"`; CI: `.github/workflows/test.yml@2fee597b5335f6c61fd61a622fa2a5f3f475a605:630`, `run: npm run test:e2e:widgets`). Затем выполнить `cd web && npm run lint` (`web/package.json@2fee597b5335f6c61fd61a622fa2a5f3f475a605:13`, `"lint": "eslint ."`) и `cd web && npm run typecheck` (`web/package.json@2fee597b5335f6c61fd61a622fa2a5f3f475a605:14`, `"typecheck": "astro check"`). Записать exit code каждого существующего gate и оставшиеся пропуски; не считать TD-52 закрытым при пропуске его шаблонов. Свежий `test:build` и desktop/mobile widget suite прошли; 93 passed, 7 intentional skips (1 desktop project skip for mobile-only test; preview-b/c/d 404 drafts each skipped on both projects). Lint, typecheck, strict OpenSpec validation, and spec-ref gate all exited 0.
+- [ ] 3.1 Загружать настроенный Bitrix SDK ровно один раз при обычной загрузке страницы; greeting показывать по настройкам портала, chooser/dialog автоматически не открывать; сохранить `address`/`none`/unset и demo/404.
+- [ ] 3.2 Удалить локальные greeting и широкую CTA, а также принудительное открытие/показ/скрытие и наблюдатели фокуса; оставить текст, изображение, chooser и DOM под управлением Bitrix.
+- [ ] 3.3 Сохранить настоящий page scrollport и reserve 120 CSS px для закрытого launcher с учётом safe-area/visual viewport; кнопка не накрывает видимый текст и controls, provider greeting остаётся закрываемым overlay.
+- [ ] 3.4 Оставить payment выше провайдера, сохранить inert фона/чата, возврат фокуса, scroll position и доступность клавиатуры; менять слой сайта только если этого требует проверка.
 
-- [x] 4.9 Проверить новую геометрию greeting на 320/375/1280px: свёрнутый slot минимум 80px, открытый slot растёт по содержимому, scrollport заканчивается над ним, greeting и кнопка не перекрывают страницу; проверить крестик/CTA dismissal до конца документа и клавиатуру/modal. `tests/chat-entry-visibility.spec.ts` прошёл на desktop/mobile (38/38); в общей bounded проверке с baseline repeat — 41 passed, 1 intentional desktop-only skip.
+## 4. Проверка
 
-## 5. Независимое ревью
+- [ ] 4.1 Выполнить действующие build/widget, lint, typecheck и performance gates; записать exit code и подтвердить бюджеты на обязательных шаблонах со SDK, загружаемым при открытии страницы.
+- [ ] 4.2 Проверить штатную кнопку после закрытия greeting, закрытия chooser и прокрутки до подвала при 320×720, 375×812 и 1280×720; проверить геометрию, viewport/keyboard, прокрутку/history и оплату.
+- [ ] 4.3 Запустить строгую OpenSpec-валидацию и проверить применимость delta к baseline; на этом этапе не архивировать change и не редактировать `openspec/specs/`.
 
-Отметки 5.1–5.2 и 5b.1 относятся к предыдущему implementation diff; новое greeting/VK расширение требует указанных ниже review.
+## 5. Незавершённая внешняя приёмка
 
-- [x] 5.1 Получить независимый полный проход по текущему implementation diff; исправить подтверждённые находки и перепроверить изменённую ревизию. Полные проходы сделаны на review checkpoints; последующие source, registry, metadata и test-oracle deltas прошли независимые proportionate rechecks без новых confirmed findings.
-- [x] 5.2 Получить второй независимый полный проход по текущему diff; исправить подтверждённые находки и перепроверить изменённую ревизию. Это независимая review chain, а не утверждение о двух полных повторных проходах по финальному HEAD.
-- [x] 5.3 Получить два независимых полных code review нового greeting/VK diff после реализации; прежние reviews относятся к прежней ревизии. Root и Astra проверили текущие code/registry revisions и последующие bounded deltas; подтверждённых findings не осталось.
+- [ ] 5.1 В авторизованном портале Bitrix настроить native greeting точным текстом `Здравствуйте! Готова помочь вам. Напишите мне, если у вас появились вопросы.` и компактной эмблемой ИКПК; проверить живое отображение и внести настройку и наблюдение в `docs/handoff/external-widgets-acceptance-evidence.md`. Портал этим плановым изменением не менялся.
+- [ ] 5.2 С телефона подтвердить, что VK доступен в chooser и ведёт к реальной переписке через Open Line института; записать свидетельство в тот же файл. Публичная страница VK, mock или stub не засчитываются.
 
-## 5b. Ревью на переусложнение
+## 6. Независимое ревью и архив
 
-- [x] 5b.1 Отдельно выполнить read-only `/ponytail-review` по прежнему implementation diff; передать список того, что удалить или заменить стандартным средством, и назвать причины отклонения каждого предложения. Этот шаг проверяет лишнее и не заменяет два независимых прохода шага 5. Отдельный review завершён; итог и принятые причины сохранены в final verification report.
-- [x] 5b.2 Отдельно выполнить read-only simplification review по новому greeting/VK diff; предложить, что удалить или заменить стандартным средством, и назвать причины для отклонённых предложений. Найден и удалён повторный DOM/Range обход в greetingGeometry; используется общий snapshotLayout. Других предложений к удалению нет; compact layout и popup bounds оставлены как минимальная геометрическая поддержка утверждённого контракта.
-
-## 6. Приёмка и архив
-
-- [ ] 6.1 В авторизованном портале Bitrix подтвердить привязку VK к правильной Открытой линии; если binding отсутствует, восстановить существующий канал по подтверждённой конфигурации. Не угадывать URL/ID; без доступа или подтверждённой линии оставить точный blocker и не менять production loader/config молча.
-- [ ] 6.2 Настроить в портале приветствие провайдера точным текстом и существующей компактной эмблемой ИКПК; проверить живой интерфейс. Внести запись в `docs/handoff/external-widgets-acceptance-evidence.md` под точным заголовком сценария, с датой, наблюдением, доказательством непустоты и несекретной идентичностью портала/канала.
-- [ ] 6.3 Выполнить приёмку с телефона: после активации `Написать нам` VK присутствует в chooser и реальный маршрут приводит в переписку Open Line с институтом. Сообщество vk.com/clubikpk, mock и stub не засчитываются; внести запись с точным именем сценария в evidence-файл.
-- [ ] 6.4 Получить финальную приёмку владельца после зелёных релевантных гейтов и закрытия согласованных находок.
-- [ ] 6.5 Только после выполнения предыдущих пунктов заархивировать change и перенести delta в `openspec/specs/external-widgets/spec.md`.
+- [ ] 6.1 Получить два независимых ревью implementation revision и исправить подтверждённые находки; ревьюеры не должны быть исполнителем реализации.
+- [ ] 6.2 Выполнить отдельное read-only ревью на упрощение и записать, что удалить/заменить, а также причины отклонения предложений.
+- [ ] 6.3 После необходимых gates и внешней приёмки получить финальную приёмку владельца, затем архивировать change и синхронизировать принятую delta в основную спецификацию.
