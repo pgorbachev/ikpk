@@ -1218,6 +1218,92 @@ class StaticMainAdmissionTests(unittest.TestCase):
             with self.subTest(changed=changed), self.assertRaises(rehearsal_host.HostFailure):
                 rehearsal_host._validate_static_main_admission(config, "a" * 40, changed)
 
+    def test_static_main_host_cli_accepts_explicit_reuse_capture_operation_id(self):
+        with patch.object(rehearsal_host, "dispatch") as dispatch:
+            result = rehearsal_host.main(["static-main", "--operation-id", "new-build",
+                "--source-sha", "a" * 40, "--provenance-b64", "e30=",
+                "--reuse-capture-operation-id", "sealed-capture"])
+        self.assertEqual(result, 0)
+        self.assertEqual(dispatch.call_args.args[0].reuse_capture_operation_id, "sealed-capture")
+
+    def test_static_main_missing_reuse_operation_refuses_without_fresh_capture(self):
+        import types
+        import io
+        import sys
+        with tempfile.TemporaryDirectory(prefix="ikpk-static-main-missing-reuse-") as temporary:
+            root = Path(temporary)
+            release_root = root / "releases"
+            static_root = root / "static"
+            state_dir = root / "state"
+            release_root.mkdir()
+            static_root.mkdir()
+            state_dir.mkdir()
+            old = static_root / "old"
+            old.mkdir()
+            (old / "index.html").write_text("old", encoding="utf-8")
+            pointer = root / "current"
+            pointer.symlink_to(old)
+            source_sha, operation_id = "a" * 40, "new-build"
+            provenance = {"sourceSha": source_sha, "ref": "refs/heads/main"}
+            source_root = release_root / f"{source_sha}-{operation_id}"
+            source_root.mkdir()
+            (source_root / ".ikpk-rehearsal-ci.json").write_text(json.dumps(provenance), encoding="utf-8")
+            config = {"profile": "staging194", "staticMainReleasePolicy": "ci-only-approved",
+                "releaseRoot": str(release_root), "staticReleaseRoot": str(static_root),
+                "currentStatic": str(pointer), "stateDir": str(state_dir), "cmsUser": "cms",
+                "currentCms": str(root / "current-cms"), "cmsDatabase": str(root / "live.sqlite"),
+                "mediaRoots": [{"prefix": "/uploads/", "path": str(root / "uploads")}],
+                "siteBaseUrl": "https://194.226.99.10"}
+            archive = b"candidate source archive"
+            args = type("Args", (), {"profile": "staging194", "action": "static-main",
+                "operation_id": operation_id, "source_sha": source_sha,
+                "provenance_b64": __import__("base64").b64encode(json.dumps(provenance).encode()).decode(),
+                "archive_sha256": hashlib.sha256(archive).hexdigest(), "browser_digest": None,
+                "reuse_capture_operation_id": "missing-capture"})()
+            captured = root / "new-capture"
+            def make_capture(_config, capture_operation_id, capture_source_sha, _candidate, _database, **_kwargs):
+                captured.mkdir()
+                (captured / "manifest.json").write_text(json.dumps({
+                    "operationId": capture_operation_id, "sourceSha": capture_source_sha}), encoding="utf-8")
+                return captured
+            built = root / "built"
+            built.mkdir()
+            def store_static(_config, source_sha, build_operation_id, _built, digest):
+                release = static_root / f"{source_sha}-{build_operation_id}"
+                release.mkdir()
+                (release / "release.json").write_text(json.dumps({"commit": source_sha,
+                    "operationId": build_operation_id, "snapshotId": "snap:fresh-capture"}), encoding="utf-8")
+                return release
+            def make_database_snapshot(_config, operation_root):
+                snapshot = operation_root / "new.sqlite"
+                snapshot.write_bytes(b"fresh database image")
+                return snapshot
+            with patch.object(rehearsal_host.os, "geteuid", return_value=0), \
+                 patch.object(rehearsal_host, "_root_config", return_value=config), \
+                 patch.object(rehearsal_host, "_validate_static_main_admission"), \
+                 patch.object(rehearsal_host, "_extract_source_archive", return_value=source_root), \
+                 patch.object(rehearsal_host, "_static_main_cms_fingerprint", return_value={"cms": "same"}), \
+                 patch.object(rehearsal_host, "_static_main_protected_paths", return_value=[old]), \
+                 patch.object(rehearsal_host.pwd, "getpwnam", return_value=types.SimpleNamespace(
+                     pw_uid=__import__("os").getuid(), pw_gid=__import__("os").getgid())), \
+                 patch.object(rehearsal_host, "_readonly_database_snapshot", side_effect=make_database_snapshot) as snapshot, \
+                 patch.object(rehearsal_host, "_create_capture_bundle", side_effect=make_capture) as create_capture, \
+                 patch.object(rehearsal_host, "_prepare_static_web_dependencies"), \
+                 patch.object(rehearsal_host, "_build_static", return_value=(built, "b" * 64)), \
+                 patch.object(rehearsal_host, "_store_static", side_effect=store_static), \
+                 patch.object(rehearsal_host.sys, "stdin", io.TextIOWrapper(io.BytesIO(archive))):
+                failure = None
+                result = None
+                try:
+                    result = rehearsal_host.dispatch(args)
+                except rehearsal_host.HostFailure as error:
+                    failure = str(error)
+            self.assertIsNotNone(failure,
+                f"missing selected capture silently fell back to fresh work: result={result}, "
+                f"sqlite_snapshot_calls={snapshot.call_count}, capture_calls={create_capture.call_count}")
+            self.assertRegex(failure, "capture|reuse|operation")
+            snapshot.assert_not_called()
+            create_capture.assert_not_called()
 
     def test_static_main_preparation_is_static_only_and_does_not_move_current(self):
         import types
