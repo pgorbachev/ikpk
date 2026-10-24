@@ -37,5 +37,6 @@ The new static build SHALL remain bound to the exact current canonical `main` SH
 
 - **WHEN** a reused capture passes validation and the new candidate is built
 - **THEN** the served release identifies the new exact `main` SHA and the reused snapshot ID, while the capture manifest retains its original `sourceSha`, operation ID, reference date, origin, and proof
-- **AND** all subprocesses from dependency installation through build consume the selected capture and materialized snapshot/media as read-only input, owned by the configured CMS build user and unchanged after the build
+- **AND** all subprocesses from dependency installation through build consume the selected capture and immutable materialized snapshot inputs (`snapshot.json`, optional metadata files, and media content store) as read-only input, owned by the configured CMS build user and unchanged after the build
+- **AND** newly generated derivative/output directories remain writable build outputs
 - **AND** exact CI revalidation, desktop/mobile browser acceptance, CMS fingerprint preservation, and explicit rollback to the exact previous static tree remain required

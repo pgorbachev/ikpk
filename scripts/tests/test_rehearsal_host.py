@@ -1517,7 +1517,8 @@ class StaticMainAdmissionTests(unittest.TestCase):
             prepare_web.assert_called_once_with(config, candidate.resolve(), [root])
             build_static.assert_called_once_with(
                 config, candidate.resolve(), capture, read_only_paths=[root],
-                chat_loader_src="https://cdn-ru.bitrix24.ru/b35315886/crm/site_button/loader_2_siutnh.js")
+                chat_loader_src="https://cdn-ru.bitrix24.ru/b35315886/crm/site_button/loader_2_siutnh.js",
+                operation_id="main-op", reused_capture=None, reuse_snapshot=False)
 
     def test_static_main_cms_fingerprint_does_not_follow_current_static_media_symlink(self):
         with tempfile.TemporaryDirectory(prefix="ikpk-static-main-fingerprint-") as temporary:

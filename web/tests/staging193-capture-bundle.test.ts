@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -7,6 +7,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it } from 'vitest';
 import { verifyStaging193Bundle } from '../../scripts/lib/staging193-capture-bundle.mjs';
 import { loadCaptureSchemas, readPublishedSqlite } from '../../scripts/lib/server-capture-sqlite.mjs';
+import { contentFingerprint, snapshotId } from '../scripts/lib/content-snapshot.ts';
 
 const repoRoot = join(import.meta.dirname, '../..');
 const schemaRoot = join(repoRoot, 'cms/src');
@@ -37,7 +38,7 @@ interface VerifiedCaptureBundle {
   media: { url: string }[];
 }
 
-function fixtureDatabase(path: string): void {
+function fixtureDatabase(path: string, includeUnshownDocument = true): void {
   const schemas = loadCaptureSchemas(schemaRoot) as Record<string, FixtureSchema>;
   const db = new DatabaseSync(path);
   const snake = (value: string) => value.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`);
@@ -72,25 +73,28 @@ function fixtureDatabase(path: string): void {
     INSERT INTO course_groups (id, document_id, name, slug, legacy_id, published_at) VALUES (2,'group','Group','group','group','2026-10-01');
     INSERT INTO teachers (id, document_id, name, slug, trait, published_at) VALUES (3,'teacher','Teacher','teacher','teacher','2026-10-01'), (4,'teacher','Draft teacher','draft','teacher',NULL);
     INSERT INTO seminars (id, document_id, name, slug, description, published_at) VALUES (5,'seminar','Published','seminar','<a href="/uploads/form.pdf">PDF</a>','2026-10-01'), (6,'seminar','Draft','draft','draft bytes',NULL);
-    INSERT INTO articles (id, document_id, title, slug, published_at) VALUES (7,'article','Article','article','2026-10-01');
+    INSERT INTO articles (id, document_id, title, slug, body, legacy_id, published_at) VALUES (7,'article','Article','article','Article body','article','2026-10-01');
     INSERT INTO course_groups_institute_lnk VALUES (1,2,1,1);
     INSERT INTO seminars_course_group_lnk VALUES (1,5,2,1);
     INSERT INTO seminars_teachers_lnk VALUES (1,5,3,1,1), (2,5,4,2,2);
-    INSERT INTO components_shared_seos (id, seo_title) VALUES (10,'Published SEO'), (11,'Draft SEO');
+    INSERT INTO components_shared_seos (id, seo_title, seo_description) VALUES (10,'Published SEO','Published seminar'), (11,'Draft SEO','Draft seminar'), (13,'Article SEO','Article description');
     INSERT INTO seminars_cmps VALUES (1,5,10,'shared.seo','seo',1), (2,6,11,'shared.seo','seo',1);
-    INSERT INTO components_seminar_document_records (id, document, issuer) VALUES (12,'Certificate','Issuer');
-    INSERT INTO seminars_cmps VALUES (3,5,12,'seminar.document-record','documents',1);
+    INSERT INTO articles_cmps VALUES (1,7,13,'shared.seo','seo',1);
     INSERT INTO files VALUES (20,'photo','/uploads/photo.jpg');
-    INSERT INTO files_related_mph VALUES (1,20,5,'api::seminar.seminar','image',1);
+    INSERT INTO files_related_mph VALUES (1,20,5,'api::seminar.seminar','image',1), (2,20,7,'api::article.article','image',1);
   `);
+  if (includeUnshownDocument) {
+    db.exec(`INSERT INTO components_seminar_document_records (id, document, issuer) VALUES (12,'Certificate','Issuer');
+      INSERT INTO seminars_cmps VALUES (3,5,12,'seminar.document-record','documents',1);`);
+  }
   db.close();
 }
 
-function sealedBundle(): string {
+function sealedBundle(includeUnshownDocument = true): string {
   const root = mkdtempSync(join(tmpdir(), 'staging193-capture-'));
   temporaryRoots.push(root);
   const database = join(root, 'database.sqlite');
-  fixtureDatabase(database);
+  fixtureDatabase(database, includeUnshownDocument);
   const mediaDir = join(root, 'media');
   mkdirSync(mediaDir);
   const photo = Buffer.from('photo bytes');
@@ -131,7 +135,7 @@ function sealedBundle(): string {
 afterEach(() => {
   for (const root of temporaryRoots.splice(0)) {
     chmodSync(root, 0o700);
-    chmodSync(join(root, 'media'), 0o700);
+    if (existsSync(join(root, 'media'))) chmodSync(join(root, 'media'), 0o700);
     rmSync(root, { recursive: true, force: true });
   }
 });
@@ -163,6 +167,45 @@ describe('staging193 sealed SQLite capture', () => {
     expect(seminar.documents[0].document).toBe('Certificate');
     expect(seminar.image[0].url).toBe('/uploads/photo.jpg');
     expect(verified.media.map((item) => item.url).sort()).toEqual(['/uploads/form.pdf', '/uploads/photo.jpg']);
+  });
+
+  it('verifies a previous-day snapshot against the real sealed bundle and preserves its identity and media', () => {
+    const bundle = sealedBundle(false);
+    const verified = verifyStaging193Bundle(bundle, schemaRoot);
+    const snapshotRoot = mkdtempSync(join(tmpdir(), 'staging193-reused-snapshot-'));
+    temporaryRoots.push(snapshotRoot);
+    const capture = spawnSync(process.execPath, [
+      '--experimental-strip-types', join(repoRoot, 'web/scripts/capture-content-snapshot.ts'),
+      '--server-capture', bundle,
+    ], { encoding: 'utf8', cwd: repoRoot, env: { ...process.env, CONTENT_SNAPSHOT_DIR: snapshotRoot } });
+    expect(capture.status, capture.stderr).toBe(0);
+
+    const snapshotPath = join(snapshotRoot, 'snapshot.json');
+    const snapshot = JSON.parse(readFileSync(snapshotPath, 'utf8'));
+    snapshot.referenceDate = '2026-10-17';
+    snapshot.fingerprint = contentFingerprint(snapshot.content);
+    snapshot.snapshotId = snapshotId({ fingerprint: snapshot.fingerprint, referenceDate: snapshot.referenceDate });
+    writeFileSync(snapshotPath, JSON.stringify(snapshot, null, 2));
+    const beforeSnapshot = readFileSync(snapshotPath);
+    const beforeMedia = snapshot.content.media.map((item: { contentId: string }) => {
+      const bytes = readFileSync(join(snapshotRoot, 'media', item.contentId));
+      return { contentId: item.contentId, digest: hash(bytes), size: bytes.length };
+    });
+    const result = spawnSync(process.execPath, [
+      '--experimental-strip-types', join(repoRoot, 'scripts/lib/verify-reused-staging193-snapshot.ts'),
+      bundle, snapshotRoot, schemaRoot, verified.manifest.operationId, verified.manifest.sourceSha, snapshot.snapshotId,
+    ], { encoding: 'utf8', cwd: repoRoot });
+
+    expect(result.status, result.stderr).toBe(0);
+    expect(JSON.parse(result.stdout)).toEqual({
+      snapshotId: snapshot.snapshotId, referenceDate: '2026-10-17',
+      bundleDigest: verified.proof.bundleDigest,
+    });
+    expect(readFileSync(snapshotPath)).toEqual(beforeSnapshot);
+    expect(snapshot.content.media.map((item: { contentId: string }) => {
+      const bytes = readFileSync(join(snapshotRoot, 'media', item.contentId));
+      return { contentId: item.contentId, digest: hash(bytes), size: bytes.length };
+    })).toEqual(beforeMedia);
   });
 
   it('runs the packaged sealer against a real non-empty SQLite and media capture', () => {
