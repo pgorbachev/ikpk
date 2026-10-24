@@ -9,13 +9,53 @@ import { installThirdPartyGuard } from './helpers/third-party-guard';
 const WIDTHS = [320, 375, 1280] as const;
 const TD52 = new Set(['home', 'course', 'seminar', 'seminar-dated', 'kontakty', 'statyi', 'raspisanie']);
 const TRIGGER = '[data-chat-trigger]';
-const FACADE = '[data-chat-facade]';
+const NATIVE_LAUNCHER = '[data-chat-stub-launcher]';
+const NATIVE_GREETING = '[data-chat-stub-greeting]';
+const NATIVE_CHOOSER = '[data-chat-stub-chooser]';
+const KEYBOARD_HELPER = '[data-chat-trigger]';
 const PAYMENT_ROOT = '#payment-dialog-root';
 const PAYMENT_DIALOG = '.payment-dialog';
 const PAYMENT_ENTRY = '[data-payment-entry]';
 const PAYMENT_FORM = '[data-payment-form]';
-const GREETING_TEXT = 'Здравствуйте! Готова помочь вам. Напишите мне, если у вас появились вопросы.';
-const GREETING_CLOSE = 'Закрыть приветствие';
+const GREETING_CLOSE = '[data-chat-stub-greeting-close]';
+
+async function helperVisualState(page: Page) {
+  return page.locator(KEYBOARD_HELPER).evaluate((el) => {
+    const rect = el.getBoundingClientRect();
+    const style = getComputedStyle(el);
+    let visible = style.display !== 'none' && style.visibility !== 'hidden' && Number(style.opacity) > 0;
+    let left = Math.max(0, rect.left);
+    let top = Math.max(0, rect.top);
+    let right = Math.min(innerWidth, rect.right);
+    let bottom = Math.min(innerHeight, rect.bottom);
+    for (let parent = el.parentElement; parent && visible; parent = parent.parentElement) {
+      const parentStyle = getComputedStyle(parent);
+      if (parentStyle.display === 'none' || parentStyle.visibility === 'hidden' || Number(parentStyle.opacity) === 0) {
+        visible = false;
+        break;
+      }
+      if (/(hidden|clip|scroll|auto)/.test(`${parentStyle.overflowX} ${parentStyle.overflowY}`)) {
+        const clip = parent.getBoundingClientRect();
+        left = Math.max(left, clip.left);
+        top = Math.max(top, clip.top);
+        right = Math.min(right, clip.right);
+        bottom = Math.min(bottom, clip.bottom);
+      }
+    }
+    const visibleWidth = Math.max(0, right - left);
+    const visibleHeight = Math.max(0, bottom - top);
+    const outline = getComputedStyle(el, ':focus-visible');
+    const focusedStyle = document.activeElement === el ? style : outline;
+    const focusIndicator = (focusedStyle.outlineStyle !== 'none' && parseFloat(focusedStyle.outlineWidth) > 0)
+      || (focusedStyle.boxShadow !== 'none' && focusedStyle.boxShadow !== '');
+    return {
+      visuallyReadable: visible && visibleWidth > 2 && visibleHeight > 2,
+      rect: { left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom, width: rect.width, height: rect.height },
+      fullyInViewport: rect.left >= 0 && rect.top >= 0 && rect.right <= innerWidth && rect.bottom <= innerHeight,
+      focusIndicator,
+    };
+  });
+}
 
 let activeBuild: ProbeBuild;
 let activeSite: StaticSite;
@@ -82,16 +122,8 @@ async function snapshotLayout(page: Page) {
     const header = document.querySelector('header');
     const main = document.querySelector('main');
     const footer = document.querySelector('footer');
-    const button = document.querySelector<HTMLElement>(args.triggerSelector);
-    const close = [...document.querySelectorAll<HTMLButtonElement>('button')]
-      .find((candidate) => candidate.getAttribute('aria-label') === args.greetingCloseName);
-    const greetingText = [...document.querySelectorAll<HTMLElement>('body *')].find((el) =>
-      el.textContent?.trim() === args.greetingText
-        && ![...el.children].some((child) => child.textContent?.trim() === args.greetingText),
-    ) ?? null;
-    let greeting = greetingText;
-    while (greeting && (!close || !greeting.contains(close) || (button && greeting.contains(button))))
-      greeting = greeting.parentElement;
+    const button = document.querySelector<HTMLElement>(args.nativeLauncherSelector);
+    const greeting = document.querySelector<HTMLElement>(args.greetingSelector);
     const greetingRect = greeting?.getBoundingClientRect() ?? null;
     const greetingStyle = greeting ? getComputedStyle(greeting) : null;
     const greetingVisible = Boolean(greetingRect && greetingStyle && greetingRect.width > 0 && greetingRect.height > 0
@@ -104,12 +136,9 @@ async function snapshotLayout(page: Page) {
         && el.hasAttribute('data-page-scrollport');
     }) ?? null;
     const frame = scrollport?.parentElement ?? null;
-    const lowerZone = frame && button
-      ? [...frame.children].find((el) => el !== scrollport && el.contains(button)) as HTMLElement | undefined
-      : undefined;
-    const rect = (el: Element | null) => {
+    const rect = (el: Element | DOMRect | null) => {
       if (!el) return null;
-      const r = el.getBoundingClientRect();
+      const r = el instanceof DOMRect ? el : el.getBoundingClientRect();
       return { x: r.x, y: r.y, top: r.top, right: r.right, bottom: r.bottom, width: r.width, height: r.height };
     };
     const visibleRect = (r: DOMRect, clip: DOMRect) => {
@@ -121,7 +150,6 @@ async function snapshotLayout(page: Page) {
     };
     const clip = scrollport?.getBoundingClientRect() ?? new DOMRect(0, 0, innerWidth, innerHeight);
     const overlaps: string[] = [];
-    const greetingOverlaps: string[] = [];
     const intersect = (a: { left: number; top: number; right: number; bottom: number }, b: { left: number; top: number; right: number; bottom: number }) =>
       a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
     if (button) {
@@ -137,8 +165,6 @@ async function snapshotLayout(page: Page) {
           if (shown) {
             const description = `text:${node.textContent.trim().slice(0, 32)}`;
             if (intersect(shown, box) && !overlaps.includes(description)) overlaps.push(description);
-            if (greetingVisible && greetingRect && greeting && !greeting.contains(node.parentElement)
-              && intersect(shown, greetingRect) && !greetingOverlaps.includes(description)) greetingOverlaps.push(description);
           }
         }
         range.detach();
@@ -152,8 +178,6 @@ async function snapshotLayout(page: Page) {
         if (shown) {
           const description = `control:${el.tagName.toLowerCase()}:${el.textContent?.trim().slice(0, 24)}`;
           if (intersect(shown, box)) overlaps.push(description);
-          if (greetingVisible && greetingRect && greeting && !greeting.contains(el) && !el.contains(greeting)
-            && intersect(shown, greetingRect)) greetingOverlaps.push(description);
         }
       }
     }
@@ -162,13 +186,16 @@ async function snapshotLayout(page: Page) {
     document.body.append(insetProbe);
     const safeAreaInset = parseFloat(getComputedStyle(insetProbe).paddingBottom) || 0;
     insetProbe.remove();
-    const lowerRect = lowerZone?.getBoundingClientRect() ?? null;
+    const scrollportRect = scrollport?.getBoundingClientRect() ?? null;
+    const lowerRect = scrollportRect
+      ? new DOMRect(0, scrollportRect.bottom, innerWidth, Math.max(0, innerHeight - scrollportRect.bottom))
+      : null;
     return {
       scrollport: rect(scrollport),
       scrollportFound: Boolean(scrollport),
       documentScrollHeight: document.documentElement.scrollHeight,
       pageFrameChildren: frame ? [...frame.children].map((el) => el.tagName.toLowerCase()) : [],
-      lowerZone: rect(lowerZone ?? null),
+      lowerZone: rect(lowerRect),
       lowerUsefulHeight: lowerRect ? lowerRect.height - safeAreaInset : null,
       safeAreaInset,
       buttonInsideUsefulArea: Boolean(button && lowerRect && button.getBoundingClientRect().top >= lowerRect.top
@@ -180,21 +207,15 @@ async function snapshotLayout(page: Page) {
       scrollportScrollHeight: scrollport?.scrollHeight ?? 0,
       scrollportClientHeight: scrollport?.clientHeight ?? 0,
       documentScrollTop: document.scrollingElement?.scrollTop ?? 0,
-      buttonInsideLowerZone: Boolean(lowerZone && button && lowerZone.contains(button)),
-      scrollportEndsBeforeLowerZone: Boolean(scrollport && lowerZone && scrollport.getBoundingClientRect().bottom <= lowerZone.getBoundingClientRect().top + 1),
-      greetingFound: Boolean(greetingText && greeting),
+      buttonInsideLowerZone: Boolean(lowerRect && button && button.getBoundingClientRect().top >= lowerRect.top
+        && button.getBoundingClientRect().bottom <= lowerRect.bottom),
+      greetingFound: Boolean(greeting),
       greetingVisible,
       greetingbox: rect(greeting),
-      greetingContainsTrigger: Boolean(greeting && button && greeting.contains(button)),
-      greetingFocusInside: Boolean(greeting && greeting.contains(document.activeElement)),
-      greetingInsideUsefulArea: Boolean(greetingVisible && greetingRect && lowerRect
-        && greetingRect.top >= lowerRect.top && greetingRect.bottom <= lowerRect.bottom - safeAreaInset + 1),
-      greetingOverlapsButton: Boolean(greetingVisible && greetingRect && button && intersect(greetingRect, button.getBoundingClientRect())),
-      greetingOverlap: greetingOverlaps.slice(0, 8),
       overlap: overlaps.slice(0, 8),
       rootFont: parseFloat(getComputedStyle(document.documentElement).fontSize),
     };
-  }, { triggerSelector: TRIGGER, greetingText: GREETING_TEXT, greetingCloseName: GREETING_CLOSE });
+  }, { nativeLauncherSelector: NATIVE_LAUNCHER, greetingSelector: NATIVE_GREETING });
 }
 
 async function visibleScrollportGestureArea(page: Page) {
@@ -211,125 +232,31 @@ async function visibleScrollportGestureArea(page: Page) {
   });
 }
 
-async function contrastAndButtonState(page: Page, width: number, theme: 'light' | 'dark') {
-  await page.setViewportSize({ width, height: 720 });
-  await page.locator('html').evaluate((el, value) => {
-    if (value === 'dark') el.setAttribute('data-theme', 'dark');
-    else el.removeAttribute('data-theme');
-  }, theme);
-  const trigger = page.locator(TRIGGER);
-  await expect(trigger, 'non-demo probe must render an actual chat trigger').toHaveCount(1);
-  await expect(trigger).toBeVisible();
-  const before = await trigger.evaluate((el) => {
+async function expectNativeLauncher(page: Page, width: number) {
+  const launcher = page.locator(NATIVE_LAUNCHER);
+  await expect(launcher, `${width}px: native launcher is created by the provider stub`).toHaveCount(1);
+  await expect(launcher, `${width}px: closed native launcher is visible`).toBeVisible();
+  const box = await launcher.evaluate((el) => {
     const r = el.getBoundingClientRect();
     const style = getComputedStyle(el);
-    const icon = el.querySelector<HTMLElement>('[aria-hidden="true"]');
-    const caption = [...el.querySelectorAll<HTMLElement>('span')].find((node) =>
-      !node.closest('[aria-hidden="true"]') && node.textContent?.trim() === 'Написать нам',
-    );
-    const iconRect = icon?.getBoundingClientRect();
-    const range = document.createRange();
-    if (caption) range.selectNodeContents(caption);
-    const textRects = caption ? [...range.getClientRects()] : [];
-    const captionStyle = caption ? getComputedStyle(caption) : null;
     return {
-      label: el.getAttribute('aria-label') ?? el.getAttribute('title') ?? '',
-      captionText: caption?.textContent?.trim() ?? '',
-      captionFontSize: captionStyle ? parseFloat(captionStyle.fontSize) : 0,
-      captionVisible: Boolean(caption && captionStyle && captionStyle.display !== 'none'
-        && captionStyle.visibility !== 'hidden' && Number(captionStyle.opacity) > 0
-        && textRects.length === 1 && textRects[0].width > 0 && textRects[0].height > 0
-        && textRects[0].left >= r.left && textRects[0].right <= r.right
-        && textRects[0].top >= r.top && textRects[0].bottom <= r.bottom),
-      height: r.height, width: r.width,
-      paddingLeft: parseFloat(style.paddingLeft), paddingRight: parseFloat(style.paddingRight),
-      gap: parseFloat(style.columnGap === 'normal' ? style.gap : style.columnGap),
-      iconWidth: iconRect?.width ?? 0,
-      iconHeight: iconRect?.height ?? 0,
+      width: r.width, height: r.height,
+      right: innerWidth - r.right, bottom: innerHeight - r.bottom,
+      position: style.position, zIndex: Number.parseInt(style.zIndex, 10),
+      name: el.getAttribute('aria-label'),
+      role: el.getAttribute('role'),
+      tabIndex: el.getAttribute('tabindex'),
     };
   });
-  expect.soft(before.label, `${theme} ${width}: accessible name follows the visible caption`).toBe('Написать нам');
-  expect.soft(before.captionText, `${theme} ${width}: visible caption is the expected one-line text`).toBe('Написать нам');
-  expect.soft(before.captionFontSize, `${theme} ${width}: caption matches approved 14px mockup`).toBe(14);
-  expect.soft(before.captionVisible, `${theme} ${width}: caption text is rendered on one visible line`).toBe(true);
-  expect.soft(before.height, `${theme} ${width}: capsule height`).toBe(52);
-  expect.soft(before.paddingLeft, `${theme} ${width}: left horizontal padding`).toBe(20);
-  expect.soft(before.paddingRight, `${theme} ${width}: right horizontal padding`).toBe(20);
-  expect.soft(before.gap, `${theme} ${width}: icon/caption gap`).toBe(10);
-  expect.soft(before.iconWidth, `${theme} ${width}: icon width`).toBe(22);
-  expect.soft(before.iconHeight, `${theme} ${width}: icon height`).toBe(22);
-
-  const states: Array<{ name: string; activate: () => Promise<void> }> = [
-    { name: 'normal', activate: async () => { await page.mouse.move(0, 0); await trigger.evaluate((el: HTMLElement) => el.blur()); } },
-    { name: 'hover', activate: async () => { await trigger.hover(); } },
-    { name: 'focus', activate: async () => {
-      await trigger.focus();
-      await page.keyboard.press('Tab');
-      await page.keyboard.press('Shift+Tab');
-    } },
-  ];
-  let unfocusedShadow = '';
-  for (const state of states) {
-    await state.activate();
-    const metrics = await trigger.evaluate((el) => {
-      const style = getComputedStyle(el);
-      const caption = [...el.querySelectorAll<HTMLElement>('span')].find((node) =>
-        !node.closest('[aria-hidden="true"]') && node.textContent?.trim() === 'Написать нам',
-      );
-      const textColor = caption ? getComputedStyle(caption).color : '';
-      const rgb = (value: string) => value.match(/[\d.]+/g)?.slice(0, 3).map(Number) ?? [0, 0, 0];
-      const linear = (v: number) => { const x = v / 255; return x <= .04045 ? x / 12.92 : ((x + .055) / 1.055) ** 2.4; };
-      const luminance = (value: string) => {
-        const [r, g, b] = rgb(value).map(linear);
-        return .2126 * r + .7152 * g + .0722 * b;
-      };
-      const fg = luminance(textColor);
-      const bg = luminance(style.backgroundColor);
-      return {
-        ratio: caption ? (Math.max(fg, bg) + .05) / (Math.min(fg, bg) + .05) : 0,
-        outlineStyle: style.outlineStyle,
-        outlineWidth: parseFloat(style.outlineWidth),
-        outlineColor: style.outlineColor,
-        boxShadow: style.boxShadow,
-        textFound: Boolean(caption),
-      };
-    });
-    expect.soft(metrics.ratio, `${theme} ${width} ${state.name}: text contrast >= 4.5:1`).toBeGreaterThanOrEqual(4.5);
-    expect.soft(metrics.textFound, `${theme} ${width} ${state.name}: actual visible caption has measurable text`).toBe(true);
-    if (state.name === 'normal') unfocusedShadow = metrics.boxShadow;
-    if (state.name === 'focus') {
-      const outlineChannels = metrics.outlineColor.match(/[\d.]+/g)?.map(Number) ?? [];
-      const outlineAlpha = outlineChannels.length >= 4 ? outlineChannels[3] : 1;
-      const opaqueOutline = metrics.outlineStyle !== 'none' && metrics.outlineWidth > 0
-        && outlineAlpha >= 0.99;
-      const changedShadow = metrics.boxShadow !== unfocusedShadow && metrics.boxShadow !== 'none';
-      const visibleFocus = opaqueOutline || changedShadow;
-      expect.soft(visibleFocus,
-        `${theme} ${width}: keyboard focus has a visible indicator`).toBe(true);
-    }
-  }
-  await trigger.focus();
-  await trigger.hover();
-  await page.mouse.down();
-  const pressed = await trigger.evaluate((el) => {
-    const style = getComputedStyle(el);
-    const caption = [...el.querySelectorAll<HTMLElement>('span')].find((node) =>
-      !node.closest('[aria-hidden="true"]') && node.textContent?.trim() === 'Написать нам',
-    );
-    const color = caption ? getComputedStyle(caption).color : '';
-    const luminance = (value: string) => {
-      const parts = value.match(/[\d.]+/g)?.slice(0, 3).map((part) => Number(part) / 255) ?? [0, 0, 0];
-      const [r, g, b] = parts.map((v) => v <= .04045 ? v / 12.92 : ((v + .055) / 1.055) ** 2.4);
-      return .2126 * r + .7152 * g + .0722 * b;
-    };
-    const fg = luminance(color);
-    const bg = luminance(style.backgroundColor);
-    return { ratio: caption ? (Math.max(fg, bg) + .05) / (Math.min(fg, bg) + .05) : 0 };
-  });
-  // Release outside the trigger so this visual-state probe cannot activate the chat.
-  await page.mouse.move(0, 0);
-  await page.mouse.up();
-  expect.soft(pressed.ratio, `${theme} ${width} pressed: actual caption contrast >= 4.5:1`).toBeGreaterThanOrEqual(4.5);
+  expect.soft(box.width, `${width}px: measured native button width`).toBe(66);
+  expect.soft(box.height, `${width}px: measured native button height`).toBe(66);
+  expect.soft(box.right, `${width}px: native button right offset`).toBe(50);
+  expect.soft(box.bottom, `${width}px: native button bottom offset`).toBe(50);
+  expect.soft(box.position, `${width}px: provider launcher is viewport-fixed`).toBe('fixed');
+  expect.soft(box.zIndex, `${width}px: provider launcher remains above its greeting`).toBe(10150);
+  expect.soft(box.name, `${width}px: test stub does not invent a native accessible name`).toBeNull();
+  expect.soft(box.role, `${width}px: test stub does not invent a native ARIA role`).toBeNull();
+  expect.soft(box.tabIndex, `${width}px: test stub does not invent keyboard focusability`).toBeNull();
 }
 
 /** Повторно использует общий layout snapshot для геометрии приветствия. */
@@ -341,47 +268,36 @@ async function greetingGeometry(page: Page) {
     bottom: layout.greetingbox.bottom,
     left: layout.greetingbox.x,
     right: layout.greetingbox.right,
-    height: layout.greetingbox.height,
-    overlaps: layout.greetingOverlap,
-    containsTrigger: layout.greetingContainsTrigger,
-    overlapsTrigger: layout.greetingOverlapsButton,
-    focusInside: layout.greetingFocusInside,
   };
 }
 
 test.describe('chat entry visibility approved contract', () => {
-  test('non-demo payment probe has both real product entry points and keeps the loader lazy until one activation', async ({ page }) => {
+  test('normal page load fetches Bitrix once without opening its chooser or adding a site card', async ({ page }) => {
     const seen = await protectThirdParties(page);
     const response = await page.goto(activeUrl('/oplata'));
     expect(response?.status(), 'the non-demo payment page must be served').toBe(200);
     await expect(page.locator('[data-payment-role="preview"]'), 'payment preview role is present in this fixture').toHaveCount(1);
     await expect(page.locator(PAYMENT_FORM), 'a real payment form exists in this fixture').toHaveCount(1);
-    const trigger = page.locator(TRIGGER);
-    await expect(trigger, 'a real chat trigger exists in this fixture').toHaveCount(1);
-    expect(seen.toHost(new URL(PROBE_CHAT_LOADER_SRC).hostname), 'loader request before activation').toEqual([]);
-    await trigger.focus();
-    await page.keyboard.press('Space');
-    await expect(page.locator('[data-chat-stub-panel]'), 'native Space activation opens the existing chat path').toHaveCount(1);
-    expect(seen.toHost(new URL(PROBE_CHAT_LOADER_SRC).hostname), 'first activation loads once').toHaveLength(1);
-
-    await page.goto(activeUrl('/oplata'));
-    const enterTrigger = page.locator(TRIGGER);
-    await expect(enterTrigger).toHaveCount(1);
-    await enterTrigger.focus();
-    await page.keyboard.press('Enter');
-    await expect(page.locator('[data-chat-stub-panel]'), 'native Enter activation opens the existing chat path').toHaveCount(1);
-    expect(seen.toHost(new URL(PROBE_CHAT_LOADER_SRC).hostname), 'one Enter activation adds one loader request').toHaveLength(2);
+    await expect(page.locator(NATIVE_LAUNCHER), 'the SDK-created launcher exists after ordinary load').toBeVisible();
+    expect(seen.toHost(new URL(PROBE_CHAT_LOADER_SRC).hostname), 'ordinary load fetches the SDK exactly once')
+      .toHaveLength(1);
+    await expect(page.locator(NATIVE_CHOOSER), 'ordinary SDK load does not open the chooser').toHaveCount(0);
+    await expect(page.locator('[data-chat-greeting]'), 'the site does not duplicate the provider greeting').toHaveCount(0);
+    await expect.poll(async () => (await helperVisualState(page)).visuallyReadable,
+      'the unfocused helper is not a visible permanent CTA').toBe(false);
+    await expect(page.locator(TRIGGER), 'the compact keyboard helper is the only owned chat action').toHaveCount(1);
   });
 
-  test('label, capsule geometry, keyboard name, and text contrast hold in both themes and all widths', async ({ page }) => {
+  test('native launcher keeps its measured fixed geometry at mobile, narrow-desktop, and desktop widths', async ({ page }) => {
     await protectThirdParties(page);
     await page.goto(activeUrl('/'));
     for (const width of WIDTHS) {
-      for (const theme of ['light', 'dark'] as const) await contrastAndButtonState(page, width, theme);
+      await page.setViewportSize({ width, height: width === 375 ? 812 : 720 });
+      await expectNativeLauncher(page, width);
     }
   });
 
-  test('page flow has one real scrollport and a dynamic sibling lower zone without clipped visible overlap', async ({ page }) => {
+  test('all seven templates reserve 120px plus safe area for the closed native launcher without overlap', async ({ page }) => {
     await protectThirdParties(page);
     const templates = TEMPLATES;
     expect(templates.map(({ name }) => name).filter((name) => TD52.has(name)).sort()).toEqual([...TD52].sort());
@@ -391,21 +307,19 @@ test.describe('chat entry visibility approved contract', () => {
       for (const { name, path } of templates) {
         const response = await page.goto(activeUrl(path));
         expect(response?.status(), `${name}: applicable page is present in this preview fixture`).toBe(200);
-        await expect(page.locator(TRIGGER), `${name}: chat remains the subject`).toHaveCount(1);
+        await expect(page.locator(NATIVE_LAUNCHER), `${name}: native launcher is present`).toBeVisible();
+        await expect(page.locator(NATIVE_GREETING), `${name}: provider greeting is overlaid before close`).toBeVisible();
+        await page.locator(GREETING_CLOSE).click();
+        await expect(page.locator(NATIVE_GREETING), `${name}: greeting can be dismissed`).toHaveCount(0);
         for (const position of ['start', 'middle', 'footer'] as const) {
           const before = await snapshotLayout(page);
           expect.soft(before.scrollportFound, `${name} ${width} ${position}: header/main/newsletter/footer share a real scrollport`).toBe(true);
-          expect.soft(before.lowerZone, `${name} ${width} ${position}: adjacent lower zone exists`).not.toBeNull();
-          expect.soft(before.lowerUsefulHeight, `${name} ${width} ${position}: useful lower-zone height is at least 80 CSS px`).toBeGreaterThanOrEqual(80);
-          expect.soft(before.buttonParentIsBody, `${name} ${width} ${position}: button is outside the content scrollport`).toBe(false);
-          expect.soft(before.buttonInsideScrollport, `${name} ${width} ${position}: button is not inside the content scrollport`).toBe(false);
-          expect.soft(before.buttonInsideLowerZone, `${name} ${width} ${position}: button belongs to the separate lower zone`).toBe(true);
-          expect.soft(before.scrollportEndsBeforeLowerZone, `${name} ${width} ${position}: scrollport ends before lower zone`).toBe(true);
-          expect.soft(before.greetingFound, `${name} ${width} ${position}: approved greeting is in the lower zone`).toBe(true);
-          expect.soft(before.greetingVisible, `${name} ${width} ${position}: greeting is visible`).toBe(true);
-          expect.soft(before.greetingInsideUsefulArea, `${name} ${width} ${position}: greeting fits above safe-area inset`).toBe(true);
-          expect.soft(before.greetingOverlapsButton, `${name} ${width} ${position}: greeting does not overlap CTA`).toBe(false);
-          expect.soft(before.greetingOverlap, `${name} ${width} ${position}: greeting does not overlap visible clipped page text or controls`).toEqual([]);
+          expect.soft(before.lowerZone, `${name} ${width} ${position}: actual viewport reserve is measurable`).not.toBeNull();
+          expect.soft(before.lowerUsefulHeight, `${name} ${width} ${position}: reserve is at least 120px plus safe area`).toBeGreaterThanOrEqual(120);
+          expect.soft(before.buttonParentIsBody, `${name} ${width} ${position}: native launcher is a provider body child`).toBe(true);
+          expect.soft(before.buttonInsideScrollport, `${name} ${width} ${position}: native launcher is outside content scrollport`).toBe(false);
+          expect.soft(before.buttonInsideLowerZone, `${name} ${width} ${position}: launcher lies in the viewport reserve`).toBe(true);
+          expect.soft(before.greetingFound, `${name} ${width} ${position}: closed greeting is absent`).toBe(false);
           if (position === 'start') await page.evaluate(() => {
             const header = document.querySelector('header');
             const main = document.querySelector('main');
@@ -445,11 +359,7 @@ test.describe('chat entry visibility approved contract', () => {
           await page.waitForTimeout(40);
           const measured = await snapshotLayout(page);
           expect.soft(measured.scrollportFound, `${name} ${width} ${position}: scrolling content is the shared scrollport`).toBe(true);
-          expect.soft(measured.lowerUsefulHeight, `${name} ${width} ${position}: dynamic lower zone retains at least 80 useful px`).toBeGreaterThanOrEqual(80);
-          expect.soft(measured.greetingVisible, `${name} ${width} ${position}: greeting remains visible while scrolling`).toBe(true);
-          expect.soft(measured.greetingInsideUsefulArea, `${name} ${width} ${position}: greeting remains above the safe-area inset`).toBe(true);
-          expect.soft(measured.greetingOverlapsButton, `${name} ${width} ${position}: greeting does not overlap CTA`).toBe(false);
-          expect.soft(measured.greetingOverlap, `${name} ${width} ${position}: greeting does not cover visible clipped page text or controls`).toEqual([]);
+          expect.soft(measured.lowerUsefulHeight, `${name} ${width} ${position}: reserve retains at least 120 useful px`).toBeGreaterThanOrEqual(120);
           expect.soft(measured.overlap, `${name} ${width} ${position}: no visible clipped text/control intersects the trigger`).toEqual([]);
           expect.soft(measured.documentScrollTop, `${name} ${width} ${position}: document has no competing scroll position`).toBe(0);
           if (position === 'start') expect.soft(measured.scrollportScrollTop, `${name} ${width}: start position resets the shared scrollport`).toBe(0);
@@ -461,104 +371,110 @@ test.describe('chat entry visibility approved contract', () => {
     }
   });
 
-  test('greeting appears immediately with the approved name, exact text, emblem, and no eager loader request', async ({ page }) => {
+  test('stub greeting is provider-owned and auto opening does not move focus or add local greeting markup', async ({ page }) => {
     const seen = await protectThirdParties(page);
     await page.goto(activeUrl('/'));
-    await expect(page.locator(TRIGGER), 'one existing chat entry action is present').toHaveCount(1);
-    await expect(page.getByRole('button', { name: 'Написать нам', exact: true }), 'greeting adds no second chat-opening button').toHaveCount(1);
-    await expect(page.getByText('Вера Рум', { exact: true }), 'the approved greeting name is visible immediately').toBeVisible();
-    const greeting = page.getByText(GREETING_TEXT, { exact: true });
-    await expect(greeting, 'the exact approved greeting is visible before any activation').toBeVisible();
-    const emblem = greeting.locator('xpath=ancestor::*[.//button[@aria-label="Закрыть приветствие"]][1]')
-      .locator('img[src$="/logo-icon.svg"]');
-    await expect(emblem, 'the local compact IKPK emblem is part of the greeting').toHaveCount(1);
-    await expect.poll(() => emblem.evaluate((image: HTMLImageElement) => image.complete && image.naturalWidth > 0),
-      'the emblem asset loads').toBe(true);
-    await expect(page.getByRole('button', { name: GREETING_CLOSE, exact: true }), 'the greeting has a named close control').toBeVisible();
-    const geometry = await greetingGeometry(page);
-    expect(geometry, 'the text and close control belong to a greeting panel separate from the chat action').not.toBeNull();
-    expect(geometry?.focusInside, 'showing the greeting does not move focus into it').toBe(false);
-    expect(geometry?.overlapsTrigger, 'greeting does not cover the sole chat-opening action').toBe(false);
-    expect(seen.toHost(new URL(PROBE_CHAT_LOADER_SRC).hostname), 'showing the local greeting does not request Bitrix').toEqual([]);
+    const greeting = page.locator(NATIVE_GREETING);
+    await expect(greeting, 'native provider overlay appears in the isolated stub').toBeVisible();
+    await expect(greeting.locator(GREETING_CLOSE), 'native stub greeting can be dismissed').toBeVisible();
+    await expect(page.getByText('Вера Рум', { exact: true }), 'the site does not render the retired local persona card').toHaveCount(0);
+    await expect(page.locator('[data-chat-greeting]'), 'the site does not render a duplicate greeting').toHaveCount(0);
+    await expect.poll(async () => (await helperVisualState(page)).visuallyReadable,
+      'unfocused helper is not a visible wide CTA').toBe(false);
+    expect(seen.toHost(new URL(PROBE_CHAT_LOADER_SRC).hostname), 'normal load fetches exactly one loader').toHaveLength(1);
+    await expect(page.locator(NATIVE_CHOOSER), 'greeting display does not open native chooser').toHaveCount(0);
+    expect(await page.evaluate(() => document.activeElement === document.body), 'provider greeting does not steal focus').toBe(true);
   });
 
-  test('greeting remains visible in the lower zone without covering page content on desktop and mobile widths', async ({ page }) => {
+  test('greeting close leaves the native launcher available at top, middle, and footer', async ({ page }) => {
     await protectThirdParties(page);
     for (const width of WIDTHS) {
       await page.setViewportSize({ width, height: width === 375 ? 812 : 720 });
       await page.goto(activeUrl('/'));
-      const greeting = page.getByText(GREETING_TEXT, { exact: true });
-      const trigger = page.locator(TRIGGER);
-      await expect(greeting, `${width}px: greeting is initially visible`).toBeVisible();
-      await expect(trigger, `${width}px: chat action is initially visible`).toBeInViewport();
-      for (const position of ['middle', 'footer'] as const) {
+      await expectNativeLauncher(page, width);
+      await page.locator(GREETING_CLOSE).click();
+      for (const position of ['start', 'middle', 'footer'] as const) {
         const port = page.locator('[data-page-scrollport]');
         await expect(port, `${width}px: a real content scrollport is available`).toHaveCount(1);
         const target = await port.evaluate((el: HTMLElement, where) => where === 'middle'
           ? Math.floor((el.scrollHeight - el.clientHeight) / 2)
-          : el.scrollHeight - el.clientHeight, position);
+          : where === 'footer' ? el.scrollHeight - el.clientHeight : 0, position);
         await port.evaluate((el: HTMLElement, top) => el.scrollTo({ top, behavior: 'instant' }), target);
         await expect.poll(() => port.evaluate((el: HTMLElement) => el.scrollTop), `${width}px: ${position} scroll settles`)
           .toBe(target);
-        await expect(greeting, `${width}px ${position}: greeting remains visible`).toBeInViewport();
-        await expect(trigger, `${width}px ${position}: sole chat action remains visible`).toBeInViewport();
-        const geometry = await greetingGeometry(page);
-        expect(geometry, `${width}px ${position}: greeting panel can be measured independently of the chat action`).not.toBeNull();
-        expect(geometry?.top, `${width}px ${position}: panel is within the viewport`).toBeGreaterThanOrEqual(0);
-        expect(geometry?.bottom, `${width}px ${position}: panel is within the viewport`).toBeLessThanOrEqual(width === 375 ? 812 : 720);
-        expect(geometry?.containsTrigger, `${width}px ${position}: greeting is not a second chat trigger`).toBe(false);
-        expect(geometry?.overlapsTrigger, `${width}px ${position}: greeting does not cover the chat action`).toBe(false);
-        expect(geometry?.overlaps, `${width}px ${position}: greeting does not cover visible clipped page text or controls`).toEqual([]);
+        await expect(page.locator(NATIVE_LAUNCHER), `${width}px ${position}: native launcher stays visible`).toBeInViewport();
+        const layout = await snapshotLayout(page);
+        expect(layout.overlap, `${width}px ${position}: closed launcher does not cover clipped text or controls`).toEqual([]);
+        expect(layout.buttonInsideLowerZone, `${width}px ${position}: native launcher stays inside bottom reserve`).toBe(true);
+        await page.locator(NATIVE_LAUNCHER).click();
+        await expect(page.locator(NATIVE_CHOOSER), `${width}px ${position}: explicit launcher action opens native chooser`).toBeVisible();
+        await page.locator('[data-chat-stub-chooser-close]').click();
+        await expect(page.locator(NATIVE_CHOOSER), `${width}px ${position}: chooser closes`).toHaveCount(0);
       }
     }
   });
 
-  test('keyboard dismissal persists through scroll and resize until a new document', async ({ page }) => {
+  test('keyboard helper is focus-only and opens then escapes the native chooser with focus restored', async ({ page }) => {
     await protectThirdParties(page);
     await page.setViewportSize({ width: 375, height: 812 });
     await page.goto(activeUrl('/'));
-    const greeting = page.getByText(GREETING_TEXT, { exact: true });
-    const close = page.getByRole('button', { name: GREETING_CLOSE, exact: true });
-    await expect(close).toBeVisible();
-    await close.focus();
-    const focusStyle = await close.evaluate((el) => {
-      const style = getComputedStyle(el);
-      return style.outlineStyle !== 'none' && parseFloat(style.outlineWidth) > 0
-        || style.boxShadow !== 'none';
+    const helper = page.locator(KEYBOARD_HELPER);
+    await expect(helper, 'exactly one site-owned keyboard helper exists').toHaveCount(1);
+    await expect.poll(async () => (await helperVisualState(page)).visuallyReadable,
+      'unfocused helper is visually clipped or offscreen, regardless of its CSS technique').toBe(false);
+    await expect(page.locator(NATIVE_CHOOSER), 'provider chooser starts closed').toHaveCount(0);
+    await page.mouse.move(10, 10);
+    await expect.poll(async () => (await helperVisualState(page)).visuallyReadable,
+      'mouse movement does not make the helper visually readable').toBe(false);
+    for (let step = 0; step < 100; step += 1) {
+      await page.keyboard.press('Tab');
+      if (await helper.evaluate((el) => el === document.activeElement)) break;
+    }
+    await expect(helper, 'Tab reaches the helper through normal keyboard navigation').toBeFocused();
+    const focusedState = await helperVisualState(page);
+    expect(focusedState.visuallyReadable, 'keyboard focus makes the helper visually readable').toBe(true);
+    expect(focusedState.fullyInViewport, 'focused helper fits in the viewport').toBe(true);
+    expect(focusedState.focusIndicator, 'focused helper has a visible focus indicator').toBe(true);
+    await helper.press('Enter');
+    await expect(page.locator(NATIVE_CHOOSER), 'Enter calls the measured native chooser path').toBeVisible();
+    const nativePlaceholder = page.locator('[data-chat-stub-native-placeholder]');
+    const overlayHit = await helper.evaluate((el) => {
+      const r = el.getBoundingClientRect();
+      const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+      return Boolean(hit && (hit === el || el.contains(hit)));
     });
-    expect(focusStyle, 'the close control has a visible keyboard focus indicator').toBe(true);
-    await page.keyboard.press('Enter');
-    await expect(greeting, 'keyboard activation hides the local greeting').toBeHidden();
-    await expect(page.locator(TRIGGER), 'closing greeting returns focus to the available chat action').toBeFocused();
-    const port = page.locator('[data-page-scrollport]');
-    await port.evaluate((el: HTMLElement) => el.scrollTo({ top: el.scrollHeight, behavior: 'instant' }));
-    await page.setViewportSize({ width: 320, height: 720 });
-    await expect(greeting, 'scrolling and viewport changes do not restore the greeting in this document').toBeHidden();
-    await page.reload();
-    await expect(page.getByText(GREETING_TEXT, { exact: true }), 'a new document starts with the greeting again').toBeVisible();
+    expect(overlayHit, 'helper receives pointer hit-testing above the native overlay').toBe(true);
+    await nativePlaceholder.focus();
+    await expect(nativePlaceholder, 'the stub represents a provider focus target without moving focus automatically').toBeFocused();
+    await page.keyboard.press('Escape');
+    await expect(page.locator(NATIVE_CHOOSER), 'Escape closes chooser opened by helper').toHaveCount(0);
+    await expect(helper, 'Escape restores focus to the helper').toBeFocused();
+    await helper.press('Space');
+    await expect(page.locator(NATIVE_CHOOSER), 'Space calls the same native chooser path').toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(page.locator(NATIVE_CHOOSER), 'second Escape closes the native chooser').toHaveCount(0);
+    await expect(helper, 'second Escape restores helper focus').toBeFocused();
   });
 
-  test('activating the chat hides the local greeting through provider close', async ({ page }) => {
+  test('native launcher explicitly opens and closes chooser without reloading the SDK', async ({ page }) => {
     const seen = await protectThirdParties(page);
     await page.goto(activeUrl('/'));
-    const greeting = page.getByText(GREETING_TEXT, { exact: true });
-    const trigger = page.locator(TRIGGER);
-    await expect(greeting).toBeVisible();
-    expect(seen.toHost(new URL(PROBE_CHAT_LOADER_SRC).hostname), 'no loader request before CTA').toEqual([]);
-    await trigger.click();
-    await expect(page.locator('[data-chat-stub-panel]'), 'the existing click path opens the guarded provider fixture').toBeVisible();
-    await expect(greeting, 'the local greeting is hidden when the chat is activated').toBeHidden();
-    expect(seen.toHost(new URL(PROBE_CHAT_LOADER_SRC).hostname), 'the click causes exactly one loader request').toHaveLength(1);
-    await page.locator('[data-chat-stub-panel]').getByRole('button', { name: 'Закрыть' }).click();
-    await expect(page.locator('[data-chat-stub-panel]')).toHaveCount(0);
-    await expect(greeting, 'closing the provider does not restore local greeting in this document').toBeHidden();
+    await expect(page.locator(NATIVE_LAUNCHER), 'native launcher survives greeting overlay').toBeVisible();
+    await expect(page.locator(NATIVE_CHOOSER), 'SDK load itself leaves chooser closed').toHaveCount(0);
+    expect(seen.toHost(new URL(PROBE_CHAT_LOADER_SRC).hostname), 'SDK loads once before visitor action').toHaveLength(1);
+    await page.locator(NATIVE_LAUNCHER).click();
+    await expect(page.locator(NATIVE_CHOOSER), 'mouse action on the native launcher opens provider chooser').toBeVisible();
+    await page.locator('[data-chat-stub-chooser-close]').click();
+    await expect(page.locator(NATIVE_CHOOSER), 'provider close action dismisses chooser').toHaveCount(0);
+    await expect(page.locator(NATIVE_LAUNCHER), 'native launcher remains visible after chooser closes').toBeVisible();
+    expect(seen.toHost(new URL(PROBE_CHAT_LOADER_SRC).hostname), 'opening chooser does not fetch SDK again').toHaveLength(1);
   });
 
   test('payment overlay paints above the greeting and keeps focus inside the dialog', async ({ page }) => {
     await protectThirdParties(page);
     await page.setViewportSize({ width: 375, height: 812 });
     await page.goto(activeUrl('/oplata'));
-    await expect(page.getByText(GREETING_TEXT, { exact: true }), 'payment page shows the local greeting before opening the dialog').toBeVisible();
+    await expect(page.locator(NATIVE_GREETING), 'provider stub exposes greeting overlay before payment').toBeVisible();
     const greeting = await greetingGeometry(page);
     expect(greeting, 'the greeting panel has its own lower-zone box').not.toBeNull();
     const opener = page.locator(PAYMENT_ENTRY);
@@ -761,6 +677,12 @@ test.describe('chat entry visibility approved contract', () => {
       await expect.poll(() => keyboardScrollport.evaluate((el) => el.scrollTop), 'Home returns to the scrollport start').toBe(0);
 
       await resetPort();
+      // This test measures the site's scrollport, not provider-overlay hit testing.
+      // Dismiss the native greeting through its own visible close control first so
+      // its fixed overlay cannot intercept the center of a wheel/touch gesture.
+      await page.locator(GREETING_CLOSE).click();
+      await expect(page.locator(NATIVE_GREETING), 'native greeting is dismissed through its own UI before gestures').toHaveCount(0);
+      await expect(page.locator(NATIVE_LAUNCHER), 'native launcher remains visible after greeting dismissal').toBeVisible();
       const beforeWheel = (await snapshotLayout(page)).scrollportScrollTop;
       const wheelArea = await visibleScrollportGestureArea(page);
       expect(wheelArea.height, 'wheel gesture has visible scrollport area below the sticky header and greeting zone').toBeGreaterThan(0);
@@ -770,7 +692,7 @@ test.describe('chat entry visibility approved contract', () => {
       await expect.poll(async () => (await snapshotLayout(page)).scrollportScrollTop,
         'wheel advances the shared scrollport').toBeGreaterThan(beforeWheel);
       await waitForGestureScrollEnd(beforeWheel, 'wheel gesture settles on the shared scrollport');
-      await expect(page.getByText(GREETING_TEXT, { exact: true }), 'wheel scrolling leaves the greeting visible').toBeVisible();
+      await expect(page.locator(NATIVE_GREETING), 'wheel scrolling does not recreate the dismissed provider greeting').toHaveCount(0);
 
       await resetPort();
       const session = await page.context().newCDPSession(page);
@@ -792,7 +714,7 @@ test.describe('chat entry visibility approved contract', () => {
         await expect.poll(async () => (await snapshotLayout(page)).scrollportScrollTop,
           'trusted CDP touch input advances the shared scrollport').toBeGreaterThan(beforeTouch);
         await waitForGestureScrollEnd(beforeTouch, 'trusted touch gesture settles on the shared scrollport');
-        await expect(page.getByText(GREETING_TEXT, { exact: true }), 'touch scrolling leaves the greeting visible').toBeVisible();
+        await expect(page.locator(NATIVE_GREETING), 'touch scrolling does not recreate the dismissed provider greeting').toHaveCount(0);
       } finally {
         try {
           await session.send('Emulation.setTouchEmulationEnabled', { enabled: false });
@@ -969,6 +891,10 @@ test.describe('chat entry visibility approved contract', () => {
         dropdown: dropdown.getBoundingClientRect().toJSON(),
         maxHeight: getComputedStyle(dropdown).maxHeight,
         overflowY: getComputedStyle(dropdown).overflowY,
+        lastLinkHit: (() => {
+          const hit = document.elementFromPoint(rect.left + Math.min(rect.width / 2, 120), rect.top + rect.height / 2);
+          return Boolean(hit && (hit === el || el.contains(hit)));
+        })(),
         port: { top: portRect.top, bottom: portRect.bottom, scrollTop: port.scrollTop, scrollHeight: port.scrollHeight },
       };
     });
@@ -976,6 +902,7 @@ test.describe('chat entry visibility approved contract', () => {
     expect(geometry.link.top, `last desktop dropdown link is unreachable at 1280x280: ${JSON.stringify(geometry)}`).toBeGreaterThanOrEqual(geometry.dropdown.top - 1);
     expect(geometry.link.bottom, `last desktop dropdown link is unreachable at 1280x280: ${JSON.stringify(geometry)}`).toBeLessThanOrEqual(geometry.dropdown.bottom + 1);
     expect(geometry.link.bottom, `last desktop dropdown link remains below the clipped scrollport: ${JSON.stringify(geometry)}`).toBeLessThanOrEqual(geometry.port.bottom + 1);
+    expect(geometry.lastLinkHit, `last dropdown link receives a hit at its measured center: ${JSON.stringify(geometry)}`).toBe(true);
     expect(geometry.port.scrollTop, 'scrolling the desktop dropdown does not scroll the page').toBe(0);
   });
 
@@ -1215,7 +1142,7 @@ test.describe('chat entry visibility approved contract', () => {
     }
   });
 
-  test('safe-area inset expands the separate lower zone while preserving the 80px useful area', async ({ page }) => {
+  test('safe-area extends the native launcher reserve to 120px plus the measured inset', async ({ page }) => {
     await protectThirdParties(page);
     await page.setViewportSize({ width: 375, height: 640 });
     await page.goto(activeUrl('/'));
@@ -1223,20 +1150,22 @@ test.describe('chat entry visibility approved contract', () => {
     await session.send('Emulation.setSafeAreaInsetsOverride', { insets: { bottom: 20 } });
     const expanded = await snapshotLayout(page);
     expect(expanded.safeAreaInset, 'CDP overrides the safe-area inset for this Chromium fixture').toBe(20);
-    expect(expanded.lowerUsefulHeight ?? -Infinity, 'visible greeting expands the useful lower zone beyond its collapsed minimum').toBeGreaterThan(80);
+    expect(expanded.lowerUsefulHeight ?? -Infinity, 'launcher reserve keeps 120 useful CSS px after inset').toBeGreaterThanOrEqual(120);
     expect(expanded.greetingVisible, 'greeting is visible in the expanded lower zone').toBe(true);
-    expect(expanded.greetingInsideUsefulArea, 'expanded greeting remains above the safe-area inset').toBe(true);
     expect(expanded.buttonInsideUsefulArea, 'capsule remains above the safe-area inset while greeting is visible').toBe(true);
-    expect(expanded.scrollportEndsBeforeLowerZone, 'scrollport ends before the expanded lower zone').toBe(true);
 
-    await page.getByRole('button', { name: GREETING_CLOSE, exact: true }).click();
-    await expect(page.getByText(GREETING_TEXT, { exact: true }), 'dismissal hides greeting before collapsed geometry is measured').toBeHidden();
+    await page.locator(GREETING_CLOSE).click();
+    await expect(page.locator(NATIVE_GREETING), 'dismissal hides the provider greeting').toHaveCount(0);
     const collapsed = await snapshotLayout(page);
     expect(collapsed.safeAreaInset, 'safe-area inset remains applied after dismissal').toBe(20);
-    expect(collapsed.lowerUsefulHeight, 'collapsed lower zone returns to its approved 80 CSS px minimum').toBe(80);
-    expect(collapsed.lowerZone?.height, 'collapsed useful zone plus 20px safe-area is 100px overall').toBe(100);
+    expect(collapsed.lowerUsefulHeight, 'reserved useful zone remains 120 CSS px').toBe(120);
+    expect(collapsed.lowerZone?.height, '120px useful reserve plus 20px safe-area is 140px overall').toBe(140);
     expect(collapsed.buttonInsideUsefulArea, 'capsule remains inside the collapsed useful zone').toBe(true);
-    expect(collapsed.scrollportEndsBeforeLowerZone, 'scrollport ends before the collapsed lower zone').toBe(true);
+    const nativeBounds = await page.locator(NATIVE_LAUNCHER).boundingBox();
+    expect(nativeBounds, 'native launcher remains after greeting dismissal').not.toBeNull();
+    expect(nativeBounds!.y + nativeBounds!.height, 'dismissed native launcher stays above the 20px safe area inset')
+      .toBeLessThanOrEqual(621);
+    await expect(page.locator(NATIVE_LAUNCHER), 'native launcher persists after greeting dismissal').toBeVisible();
     await session.detach();
   });
 
@@ -1275,7 +1204,7 @@ test.describe('chat entry visibility approved contract', () => {
     await expect(reviews.locator('iframe')).toHaveCount(1);
   });
 
-  test('layout resize and reduced visualViewport keep the focused field and chat control visible', async ({ page }) => {
+  test('layout resize and reduced visualViewport keep page fields and payment controls visible', async ({ page }) => {
     await protectThirdParties(page);
     await page.addInitScript(() => {
       const viewport = window.visualViewport;
@@ -1329,7 +1258,7 @@ test.describe('chat entry visibility approved contract', () => {
     await page.mouse.wheel(0, 300);
     await expect.poll(() => page.locator('[data-page-scrollport]').evaluate((el) => el.scrollTop),
       'wheel scrolling can move away from the focused field').toBeGreaterThan(focusedBeforeWheel.scrollTop);
-    await expect(page.getByText(GREETING_TEXT, { exact: true }), 'wheel scrolling does not dismiss the greeting').toBeVisible();
+    await expect(page.locator(NATIVE_GREETING), 'wheel scrolling does not dismiss provider greeting').toBeVisible();
     expect(await page.evaluate(() => document.activeElement === document.querySelector('[data-schedule-search]')),
       'ordinary scrolling keeps the field focused without snapping the page back').toBe(focusedBeforeWheel.active);
 
@@ -1392,27 +1321,32 @@ test.describe('chat entry visibility approved contract', () => {
       const bottom = Math.min(panel.bottom, (vv?.offsetTop ?? 0) + (vv?.height ?? innerHeight));
       return rect.top >= top && rect.bottom <= bottom;
     }), 'payment consent remains visible after a second keyboard viewport resize').toBe(true);
-    const visibleBounds = await page.evaluate((triggerSelector) => {
+    const visibleBounds = await page.evaluate(() => {
       const vv = window.visualViewport!;
-      const button = document.querySelector<HTMLElement>(triggerSelector)!.getBoundingClientRect();
       const port = [...document.querySelectorAll<HTMLElement>('body *')].find((el) => {
         const style = getComputedStyle(el);
         return el.hasAttribute('data-page-scrollport') && el.contains(document.querySelector('main')) && /(auto|scroll)/.test(style.overflowY);
       });
-      return { buttonBottom: button.bottom, visibleBottom: vv.offsetTop + vv.height, portBottom: port?.getBoundingClientRect().bottom ?? null };
-    }, TRIGGER);
-    expect.soft(visibleBounds.buttonBottom, 'chat button stays inside reduced visual viewport').toBeLessThanOrEqual(visibleBounds.visibleBottom + 1);
+      return { visibleBottom: vv.offsetTop + vv.height, portBottom: port?.getBoundingClientRect().bottom ?? null };
+    });
     expect.soft(visibleBounds.portBottom, 'scrollport exists after visual viewport reduction').not.toBeNull();
     expect.soft(visibleBounds.portBottom ?? Infinity, 'scrollport follows reduced visual viewport').toBeLessThanOrEqual(visibleBounds.visibleBottom + 1);
+    await page.setViewportSize({ width: 320, height: 300 });
+    const nativeBounds = await page.locator(NATIVE_LAUNCHER).boundingBox();
+    expect(nativeBounds, 'native launcher stays rendered after an actual browser viewport resize').not.toBeNull();
+    expect(nativeBounds!.y + nativeBounds!.height, 'native launcher stays inside the actual resized layout viewport')
+      .toBeLessThanOrEqual(301);
   });
 
-  test('payment overlay is a body-level sibling, blocks background input, and restores scroll and focus', async ({ page }) => {
+  test('payment stays above late provider nodes, makes helper and chat inert, and restores scroll and focus', async ({ page }) => {
     await protectThirdParties(page);
     await page.setViewportSize({ width: 375, height: 812 });
     await page.goto(activeUrl('/oplata'));
-    const trigger = page.locator(TRIGGER);
+    const trigger = page.locator(KEYBOARD_HELPER);
+    const nativeLauncher = page.locator(NATIVE_LAUNCHER);
     const root = page.locator(PAYMENT_ROOT);
-    await expect(trigger, 'real chat trigger is present').toHaveCount(1);
+    await expect(trigger, 'the compact keyboard helper is present').toHaveCount(1);
+    await expect(nativeLauncher, 'provider launcher is injected by the ordinary SDK load').toBeVisible();
     await expect(root, 'real payment root is present').toHaveCount(1);
     await expect(page.locator(PAYMENT_FORM), 'real payment form is present').toHaveCount(1);
     await expect(page.locator(PAYMENT_ENTRY), 'actual payment opener is present').toHaveCount(1);
@@ -1420,15 +1354,23 @@ test.describe('chat entry visibility approved contract', () => {
     const opener = page.locator(PAYMENT_ENTRY);
     await opener.scrollIntoViewIfNeeded();
     await opener.focus();
-    const before = await snapshotLayout(page);
     await opener.click();
     await expect(page.locator(PAYMENT_DIALOG)).toBeVisible();
+    await page.evaluate(() => {
+      const lateProviderNode = document.createElement('div');
+      lateProviderNode.setAttribute('data-chat-stub-late-launcher', '');
+      lateProviderNode.style.cssText = 'position:fixed;right:50px;bottom:50px;width:66px;height:66px;z-index:10150';
+      document.body.append(lateProviderNode);
+    });
+    await expect.poll(() => page.locator('[data-chat-stub-late-launcher]').evaluate((el) =>
+      (el as HTMLElement).inert || el.closest('[inert]') !== null,
+    ), 'a provider body child injected after payment opens becomes inert').toBe(true);
     const overlay = await page.evaluate((args) => {
       const paymentRoot = document.querySelector<HTMLElement>(args.root)!;
       const dialog = document.querySelector<HTMLElement>(args.dialog)!;
-      const chat = document.querySelector<HTMLElement>(args.chat)!;
-      const button = chat.querySelector<HTMLElement>('button')!;
-      const r = button.getBoundingClientRect();
+      const launcher = document.querySelector<HTMLElement>(args.launcher)!;
+      const wrapper = document.querySelector<HTMLElement>('[data-chat-stub-wrapper]')!;
+      const r = launcher.getBoundingClientRect();
       const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
       const scrollport = [...document.querySelectorAll<HTMLElement>('body *')].find((el) => {
         const style = getComputedStyle(el);
@@ -1436,37 +1378,63 @@ test.describe('chat entry visibility approved contract', () => {
       });
       return {
         paymentRootBodyChild: paymentRoot.parentElement === document.body,
-        chatFacadeBodyChild: chat.parentElement === document.body,
+        providerNodeBodyChild: launcher.parentElement === document.body,
+        providerWrapperInert: wrapper.inert || wrapper.closest('[inert]') !== null,
+        providerWrapperZ: Number.parseInt(getComputedStyle(wrapper).zIndex, 10),
         paymentRootOutsideScrollport: !scrollport?.contains(paymentRoot),
         dialogVisible: !dialog.hidden,
         dialogZ: Number.parseInt(getComputedStyle(dialog).zIndex, 10),
-        chatZ: Number.parseInt(getComputedStyle(chat).zIndex, 10),
-        chatInert: chat.inert,
+        helperInert: document.querySelector<HTMLElement>(args.helper)?.closest('[inert]') !== null,
+        helperFocused: document.activeElement === document.querySelector<HTMLElement>(args.helper),
+        launcherInert: launcher.inert || launcher.closest('[inert]') !== null,
+        lateProviderNodeInert: (() => {
+          const late = document.querySelector<HTMLElement>('[data-chat-stub-late-launcher]');
+          return Boolean(late && (late.inert || late.closest('[inert]')));
+        })(),
         scrollportFound: Boolean(scrollport),
         scrollportInert: scrollport?.inert ?? false,
         hitByOverlay: Boolean(hit && (dialog === hit || dialog.contains(hit))),
         activeInsideDialog: dialog.contains(document.activeElement),
       };
-    }, { root: PAYMENT_ROOT, dialog: PAYMENT_DIALOG, chat: FACADE });
+    }, { root: PAYMENT_ROOT, dialog: PAYMENT_DIALOG, launcher: NATIVE_LAUNCHER, helper: KEYBOARD_HELPER });
     expect.soft(overlay.paymentRootBodyChild, 'payment root is a direct body sibling outside the page scrollport').toBe(true);
-    expect.soft(overlay.chatFacadeBodyChild, 'chat facade remains a direct body sibling for existing inert behavior').toBe(true);
+    expect.soft(overlay.providerNodeBodyChild, 'provider launcher is injected outside the scrollport').toBe(true);
     expect.soft(overlay.paymentRootOutsideScrollport, 'payment dialog root stays outside the page scrollport').toBe(true);
     expect.soft(overlay.scrollportFound, 'page scrollport exists').toBe(true);
     expect.soft(overlay.scrollportInert, 'page scrollport is inert while payment is open').toBe(true);
-    expect.soft(overlay.chatInert, 'chat is inert while payment is open').toBe(true);
-    expect.soft(overlay.dialogZ > overlay.chatZ, 'payment overlay paints above chat').toBe(true);
-    expect.soft(overlay.hitByOverlay, 'click at the covered chat button is intercepted by payment overlay').toBe(true);
+    expect.soft(overlay.helperInert, 'site helper is inert while payment is open').toBe(true);
+    expect.soft(overlay.launcherInert, 'late provider launcher is inert while payment is open').toBe(true);
+    expect.soft(overlay.lateProviderNodeInert, 'late body-level provider insertion is inert while payment is open').toBe(true);
+    expect.soft(overlay.providerWrapperZ, 'stub uses the measured provider wrapper layer').toBe(10150);
+    expect.soft(overlay.dialogZ > overlay.providerWrapperZ!, 'payment overlay paints above native provider wrapper').toBe(true);
+    expect.soft(overlay.hitByOverlay, 'click at the covered native launcher is intercepted by payment overlay').toBe(true);
     expect.soft(overlay.activeInsideDialog, 'focus is moved inside payment dialog').toBe(true);
+    expect.soft(overlay.helperFocused, 'payment never moves focus to the helper').toBe(false);
 
     const dialogFocus = page.locator('.payment-dialog-close');
     await dialogFocus.focus();
+    const lockedBeforeEscape = await snapshotLayout(page);
     await page.keyboard.press('PageDown');
     await page.mouse.wheel(0, 500);
+    expect((await snapshotLayout(page)).scrollportScrollTop, 'PageDown and wheel input cannot move the background while payment is open')
+      .toBe(lockedBeforeEscape.scrollportScrollTop);
+    await page.keyboard.press('Escape');
+    await expect(page.locator(PAYMENT_DIALOG), 'Escape closes the payment dialog through its existing behavior').toBeHidden();
+    await expect(page.locator(NATIVE_CHOOSER), 'Escape while payment is active never opens the provider chooser').toHaveCount(0);
+    expect(await page.evaluate((selector) => document.activeElement !== document.querySelector(selector), KEYBOARD_HELPER),
+      'Escape in the payment focus cycle does not hand focus to the helper').toBe(true);
+    await expect(opener, 'Escape restores focus to the payment opener').toBeFocused();
+    await opener.click();
+    await expect(page.locator(PAYMENT_DIALOG), 'payment dialog reopens for the remaining inert-input checks').toBeVisible();
+    const before = await snapshotLayout(page);
+    await dialogFocus.focus();
+    const lockedBeforeTouch = await snapshotLayout(page);
     const session = await page.context().newCDPSession(page);
     await session.send('Input.synthesizeScrollGesture', { x: 180, y: 300, yDistance: -350, speed: 650, gestureSourceType: 'touch' });
     await session.detach();
     const afterBackgroundInput = await snapshotLayout(page);
-    expect.soft(afterBackgroundInput.scrollportScrollTop, 'keyboard/wheel/touch-like input cannot move background scrollport').toBe(before.scrollportScrollTop);
+    expect.soft(afterBackgroundInput.scrollportScrollTop, 'touch-like input cannot move the background while payment is reopened')
+      .toBe(lockedBeforeTouch.scrollportScrollTop);
 
     await page.locator('[data-payment-close]').click();
     await expect(page.locator(PAYMENT_DIALOG)).toBeHidden();
@@ -1528,9 +1496,9 @@ test.describe('chat entry visibility approved contract', () => {
             .some((node) => { const r = node.getBoundingClientRect(); return r.width > 0 && r.height > 0 && r.bottom > 0 && r.top < innerHeight; });
           return hasText || hasControl;
         };
-        const reservedSibling = siblings.some((el) => {
+        const emptyReserveSibling = siblings.some((el) => {
           const r = el.getBoundingClientRect();
-          return Math.abs(r.height - 80) < 1 && r.bottom >= innerHeight - 1 && !visibleContent(el);
+          return r.height >= 120 && r.bottom >= innerHeight - 1 && !visibleContent(el);
         });
         const portRect = port?.getBoundingClientRect();
         const footerRect = footer?.getBoundingClientRect();
@@ -1541,10 +1509,11 @@ test.describe('chat entry visibility approved contract', () => {
           documentMaxScroll: Math.max(0, (document.scrollingElement?.scrollHeight ?? 0) - innerHeight),
           footerBottom: footerRect?.bottom ?? 0,
           scrollportBottom: portRect?.bottom ?? null,
-          reservedSibling,
+          emptyReserveSibling,
         };
         });
-        expect.soft(layout.reservedSibling, `${name}: no empty 80px sibling is reserved without chat`).toBe(false);
+        await expect(page.locator(NATIVE_LAUNCHER), `${name}: disabled chat creates no provider launcher`).toHaveCount(0);
+        expect.soft(layout.emptyReserveSibling, `${name}: no empty 120px chat reserve is created when chat is disabled`).toBe(false);
         if (layout.scrollportFound) {
           expect.soft(layout.scrollportBottom ?? -Infinity, `${name}: chatless scrollport reaches the viewport bottom`).toBeGreaterThanOrEqual(layout.viewportHeight - 1);
           expect.soft(layout.documentScrollTop, `${name}: chatless layout has no competing document scroll`).toBe(0);

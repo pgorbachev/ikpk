@@ -161,12 +161,18 @@ describe('состояние 1: конфигурация задана — вст
       expect(byDataName(html!, name).map((el) => el.tagName), `на 404 есть '${name}'`).toEqual([]);
   });
 
-  it('кнопка вызова и точка монтирования объявлены нашими именами', () => {
+  it('keyboard helper объявлен, а native roots остаются runtime-разметкой провайдера', () => {
     const home = state1.pages.get('/index.html');
     expect(home, 'в пробе нет главной страницы').toBeTruthy();
     expect(byDataName(home!, SEL_CHAT_FACADE).length, 'фасада чата нет').toBe(1);
-    expect(byDataName(home!, SEL_CHAT_TRIGGER).length, 'нашей кнопки вызова нет').toBe(1);
-    expect(byDataName(home!, SEL_CHAT_MOUNT).length, 'объявленной точки монтирования нет').toBe(1);
+    const helper = byDataName(home!, SEL_CHAT_TRIGGER);
+    expect(helper.length, 'keyboard helper должен быть ровно один').toBe(1);
+    expect(helper[0].tagName, 'keyboard helper должен быть кнопкой').toBe('button');
+    expect(attr(helper[0], 'aria-label'), 'keyboard helper должен иметь доступное имя').toBe('Написать нам');
+    expect(attr(helper[0], 'data-chat-loader-src'), 'helper должен нести объявленный SDK-адрес').toBe(
+      PROBE_CHAT_LOADER_SRC,
+    );
+    expect(byDataName(home!, 'data-chat-greeting'), 'локальная greeting-разметка не дублируется').toEqual([]);
   });
 
   it('адрес загрузчика записан СО СХЕМОЙ', () => {
