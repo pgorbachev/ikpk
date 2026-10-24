@@ -49904,7 +49904,7 @@
       "slotId": "src:components/articles/ArticleFilterBar.astro:L34:C1:style",
       "route": "/knigi-i-uchebnye-materialy",
       "placement": "doc-order:8:style",
-      "identity": "style|body:0eef0e64ffb5b656",
+      "identity": "style|body:e06d938c6b2290fd",
       "count": 1,
       "builds": [
         "production",
