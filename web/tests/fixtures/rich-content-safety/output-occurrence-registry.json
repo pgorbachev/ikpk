@@ -125,7 +125,7 @@
     "src:pages/demo-zayavka/[...rest].astro:L48:C1:style",
     "src:pages/instituty/[slug].astro:L66:C1:style",
     "src:pages/instituty/index.astro:L37:C1:style",
-    "src:pages/knigi-i-uchebnye-materialy.astro:L38:C1:style",
+    "src:pages/knigi-i-uchebnye-materialy.astro:L54:C1:style",
     "src:pages/kontakty.astro:L72:C1:style",
     "src:pages/oplata.astro:L52:C11:svg",
     "src:pages/oplata.astro:L83:C1:style",
@@ -49904,7 +49904,7 @@
       "slotId": "src:components/articles/ArticleFilterBar.astro:L34:C1:style",
       "route": "/knigi-i-uchebnye-materialy",
       "placement": "doc-order:8:style",
-      "identity": "style|body:0eef0e64ffb5b656",
+      "identity": "style|body:e06d938c6b2290fd",
       "count": 1,
       "builds": [
         "production",
