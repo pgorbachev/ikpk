@@ -73,6 +73,7 @@ export function readInitialProductionSnapshot(snapshotDir: string, treeDir: stri
       !digest(proof.schemaDigest) || !digest(proof.databaseDigest) || !digest(proof.mediaManifestDigest) ||
       proof.bundleDigest !== createHash('sha256').update(captureBytes).digest('hex') ||
       release.commit !== sourceSha || release.operationId !== capture.operationId ||
+      'reusedCapture' in release ||
       release.snapshotId !== snapshot.snapshotId || release.staticTreeSha256 !== treeDigest ||
       process.env.PUBLICATION_SNAPSHOT_ID !== snapshot.snapshotId) {
     throw new Error('initial production candidate does not match the admitted source, capture, and release');
@@ -96,14 +97,24 @@ function readStagingSnapshot(snapshotDir: string, treeDir: string): DemoPublicat
   const capture = JSON.parse(captureBytes.toString('utf8')) as Record<string, unknown>;
   const proof = snapshot.captureProof;
   const release = JSON.parse(readFileSync(`${treeDir}/release.json`, 'utf8')) as Record<string, unknown>;
+  const bundleDigest = createHash('sha256').update(captureBytes).digest('hex');
+  const reusedCapture = release.reusedCapture;
+  const sameOperation = capture.operationId === release.operationId
+    && capture.sourceSha === process.env.PUBLICATION_COMMIT;
+  const reuseReferenceValid = sameOperation
+    ? reusedCapture === undefined
+    : reusedCapture !== null && typeof reusedCapture === 'object' && !Array.isArray(reusedCapture)
+      && Object.keys(reusedCapture).sort().join(',') === 'bundleDigest,operationId,sourceSha'
+      && (reusedCapture as Record<string, unknown>).operationId === capture.operationId
+      && (reusedCapture as Record<string, unknown>).sourceSha === capture.sourceSha
+      && (reusedCapture as Record<string, unknown>).bundleDigest === bundleDigest;
   if (capture.siteUrl !== 'https://194.226.99.10' || snapshot.origin?.kind !== 'server-db' || snapshot.origin.sourceId !== 'demo193-cms' ||
       snapshot.sourcePolicy !== 'demo-publication-only' || snapshot.sourceAge !== 'untracked' ||
       snapshot.pinned || !proof || proof.version !== 1 || proof.method !== 'quiesced-sqlite-backup' ||
       proof.sourceId !== 'demo193-cms' || typeof proof.captureId !== 'string' || proof.captureId !== capture.operationId ||
       proof.schemaDigest !== capture.schemaDigest || proof.databaseDigest !== capture.databaseSha256 ||
       proof.mediaManifestDigest !== capture.mediaManifestSha256 ||
-      proof.bundleDigest !== createHash('sha256').update(captureBytes).digest('hex') ||
-      capture.operationId !== release.operationId || release.commit !== process.env.PUBLICATION_COMMIT ||
+      proof.bundleDigest !== bundleDigest || !reuseReferenceValid || release.commit !== process.env.PUBLICATION_COMMIT ||
       release.snapshotId !== snapshot.snapshotId || typeof release.staticTreeSha256 !== 'string' ||
       !Array.isArray(snapshot.content?.media) || !snapshot.content.types || !/^\d{4}-\d{2}-\d{2}$/.test(snapshot.referenceDate)) {
     throw new Error('invalid sealed staging snapshot');

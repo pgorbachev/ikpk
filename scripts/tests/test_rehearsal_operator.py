@@ -31,31 +31,48 @@ class OperatorAdmissionTests(unittest.TestCase):
         }]
         self.jobs = [{"name": name, "status": "completed", "conclusion": "success"} for name in JOBS]
 
-    def _browser_candidate(self, root, manifest_source_sha=SHA):
-        operation_id = "capture-op"
+    def _browser_candidate(self, root, manifest_source_sha=SHA, capture_operation_id="capture-op",
+                           build_operation_id=None, reused_capture_reference=None, profile="staging194"):
+        operation_id = capture_operation_id
+        build_operation_id = build_operation_id or operation_id
         snapshot_id = "snapshot-demo"
-        manifest = {"version": 1, "host": "194.226.99.10", "siteUrl": "https://194.226.99.10",
-                    "sourceId": "demo193-cms", "operationId": operation_id,
+        production = profile == "initial-prod"
+        manifest = {"version": 1, "host": "89.111.184.196" if production else "194.226.99.10",
+                    "siteUrl": "https://ikpk.su" if production else "https://194.226.99.10",
+                    "sourceId": "initial-prod-server-db" if production else "demo193-cms",
+                    "operationId": operation_id,
                     "sourceSha": manifest_source_sha, "capturedAt": "2026-10-22T10:00:00.000Z",
                     "schemaDigest": "schema-digest", "databaseSha256": "database-digest",
                     "mediaManifestSha256": "media-digest"}
+        if production:
+            manifest.update({"profile": "initial-prod", "runId": 123, "attempt": 1})
         manifest_bytes = json.dumps(manifest, separators=(",", ":")).encode()
-        snapshot = {"sourcePolicy": "demo-publication-only", "sourceAge": "untracked",
-                    "origin": {"kind": "server-db", "sourceId": "demo193-cms"},
+        snapshot = {"sourcePolicy": "initial-production" if production else "demo-publication-only",
+                    "sourceAge": "source-bound" if production else "untracked",
+                    "origin": {"kind": "server-db", "sourceId": "initial-prod-server-db" if production else "demo193-cms"},
                     "snapshotId": snapshot_id,
                     "captureProof": {"version": 1, "method": "quiesced-sqlite-backup",
-                        "sourceId": "demo193-cms", "captureId": operation_id,
+                        "sourceId": "initial-prod-server-db" if production else "demo193-cms",
+                        "captureId": operation_id,
                         "schemaDigest": "schema-digest", "databaseDigest": "database-digest",
                         "mediaManifestDigest": "media-digest",
                         "bundleDigest": hashlib.sha256(manifest_bytes).hexdigest()}}
+        if production:
+            snapshot["captureProof"].update({"targetHost": "89.111.184.196", "siteUrl": "https://ikpk.su",
+                "sourceSha": manifest_source_sha, "runId": 123, "attempt": 1})
         static_root = Path(root) / "static"
         snapshot_root = Path(root) / "snapshot"
         static_root.mkdir()
         snapshot_root.mkdir()
         (static_root / "index.html").write_text("candidate", encoding="utf-8")
         static_digest = staging193._static_tree_sha256(static_root)
-        release = {"commit": SHA, "operationId": operation_id,
+        release = {"commit": SHA, "operationId": build_operation_id,
                    "staticTreeSha256": static_digest, "snapshotId": snapshot_id}
+        if reused_capture_reference is True:
+            reused_capture_reference = {"operationId": operation_id, "sourceSha": manifest_source_sha,
+                                        "bundleDigest": hashlib.sha256(manifest_bytes).hexdigest()}
+        if reused_capture_reference is not None:
+            release["reusedCapture"] = reused_capture_reference
         (static_root / "release.json").write_text(json.dumps(release), encoding="utf-8")
         (snapshot_root / "snapshot.json").write_text(json.dumps(snapshot), encoding="utf-8")
         (snapshot_root / "capture-manifest.json").write_bytes(manifest_bytes)
@@ -69,7 +86,7 @@ class OperatorAdmissionTests(unittest.TestCase):
                         member = tarfile.TarInfo(name)
                         member.size = len(payload)
                         bundle.addfile(member, io.BytesIO(payload))
-        return operation_id, static_digest, archive.getvalue()
+        return build_operation_id, static_digest, archive.getvalue()
 
     def test_browser_check_accepts_real_demo_capture_proof_without_source_sha(self):
         with tempfile.TemporaryDirectory(prefix="ikpk-browser-proof-") as temporary:
@@ -106,6 +123,110 @@ class OperatorAdmissionTests(unittest.TestCase):
                     staging193.browser_check(SHA, operation_id, digest, archive)
             server.assert_not_called()
             run.assert_not_called()
+
+    def test_browser_check_accepts_original_capture_proof_for_a_new_build_operation(self):
+        with tempfile.TemporaryDirectory(prefix="ikpk-browser-reused-capture-") as temporary:
+            root = Path(temporary)
+            (root / "web/node_modules/.bin").mkdir(parents=True)
+            (root / "web/node_modules/.bin/playwright").touch()
+            build_operation_id, digest, archive = self._browser_candidate(
+                root, manifest_source_sha="b" * 40, capture_operation_id="sealed-capture",
+                build_operation_id="code-only-build", reused_capture_reference=True)
+            server = MagicMock()
+            server.server_address = ("127.0.0.1", 12345)
+            thread = MagicMock()
+            with patch.object(staging193, "ROOT", root), \
+                 patch.object(staging193.socketserver, "ThreadingTCPServer", return_value=server), \
+                 patch.object(staging193.threading, "Thread", return_value=thread), \
+                 patch.object(staging193.subprocess, "run", return_value=subprocess.CompletedProcess([], 0)) as run:
+                staging193.browser_check(SHA, build_operation_id, digest, archive,
+                    chat_loader_src="https://cdn-ru.bitrix24.ru/b35315886/crm/site_button/loader_2_siutnh.js")
+            run.assert_called_once()
+
+    def test_browser_check_rejects_reused_capture_without_release_reference(self):
+        with tempfile.TemporaryDirectory(prefix="ikpk-browser-unreferenced-reuse-") as temporary:
+            root = Path(temporary)
+            (root / "web/node_modules/.bin").mkdir(parents=True)
+            (root / "web/node_modules/.bin/playwright").touch()
+            build_operation_id, digest, archive = self._browser_candidate(
+                root, manifest_source_sha="b" * 40, capture_operation_id="sealed-capture",
+                build_operation_id="code-only-build")
+            server = MagicMock()
+            server.server_address = ("127.0.0.1", 12345)
+            with patch.object(staging193, "ROOT", root), \
+                 patch.object(staging193.socketserver, "ThreadingTCPServer", return_value=server), \
+                 patch.object(staging193.threading, "Thread", return_value=MagicMock()), \
+                 self.assertRaises(staging193.Refusal):
+                staging193.browser_check(SHA, build_operation_id, digest, archive)
+
+    def test_browser_check_rejects_reused_capture_with_wrong_release_bundle_digest(self):
+        with tempfile.TemporaryDirectory(prefix="ikpk-browser-wrong-reuse-ref-") as temporary:
+            root = Path(temporary)
+            (root / "web/node_modules/.bin").mkdir(parents=True)
+            (root / "web/node_modules/.bin/playwright").touch()
+            build_operation_id, digest, archive = self._browser_candidate(
+                root, manifest_source_sha="b" * 40, capture_operation_id="sealed-capture",
+                build_operation_id="code-only-build", reused_capture_reference={
+                    "operationId": "sealed-capture", "sourceSha": "b" * 40,
+                    "bundleDigest": "0" * 64})
+            server = MagicMock()
+            server.server_address = ("127.0.0.1", 12345)
+            with patch.object(staging193, "ROOT", root), \
+                 patch.object(staging193.socketserver, "ThreadingTCPServer", return_value=server), \
+                 patch.object(staging193.threading, "Thread", return_value=MagicMock()), \
+                 self.assertRaises(staging193.Refusal):
+                staging193.browser_check(SHA, build_operation_id, digest, archive)
+
+    def test_initial_prod_browser_check_rejects_reused_capture_reference(self):
+        with tempfile.TemporaryDirectory(prefix="ikpk-browser-production-reuse-ref-") as temporary:
+            root = Path(temporary)
+            (root / "web/node_modules/.bin").mkdir(parents=True)
+            (root / "web/node_modules/.bin/playwright").touch()
+            operation_id, digest, archive = self._browser_candidate(root,
+                capture_operation_id=staging193.INITIAL_PROD_OPERATION_ID,
+                build_operation_id=staging193.INITIAL_PROD_OPERATION_ID,
+                reused_capture_reference={"operationId": staging193.INITIAL_PROD_OPERATION_ID,
+                    "sourceSha": SHA, "bundleDigest": "0" * 64}, profile="initial-prod")
+            with patch.object(staging193, "ROOT", root), \
+                 patch.object(staging193.socketserver, "ThreadingTCPServer") as server, \
+                 patch.object(staging193.subprocess, "run") as run, \
+                 self.assertRaises(staging193.Refusal):
+                staging193.browser_check(SHA, operation_id, digest, archive, profile="initial-prod",
+                    admitted_run={"runId": 123, "attempt": 1})
+            server.assert_not_called()
+            run.assert_not_called()
+
+    def test_static_main_cli_accepts_explicit_reuse_capture_operation_id(self):
+        with patch.object(staging193, "invoke") as invoke:
+            result = staging193.main(["static-main", "--host", staging193.TARGET_HOST,
+                "--operation-id", "new-build", "--source-sha", SHA,
+                "--reuse-capture-operation-id", "sealed-capture"])
+        self.assertEqual(result, 0)
+        self.assertEqual(invoke.call_args.args[0].reuse_capture_operation_id, "sealed-capture")
+
+    def test_static_main_forwards_reuse_capture_id_to_host_prepare(self):
+        provenance = {"sourceSha": SHA, "runId": 123, "attempt": 1}
+        responses = [json.dumps({"phase": "browser-check-required", "staticTreeSha256": "c" * 64}).encode(),
+                     b"candidate bytes", json.dumps({"phase": "committed"}).encode()]
+        calls = []
+
+        def ssh(arguments, input_bytes=None, **_kwargs):
+            calls.append((arguments, input_bytes))
+            return responses.pop(0)
+
+        args = type("Args", (), {"host": staging193.TARGET_HOST, "command": "static-main",
+            "operation_id": "new-build", "source_sha": SHA,
+            "reuse_capture_operation_id": "sealed-capture"})()
+        with patch.object(staging193, "validate_static_main_ci", return_value=provenance), \
+             patch.object(staging193, "make_archive", return_value=(b"source archive", "a" * 64)), \
+             patch.object(staging193, "ssh_remote", side_effect=ssh), \
+             patch.object(staging193, "browser_check"):
+            staging193.invoke(args)
+        self.assertIn("--reuse-capture-operation-id", calls[0][0])
+        self.assertEqual(calls[0][0][calls[0][0].index("--reuse-capture-operation-id") + 1],
+                         "sealed-capture")
+        self.assertIn(["export-static-main", "--operation-id", "new-build", "--source-sha", SHA],
+                      [call[0] for call in calls])
 
     def _capture(self, argv):
         if argv[:2] == ["gh", "repo"]:
