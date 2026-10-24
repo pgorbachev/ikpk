@@ -1,16 +1,15 @@
 import { createHash } from 'node:crypto';
 import { lstatSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { pathToFileURL } from 'node:url';
-import { contentFingerprint, snapshotId } from '../../web/scripts/lib/content-snapshot.ts';
 
 const [captureRoot, snapshotRoot, schemaRoot, operationId, sourceSha, expectedSnapshotId] = process.argv.slice(2);
 if (!captureRoot || !snapshotRoot || !schemaRoot || !operationId || !sourceSha || !expectedSnapshotId) {
   throw new Error('reused snapshot verifier requires capture, snapshot, schema, and operation identity');
 }
 
-const { verifyStaging193Bundle } = await import(pathToFileURL(join(
-  process.cwd(), 'scripts/lib/staging193-capture-bundle.mjs')));
+const { contentFingerprint, snapshotId } = await import(new URL(
+  '../../web/scripts/lib/content-snapshot.ts', import.meta.url).href);
+const { verifyStaging193Bundle } = await import(new URL('./staging193-capture-bundle.mjs', import.meta.url).href);
 const verified = verifyStaging193Bundle(captureRoot, schemaRoot);
 const manifestBytes = readFileSync(join(captureRoot, 'manifest.json'));
 const manifest = verified.manifest;
