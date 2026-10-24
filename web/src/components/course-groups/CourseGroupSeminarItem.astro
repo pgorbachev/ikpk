@@ -36,7 +36,7 @@ const lead = description ? clipLead(description) : '';
     <span class="cgs-chip cgs-chip--muted" data-start-empty hidden={Boolean(nearestDate)} data-testid="seminar-date-fallback">Даты пока не назначены</span>
     <a class="cgs-phone" data-start-empty hidden={Boolean(nearestDate)} href={MANAGER_PHONE_HREF}>уточняйте у менеджера: {MANAGER_PHONE}</a>
   </div>
-  <a href={href} class="course-group-seminar-main" aria-label={`Семинар "${seminar.name}"`}>
+  <a href={href} class="course-group-seminar-main">
     <h2 class="course-group-seminar-title">{seminar.name}</h2>
     {lead && <p class="course-group-seminar-excerpt">{lead}</p>}
   </a>
