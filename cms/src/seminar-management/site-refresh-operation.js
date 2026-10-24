@@ -422,7 +422,7 @@ export async function runRefresh(deps) {
     releaseId: built.releaseId,
     switched: false,
   });
-  let previous = null;
+  let previous;
   try {
     previous = deps.switchRelease(built.releaseId).previous;
   } catch (error) {
