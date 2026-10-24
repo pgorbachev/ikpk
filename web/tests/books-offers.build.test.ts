@@ -34,7 +34,9 @@ describe('Книги и предложения в собранном сайте'
     const home = readPage('/');
     const internal = links(home).filter((link) => link.href === BOOKS_PATH);
     expect(internal.length).toBeGreaterThanOrEqual(3);
-    expect(internal.every((link) => link.text.includes('Книги и учебные материалы'))).toBe(true);
+    expect(internal.some((link) => link.tag.includes('topnav-link') && link.text === 'Книги')).toBe(true);
+    expect(internal.some((link) => link.tag.includes('drawer-link') && link.text === 'Книги и учебные материалы')).toBe(true);
+    expect(internal.some((link) => link.text === 'Книги и учебные материалы')).toBe(true);
     expect(readPage('/sitemap/')).toContain(`href="${BOOKS_PATH}"`);
     expect(readFileSync(join(dist, 'sitemap-0.xml'), 'utf8')).toContain(`${BOOKS_PATH}`);
   });

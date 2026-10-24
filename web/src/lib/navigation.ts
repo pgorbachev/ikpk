@@ -10,6 +10,7 @@ export interface NavLink {
 }
 
 export interface NavItem extends NavLink {
+  desktopLabel?: string;
   children?: NavLink[];
 }
 
@@ -26,7 +27,7 @@ export const primaryNav: NavItem[] = [
     ],
   },
   { label: 'Расписание', href: '/raspisanie-i-tseny' },
-  { label: 'Книги и учебные материалы', href: '/knigi-i-uchebnye-materialy' },
+  { label: 'Книги и учебные материалы', desktopLabel: 'Книги', href: '/knigi-i-uchebnye-materialy' },
   { label: 'Статьи', href: '/statyi' },
   {
     label: 'Об институте',

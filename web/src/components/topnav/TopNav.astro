@@ -54,8 +54,8 @@ const target = (link: { external?: boolean }) => (link.external ? '_blank' : und
             </li>
           ) : (
             <li>
-              <a href={item.href} class="topnav-link" target={target(item)} rel={rel(item)}>
-                {item.label}
+              <a href={item.href} class="topnav-link" aria-label={item.desktopLabel ? item.label : undefined} target={target(item)} rel={rel(item)}>
+                {item.desktopLabel ?? item.label}
               </a>
             </li>
           )
@@ -116,7 +116,7 @@ const target = (link: { external?: boolean }) => (link.external ? '_blank' : und
     if (header && bar) {
       const reflow = () => {
         const rootSize = parseFloat(getComputedStyle(document.documentElement).fontSize);
-        header.classList.toggle('topnav-text-reflow', window.innerWidth > 900 && bar.clientWidth <= 56.25 * rootSize);
+        header.classList.toggle('topnav-text-reflow', window.innerWidth > 1023 && bar.clientWidth < 58.75 * rootSize);
       };
       // The bar is capped at 1240px even on wider viewports. Observe height too:
       // a root-font change grows it while its width remains fixed. The condition
@@ -175,6 +175,17 @@ const target = (link: { external?: boolean }) => (link.external ? '_blank' : und
     padding: 0;
   }
   .topnav-menu li { position: relative; }
+  .topnav-menu > ul > li + li { padding-left: 0.5rem; }
+  .topnav-menu > ul > li + li::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 0;
+    width: 1px;
+    height: 1rem;
+    background: var(--color-gray-300);
+    transform: translateY(-50%);
+  }
   .topnav-link {
     display: inline-flex;
     align-items: center;
@@ -256,7 +267,7 @@ const target = (link: { external?: boolean }) => (link.external ? '_blank' : und
 
   /* Шапка ужимается — иначе с длинной подписью CTA ей не хватает ширины и она
      уезжает по горизонтали (замерено: 140 px переполнения при 1181, 61 при 1280).
-     Отдаём в том же порядке, в каком шапка уже отдаёт место ниже 900: сначала
+     Отдаём в том же порядке, в каком шапка уже отдаёт место ниже 1024: сначала
      дескриптор под логотипом, затем внутренние отступы меню и кнопки. Номер
      приоритетнее подписи под лого: телефон просил заказчик, дескриптор — наше
      добавление.
@@ -267,8 +278,7 @@ const target = (link: { external?: boolean }) => (link.external ? '_blank' : und
      двойной скачок, который на macOS проходил впритык (0 px), а на более широких
      шрифтах Linux уезжал на 40 px. Поймал собственный гейт в CI. Теперь скачки
      разнесены: на 1441 добавляется только номер, на 1701 только возвращается
-     дескриптор. Длинный пункт «Книги и учебные материалы» требует ещё 42 px
-     на 1601, поэтому порог поднят до 1700. */
+     дескриптор. */
   @media (max-width: 1700px) {
     .topnav-logo-desc { display: none; }
     .topnav-bar { gap: 0.6rem; }
@@ -277,24 +287,17 @@ const target = (link: { external?: boolean }) => (link.external ? '_blank' : und
     .topnav-cta { padding: 0.5rem 0.7rem; }
   }
 
-  @media (min-width: 901px) and (max-width: 1360px) {
+  @media (min-width: 1024px) and (max-width: 1360px) {
     .topnav-bar { gap: 0.4rem; padding-inline: 0.75rem; }
     .topnav-menu > ul { gap: 0; align-items: center; }
-    .topnav-link[href='/knigi-i-uchebnye-materialy'] {
-      width: 6.5rem;
-      padding-block: 0.25rem;
-      white-space: normal;
-      line-height: 1.05;
-      text-align: center;
-      justify-content: center;
-    }
+    .topnav-menu > ul > li + li { padding-left: 0.35rem; }
   }
 
   @media (max-width: 1180px) {
     .topnav-phones { display: none; }
   }
 
-  @media (max-width: 900px) {
+  @media (max-width: 1023px) {
     .topnav-menu, .topnav-phones { display: none; }
     /* дескриптор под лого не помещается рядом с CTA+бургером на узком
        мобильном — прячем, чтобы шапка не распирала вьюпорт */
@@ -360,9 +363,9 @@ const target = (link: { external?: boolean }) => (link.external ? '_blank' : und
   /* На узком мобильном подпись CTA не влезает в строку рядом с логотипом,
      инструментами и бургером: до этой правки шапке требовалось 407 CSS-px при
      вьюпорте 375, и уезжали ВСЕ страницы сайта. Кнопке разрешено переносить
-     подпись на две строки. Блок отдельный и идёт ПОСЛЕ ≤900 намеренно: правила
+     подпись на две строки. Блок отдельный и идёт ПОСЛЕ ≤1023 намеренно: правила
      мобильного меню живут в том блоке, и любое вложение их сюда оставило бы
-     зону 431–900 без навигации вовсе. */
+     зону 431–1023 без навигации вовсе. */
   @media (max-width: 430px) {
     /* Сжатие включаем ТОЛЬКО здесь. В базовом правиле `min-width: 0` снимает у
        блока действий пол в min-content, и раскладка поджимает кнопку даже там,
