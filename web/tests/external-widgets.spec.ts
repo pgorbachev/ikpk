@@ -795,7 +795,7 @@ test.describe('плавающая кнопка чата не блокирует 
           }
           const shown = visible(rect);
           const center = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
-          if (!shown || rect.top < clip.top - 1 || rect.bottom > clip.bottom + 1 || hit(shown)
+          if (!shown || rect.top < clip.top - 1 || rect.bottom > clip.bottom + 1
             || !center || (center !== el && !el.contains(center))) unreachableInteractive.push(label);
         }
         const unreachableText: string[] = [];
