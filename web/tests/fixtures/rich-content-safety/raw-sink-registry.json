@@ -42,14 +42,14 @@
       "file": "components/schedule/ScheduleControlsScript.astro",
       "kind": "innerHTML",
       "text": "pagination.innerHTML = ''",
-      "locator": "components/schedule/ScheduleControlsScript.astro:L116:C7:pagination.innerHTML=''",
+      "locator": "components/schedule/ScheduleControlsScript.astro:L119:C7:pagination.innerHTML=''",
       "allowedEmptyClear": true
     },
     {
       "file": "components/schedule/ScheduleControlsScript.astro",
       "kind": "innerHTML",
       "text": "program.innerHTML = ''",
-      "locator": "components/schedule/ScheduleControlsScript.astro:L78:C7:program.innerHTML=''",
+      "locator": "components/schedule/ScheduleControlsScript.astro:L81:C7:program.innerHTML=''",
       "allowedEmptyClear": true
     },
     {
