@@ -5,6 +5,7 @@ import { serveStatic, type StaticSite } from './helpers/static-serve';
 import { PROBE_CHAT_LOADER_SRC, buildProbe, type ProbeBuild } from './helpers/widget-probe-build';
 import { TEMPLATES } from './helpers/templates';
 import { installThirdPartyGuard } from './helpers/third-party-guard';
+import { measureFullReachability } from './helpers/reachability';
 
 const WIDTHS = [320, 375, 1280] as const;
 const TD52_REACHABILITY_VIEWPORTS = [
@@ -23,28 +24,6 @@ const PAYMENT_DIALOG = '.payment-dialog';
 const PAYMENT_ENTRY = '[data-payment-entry]';
 const PAYMENT_FORM = '[data-payment-form]';
 const GREETING_CLOSE = '[data-chat-stub-greeting-close]';
-
-function measureFullReachability(el: HTMLElement) {
-  const r = el.getBoundingClientRect();
-  const clips = [{ left: 0, top: 0, right: innerWidth, bottom: innerHeight }];
-  for (let parent = el.parentElement; parent; parent = parent.parentElement) {
-    const style = getComputedStyle(parent);
-    const clipX = /(hidden|clip|scroll|auto)/.test(style.overflowX);
-    const clipY = /(hidden|clip|scroll|auto)/.test(style.overflowY);
-    if (!clipX && !clipY) continue;
-    const bounds = parent.getBoundingClientRect();
-    clips.push({
-      left: clipX ? bounds.left : -Infinity,
-      right: clipX ? bounds.right : Infinity,
-      top: clipY ? bounds.top : -Infinity,
-      bottom: clipY ? bounds.bottom : Infinity,
-    });
-  }
-  const fullRectVisible = r.width > 0 && r.height > 0 && clips.every((clip) =>
-    r.left >= clip.left - 1 && r.right <= clip.right + 1
-      && r.top >= clip.top - 1 && r.bottom <= clip.bottom + 1);
-  return { fullRectVisible };
-}
 
 async function helperVisualState(page: Page) {
   return page.locator(KEYBOARD_HELPER).evaluate((el) => {

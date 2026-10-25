@@ -8,6 +8,7 @@ import {
 import { serveStatic, type StaticSite } from './helpers/static-serve';
 import { PROBE_CHAT_LOADER_SRC, buildProbe, type ProbeBuild } from './helpers/widget-probe-build';
 import { TEMPLATES } from './helpers/templates';
+import { measureFullReachability } from './helpers/reachability';
 import {
   CHAT_LOADER_KEY,
   FOREIGN_METRIKA_ID,
@@ -691,6 +692,21 @@ test.describe('сторонний iframe не отменяет доступно�
 test.describe('плавающая кнопка чата не блокирует содержимое страницы', () => {
   test.describe.configure({ timeout: 60_000 });
 
+  test('oracle rejects a center-hit link whose edge remains under the launcher', async ({ page }) => {
+    await page.setContent(`<a id="edge-control" href="#" style="position:fixed;right:40px;bottom:20px;width:160px;height:40px;z-index:1">Edge fixture</a>
+      <button id="fixture-launcher" style="position:fixed;right:0;bottom:0;width:80px;height:80px;z-index:2">Chat</button>`);
+    const link = page.locator('#edge-control');
+    const centerHit = await link.evaluate((el) => {
+      const r = el.getBoundingClientRect();
+      const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+      return hit === el || el.contains(hit);
+    });
+    const reachability = await link.evaluate(measureFullReachability, '#fixture-launcher');
+    expect(centerHit, 'the fixture center is clickable, so a center-only oracle would pass').toBe(true);
+    expect(reachability.fullRectVisible, 'the fixture is inside viewport and clipping ancestors').toBe(true);
+    expect(reachability.fullRectOutsideLauncher, 'the full link rectangle still overlaps the launcher').toBe(false);
+  });
+
   for (const { name, path } of TEMPLATES) {
     test(`${name}: перекрытые controls и текст достижимы прокруткой`, async ({ page }) => {
       await guard(page);
@@ -708,7 +724,6 @@ test.describe('плавающая кнопка чата не блокирует 
       const overlaps = await page.evaluate((launcherAttr) => {
         const button = document.querySelector(`[${launcherAttr}]`) as HTMLElement | null;
         if (button === null) return { interactive: ['native launcher missing'], text: [] as string[] };
-        const box = button.getBoundingClientRect();
         const header = document.querySelector('header');
         const main = document.querySelector('main');
         const footer = document.querySelector('footer');
@@ -717,17 +732,30 @@ test.describe('плавающая кнопка чата не блокирует 
           return Boolean(header && main && footer && el.contains(header) && el.contains(main) && el.contains(footer))
             && /(auto|scroll)/.test(style.overflowY) && el.scrollHeight > el.clientHeight + 1;
         }) ?? null;
-        const clip = scrollport?.getBoundingClientRect() ?? new DOMRect(0, 0, innerWidth, innerHeight);
         const initialScrollTop = scrollport?.scrollTop ?? 0;
-        const visible = (r: DOMRect) => {
-          const left = Math.max(r.left, clip.left, 0);
-          const top = Math.max(r.top, clip.top, 0);
-          const right = Math.min(r.right, clip.right, innerWidth);
-          const bottom = Math.min(r.bottom, clip.bottom, innerHeight);
-          return right > left && bottom > top ? { left, top, right, bottom } : null;
+        const clipBounds = (el: Element) => {
+          const clip = { left: 0, top: 0, right: innerWidth, bottom: innerHeight };
+          for (let parent = el.parentElement; parent; parent = parent.parentElement) {
+            const style = getComputedStyle(parent);
+            const bounds = parent.getBoundingClientRect();
+            if (/(hidden|clip|scroll|auto)/.test(style.overflowX)) {
+              clip.left = Math.max(clip.left, bounds.left);
+              clip.right = Math.min(clip.right, bounds.right);
+            }
+            if (/(hidden|clip|scroll|auto)/.test(style.overflowY)) {
+              clip.top = Math.max(clip.top, bounds.top);
+              clip.bottom = Math.min(clip.bottom, bounds.bottom);
+            }
+          }
+          return clip;
         };
-        const hit = (r: { left: number; top: number; right: number; bottom: number }): boolean =>
-          r.left < box.right && r.right > box.left && r.top < box.bottom && r.bottom > box.top;
+        const visible = (r: DOMRect, el: Element) => {
+          const clip = clipBounds(el);
+          return r.width > 0 && r.height > 0 && r.left >= clip.left - 1 && r.right <= clip.right + 1
+            && r.top >= clip.top - 1 && r.bottom <= clip.bottom + 1 ? clip : null;
+        };
+        const intersects = (r: DOMRect, launcherBox: DOMRect) => r.left < launcherBox.right && r.right > launcherBox.left
+          && r.top < launcherBox.bottom && r.bottom > launcherBox.top;
 
         // Закрытый `<details>` не прячет содержимое через display/visibility САМОГО
         // потомка — это признак ПРЕДКА. У `.topnav-drawer` (мобильное меню, TopNav.astro,
@@ -746,23 +774,22 @@ test.describe('плавающая кнопка чата не блокирует 
           return false;
         };
 
-        const controlTargets: { el: Element; label: string; scrollTop: number }[] = [];
-        const textTargets: { el: Element; fragment: number; label: string; scrollTop: number }[] = [];
+        const controlTargets: { el: Element; label: string; scrollTop: number; rect: number[]; launcher: number[] }[] = [];
+        const textTargets: { el: Element; fragment: number; label: string; scrollTop: number; rect: number[]; launcher: number[] }[] = [];
         const sampleScrollTops = [...new Set([initialScrollTop, (scrollport?.scrollHeight ?? 0) / 2,
           (scrollport?.scrollHeight ?? 0) - (scrollport?.clientHeight ?? 0)])];
         for (const sampleTop of sampleScrollTops) {
           if (scrollport) scrollport.scrollTop = sampleTop;
           const sampleLauncher = button.getBoundingClientRect();
-          const intersectsLauncher = (r: DOMRect) => r.left < sampleLauncher.right && r.right > sampleLauncher.left
-            && r.top < sampleLauncher.bottom && r.bottom > sampleLauncher.top;
           for (const el of document.querySelectorAll('a, button, input, select, textarea, [role="button"]')) {
           if (button.contains(el) || el.contains(button)) continue;
           if (insideClosedDetails(el)) continue;
           const style = getComputedStyle(el);
           if (style.visibility === 'hidden' || style.display === 'none') continue;
-          const shown = visible(el.getBoundingClientRect());
-          if (shown && intersectsLauncher(el.getBoundingClientRect()))
-            controlTargets.push({ el, scrollTop: sampleTop, label: `${el.tagName.toLowerCase()}: ${(el.textContent ?? '').trim().slice(0, 40)}` });
+          const rect = el.getBoundingClientRect();
+          const shown = visible(rect, el);
+          if (shown && intersects(rect, sampleLauncher))
+            controlTargets.push({ el, scrollTop: sampleTop, rect: [rect.left, rect.top, rect.right, rect.bottom], launcher: [sampleLauncher.left, sampleLauncher.top, sampleLauncher.right, sampleLauncher.bottom], label: `${el.tagName.toLowerCase()}: ${(el.textContent ?? '').trim().slice(0, 40)}` });
           }
 
         // РАМКА ТЕКСТА, а не рамка блока: блок во всю ширину пересекается с плавающим
@@ -776,47 +803,124 @@ test.describe('плавающая кнопка чата не блокирует 
           range.selectNodeContents(p);
           const fragments = [...range.getClientRects()];
           for (const [fragment, rect] of fragments.entries()) {
-            const shown = visible(rect);
-            if (shown && intersectsLauncher(rect)) {
-              textTargets.push({ el: p, fragment, scrollTop: sampleTop, label: `${p.tagName.toLowerCase()}: ${(p.textContent ?? '').trim().slice(0, 40)}` });
+            const shown = visible(rect, p);
+            if (shown && intersects(rect, sampleLauncher)) {
+              textTargets.push({ el: p, fragment, scrollTop: sampleTop, rect: [rect.left, rect.top, rect.right, rect.bottom], launcher: [sampleLauncher.left, sampleLauncher.top, sampleLauncher.right, sampleLauncher.bottom], label: `${p.tagName.toLowerCase()}: ${(p.textContent ?? '').trim().slice(0, 40)}` });
             }
           }
           range.detach();
         }
         }
+        const itemRect = (item: (typeof controlTargets)[number] | (typeof textTargets)[number]) => {
+          if ('fragment' in item) {
+            const range = document.createRange();
+            range.selectNodeContents(item.el);
+            const rect = [...range.getClientRects()][item.fragment];
+            range.detach();
+            return rect;
+          }
+          return (item.el as HTMLElement).getBoundingClientRect();
+        };
+        const scrollCandidates = (container: HTMLElement, target: Element, rect: DOMRect) => {
+          const max = Math.max(0, container.scrollHeight - container.clientHeight);
+          const launcherBox = button.getBoundingClientRect();
+          const clip = clipBounds(target);
+          const clearBand = Math.max(launcherBox.top - clip.top - rect.height,
+            clip.bottom - launcherBox.bottom - rect.height, 1);
+          const step = Math.max(1, Math.min(Math.floor(container.clientHeight / 2), Math.floor(clearBand / 2)));
+          return [...new Set([container.scrollTop, ...Array.from({ length: Math.floor(max / step) + 1 }, (_, i) => i * step), max])];
+        };
+        const clipsScrollers = (target: Element) => {
+          const ancestors: HTMLElement[] = [];
+          for (let parent = target.parentElement as HTMLElement | null; parent && parent !== scrollport; parent = parent.parentElement as HTMLElement | null) {
+            const style = getComputedStyle(parent);
+            if (/(auto|scroll)/.test(style.overflowY) && parent.scrollHeight > parent.clientHeight + 1) ancestors.push(parent);
+          }
+          return ancestors;
+        };
+        const testPosition = (el: Element, r: DOMRect, isControl: boolean) => {
+          const currentLauncher = button.getBoundingClientRect();
+          const clip = visible(r, el);
+          if (!clip || intersects(r, currentLauncher)) return { pass: false, currentLauncher, clip };
+          if (!isControl) return { pass: true, currentLauncher, clip };
+          const points = [.1, .5, .9].flatMap((fx) => [.1, .5, .9].map((fy) => [r.left + r.width * fx, r.top + r.height * fy]));
+          const hit = points.some(([x, y]) => {
+            if (x >= currentLauncher.left && x <= currentLauncher.right && y >= currentLauncher.top && y <= currentLauncher.bottom) return false;
+            const found = document.elementFromPoint(x, y);
+            return Boolean(found && (found === el || el.contains(found)));
+          });
+          return { pass: hit, currentLauncher, clip };
+        };
         const unreachableInteractive: string[] = [];
-        for (const { el, label, scrollTop } of controlTargets) {
-          if (scrollport) scrollport.scrollTop = scrollTop;
-          let rect = el.getBoundingClientRect();
-          if (hit(rect) && scrollport) {
-            const targetTop = Math.max(clip.top + 1, box.top - rect.height - 2);
-            scrollport.scrollBy({ top: rect.top - targetTop, behavior: 'instant' });
-            rect = el.getBoundingClientRect();
-          }
-          const shown = visible(rect);
-          const center = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
-          if (!shown || rect.top < clip.top - 1 || rect.bottom > clip.bottom + 1
-            || !center || (center !== el && !el.contains(center))) unreachableInteractive.push(label);
-        }
         const unreachableText: string[] = [];
-        for (const { el, fragment, label, scrollTop } of textTargets) {
-          if (scrollport) scrollport.scrollTop = scrollTop;
-          const range = document.createRange();
-          range.selectNodeContents(el);
-          let rect = [...range.getClientRects()][fragment];
-          if (rect && hit(rect) && scrollport) {
-            const targetTop = Math.max(clip.top + 1, box.top - rect.height - 2);
-            scrollport.scrollBy({ top: rect.top - targetTop, behavior: 'instant' });
-            rect = [...range.getClientRects()][fragment];
+        const diagnostics: string[] = [];
+        const reachableEvidence: string[] = [];
+        const scanStartedAt = performance.now();
+        const candidates = [
+          ...controlTargets.map((item) => ({ ...item, kind: 'control' as const })),
+          ...textTargets.map((item) => ({ ...item, kind: 'text' as const })),
+        ];
+        const seenTargets = new Set<string>();
+        const targetIds = new WeakMap<Element, number>();
+        let nextTargetId = 0;
+        for (const item of candidates) {
+          if (!targetIds.has(item.el)) targetIds.set(item.el, nextTargetId++);
+          const identity = `${item.kind}:${targetIds.get(item.el)}:${'fragment' in item ? item.fragment : -1}`;
+          if (seenTargets.has(identity)) continue;
+          seenTargets.add(identity);
+          if (!itemRect(item)) {
+            (item.kind === 'control' ? unreachableInteractive : unreachableText).push(item.label);
+            diagnostics.push(`${item.label} no initial fragment rect`);
+            continue;
           }
-          const shown = rect && visible(rect);
-          if (!rect || !shown || rect.top < clip.top - 1 || rect.bottom > clip.bottom + 1 || hit(shown))
-            unreachableText.push(label);
-          range.detach();
+          const nested = clipsScrollers(item.el);
+          let found = false;
+          let last = '';
+        const measure = () => {
+            const rect = itemRect(item);
+            if (!rect) return { pass: false, desc: 'no-rect' };
+            const result = testPosition(item.el, rect, item.kind === 'control');
+            last = `outer=${scrollport?.scrollTop.toFixed(0) ?? 'none'} nested=${nested.map((n) => n.scrollTop.toFixed(0)).join(',')} rect=${[rect.left, rect.top, rect.right, rect.bottom].map((n) => n.toFixed(1)).join(',')} launcher=${[result.currentLauncher.left, result.currentLauncher.top, result.currentLauncher.right, result.currentLauncher.bottom].map((n) => n.toFixed(1)).join(',')} clip=${result.clip ? [result.clip.left, result.clip.top, result.clip.right, result.clip.bottom].map((n) => n.toFixed(1)).join(',') : 'clipped'}`;
+            return { pass: result.pass, desc: last };
+          };
+          const walkNested = (index: number): boolean => {
+            if (index >= nested.length) return measure().pass;
+            const rect = itemRect(item);
+            if (!rect) return false;
+            for (const top of scrollCandidates(nested[index], item.el, rect)) {
+              nested[index].scrollTop = top;
+              if (walkNested(index + 1)) return true;
+            }
+            return false;
+          };
+          const startingRect = itemRect(item)!;
+          for (const outerTop of scrollport ? scrollCandidates(scrollport, item.el, startingRect) : [0]) {
+            if (scrollport) scrollport.scrollTop = outerTop;
+            if (walkNested(0)) {
+              found = true;
+              reachableEvidence.push(`${item.kind} ${item.label} before rect=${item.rect.map((n) => n.toFixed(1)).join(',')} launcher=${item.launcher.map((n) => n.toFixed(1)).join(',')} at ${last}`);
+              break;
+            }
+          }
+          if (!found) {
+            (item.kind === 'control' ? unreachableInteractive : unreachableText).push(item.label);
+            diagnostics.push(`${item.label} ${last}`);
+          }
         }
-        return { unreachableInteractive, unreachableText, scrollportFound: scrollport !== null,
-          checkedInteractive: controlTargets.length, checkedText: textTargets.length };
+        return { unreachableInteractive, unreachableText, diagnostics, reachableEvidence, checkedTargets: seenTargets.size,
+          scanDurationMs: Math.round(performance.now() - scanStartedAt),
+          scrollportFound: scrollport !== null, checkedInteractive: controlTargets.length, checkedText: textTargets.length };
       }, 'data-chat-stub-launcher');
+
+      if (['seminar-dated', 'article', 'kontakty', 'statyi'].includes(name)) {
+        console.log(`${name} ${page.viewportSize()?.width} reachability evidence`, {
+          checkedTargets: overlaps.checkedTargets,
+          controls: overlaps.checkedInteractive,
+          textFragments: overlaps.checkedText,
+          scanDurationMs: overlaps.scanDurationMs,
+          reachable: overlaps.reachableEvidence,
+        });
+      }
 
       expect(
         overlaps.scrollportFound,
@@ -824,11 +928,11 @@ test.describe('плавающая кнопка чата не блокирует 
       ).toBe(true);
       expect(
         overlaps.unreachableInteractive?.slice(0, 5) ?? ['reachability results missing'],
-        `${path}: обычная прокрутка не вывела control целиком из-под launcher`,
+        `${path}: обычная прокрутка не вывела control целиком из-под launcher: ${overlaps.diagnostics?.join('; ')}`,
       ).toEqual([]);
       expect(
         overlaps.unreachableText?.slice(0, 5) ?? ['text reachability results missing'],
-        `${path}: обычная прокрутка не вывела текстовый фрагмент из-под launcher`,
+        `${path}: обычная прокрутка не вывела текстовый фрагмент из-под launcher: ${overlaps.diagnostics?.join('; ')}`,
       ).toEqual([]);
     });
   }
