@@ -325,7 +325,7 @@ const showFacade = config.state === 'address' && !isDemoOutput;
         if (pointerDown) return;
         const focused = document.activeElement;
         if (!(focused instanceof HTMLElement) || !pageScrollport.contains(focused)
-          || focused.closest('header')
+          || focused.closest('header.topnav')
           || !focused.matches('a[href], button, input, textarea, select, [contenteditable="true"]')) return;
         const portRect = pageScrollport.getBoundingClientRect();
         const fieldRect = focused.getBoundingClientRect();

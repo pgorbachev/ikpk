@@ -746,20 +746,27 @@ test.describe('плавающая кнопка чата не блокирует 
           return false;
         };
 
-        const controlTargets: { el: Element; label: string }[] = [];
-        for (const el of document.querySelectorAll('a, button, input, select, textarea, [role="button"]')) {
+        const controlTargets: { el: Element; label: string; scrollTop: number }[] = [];
+        const textTargets: { el: Element; fragment: number; label: string; scrollTop: number }[] = [];
+        const sampleScrollTops = [...new Set([initialScrollTop, (scrollport?.scrollHeight ?? 0) / 2,
+          (scrollport?.scrollHeight ?? 0) - (scrollport?.clientHeight ?? 0)])];
+        for (const sampleTop of sampleScrollTops) {
+          if (scrollport) scrollport.scrollTop = sampleTop;
+          const sampleLauncher = button.getBoundingClientRect();
+          const intersectsLauncher = (r: DOMRect) => r.left < sampleLauncher.right && r.right > sampleLauncher.left
+            && r.top < sampleLauncher.bottom && r.bottom > sampleLauncher.top;
+          for (const el of document.querySelectorAll('a, button, input, select, textarea, [role="button"]')) {
           if (button.contains(el) || el.contains(button)) continue;
           if (insideClosedDetails(el)) continue;
           const style = getComputedStyle(el);
           if (style.visibility === 'hidden' || style.display === 'none') continue;
           const shown = visible(el.getBoundingClientRect());
-          if (shown && hit(shown))
-            controlTargets.push({ el, label: `${el.tagName.toLowerCase()}: ${(el.textContent ?? '').trim().slice(0, 40)}` });
-        }
+          if (shown && intersectsLauncher(el.getBoundingClientRect()))
+            controlTargets.push({ el, scrollTop: sampleTop, label: `${el.tagName.toLowerCase()}: ${(el.textContent ?? '').trim().slice(0, 40)}` });
+          }
 
         // РАМКА ТЕКСТА, а не рамка блока: блок во всю ширину пересекается с плавающим
         // элементом всегда, и такое измерение сообщает о перекрытии там, где его нет.
-        const textTargets: { el: Element; fragment: number; label: string }[] = [];
         for (const p of document.querySelectorAll('p, li, h1, h2, h3, h4')) {
           if (button.contains(p)) continue;
           if (insideClosedDetails(p)) continue;
@@ -770,15 +777,16 @@ test.describe('плавающая кнопка чата не блокирует 
           const fragments = [...range.getClientRects()];
           for (const [fragment, rect] of fragments.entries()) {
             const shown = visible(rect);
-            if (shown && hit(shown)) {
-              textTargets.push({ el: p, fragment, label: `${p.tagName.toLowerCase()}: ${(p.textContent ?? '').trim().slice(0, 40)}` });
+            if (shown && intersectsLauncher(rect)) {
+              textTargets.push({ el: p, fragment, scrollTop: sampleTop, label: `${p.tagName.toLowerCase()}: ${(p.textContent ?? '').trim().slice(0, 40)}` });
             }
           }
           range.detach();
         }
+        }
         const unreachableInteractive: string[] = [];
-        for (const { el, label } of controlTargets) {
-          if (scrollport) scrollport.scrollTop = initialScrollTop;
+        for (const { el, label, scrollTop } of controlTargets) {
+          if (scrollport) scrollport.scrollTop = scrollTop;
           let rect = el.getBoundingClientRect();
           if (hit(rect) && scrollport) {
             const targetTop = Math.max(clip.top + 1, box.top - rect.height - 2);
@@ -791,8 +799,8 @@ test.describe('плавающая кнопка чата не блокирует 
             || !center || (center !== el && !el.contains(center))) unreachableInteractive.push(label);
         }
         const unreachableText: string[] = [];
-        for (const { el, fragment, label } of textTargets) {
-          if (scrollport) scrollport.scrollTop = initialScrollTop;
+        for (const { el, fragment, label, scrollTop } of textTargets) {
+          if (scrollport) scrollport.scrollTop = scrollTop;
           const range = document.createRange();
           range.selectNodeContents(el);
           let rect = [...range.getClientRects()][fragment];
@@ -806,14 +814,14 @@ test.describe('плавающая кнопка чата не блокирует 
             unreachableText.push(label);
           range.detach();
         }
-        return { unreachableInteractive, unreachableText, scrollportFound: scrollport !== null };
+        return { unreachableInteractive, unreachableText, scrollportFound: scrollport !== null,
+          checkedInteractive: controlTargets.length, checkedText: textTargets.length };
       }, 'data-chat-stub-launcher');
 
       expect(
         overlaps.scrollportFound,
         `${path}: header, main, newsletter and footer share a real scrollport`,
       ).toBe(true);
-
       expect(
         overlaps.unreachableInteractive?.slice(0, 5) ?? ['reachability results missing'],
         `${path}: обычная прокрутка не вывела control целиком из-под launcher`,

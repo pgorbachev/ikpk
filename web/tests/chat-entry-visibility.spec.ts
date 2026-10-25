@@ -521,6 +521,43 @@ test.describe('chat entry visibility approved contract', () => {
         expect(fixtureState.focused, `${name} ${width}: below-viewport fixture is focus reachable`).toBe(true);
         expect(fixtureState.hitTestable, `${name} ${width}: below-viewport fixture is pointer reachable`).toBe(true);
         await belowViewportFixture.evaluate((el) => el.remove());
+        // Prove the reachability oracle rejects a target that no ordinary scroll can clear.
+        await page.locator('footer').evaluate((footer) => {
+          const blocked = document.createElement('a');
+          blocked.dataset.footerBlockedFixture = '';
+          blocked.href = '/politika-konfidencialnosti';
+          blocked.textContent = 'Permanently occluded negative fixture';
+          Object.assign(blocked.style, { display: 'block', marginTop: `${innerHeight + 100}px` });
+          footer.append(blocked);
+        });
+        const negativeStart = await page.locator('[data-footer-blocked-fixture]').evaluate((el) => el.getBoundingClientRect().top);
+        expect(negativeStart, `${name} ${width}: negative fixture starts below the initial viewport`).toBeGreaterThan(await page.evaluate(() => innerHeight));
+        await page.locator('[data-footer-blocked-fixture]').evaluate((el) => (el as HTMLElement).scrollIntoView({ block: 'center', behavior: 'instant' }));
+        const negative = await page.evaluate(() => {
+          const port = document.querySelector<HTMLElement>('[data-page-scrollport]')!;
+          const target = document.querySelector<HTMLElement>('[data-footer-blocked-fixture]')!;
+          const isReachable = () => {
+            target.scrollIntoView({ block: 'center', behavior: 'instant' });
+            const r = target.getBoundingClientRect();
+            const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+            return Boolean(hit && (hit === target || target.contains(hit)));
+          };
+          const reachableBeforeBlocker = isReachable();
+          const r = target.getBoundingClientRect();
+          const blocker = document.createElement('div');
+          blocker.dataset.footerReachabilityBlocker = '';
+          Object.assign(blocker.style, { position: 'fixed', inset: '0', zIndex: '2147483647', background: 'transparent' });
+          document.body.append(blocker);
+          port.scrollTo({ top: 0, behavior: 'instant' });
+          const reachableAfterBlocker = isReachable();
+          return { reachableBeforeBlocker, reachableAfterBlocker, blockedByOverlay: document.elementFromPoint(
+            r.left + r.width / 2, r.top + r.height / 2) === blocker };
+        });
+        expect(negative.reachableBeforeBlocker, `${name} ${width}: below-viewport fixture is reachable after ordinary scroll`).toBe(true);
+        expect(negative.blockedByOverlay, `${name} ${width}: test overlay wins hit-testing over the fixture`).toBe(true);
+        expect(negative.reachableAfterBlocker, `${name} ${width}: the same scroll-and-hit predicate rejects the occluded fixture`).toBe(false);
+        await page.locator('[data-footer-reachability-blocker]').evaluate((el) => el.remove());
+        await page.locator('[data-footer-blocked-fixture]').evaluate((el) => el.remove());
 
         const atScrollEnd = await page.evaluate(() => {
           const port = document.querySelector<HTMLElement>('[data-page-scrollport]');
@@ -568,42 +605,133 @@ test.describe('chat entry visibility approved contract', () => {
     }
   });
 
-  test('interactive candidates remain reachable at start, middle, and footer across TD-52 templates', async ({ page }) => {
+  test('launcher-overlapped controls and text remain reachable by ordinary scroll across TD-52 templates', async ({ page }) => {
     await protectThirdParties(page);
     const templates = TEMPLATES.filter(({ name }) => TD52.has(name));
+    let middleObserved = 0;
+    let checkedCells = 0, measuredTargets = 0, checkedControls = 0, checkedText = 0, reachableTargets = 0, fixtureCells = 0;
     for (const width of TD52_REACHABILITY_WIDTHS) {
       await page.setViewportSize({ width, height: width === 390 ? 844 : width === 1440 ? 900 : 720 });
       for (const { name, path } of templates) {
         await page.goto(activeUrl(path));
         await page.locator(GREETING_CLOSE).click();
-        for (const position of ['start', 'middle', 'footer'] as const) {
-          const chosen = await page.evaluate(({ position, launcherSelector }) => {
+        const evidence = await page.evaluate(({ launcherSelector }) => {
             const port = document.querySelector<HTMLElement>('[data-page-scrollport]');
             if (!port) throw new Error('shared page scrollport is missing');
-            port.scrollTo({ top: position === 'start' ? 0 : position === 'middle'
-              ? (port.scrollHeight - port.clientHeight) / 2 : port.scrollHeight, behavior: 'instant' });
-            const launcher = document.querySelector<HTMLElement>(launcherSelector)?.getBoundingClientRect();
-            const candidates = [...port.querySelectorAll<HTMLElement>('a[href],button,input,select,textarea,[tabindex]:not([tabindex="-1"])')]
-              .filter((el) => !el.matches('[data-chat-trigger]') && el.getClientRects().length > 0);
-            const candidate = candidates.find((el) => {
-              const r = el.getBoundingClientRect();
-              const x = r.left + Math.min(r.width / 2, 12);
-              const y = r.top + Math.min(r.height / 2, 12);
-              if (r.width <= 0 || r.height <= 0 || x < 0 || x > innerWidth || y < 0 || y > innerHeight) return false;
-              if (launcher && x >= launcher.left && x <= launcher.right && y >= launcher.top && y <= launcher.bottom) return false;
-              const hit = document.elementFromPoint(x, y);
-              return Boolean(hit && (hit === el || el.contains(hit)));
-            });
-            if (!candidate) return null;
-            candidate.focus({ preventScroll: true });
-            return { tag: candidate.tagName.toLowerCase(), text: candidate.textContent?.replace(/\s+/g, ' ').trim().slice(0, 60) };
-          }, { position, launcherSelector: NATIVE_LAUNCHER });
-          expect(chosen, `${name} ${width} ${position}: a visible interactive candidate can receive focus and pointer hit-testing`).not.toBeNull();
-          const active = await page.evaluate(() => document.activeElement?.matches('a[href],button,input,select,textarea,[tabindex]:not([tabindex="-1"])'));
-          expect(active, `${name} ${width} ${position}: candidate focus is retained`).toBe(true);
-        }
+            const max = port.scrollHeight - port.clientHeight;
+            const points = [...new Set([0, max * .25, max * .5, max * .75, max])];
+            const launcher = document.querySelector<HTMLElement>(launcherSelector);
+            if (!launcher) throw new Error('native launcher is missing');
+            const overlaps: { el: HTMLElement; kind: string; fragment: number; top: number; rectEl?: HTMLElement }[] = [];
+            const positionCounts: number[] = [];
+            const originalPortPosition = port.style.position;
+            let matrixFixture: HTMLElement | null = null;
+            const insideClosedDetails = (el: Element): boolean => {
+              for (let node: Element | null = el; node; node = node.parentElement)
+                if (node.tagName === 'DETAILS' && !(node as HTMLDetailsElement).open) return true;
+              return false;
+            };
+            const intersects = (r: DOMRect) => { const b = launcher.getBoundingClientRect();
+              return r.left < b.right && r.right > b.left && r.top < b.bottom && r.bottom > b.top; };
+            const controlRects = (el: HTMLElement) => {
+              if (el.matches('a,button,[role="button"]')) {
+                const range = document.createRange(); range.selectNodeContents(el);
+                const fragments = [...range.getClientRects()]; range.detach();
+                if (fragments.length && fragments.every((rect) => rect.height < innerHeight * .25))
+                  return fragments.map((rect, fragment) => ({ rect, fragment, rectEl: el }));
+                const descendantRects = [...el.querySelectorAll<HTMLElement>('h1,h2,h3,h4,p,span')].flatMap((textEl) => {
+                  const childRange = document.createRange(); childRange.selectNodeContents(textEl);
+                  const rects = [...childRange.getClientRects()].map((rect, fragment) => ({ rect, fragment, rectEl: textEl }));
+                  childRange.detach(); return rects;
+                });
+                if (descendantRects.length) return descendantRects;
+              }
+              return [...el.getClientRects()].map((rect) => ({ rect, fragment: -1, rectEl: el }));
+            };
+            for (const top of points) {
+              port.scrollTo({ top, behavior: 'instant' });
+              let count = 0;
+              for (const el of port.querySelectorAll<HTMLElement>('a[href],button,input,select,textarea,[tabindex]:not([tabindex="-1"])')) {
+                if (el.matches('[data-chat-trigger]') || insideClosedDetails(el)) continue;
+                controlRects(el).forEach(({ rect: r, fragment, rectEl }) => { if (intersects(r)) { overlaps.push({ el, kind: 'control', fragment, top, rectEl }); count++; } });
+              }
+              for (const el of port.querySelectorAll<HTMLElement>('p,li,h1,h2,h3,h4')) {
+                if (insideClosedDetails(el)) continue;
+                const range = document.createRange(); range.selectNodeContents(el);
+                [...range.getClientRects()].forEach((r, fragment) => { if (intersects(r)) { overlaps.push({ el, kind: 'text', fragment, top }); count++; } }); range.detach();
+              }
+              positionCounts.push(count);
+            }
+            if (positionCounts.slice(1, -1).every((count) => count === 0)) {
+              const top = points[2];
+              const portRect = port.getBoundingClientRect(), launcherRect = launcher.getBoundingClientRect();
+              port.style.position = 'relative';
+              matrixFixture = document.createElement('div');
+              matrixFixture.dataset.reachabilityMatrixFixture = '';
+              Object.assign(matrixFixture.style, { position: 'absolute', zIndex: '0', top: `${top + launcherRect.top - portRect.top + 4}px`, left: `${launcherRect.left - portRect.left + 4}px` });
+              const p = document.createElement('p'); p.style.margin = '0';
+              const a = document.createElement('a'); a.href = '/politika-konfidencialnosti'; a.textContent = 'Matrix scroll reachability fixture';
+              p.append(a); matrixFixture.append(p); port.append(matrixFixture);
+              port.scrollTo({ top, behavior: 'instant' });
+              const range = document.createRange(); range.selectNodeContents(a); const controlFragment = [...range.getClientRects()].findIndex((r) => intersects(r)); range.detach();
+              const textRange = document.createRange(); textRange.selectNodeContents(p); const textFragment = [...textRange.getClientRects()].findIndex((r) => intersects(r)); textRange.detach();
+              if (controlFragment < 0 || textFragment < 0) throw new Error('middle-scroll reachability fixture did not intersect the launcher');
+              overlaps.push({ el: a, kind: 'control', fragment: controlFragment, top, rectEl: a }, { el: p, kind: 'text', fragment: textFragment, top });
+              positionCounts[2] += 2;
+            }
+            const unique = [...new Map(overlaps.map((item) => [`${item.kind}:${item.el.tagName}:${item.el.textContent?.trim()}:${item.rectEl?.tagName}:${item.rectEl?.textContent?.trim()}:${item.fragment}:${item.top}`, item])).values()];
+            let controls = 0, text = 0, reachable = 0;
+            const misses: string[] = [];
+            for (const item of unique) {
+              if (item.kind === 'control') controls++; else text++;
+              port.scrollTo({ top: item.top, behavior: 'instant' });
+              const rect = () => item.kind === 'control' && item.fragment < 0 ? item.el.getBoundingClientRect() : (() => {
+                const range = document.createRange(); range.selectNodeContents(item.rectEl ?? item.el); const r = [...range.getClientRects()][item.fragment]; range.detach(); return r;
+              })();
+              let r = rect();
+              if (!r) continue;
+              if (intersects(r)) {
+                const portTop = port.getBoundingClientRect().top;
+                const headerBottom = document.querySelector<HTMLElement>('header.topnav')?.getBoundingClientRect().bottom ?? portTop;
+                let targetTop = Math.max(portTop, headerBottom) + 1;
+                const beforeLauncher = launcher.getBoundingClientRect().top - r.height - 2;
+                if (beforeLauncher > targetTop) targetTop = beforeLauncher;
+                port.scrollBy({ top: r.top - targetTop, behavior: 'instant' });
+                r = rect();
+              }
+              if (!r || intersects(r) || r.top < port.getBoundingClientRect().top - 1 || r.bottom > port.getBoundingClientRect().bottom + 1) {
+                misses.push(`${item.kind}:${item.el.tagName}:${item.el.textContent?.trim().slice(0, 28)}@${item.top} rect=${r ? `${r.top}-${r.bottom}` : 'none'}`); continue;
+              }
+              let clickRect = r;
+              if (item.kind === 'control' && item.el.matches('a,button,[role="button"]')) {
+                const range = document.createRange(); range.selectNodeContents(item.rectEl ?? item.el);
+                clickRect = [...range.getClientRects()].find((fragment) => fragment.width > 0 && fragment.height > 0) ?? r;
+                range.detach();
+              }
+              const x = clickRect.left + clickRect.width / 2, y = clickRect.top + clickRect.height / 2, hit = document.elementFromPoint(x, y);
+              if (item.kind === 'control') { if (hit && (hit === item.el || item.el.contains(hit))) reachable++; else misses.push(`control-hit:${item.el.textContent?.trim().slice(0, 28)}@${item.top} point=${x},${y} hit=${hit?.tagName}.${(hit as HTMLElement | null)?.className ?? ''}`); }
+              else { if (hit && (hit === item.el || item.el.contains(hit))) reachable++; else misses.push(`text-hit:${item.el.textContent?.trim().slice(0, 28)}@${item.top}`); }
+            }
+            matrixFixture?.remove();
+            port.style.position = originalPortPosition;
+            return { overlapCount: unique.length, controls, text, reachable, positionCounts, misses, fixtureInjected: matrixFixture !== null };
+          }, { launcherSelector: NATIVE_LAUNCHER });
+        checkedCells++;
+        measuredTargets += evidence.overlapCount;
+        checkedControls += evidence.controls;
+        checkedText += evidence.text;
+        reachableTargets += evidence.reachable;
+        if (evidence.fixtureInjected) fixtureCells++;
+        expect(evidence.overlapCount, `${name} ${width}: launcher intersects measurable controls or text across sampled scroll positions`).toBeGreaterThan(0);
+        middleObserved += evidence.positionCounts.slice(1, -1).reduce((sum, count) => sum + count, 0);
+        expect(evidence.controls + evidence.text, `${name} ${width}: checked target evidence is nonempty`).toBeGreaterThan(0);
+        expect(evidence.misses, `${name} ${width}: every sampled occluded target must clear by ordinary scroll and hit-test`).toEqual([]);
+        expect(evidence.reachable, `${name} ${width}: all ${evidence.overlapCount} measured targets are reachable`).toBe(evidence.overlapCount);
       }
     }
+    expect(middleObserved, 'non-initial middle scroll samples contain real occluded targets').toBeGreaterThan(0);
+    expect(checkedCells, 'TD-52 sweep covers all seven templates at all three widths').toBe(21);
+    console.log('TD-52 launcher sweep evidence', { checkedCells, measuredTargets, checkedControls, checkedText, reachableTargets, middleObserved, fixtureCells });
   });
 
   test('keyboard focus alone reveals a footer link outside the native launcher', async ({ page }) => {
@@ -671,6 +799,31 @@ test.describe('chat entry visibility approved contract', () => {
     }
   });
 
+  test('keyboard focus reveals enrollment links inside the seminar hero header', async ({ page }) => {
+    await protectThirdParties(page);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto(activeUrl('/'));
+    await page.locator(GREETING_CLOSE).click();
+    await page.locator('main').evaluate((main) => {
+      const hero = document.createElement('header'); hero.className = 'sem-hero';
+      hero.innerHTML = '<a href="/raspisanie-i-tseny" data-seminar-hero-enrollment>Записаться на обучение</a>';
+      main.prepend(hero);
+    });
+    const link = page.locator('[data-seminar-hero-enrollment]');
+    await expect(link).toBeVisible();
+    await page.locator('[data-page-scrollport]').evaluate((port) => {
+      const el = port as HTMLElement; el.scrollTo({ top: el.scrollHeight, behavior: 'instant' });
+    });
+    await link.focus();
+    const state = await link.evaluate((el) => {
+      const r = el.getBoundingClientRect();
+      const port = document.querySelector('[data-page-scrollport]')!.getBoundingClientRect();
+      return { focused: document.activeElement === el, visible: r.top >= port.top - 1 && r.bottom <= port.bottom + 1 };
+    });
+    expect(state.focused, 'seminar hero enrollment link receives keyboard focus').toBe(true);
+    expect(state.visible, 'focus reveal scrolls the seminar hero link into the shared scrollport').toBe(true);
+  });
+
   test('pointer activation of a partly visible footer link is not displaced by focus reveal', async ({ page }) => {
     await protectThirdParties(page);
     await page.setViewportSize({ width: 500, height: 805 });
@@ -697,6 +850,41 @@ test.describe('chat entry visibility approved contract', () => {
     await page.mouse.click(before.x + before.width / 2, before.y + before.height / 2);
     expect(await page.evaluate(() => (window as Window & { __footerPointerClick?: boolean }).__footerPointerClick),
       'mouse down focus reveal must not move the link before mouse up').toBe(true);
+  });
+
+  test('touchscreen tap keeps a partly visible footer link under the tap through compatibility events', async ({ browser }) => {
+    const context = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 1, isMobile: true, hasTouch: true });
+    const touchPage = await context.newPage();
+    try {
+      await protectThirdParties(touchPage);
+      await touchPage.goto(activeUrl('/'));
+      await touchPage.locator(GREETING_CLOSE).tap();
+      const link = touchPage.locator('footer .footer-legal a[href]');
+      await link.evaluate((el) => {
+        const port = document.querySelector<HTMLElement>('[data-page-scrollport]')!;
+        port.scrollTop = port.scrollHeight - port.clientHeight - 12;
+        Object.assign((el as HTMLElement).style, { display: 'block', width: '100%', textAlign: 'right', paddingRight: '130px', boxSizing: 'border-box' });
+        (window as Window & { __touchFooterClick?: boolean }).__touchFooterClick = false;
+        document.addEventListener('click', (event) => {
+          if (event.target instanceof Element && (event.target === el || el.contains(event.target))) {
+            (window as Window & { __touchFooterClick?: boolean }).__touchFooterClick = true;
+            event.preventDefault();
+          }
+        }, { once: true });
+      });
+      const before = await link.boundingBox();
+      const launcher = await touchPage.locator(NATIVE_LAUNCHER).boundingBox();
+      expect(before).not.toBeNull();
+      expect(launcher).not.toBeNull();
+      expect(before!.y + before!.height).toBeGreaterThan(650);
+      const tapX = Math.min(before!.x + before!.width - 2, launcher!.x - 2);
+      expect(tapX).toBeGreaterThan(before!.x);
+      await touchPage.touchscreen.tap(tapX, before!.y + before!.height / 2);
+      expect(await touchPage.evaluate(() => (window as Window & { __touchFooterClick?: boolean }).__touchFooterClick),
+        'touch-generated focus must not scroll the tap target away before click').toBe(true);
+    } finally {
+      await context.close();
+    }
   });
 
   test('keyboard helper is focus-only and opens then escapes the native chooser with focus restored', async ({ page }) => {
