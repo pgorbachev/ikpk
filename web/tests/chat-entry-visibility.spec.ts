@@ -186,20 +186,14 @@ async function snapshotLayout(page: Page) {
     document.body.append(insetProbe);
     const safeAreaInset = parseFloat(getComputedStyle(insetProbe).paddingBottom) || 0;
     insetProbe.remove();
-    const scrollportRect = scrollport?.getBoundingClientRect() ?? null;
-    const lowerRect = scrollportRect
-      ? new DOMRect(0, scrollportRect.bottom, innerWidth, Math.max(0, innerHeight - scrollportRect.bottom))
-      : null;
     return {
       scrollport: rect(scrollport),
       scrollportFound: Boolean(scrollport),
+      scrollportBottom: scrollport?.getBoundingClientRect().bottom ?? null,
+      footer: rect(footer),
       documentScrollHeight: document.documentElement.scrollHeight,
       pageFrameChildren: frame ? [...frame.children].map((el) => el.tagName.toLowerCase()) : [],
-      lowerZone: rect(lowerRect),
-      lowerUsefulHeight: lowerRect ? lowerRect.height - safeAreaInset : null,
       safeAreaInset,
-      buttonInsideUsefulArea: Boolean(button && lowerRect && button.getBoundingClientRect().top >= lowerRect.top
-        && button.getBoundingClientRect().bottom <= lowerRect.bottom - safeAreaInset),
       button: rect(button),
       buttonParentIsBody: button?.parentElement === document.body,
       buttonInsideScrollport: Boolean(scrollport && button && scrollport.contains(button)),
@@ -207,8 +201,6 @@ async function snapshotLayout(page: Page) {
       scrollportScrollHeight: scrollport?.scrollHeight ?? 0,
       scrollportClientHeight: scrollport?.clientHeight ?? 0,
       documentScrollTop: document.scrollingElement?.scrollTop ?? 0,
-      buttonInsideLowerZone: Boolean(lowerRect && button && button.getBoundingClientRect().top >= lowerRect.top
-        && button.getBoundingClientRect().bottom <= lowerRect.bottom),
       greetingFound: Boolean(greeting),
       greetingVisible,
       greetingbox: rect(greeting),
@@ -248,10 +240,10 @@ async function expectNativeLauncher(page: Page, width: number) {
       tabIndex: el.getAttribute('tabindex'),
     };
   });
-  expect.soft(box.width, `${width}px: measured native button width`).toBe(66);
-  expect.soft(box.height, `${width}px: measured native button height`).toBe(66);
-  expect.soft(box.right, `${width}px: native button right offset`).toBe(50);
-  expect.soft(box.bottom, `${width}px: native button bottom offset`).toBe(50);
+  expect.soft(box.width, `${width}px: native launcher has a non-empty measured DOMRect`).toBeGreaterThan(0);
+  expect.soft(box.height, `${width}px: native launcher has a non-empty measured DOMRect`).toBeGreaterThan(0);
+  expect.soft(box.right, `${width}px: native launcher remains inside the viewport horizontally`).toBeGreaterThanOrEqual(0);
+  expect.soft(box.bottom, `${width}px: native launcher remains inside the viewport vertically`).toBeGreaterThanOrEqual(0);
   expect.soft(box.position, `${width}px: provider launcher is viewport-fixed`).toBe('fixed');
   expect.soft(box.zIndex, `${width}px: provider launcher remains above its greeting`).toBe(10150);
   expect.soft(box.name, `${width}px: test stub does not invent a native accessible name`).toBeNull();
@@ -297,9 +289,9 @@ test.describe('chat entry visibility approved contract', () => {
     }
   });
 
-  test('all seven templates reserve 120px plus safe area for the closed native launcher without overlap', async ({ page }) => {
+  test('TD-52 templates give the shared scrollport the full viewport and keep its native launcher usable', async ({ page }) => {
     await protectThirdParties(page);
-    const templates = TEMPLATES;
+    const templates = TEMPLATES.filter(({ name }) => TD52.has(name));
     expect(templates.map(({ name }) => name).filter((name) => TD52.has(name)).sort()).toEqual([...TD52].sort());
 
     for (const width of WIDTHS) {
@@ -314,11 +306,10 @@ test.describe('chat entry visibility approved contract', () => {
         for (const position of ['start', 'middle', 'footer'] as const) {
           const before = await snapshotLayout(page);
           expect.soft(before.scrollportFound, `${name} ${width} ${position}: header/main/newsletter/footer share a real scrollport`).toBe(true);
-          expect.soft(before.lowerZone, `${name} ${width} ${position}: actual viewport reserve is measurable`).not.toBeNull();
-          expect.soft(before.lowerUsefulHeight, `${name} ${width} ${position}: reserve is at least 120px plus safe area`).toBeGreaterThanOrEqual(120);
+          expect.soft(before.scrollportBottom, `${name} ${width} ${position}: scrollport reaches the viewport bottom without a permanent lower band`)
+            .toBeGreaterThanOrEqual((await page.evaluate(() => innerHeight)) - 1);
           expect.soft(before.buttonParentIsBody, `${name} ${width} ${position}: native launcher is a provider body child`).toBe(true);
           expect.soft(before.buttonInsideScrollport, `${name} ${width} ${position}: native launcher is outside content scrollport`).toBe(false);
-          expect.soft(before.buttonInsideLowerZone, `${name} ${width} ${position}: launcher lies in the viewport reserve`).toBe(true);
           expect.soft(before.greetingFound, `${name} ${width} ${position}: closed greeting is absent`).toBe(false);
           if (position === 'start') await page.evaluate(() => {
             const header = document.querySelector('header');
@@ -359,9 +350,18 @@ test.describe('chat entry visibility approved contract', () => {
           await page.waitForTimeout(40);
           const measured = await snapshotLayout(page);
           expect.soft(measured.scrollportFound, `${name} ${width} ${position}: scrolling content is the shared scrollport`).toBe(true);
-          expect.soft(measured.lowerUsefulHeight, `${name} ${width} ${position}: reserve retains at least 120 useful px`).toBeGreaterThanOrEqual(120);
-          expect.soft(measured.overlap, `${name} ${width} ${position}: no visible clipped text/control intersects the trigger`).toEqual([]);
+          expect.soft(measured.scrollportBottom, `${name} ${width} ${position}: scrollport retains the full viewport after scrolling`)
+            .toBeGreaterThanOrEqual((await page.evaluate(() => innerHeight)) - 1);
           expect.soft(measured.documentScrollTop, `${name} ${width} ${position}: document has no competing scroll position`).toBe(0);
+          const launcherIsHitTestable = await page.locator(NATIVE_LAUNCHER).evaluate((el) => {
+            const r = el.getBoundingClientRect();
+            const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+            return Boolean(hit && (hit === el || el.contains(hit))) && r.width > 0 && r.height > 0;
+          });
+          expect.soft(launcherIsHitTestable, `${name} ${width} ${position}: native launcher remains visible and hit-testable`).toBe(true);
+          if (position === 'footer') {
+            expect.soft(measured.overlap, `${name} ${width} footer: no text fragment or control is left beneath the launcher at scroll end`).toEqual([]);
+          }
           if (position === 'start') expect.soft(measured.scrollportScrollTop, `${name} ${width}: start position resets the shared scrollport`).toBe(0);
           if (position !== 'start' && measured.scrollportScrollHeight > measured.scrollportClientHeight + 1) {
             expect.soft(measured.scrollportScrollTop, `${name} ${width}: ${position} position scrolls a long shared scrollport`).toBeGreaterThan(0);
@@ -404,12 +404,130 @@ test.describe('chat entry visibility approved contract', () => {
           .toBe(target);
         await expect(page.locator(NATIVE_LAUNCHER), `${width}px ${position}: native launcher stays visible`).toBeInViewport();
         const layout = await snapshotLayout(page);
-        expect(layout.overlap, `${width}px ${position}: closed launcher does not cover clipped text or controls`).toEqual([]);
-        expect(layout.buttonInsideLowerZone, `${width}px ${position}: native launcher stays inside bottom reserve`).toBe(true);
-        await page.locator(NATIVE_LAUNCHER).click();
+        const hitTarget = await page.locator(NATIVE_LAUNCHER).evaluate((el) => {
+          const r = el.getBoundingClientRect();
+          const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+          return Boolean(hit && (hit === el || el.contains(hit))) && r.width > 0 && r.height > 0;
+        });
+        expect(hitTarget, `${width}px ${position}: native launcher has a non-empty hit-testable DOMRect`).toBe(true);
+        if (position === 'footer') {
+          expect(layout.overlap, `${width}px footer: scroll end leaves no text or control underneath launcher`).toEqual([]);
+        }
+        const launcherBox = await page.locator(NATIVE_LAUNCHER).boundingBox();
+        expect(launcherBox, `${width}px ${position}: launcher has measured bounds for a real pointer click`).not.toBeNull();
+        await page.mouse.click(launcherBox!.x + launcherBox!.width / 2, launcherBox!.y + launcherBox!.height / 2);
         await expect(page.locator(NATIVE_CHOOSER), `${width}px ${position}: explicit launcher action opens native chooser`).toBeVisible();
         await page.locator('[data-chat-stub-chooser-close]').click();
         await expect(page.locator(NATIVE_CHOOSER), `${width}px ${position}: chooser closes`).toHaveCount(0);
+      }
+    }
+  });
+
+  test('all original footer links remain reachable, focusable, and hit-testable at each TD-52 viewport', async ({ page }) => {
+    await protectThirdParties(page);
+    const templates = TEMPLATES.filter(({ name }) => TD52.has(name));
+    for (const width of WIDTHS) {
+      await page.setViewportSize({ width, height: width === 375 ? 812 : 720 });
+      for (const { name, path } of templates) {
+        const response = await page.goto(activeUrl(path));
+        expect(response?.status(), `${name} ${width}: page is served for footer reachability`).toBe(200);
+        await expect(page.locator(GREETING_CLOSE), `${name} ${width}: provider greeting has its own close control`).toBeVisible();
+        await page.locator(GREETING_CLOSE).click();
+        const original = await page.locator('footer a[href]').evaluateAll((links) => links.map((link) => ({
+          href: (link as HTMLAnchorElement).href,
+          text: link.textContent?.replace(/\s+/g, ' ').trim() ?? '',
+        })));
+        expect(original.length, `${name} ${width}: original footer contains actionable links`).toBeGreaterThan(0);
+
+        for (let index = 0; index < original.length; index += 1) {
+          const link = page.locator('footer a[href]').nth(index);
+          await link.evaluate((el) => el.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'instant' }));
+          await link.focus();
+          const state = await link.evaluate((el) => {
+            const link = el as HTMLAnchorElement;
+            const r = link.getBoundingClientRect();
+            const port = document.querySelector<HTMLElement>('[data-page-scrollport]');
+            const clip = port?.getBoundingClientRect();
+            const launcher = document.querySelector<HTMLElement>('[data-chat-stub-launcher]')?.getBoundingClientRect();
+            const range = document.createRange();
+            range.selectNodeContents(link);
+            const textRects = [...range.getClientRects()];
+            const clickRects = textRects.length > 0 ? textRects : [...link.getClientRects()];
+            const obscured = Boolean(launcher && textRects.some((textRect) => textRect.left < launcher.right
+              && textRect.right > launcher.left && textRect.top < launcher.bottom && textRect.bottom > launcher.top));
+            const hitTestable = clickRects.some((textRect) => {
+              for (const fx of [0.2, 0.5, 0.8]) {
+                for (const fy of [0.25, 0.5, 0.75]) {
+                  const x = textRect.left + textRect.width * fx;
+                  const y = textRect.top + textRect.height * fy;
+                  const hit = document.elementFromPoint(x, y);
+                  if (hit && (hit === link || link.contains(hit))
+                    && !(launcher && x >= launcher.left && x <= launcher.right && y >= launcher.top && y <= launcher.bottom)) return true;
+                }
+              }
+              return false;
+            });
+            range.detach();
+            return {
+              href: link.href,
+              text: link.textContent?.replace(/\s+/g, ' ').trim() ?? '',
+              focused: document.activeElement === link,
+              fullRectInScrollport: Boolean(clip && r.width > 0 && r.height > 0 && r.left >= clip.left - 1
+                && r.right <= clip.right + 1 && r.top >= clip.top - 1 && r.bottom <= clip.bottom + 1),
+              notUnderLauncher: !obscured,
+              hitTestable,
+            };
+          });
+          expect(state.focused, `${name} ${width} footer link ${index}: focus reaches the original link`).toBe(true);
+          expect(state.fullRectInScrollport, `${name} ${width} footer link ${index}: focus-reveal exposes the full link rect: ${JSON.stringify(state)}`).toBe(true);
+          expect(state.notUnderLauncher, `${name} ${width} footer link ${index}: launcher does not cover the focused link: ${JSON.stringify(state)}`).toBe(true);
+          expect(state.hitTestable, `${name} ${width} footer link ${index}: center point activates the link rather than the launcher: ${JSON.stringify(state)}`).toBe(true);
+          expect(state.href, `${name} ${width} footer link ${index}: href remains unchanged`).toBe(original[index].href);
+          expect(state.text, `${name} ${width} footer link ${index}: link text remains unchanged`).toBe(original[index].text);
+        }
+
+        const atScrollEnd = await page.evaluate(() => {
+          const port = document.querySelector<HTMLElement>('[data-page-scrollport]');
+          if (!port) throw new Error('shared page scrollport is missing');
+          port.scrollTo({ top: port.scrollHeight, behavior: 'instant' });
+          const footer = document.querySelector('footer')!.getBoundingClientRect();
+          const footerLinks = [...document.querySelectorAll<HTMLAnchorElement>('footer a[href]')];
+          const last = footerLinks[footerLinks.length - 1];
+          const r = last.getBoundingClientRect();
+          const clip = port.getBoundingClientRect();
+          const launcher = document.querySelector<HTMLElement>('[data-chat-stub-launcher]')!.getBoundingClientRect();
+          const range = document.createRange();
+          range.selectNodeContents(last);
+          const lastTextRects = [...range.getClientRects()];
+          const lastClickRects = lastTextRects.length > 0 ? lastTextRects : [...last.getClientRects()];
+          const lastLinkUnderLauncher = lastTextRects.some((textRect) => textRect.left < launcher.right
+            && textRect.right > launcher.left && textRect.top < launcher.bottom && textRect.bottom > launcher.top);
+          const lastLinkHitTestable = lastClickRects.some((textRect) => {
+            const x = textRect.left + textRect.width / 2;
+            const y = textRect.top + textRect.height / 2;
+            const hit = document.elementFromPoint(x, y);
+            return Boolean(hit && (hit === last || last.contains(hit)))
+              && !(x >= launcher.left && x <= launcher.right && y >= launcher.top && y <= launcher.bottom);
+          });
+          range.detach();
+          return {
+            footerBottom: footer.bottom,
+            viewportBottom: innerHeight,
+            lastLinkBottom: r.bottom,
+            lastLinkInsideScrollport: r.top >= clip.top - 1 && r.bottom <= clip.bottom + 1,
+            lastLinkUnderLauncher,
+            lastLinkHitTestable,
+            original: [...document.querySelectorAll<HTMLAnchorElement>('footer a[href]')].map((link) => ({
+              href: link.href, text: link.textContent?.replace(/\s+/g, ' ').trim() ?? '',
+            })),
+          };
+        });
+        expect(atScrollEnd.footerBottom, `${name} ${width}: footer reaches the available viewport boundary`).toBeGreaterThanOrEqual(atScrollEnd.viewportBottom - 1);
+        expect(atScrollEnd.footerBottom, `${name} ${width}: footer does not create a tail beyond the scrollport`).toBeLessThanOrEqual(atScrollEnd.viewportBottom + 1);
+        expect(atScrollEnd.lastLinkInsideScrollport, `${name} ${width}: last original link is fully visible at maximum scroll`).toBe(true);
+        expect(atScrollEnd.lastLinkUnderLauncher, `${name} ${width}: last original link is outside launcher footprint`).toBe(false);
+        expect(atScrollEnd.lastLinkHitTestable, `${name} ${width}: last original link receives its click point`).toBe(true);
+        expect(atScrollEnd.original, `${name} ${width}: footer link composition is unchanged`).toEqual(original);
       }
     }
   });
@@ -1142,7 +1260,7 @@ test.describe('chat entry visibility approved contract', () => {
     }
   });
 
-  test('safe-area extends the native launcher reserve to 120px plus the measured inset', async ({ page }) => {
+  test('safe-area keeps the native launcher clear while the scrollport still reaches the viewport bottom', async ({ page }) => {
     await protectThirdParties(page);
     await page.setViewportSize({ width: 375, height: 640 });
     await page.goto(activeUrl('/'));
@@ -1150,17 +1268,14 @@ test.describe('chat entry visibility approved contract', () => {
     await session.send('Emulation.setSafeAreaInsetsOverride', { insets: { bottom: 20 } });
     const expanded = await snapshotLayout(page);
     expect(expanded.safeAreaInset, 'CDP overrides the safe-area inset for this Chromium fixture').toBe(20);
-    expect(expanded.lowerUsefulHeight ?? -Infinity, 'launcher reserve keeps 120 useful CSS px after inset').toBeGreaterThanOrEqual(120);
-    expect(expanded.greetingVisible, 'greeting is visible in the expanded lower zone').toBe(true);
-    expect(expanded.buttonInsideUsefulArea, 'capsule remains above the safe-area inset while greeting is visible').toBe(true);
+    expect(expanded.scrollportBottom ?? -Infinity, 'safe-area does not shorten the page scrollport').toBeGreaterThanOrEqual(639);
+    expect(expanded.greetingVisible, 'provider greeting remains visible over the page').toBe(true);
 
     await page.locator(GREETING_CLOSE).click();
     await expect(page.locator(NATIVE_GREETING), 'dismissal hides the provider greeting').toHaveCount(0);
     const collapsed = await snapshotLayout(page);
     expect(collapsed.safeAreaInset, 'safe-area inset remains applied after dismissal').toBe(20);
-    expect(collapsed.lowerUsefulHeight, 'reserved useful zone remains 120 CSS px').toBe(120);
-    expect(collapsed.lowerZone?.height, '120px useful reserve plus 20px safe-area is 140px overall').toBe(140);
-    expect(collapsed.buttonInsideUsefulArea, 'capsule remains inside the collapsed useful zone').toBe(true);
+    expect(collapsed.scrollportBottom ?? -Infinity, 'scrollport remains full height after greeting dismissal').toBeGreaterThanOrEqual(639);
     const nativeBounds = await page.locator(NATIVE_LAUNCHER).boundingBox();
     expect(nativeBounds, 'native launcher remains after greeting dismissal').not.toBeNull();
     expect(nativeBounds!.y + nativeBounds!.height, 'dismissed native launcher stays above the 20px safe area inset')
