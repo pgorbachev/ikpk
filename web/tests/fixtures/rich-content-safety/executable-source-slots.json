@@ -136,12 +136,12 @@
     "identity": "svg|fill=quoted:none|viewBox=quoted:0 0 24 24"
   },
   {
-    "slotId": "src:components/course-groups/CourseGroupSeminarItem.astro:L52:C1:style",
+    "slotId": "src:components/course-groups/CourseGroupSeminarItem.astro:L54:C1:style",
     "file": "components/course-groups/CourseGroupSeminarItem.astro",
     "nodeKind": "element",
-    "locator": "components/course-groups/CourseGroupSeminarItem.astro:L52:C1:style",
-    "fingerprint": "7fabe04a6e888a126eed983033d5ec6b9d3d49de5b2d49d181d37f12ab93aa8a",
-    "identity": "style|body:a46d6650aafc400b"
+    "locator": "components/course-groups/CourseGroupSeminarItem.astro:L54:C1:style",
+    "fingerprint": "1320eadde7c253ae3bd16707b5b79cc56dbd27e04a89a7ae2c18f837eee3193c",
+    "identity": "style|body:136de030d3f851db"
   },
   {
     "slotId": "src:components/Footer.astro:L109:C1:style",
