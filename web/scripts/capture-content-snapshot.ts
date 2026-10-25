@@ -23,7 +23,7 @@ import {
   type CmsSchema,
   type FieldMapEntry,
 } from './lib/content-field-map.ts';
-import { contentFingerprint, snapshotId, type DemoCaptureProof, type InitialProductionCaptureProof, type Snapshot, type SnapshotContent } from './lib/content-snapshot.ts';
+import { contentFingerprint, snapshotId, type DemoCaptureProof, type InitialProductionCaptureProof, type ProductionStaticCaptureProof, type Snapshot, type SnapshotContent } from './lib/content-snapshot.ts';
 import { contentIdOf, readFromStore } from './lib/content-media-store.ts';
 
 const webRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -41,11 +41,11 @@ interface SealedCaptureMedia {
 
 interface Staging193Capture {
   directory: string;
-  profile: 'staging194' | 'initial-prod';
+  profile: 'staging194' | 'initial-prod' | 'production-static';
   media: SealedCaptureMedia[];
   readback: { collections: Record<string, unknown[]>; schemaDigest: string };
   manifest: { capturedAt: string };
-  proof: DemoCaptureProof | InitialProductionCaptureProof;
+  proof: DemoCaptureProof | InitialProductionCaptureProof | ProductionStaticCaptureProof;
 }
 
 // An explicit sealed server input supersedes any earlier capture attempt. Invalidate the
@@ -57,7 +57,7 @@ if (process.argv[2] === '--server-capture') {
 async function serverInput(): Promise<Staging193Capture | undefined> {
   const args = process.argv.slice(2);
   if (args.length === 0) return undefined;
-  const profile = args.length === 2 ? 'staging194' : args[1] === '--profile' && args[2] === 'initial-prod' ? 'initial-prod' : '';
+  const profile = args.length === 2 ? 'staging194' : args[1] === '--profile' && ['initial-prod', 'production-static'].includes(args[2]) ? args[2] : '';
   const bundle = profile === 'staging194' ? args[1] : args[3];
   if (args[0] !== '--server-capture' || !profile || args.length !== (profile === 'staging194' ? 2 : 4) || cmsUrl) {
     throw new Error('server capture requires its fixed profile, sealed bundle, and no CMS_URL');
@@ -65,7 +65,9 @@ async function serverInput(): Promise<Staging193Capture | undefined> {
   const verifier = await import('../../scripts/lib/staging193-capture-bundle.mjs');
   const capture = profile === 'staging194'
     ? verifier.verifyStaging193Bundle(bundle!, join(repoRoot, 'cms', 'src'))
-    : verifier.verifyInitialProdBundle(bundle!, join(repoRoot, 'cms', 'src'));
+    : profile === 'initial-prod'
+      ? verifier.verifyInitialProdBundle(bundle!, join(repoRoot, 'cms', 'src'))
+      : verifier.verifyProductionStaticBundle(bundle!, join(repoRoot, 'cms', 'src'));
   return { ...capture, profile } as Staging193Capture;
 }
 const serverCapture = await serverInput();
@@ -606,7 +608,10 @@ async function liveCapture(): Promise<void> {
   const snap: Snapshot = serverCapture?.profile === 'initial-prod'
     ? { ...snapshotBase, origin: { kind: 'server-db', sourceId: 'initial-prod-server-db', capturedAt: serverCapture.manifest.capturedAt },
         sourcePolicy: 'initial-production', sourceAge: 'source-bound', captureProof: serverCapture.proof as InitialProductionCaptureProof }
-    : serverCapture
+      : serverCapture?.profile === 'production-static'
+        ? { ...snapshotBase, origin: { kind: 'server-db', sourceId: 'initial-prod-server-db', capturedAt: serverCapture.manifest.capturedAt },
+            sourcePolicy: 'production-static', sourceAge: 'source-bound', captureProof: serverCapture.proof as ProductionStaticCaptureProof }
+      : serverCapture
       ? { ...snapshotBase, origin: { kind: 'server-db', sourceId: 'demo193-cms', capturedAt: serverCapture.manifest.capturedAt },
           sourcePolicy: 'demo-publication-only', sourceAge: 'untracked', captureProof: serverCapture.proof as DemoCaptureProof }
     : { ...snapshotBase, origin: { kind: 'live', url: cmsUrl, capturedAt: new Date().toISOString() } };
@@ -645,7 +650,9 @@ async function liveCapture(): Promise<void> {
 
   // Тот же контракт, что и у фикстуры (design.md, решение 2): второго, более слабого контракта
   // для живого пути нет. Снимок не должен появиться на диске, пока не прошёл эту проверку.
-  assertCaptureSnapshotContract(snap, undefined, serverCapture?.profile === 'initial-prod' ? 'initial-prod' : undefined);
+  assertCaptureSnapshotContract(snap, undefined,
+    serverCapture?.profile === 'initial-prod' || serverCapture?.profile === 'production-static'
+      ? serverCapture.profile : undefined);
 
   mkdirSync(outDir, { recursive: true });
   writeFileSync(join(outDir, 'snapshot.json'), JSON.stringify(snap, null, 2));

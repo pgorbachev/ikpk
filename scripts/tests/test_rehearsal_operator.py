@@ -47,7 +47,8 @@ class OperatorAdmissionTests(unittest.TestCase):
         if production:
             manifest.update({"profile": profile, "runId": 123, "attempt": 1})
         manifest_bytes = json.dumps(manifest, separators=(",", ":")).encode()
-        snapshot = {"sourcePolicy": "initial-production" if production else "demo-publication-only",
+        snapshot = {"sourcePolicy": ("initial-production" if profile == "initial-prod" else "production-static")
+                        if production else "demo-publication-only",
                     "sourceAge": "source-bound" if production else "untracked",
                     "origin": {"kind": "server-db", "sourceId": "initial-prod-server-db" if production else "demo193-cms"},
                     "snapshotId": snapshot_id,

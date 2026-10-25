@@ -203,9 +203,9 @@ def make_archive(sha: str, provenance: dict) -> tuple[bytes, str]:
 
 
 def ssh_remote(arguments: list[str], *, profile: str = "staging194", input_bytes: Optional[bytes] = None, binary: bool = False) -> bytes:
-    if profile == "initial-prod":
+    if profile in ("initial-prod", "production-static"):
         host, user, identity, known_hosts = INITIAL_PROD_HOST, INITIAL_PROD_USER, INITIAL_PROD_IDENTITY, INITIAL_PROD_KNOWN_HOSTS
-        arguments = ["--profile", "initial-prod", *arguments]
+        arguments = ["--profile", profile, *arguments]
     else:
         host, user, identity, known_hosts = TARGET_HOST, TARGET_USER, TARGET_IDENTITY, TARGET_KNOWN_HOSTS
     if not identity.is_file():
@@ -411,7 +411,7 @@ def browser_check(source_sha: str, operation_id: str, static_digest: str, archiv
         reused_capture = release.get("reusedCapture")
         same_capture_operation = (capture.get("operationId") == operation_id
                                   and capture.get("sourceSha") == source_sha)
-        if profile == "initial-prod":
+        if profile in ("initial-prod", "production-static"):
             capture_reference_matches = same_capture_operation and "reusedCapture" not in release
         elif same_capture_operation:
             capture_reference_matches = "reusedCapture" not in release
@@ -421,15 +421,16 @@ def browser_check(source_sha: str, operation_id: str, static_digest: str, archiv
                 and reused_capture.get("operationId") == capture.get("operationId")
                 and reused_capture.get("sourceSha") == capture.get("sourceSha")
                 and reused_capture.get("bundleDigest") == bundle_digest)
-        if profile == "initial-prod":
-            proof_matches = (isinstance(proof, dict) and snapshot.get("sourcePolicy") == "initial-production"
+        if profile in ("initial-prod", "production-static"):
+            proof_matches = (isinstance(proof, dict)
+                and snapshot.get("sourcePolicy") == ("initial-production" if profile == "initial-prod" else "production-static")
                 and snapshot.get("sourceAge") == "source-bound"
                 and snapshot.get("origin", {}).get("sourceId") == "initial-prod-server-db"
                 and proof.get("targetHost") == INITIAL_PROD_HOST and proof.get("siteUrl") == "https://ikpk.su"
                 and proof.get("sourceSha") == source_sha and isinstance(proof.get("runId"), int)
                 and isinstance(proof.get("attempt"), int)
-                and proof.get("captureId") == INITIAL_PROD_OPERATION_ID
-                and capture.get("profile") == "initial-prod" and capture.get("host") == INITIAL_PROD_HOST
+                and proof.get("captureId") == (INITIAL_PROD_OPERATION_ID if profile == "initial-prod" else operation_id)
+                and capture.get("profile") == profile and capture.get("host") == INITIAL_PROD_HOST
                 and capture.get("siteUrl") == "https://ikpk.su" and capture.get("sourceSha") == source_sha
                 and capture.get("runId") == proof.get("runId") and capture.get("attempt") == proof.get("attempt"))
             if admitted_run is not None:
@@ -458,10 +459,14 @@ def browser_check(source_sha: str, operation_id: str, static_digest: str, archiv
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
         try:
-            environment = {**os.environ, **({"INITIAL_PROD_PROFILE": "1", "PUBLICATION_INITIAL_PRODUCTION_CAPTURE": "1", "DEPLOY_MODE": "prod",
-                                               "PAYMENT_ROLE": "prod", "PAYMENT_ENDPOINT_PROD": "https://ikpk.su/api",
-                                               "CHAT_LOADER_SRC": INITIAL_PROD_CHAT_LOADER_SRC}
-                                              if profile == "initial-prod" else {"PUBLICATION_STAGING_CAPTURE": "1",
+            production_environment = {"DEPLOY_MODE": "prod", "PAYMENT_ROLE": "prod",
+                                      "PAYMENT_ENDPOINT_PROD": "https://ikpk.su/api",
+                                      "CHAT_LOADER_SRC": INITIAL_PROD_CHAT_LOADER_SRC}
+            if profile == "initial-prod":
+                production_environment.update({"INITIAL_PROD_PROFILE": "1",
+                                               "PUBLICATION_INITIAL_PRODUCTION_CAPTURE": "1"})
+            environment = {**os.environ, **(production_environment
+                                              if profile in ("initial-prod", "production-static") else {"PUBLICATION_STAGING_CAPTURE": "1",
                                                "DEPLOY_MODE": "stand", "PAYMENT_ROLE": "ci", "DEMO_FORMS": "stub",
                                                "CHAT_LOADER_SRC": chat_loader_src or "none",
                                                "CHAT_OFFLINE_MESSAGE": "absent"}),
@@ -470,7 +475,7 @@ def browser_check(source_sha: str, operation_id: str, static_digest: str, archiv
                            "PUBLICATION_COMMIT": source_sha, "PUBLICATION_SNAPSHOT_ID": release["snapshotId"],
                            "PUBLICATION_STATIC_TREE_SHA256": static_digest,
                            "CI": "1"}
-            if profile == "initial-prod":
+            if profile in ("initial-prod", "production-static"):
                 environment.pop("CHAT_OFFLINE_MESSAGE", None)
                 if (not admitted_run or type(admitted_run.get("runId")) is not int or admitted_run["runId"] <= 0
                         or type(admitted_run.get("attempt")) is not int or admitted_run["attempt"] <= 0):
@@ -495,9 +500,11 @@ def browser_check(source_sha: str, operation_id: str, static_digest: str, archiv
 
 def invoke(args: argparse.Namespace) -> None:
     profile = getattr(args, "profile", "staging194")
-    target_host = INITIAL_PROD_HOST if profile == "initial-prod" else TARGET_HOST
-    if args.command in ("static-main", "static-main-recover") and profile != "staging194":
-        raise Refusal("static-main commands are bound to the staging194 profile")
+    target_host = INITIAL_PROD_HOST if profile in ("initial-prod", "production-static") else TARGET_HOST
+    if profile == "production-static" and args.command not in ("static-main", "static-main-recover"):
+        raise Refusal("production-static permits only static-main publication and recovery")
+    if args.command in ("static-main", "static-main-recover") and profile not in ("staging194", "production-static"):
+        raise Refusal("static-main commands are bound to the staging194 profile or authorized production-static profile")
     if args.host is not None and args.host != target_host:
         raise Refusal(f"this command is bound to the authorized {profile} host")
     if profile == "initial-prod" and (args.operation_id != INITIAL_PROD_OPERATION_ID or args.command == "recover"):
@@ -555,7 +562,8 @@ def invoke(args: argparse.Namespace) -> None:
         if reuse_capture_operation_id is not None:
             common.extend(["--reuse-capture-operation-id", reuse_capture_operation_id])
         archive, archive_sha256 = make_archive(args.source_sha, admitted_run)
-        prepared = parse_host_json(ssh_remote(common + ["--archive-sha256", archive_sha256],
+        remote_options = {} if profile == "staging194" else {"profile": profile}
+        prepared = parse_host_json(ssh_remote(common + ["--archive-sha256", archive_sha256], **remote_options,
                                               input_bytes=archive))
         if prepared.get("phase") != "browser-check-required":
             raise Refusal(f"static-main candidate is not ready for browser acceptance: {prepared.get('phase')}")
@@ -563,13 +571,14 @@ def invoke(args: argparse.Namespace) -> None:
         if not isinstance(digest, str) or not re.fullmatch(r"[a-f0-9]{64}", digest):
             raise Refusal("host returned an invalid static-main candidate digest")
         candidate = ssh_remote(["export-static-main", "--operation-id", args.operation_id,
-                                "--source-sha", args.source_sha])
-        browser_check(args.source_sha, args.operation_id, digest, candidate, "staging194", admitted_run,
-                      chat_loader_src=STAGING194_CHAT_LOADER_SRC)
+                                "--source-sha", args.source_sha], **remote_options)
+        browser_profile = "production-static" if profile == "production-static" else "staging194"
+        browser_check(args.source_sha, args.operation_id, digest, candidate, browser_profile, admitted_run,
+                      chat_loader_src=INITIAL_PROD_CHAT_LOADER_SRC if profile == "production-static" else STAGING194_CHAT_LOADER_SRC)
         current_run = validate_static_main_ci(args.source_sha)
         if current_run != admitted_run:
             raise Refusal("canonical main source, Tests run, or Release proof changed during acceptance")
-        committed = parse_host_json(ssh_remote(common + ["--browser-digest", digest]))
+        committed = parse_host_json(ssh_remote(common + ["--browser-digest", digest], **remote_options))
         if committed.get("phase") != "committed":
             raise Refusal(f"static-main publication did not reach durable commit: {committed.get('phase')}")
     elif args.command == "static-main-recover":
@@ -583,7 +592,7 @@ def invoke(args: argparse.Namespace) -> None:
             expected_phase = "rolled-back"
         elif args.operator is not None or args.reason is not None:
             raise Refusal("--operator and --reason require --rollback-committed")
-        result = parse_host_json(ssh_remote(command))
+        result = parse_host_json(ssh_remote(command, **({} if profile == "staging194" else {"profile": profile})))
         allowed_phases = {expected_phase} if args.rollback_committed else {"recovered", "rolled-back"}
         if result.get("phase") not in allowed_phases:
             raise Refusal(f"static-main recovery did not reach {expected_phase}: {result.get('phase')}")
@@ -612,7 +621,7 @@ def invoke(args: argparse.Namespace) -> None:
 
 def main(argv: Optional[list[str]] = None) -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--profile", choices=("staging194", "initial-prod"), default="staging194")
+    parser.add_argument("--profile", choices=("staging194", "initial-prod", "production-static"), default="staging194")
     sub = parser.add_subparsers(dest="command", required=True)
     for action in ("cms-update", "static-publish", "static-main", "static-main-recover", "recover"):
         command = sub.add_parser(action)

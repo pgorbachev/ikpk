@@ -242,6 +242,28 @@ export function assertInitialProductionCaptureContract(snapshot: Snapshot): void
   assertSnapshotContractCore(snapshot, false);
 }
 
+/** Capture/build-only validation for reusable static-only production publishes. */
+export function assertProductionStaticCaptureContract(snapshot: Snapshot): void {
+  const value = snapshot as Snapshot & {
+    sourcePolicy?: unknown; sourceAge?: unknown; captureProof?: Record<string, unknown>;
+  };
+  const proof = value.captureProof;
+  const digest = (input: unknown): input is string => typeof input === 'string' && /^[a-f0-9]{64}$/.test(input);
+  if (value.sourcePolicy !== 'production-static' || value.sourceAge !== 'source-bound'
+      || snapshot.origin?.kind !== 'server-db' || snapshot.origin.sourceId !== 'initial-prod-server-db'
+      || !proof || proof.version !== 1 || proof.method !== 'quiesced-sqlite-backup'
+      || proof.targetHost !== '89.111.184.196' || proof.siteUrl !== 'https://ikpk.su'
+      || typeof proof.captureId !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(proof.captureId)
+      || !/^[a-f0-9]{40}$/.test(String(proof.sourceSha))
+      || !Number.isSafeInteger(proof.runId) || Number(proof.runId) <= 0
+      || !Number.isSafeInteger(proof.attempt) || Number(proof.attempt) <= 0
+      || !digest(proof.schemaDigest) || !digest(proof.databaseDigest)
+      || !digest(proof.mediaManifestDigest) || !digest(proof.bundleDigest)) {
+    throw new Error('production-static snapshot has incomplete or invalid source-bound server-DB proof');
+  }
+  assertSnapshotContractCore(snapshot, false);
+}
+
 /**
  * Prototype-only acceptance for the exact article SEO holes approved for demo193.
  * The ordinary snapshot/publication contract remains strict; callers must provide

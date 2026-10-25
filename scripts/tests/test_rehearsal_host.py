@@ -72,6 +72,22 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
         self.assertEqual(config["targetHost"], rehearsal_host.INITIAL_PROD_HOST)
         self.assertEqual(config["allowedSourceRef"], "refs/heads/main")
 
+    def test_production_static_config_isolated_and_bound_to_current_production_data(self):
+        config = json.loads((ROOT / "scripts/production-static-rehearsal.json").read_text(encoding="utf-8"))
+        rehearsal_host._validate_target_binding(config)
+        self.assertEqual(config["profile"], "production-static")
+        self.assertNotEqual(config["stateDir"], "/var/lib/ikpk-rehearsal/initial-prod")
+        self.assertNotEqual(config["stateDir"], "/var/lib/ikpk-rehearsal/staging194")
+        self.assertEqual(config["cmsDatabase"], "/var/lib/ikpk-cms/trial/data/data.db")
+        self.assertEqual(config["currentStatic"], "/var/www/ikpk/current")
+        self.assertEqual(config["staticReleaseRoot"], "/var/www/ikpk/releases")
+        for changed in ({**config, "targetHost": "194.226.99.10"},
+                        {**config, "currentStatic": "/opt/ikpk-cms/current"},
+                        {**config, "cmsDatabase": "/tmp/unrelated.db"},
+                        {**config, "mediaRoots": []}):
+            with self.subTest(changed=changed), self.assertRaises(rehearsal_host.HostFailure):
+                rehearsal_host._validate_target_binding(changed)
+
     def test_initial_prod_ci_admission_uses_exact_canonical_main_push_run(self):
         sha = "a" * 40
         run_row = {"databaseId": 123, "headSha": sha, "event": "push", "status": "completed",
