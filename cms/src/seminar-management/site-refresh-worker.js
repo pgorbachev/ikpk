@@ -67,7 +67,7 @@ export async function executeRefresh() {
         const built = runStep('npm', ['run', 'build'], join(workspace, 'web'), siteBuildEnv(workspace));
         if (!built.ok) return built;
         const commit = installedCommit(webRoot, process.env.IKPK_INSTALLED_COMMIT);
-        let snapshotId = null;
+        let snapshotId;
         try {
           snapshotId = JSON.parse(readFileSync(join(workspace, 'web', '.snapshot', 'snapshot.json'), 'utf8')).snapshotId;
         } catch {
