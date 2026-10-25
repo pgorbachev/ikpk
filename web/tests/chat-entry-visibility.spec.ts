@@ -7,6 +7,7 @@ import { TEMPLATES } from './helpers/templates';
 import { installThirdPartyGuard } from './helpers/third-party-guard';
 
 const WIDTHS = [320, 375, 1280] as const;
+const TD52_REACHABILITY_WIDTHS = [320, 390, 1440] as const;
 const TD52 = new Set(['home', 'course', 'seminar', 'seminar-dated', 'kontakty', 'statyi', 'raspisanie']);
 const TRIGGER = '[data-chat-trigger]';
 const NATIVE_LAUNCHER = '[data-chat-stub-launcher]';
@@ -437,8 +438,8 @@ test.describe('chat entry visibility approved contract', () => {
   test('all original footer links remain reachable, focusable, and hit-testable at each TD-52 viewport', async ({ page }) => {
     await protectThirdParties(page);
     const templates = TEMPLATES.filter(({ name }) => TD52.has(name));
-    for (const width of WIDTHS) {
-      await page.setViewportSize({ width, height: width === 375 ? 812 : 720 });
+    for (const width of TD52_REACHABILITY_WIDTHS) {
+      await page.setViewportSize({ width, height: width === 390 ? 844 : width === 1440 ? 900 : 720 });
       for (const { name, path } of templates) {
         const response = await page.goto(activeUrl(path));
         expect(response?.status(), `${name} ${width}: page is served for footer reachability`).toBe(200);
@@ -497,6 +498,30 @@ test.describe('chat entry visibility approved contract', () => {
           expect(state.text, `${name} ${width} footer link ${index}: link text remains unchanged`).toBe(original[index].text);
         }
 
+        const belowViewportFixture = page.locator('[data-footer-reachability-fixture]');
+        await page.locator('[data-page-scrollport]').evaluate((port) => (port as HTMLElement).scrollTo({ top: 0, behavior: 'instant' }));
+        await page.locator('footer').evaluate((footer) => {
+          const link = document.createElement('a');
+          link.href = '/politika-konfidencialnosti';
+          link.dataset.footerReachabilityFixture = '';
+          link.textContent = 'Deep footer reachability fixture';
+          link.style.display = 'block';
+          footer.append(link);
+        });
+        const fixtureStart = await belowViewportFixture.evaluate((el) => el.getBoundingClientRect().top);
+        expect(fixtureStart, `${name} ${width}: negative fixture starts below the initial viewport`).toBeGreaterThan(await page.evaluate(() => innerHeight));
+        await belowViewportFixture.evaluate((el) => (el as HTMLElement).scrollIntoView({ block: 'center', behavior: 'instant' }));
+        await belowViewportFixture.focus();
+        const fixtureState = await belowViewportFixture.evaluate((el) => {
+          const link = el as HTMLAnchorElement;
+          const r = link.getBoundingClientRect();
+          const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+          return { focused: document.activeElement === link, hitTestable: hit === link || link.contains(hit) };
+        });
+        expect(fixtureState.focused, `${name} ${width}: below-viewport fixture is focus reachable`).toBe(true);
+        expect(fixtureState.hitTestable, `${name} ${width}: below-viewport fixture is pointer reachable`).toBe(true);
+        await belowViewportFixture.evaluate((el) => el.remove());
+
         const atScrollEnd = await page.evaluate(() => {
           const port = document.querySelector<HTMLElement>('[data-page-scrollport]');
           if (!port) throw new Error('shared page scrollport is missing');
@@ -539,6 +564,44 @@ test.describe('chat entry visibility approved contract', () => {
         expect(atScrollEnd.lastLinkUnderLauncher, `${name} ${width}: last original link is outside launcher footprint`).toBe(false);
         expect(atScrollEnd.lastLinkHitTestable, `${name} ${width}: last original link receives its click point`).toBe(true);
         expect(atScrollEnd.original, `${name} ${width}: footer link composition is unchanged`).toEqual(original);
+      }
+    }
+  });
+
+  test('interactive candidates remain reachable at start, middle, and footer across TD-52 templates', async ({ page }) => {
+    await protectThirdParties(page);
+    const templates = TEMPLATES.filter(({ name }) => TD52.has(name));
+    for (const width of TD52_REACHABILITY_WIDTHS) {
+      await page.setViewportSize({ width, height: width === 390 ? 844 : width === 1440 ? 900 : 720 });
+      for (const { name, path } of templates) {
+        await page.goto(activeUrl(path));
+        await page.locator(GREETING_CLOSE).click();
+        for (const position of ['start', 'middle', 'footer'] as const) {
+          const chosen = await page.evaluate(({ position, launcherSelector }) => {
+            const port = document.querySelector<HTMLElement>('[data-page-scrollport]');
+            if (!port) throw new Error('shared page scrollport is missing');
+            port.scrollTo({ top: position === 'start' ? 0 : position === 'middle'
+              ? (port.scrollHeight - port.clientHeight) / 2 : port.scrollHeight, behavior: 'instant' });
+            const launcher = document.querySelector<HTMLElement>(launcherSelector)?.getBoundingClientRect();
+            const candidates = [...port.querySelectorAll<HTMLElement>('a[href],button,input,select,textarea,[tabindex]:not([tabindex="-1"])')]
+              .filter((el) => !el.matches('[data-chat-trigger]') && el.getClientRects().length > 0);
+            const candidate = candidates.find((el) => {
+              const r = el.getBoundingClientRect();
+              const x = r.left + Math.min(r.width / 2, 12);
+              const y = r.top + Math.min(r.height / 2, 12);
+              if (r.width <= 0 || r.height <= 0 || x < 0 || x > innerWidth || y < 0 || y > innerHeight) return false;
+              if (launcher && x >= launcher.left && x <= launcher.right && y >= launcher.top && y <= launcher.bottom) return false;
+              const hit = document.elementFromPoint(x, y);
+              return Boolean(hit && (hit === el || el.contains(hit)));
+            });
+            if (!candidate) return null;
+            candidate.focus({ preventScroll: true });
+            return { tag: candidate.tagName.toLowerCase(), text: candidate.textContent?.replace(/\s+/g, ' ').trim().slice(0, 60) };
+          }, { position, launcherSelector: NATIVE_LAUNCHER });
+          expect(chosen, `${name} ${width} ${position}: a visible interactive candidate can receive focus and pointer hit-testing`).not.toBeNull();
+          const active = await page.evaluate(() => document.activeElement?.matches('a[href],button,input,select,textarea,[tabindex]:not([tabindex="-1"])'));
+          expect(active, `${name} ${width} ${position}: candidate focus is retained`).toBe(true);
+        }
       }
     }
   });
@@ -606,6 +669,34 @@ test.describe('chat entry visibility approved contract', () => {
       expect(state.notUnderLauncher, `${width}px: focused footer link is clear of the native launcher: ${JSON.stringify(state)}`).toBe(true);
       expect(state.hitTestable, `${width}px: focused footer link remains hit-testable: ${JSON.stringify(state)}`).toBe(true);
     }
+  });
+
+  test('pointer activation of a partly visible footer link is not displaced by focus reveal', async ({ page }) => {
+    await protectThirdParties(page);
+    await page.setViewportSize({ width: 500, height: 805 });
+    await page.goto(activeUrl('/'));
+    await page.locator(GREETING_CLOSE).click();
+    const link = page.locator('footer .footer-legal a[href]');
+    await expect(link).toBeVisible();
+    await link.evaluate((el) => {
+      const port = document.querySelector<HTMLElement>('[data-page-scrollport]')!;
+      port.scrollTop = port.scrollHeight - port.clientHeight - 20;
+      (window as Window & { __footerPointerClick?: boolean }).__footerPointerClick = false;
+      document.addEventListener('click', (event) => {
+        if (event.target instanceof Element && (event.target === el || el.contains(event.target))) {
+          (window as Window & { __footerPointerClick?: boolean }).__footerPointerClick = true;
+          event.preventDefault();
+        }
+      }, { once: true });
+    });
+    const before = await link.evaluate((el) => {
+      const r = el.getBoundingClientRect();
+      return { x: r.x, y: r.y, width: r.width, height: r.height, bottom: r.bottom };
+    });
+    expect(before.bottom, 'fixture places the footer link in the focus-reveal band').toBeGreaterThan(640);
+    await page.mouse.click(before.x + before.width / 2, before.y + before.height / 2);
+    expect(await page.evaluate(() => (window as Window & { __footerPointerClick?: boolean }).__footerPointerClick),
+      'mouse down focus reveal must not move the link before mouse up').toBe(true);
   });
 
   test('keyboard helper is focus-only and opens then escapes the native chooser with focus restored', async ({ page }) => {

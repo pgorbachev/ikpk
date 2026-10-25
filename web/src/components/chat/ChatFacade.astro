@@ -317,7 +317,12 @@ const showFacade = config.state === 'address' && !isDemoOutput;
         event.preventDefault();
         pageScrollport.scrollTo({ top: top, behavior: 'instant' });
       });
+      let pointerDown = false;
+      pageScrollport.addEventListener('pointerdown', function () { pointerDown = true; }, true);
+      window.addEventListener('pointerup', function () { pointerDown = false; }, true);
+      window.addEventListener('pointercancel', function () { pointerDown = false; }, true);
       const revealFocusedField = function () {
+        if (pointerDown) return;
         const focused = document.activeElement;
         if (!(focused instanceof HTMLElement) || !pageScrollport.contains(focused)
           || focused.closest('header')
