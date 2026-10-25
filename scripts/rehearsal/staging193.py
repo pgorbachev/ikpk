@@ -465,6 +465,8 @@ def browser_check(source_sha: str, operation_id: str, static_digest: str, archiv
             if profile == "initial-prod":
                 production_environment.update({"INITIAL_PROD_PROFILE": "1",
                                                "PUBLICATION_INITIAL_PRODUCTION_CAPTURE": "1"})
+            elif profile == "production-static":
+                production_environment.update({"PUBLICATION_PRODUCTION_STATIC_CAPTURE": "1"})
             environment = {**os.environ, **(production_environment
                                               if profile in ("initial-prod", "production-static") else {"PUBLICATION_STAGING_CAPTURE": "1",
                                                "DEPLOY_MODE": "stand", "PAYMENT_ROLE": "ci", "DEMO_FORMS": "stub",
