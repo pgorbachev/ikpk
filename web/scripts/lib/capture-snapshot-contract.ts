@@ -1,5 +1,6 @@
 import {
   assertInitialProductionCaptureContract,
+  assertProductionStaticCaptureContract,
   assertPrototypeDemo193SnapshotContract,
   assertSnapshotContract,
 } from './content-contract.ts';
@@ -9,10 +10,14 @@ import type { Snapshot } from './content-snapshot.ts';
 export function assertCaptureSnapshotContract(
   snapshot: Snapshot,
   demo193SourceSqlSha256?: string,
-  profile?: 'initial-prod',
+  profile?: 'initial-prod' | 'production-static',
 ): void {
   if (profile === 'initial-prod') {
     assertInitialProductionCaptureContract(snapshot);
+    return;
+  }
+  if (profile === 'production-static') {
+    assertProductionStaticCaptureContract(snapshot);
     return;
   }
   if (demo193SourceSqlSha256 === undefined) {

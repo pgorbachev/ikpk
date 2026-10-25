@@ -9,7 +9,8 @@ while (($#)); do
     --prefix) PREFIX=${2:?missing prefix}; shift 2 ;;
     --staging193-config) INSTALL_CONFIG_PROFILE=staging193; shift ;;
     --initial-prod-config) INSTALL_CONFIG_PROFILE=initial-prod; shift ;;
-    *) echo "usage: $0 [--prefix ABSOLUTE-PREFIX] [--staging193-config|--initial-prod-config]" >&2; exit 2 ;;
+    --production-static-config) INSTALL_CONFIG_PROFILE=production-static; shift ;;
+    *) echo "usage: $0 [--prefix ABSOLUTE-PREFIX] [--staging193-config|--initial-prod-config|--production-static-config]" >&2; exit 2 ;;
   esac
 done
 [[ "$PREFIX" = /* && "$PREFIX" != / ]] || { echo 'prefix must be an absolute non-root path' >&2; exit 2; }
@@ -34,6 +35,9 @@ if [[ -n "$INSTALL_CONFIG_PROFILE" ]]; then
   if [[ "$INSTALL_CONFIG_PROFILE" == initial-prod ]]; then
     CONFIG="$CONFIG_DIR/rehearsal-initial-prod.json"
     TEMPLATE="$ROOT/scripts/initial-prod-rehearsal.json"
+  elif [[ "$INSTALL_CONFIG_PROFILE" == production-static ]]; then
+    CONFIG="$CONFIG_DIR/rehearsal-production-static.json"
+    TEMPLATE="$ROOT/scripts/production-static-rehearsal.json"
   else
     CONFIG="$CONFIG_DIR/rehearsal.json"
     TEMPLATE="$ROOT/scripts/staging193-rehearsal.json"
@@ -76,8 +80,16 @@ for name in ("stateDir", "backupRoot"):
     os.makedirs(config[name], mode=0o700, exist_ok=True)
     os.chown(config[name], 0, 0)
     os.chmod(config[name], 0o700)
+if config["profile"] == "production-static":
+    if os.path.lexists(config["releaseRoot"]):
+        info = os.lstat(config["releaseRoot"])
+        if not stat.S_ISDIR(info.st_mode) or stat.S_ISLNK(info.st_mode):
+            raise SystemExit("production-static source root must be a real directory")
+    os.makedirs(config["releaseRoot"], mode=0o700, exist_ok=True)
+    os.chown(config["releaseRoot"], 0, account.pw_gid)
+    os.chmod(config["releaseRoot"], 0o750)
 PY
-  if ! PYTHONDONTWRITEBYTECODE=1 "$SBIN/ikpk-rehearsal" --profile "$([[ "$INSTALL_CONFIG_PROFILE" == initial-prod ]] && echo initial-prod || echo staging194)" validate-config; then
+  if ! PYTHONDONTWRITEBYTECODE=1 "$SBIN/ikpk-rehearsal" --profile "$INSTALL_CONFIG_PROFILE" validate-config; then
     if (( installed_config )); then rm -f -- "$CONFIG"; fi
     echo 'rehearsal config validation failed; no operation is enabled' >&2
     exit 2

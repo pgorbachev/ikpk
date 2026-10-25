@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { isAbsolute, relative } from 'node:path';
 import { readPublicationSnapshot } from '../../scripts/lib/publication-snapshot';
-import { contentFingerprint, snapshotId, type DemoPublicationSnapshot, type InitialProductionSnapshot } from '../../scripts/lib/content-snapshot';
+import { contentFingerprint, snapshotId, type DemoPublicationSnapshot, type InitialProductionSnapshot, type ProductionStaticSnapshot } from '../../scripts/lib/content-snapshot';
 import { assertCaptureSnapshotContract } from '../../scripts/lib/capture-snapshot-contract';
 import { walkHtml } from './dist-pages';
 import { attr, findAll, textOf } from './dom';
@@ -17,10 +17,12 @@ export function candidate() {
   if (!snapshotDir || !treeDir || !isAbsolute(treeDir) || !process.env.PUBLICATION_BASE_URL) throw new Error('owned candidate context required');
   const staging = process.env.PUBLICATION_STAGING_CAPTURE === '1';
   const initialProd = process.env.PUBLICATION_INITIAL_PRODUCTION_CAPTURE === '1';
-  if (staging && initialProd) throw new Error('candidate capture profile is ambiguous');
+  const productionStatic = process.env.PUBLICATION_PRODUCTION_STATIC_CAPTURE === '1';
+  if ([staging, initialProd, productionStatic].filter(Boolean).length > 1) throw new Error('candidate capture profile is ambiguous');
   const snapshot = staging
     ? readStagingSnapshot(snapshotDir, treeDir)
-    : initialProd ? readInitialProductionSnapshot(snapshotDir, treeDir) : readPublicationSnapshot(snapshotDir);
+    : initialProd ? readInitialProductionSnapshot(snapshotDir, treeDir)
+      : productionStatic ? readProductionStaticSnapshot(snapshotDir, treeDir) : readPublicationSnapshot(snapshotDir);
   const pages = [...walkHtml(treeDir)].map((file) => ({
     route: `/${relative(treeDir, file).replace(/index\.html$/, '').replace(/\/$/, '')}`,
     html: readFileSync(file, 'utf8'),
@@ -38,12 +40,60 @@ export function candidateSiteOrigin(): string {
     if (!snapshotDir || !treeDir) throw new Error('initial production capture context is missing');
     return readInitialProductionSnapshot(snapshotDir, treeDir).captureProof.siteUrl;
   }
+  if (process.env.PUBLICATION_PRODUCTION_STATIC_CAPTURE === '1') {
+    const snapshotDir = process.env.CONTENT_SNAPSHOT_DIR;
+    const treeDir = process.env.PUBLICATION_TREE_DIR;
+    if (!snapshotDir || !treeDir) throw new Error('production-static capture context is missing');
+    return readProductionStaticSnapshot(snapshotDir, treeDir).captureProof.siteUrl;
+  }
   if (process.env.PUBLICATION_STAGING_CAPTURE !== '1') return 'https://ikpk.su';
   const snapshotDir = process.env.CONTENT_SNAPSHOT_DIR;
   if (!snapshotDir) throw new Error('staging capture context is missing');
   const capture = JSON.parse(readFileSync(`${snapshotDir}/capture-manifest.json`, 'utf8')) as Record<string, unknown>;
   if (capture.siteUrl !== 'https://194.226.99.10') throw new Error('staging capture names an unexpected serving origin');
   return capture.siteUrl;
+}
+
+/** Reusable static production captures have their own proof path, separate from the one-off initial-prod admission. */
+export function readProductionStaticSnapshot(snapshotDir: string, treeDir: string): ProductionStaticSnapshot {
+  const snapshot = JSON.parse(readFileSync(`${snapshotDir}/snapshot.json`, 'utf8')) as ProductionStaticSnapshot;
+  const captureBytes = readFileSync(`${snapshotDir}/capture-manifest.json`);
+  const capture = JSON.parse(captureBytes.toString('utf8')) as Record<string, unknown>;
+  const release = JSON.parse(readFileSync(`${treeDir}/release.json`, 'utf8')) as Record<string, unknown>;
+  const proof = snapshot.captureProof;
+  const positiveInteger = (value: unknown): value is number => Number.isSafeInteger(value) && Number(value) > 0;
+  const digest = (value: unknown): value is string => typeof value === 'string' && /^[a-f0-9]{64}$/.test(value);
+  const sourceSha = process.env.PUBLICATION_COMMIT;
+  const runId = Number(process.env.PUBLICATION_RUN_ID);
+  const attempt = Number(process.env.PUBLICATION_ATTEMPT);
+  const treeDigest = process.env.PUBLICATION_STATIC_TREE_SHA256;
+  if (!sourceSha || !/^[a-f0-9]{40}$/.test(sourceSha) || !positiveInteger(runId) || !positiveInteger(attempt) || !digest(treeDigest) ||
+      snapshot.sourcePolicy !== 'production-static' || snapshot.sourceAge !== 'source-bound' || snapshot.pinned ||
+      snapshot.origin?.kind !== 'server-db' || snapshot.origin.sourceId !== 'initial-prod-server-db' ||
+      capture.version !== 1 || capture.profile !== 'production-static' || capture.host !== '89.111.184.196' ||
+      capture.siteUrl !== 'https://ikpk.su' || capture.sourceId !== 'initial-prod-server-db' ||
+      capture.sourceSha !== sourceSha || capture.runId !== runId || capture.attempt !== attempt ||
+      typeof capture.operationId !== 'string' || proof.targetHost !== '89.111.184.196' || proof.siteUrl !== 'https://ikpk.su' ||
+      proof.sourceSha !== sourceSha || proof.runId !== runId || proof.attempt !== attempt || proof.captureId !== capture.operationId ||
+      proof.schemaDigest !== capture.schemaDigest || proof.databaseDigest !== capture.databaseSha256 ||
+      proof.mediaManifestDigest !== capture.mediaManifestSha256 ||
+      !digest(proof.schemaDigest) || !digest(proof.databaseDigest) || !digest(proof.mediaManifestDigest) ||
+      proof.bundleDigest !== createHash('sha256').update(captureBytes).digest('hex') ||
+      release.commit !== sourceSha || release.operationId !== capture.operationId || 'reusedCapture' in release ||
+      release.snapshotId !== snapshot.snapshotId || release.staticTreeSha256 !== treeDigest ||
+      process.env.PUBLICATION_SNAPSHOT_ID !== snapshot.snapshotId) {
+    throw new Error('production-static candidate does not match the admitted source, capture, and release');
+  }
+  assertCaptureSnapshotContract(snapshot, undefined, 'production-static');
+  const fingerprint = contentFingerprint(snapshot.content);
+  if (snapshot.fingerprint !== fingerprint || snapshot.snapshotId !== snapshotId({ fingerprint, referenceDate: snapshot.referenceDate })) {
+    throw new Error('production-static snapshot identity mismatch');
+  }
+  for (const type of ['articles', 'seminars', 'schedule_entries', 'teachers']) {
+    if (!Array.isArray(snapshot.content.types[type]) || snapshot.content.types[type].length === 0) throw new Error(`production-static snapshot has no ${type}`);
+  }
+  if (!Array.isArray(snapshot.content.media) || snapshot.content.media.length === 0) throw new Error('production-static snapshot has no captured media');
+  return snapshot;
 }
 
 /** The one-off production capture is admitted only when snapshot, capture manifest, and release agree. */
