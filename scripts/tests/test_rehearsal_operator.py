@@ -36,7 +36,7 @@ class OperatorAdmissionTests(unittest.TestCase):
         operation_id = capture_operation_id
         build_operation_id = build_operation_id or operation_id
         snapshot_id = "snapshot-demo"
-        production = profile == "initial-prod"
+        production = profile in ("initial-prod", "production-static")
         manifest = {"version": 1, "host": "89.111.184.196" if production else "194.226.99.10",
                     "siteUrl": "https://ikpk.su" if production else "https://194.226.99.10",
                     "sourceId": "initial-prod-server-db" if production else "demo193-cms",
@@ -45,7 +45,7 @@ class OperatorAdmissionTests(unittest.TestCase):
                     "schemaDigest": "schema-digest", "databaseSha256": "database-digest",
                     "mediaManifestSha256": "media-digest"}
         if production:
-            manifest.update({"profile": "initial-prod", "runId": 123, "attempt": 1})
+            manifest.update({"profile": profile, "runId": 123, "attempt": 1})
         manifest_bytes = json.dumps(manifest, separators=(",", ":")).encode()
         snapshot = {"sourcePolicy": "initial-production" if production else "demo-publication-only",
                     "sourceAge": "source-bound" if production else "untracked",
@@ -196,6 +196,29 @@ class OperatorAdmissionTests(unittest.TestCase):
             server.assert_not_called()
             run.assert_not_called()
 
+    def test_production_static_browser_check_uses_production_capture_without_demo_environment(self):
+        with tempfile.TemporaryDirectory(prefix="ikpk-browser-production-static-") as temporary:
+            root = Path(temporary)
+            (root / "web/node_modules/.bin").mkdir(parents=True)
+            (root / "web/node_modules/.bin/playwright").touch()
+            operation_id, digest, archive = self._browser_candidate(root,
+                capture_operation_id="production-static-20261025-1", profile="production-static")
+            server = MagicMock()
+            server.server_address = ("127.0.0.1", 12345)
+            with patch.object(staging193, "ROOT", root), \
+                 patch.object(staging193.socketserver, "ThreadingTCPServer", return_value=server), \
+                 patch.object(staging193.threading, "Thread", return_value=MagicMock()), \
+                 patch.object(staging193.subprocess, "run", return_value=subprocess.CompletedProcess([], 0)) as run:
+                staging193.browser_check(SHA, operation_id, digest, archive, profile="production-static",
+                    admitted_run={"runId": 123, "attempt": 1})
+            environment = run.call_args.kwargs["env"]
+            self.assertEqual(environment["DEPLOY_MODE"], "prod")
+            self.assertEqual(environment["PAYMENT_ROLE"], "prod")
+            self.assertEqual(environment["PAYMENT_ENDPOINT_PROD"], "https://ikpk.su/api")
+            self.assertEqual(environment["CHAT_LOADER_SRC"], staging193.INITIAL_PROD_CHAT_LOADER_SRC)
+            for key in ("PUBLICATION_STAGING_CAPTURE", "DEMO_FORMS", "CHAT_OFFLINE_MESSAGE"):
+                self.assertNotIn(key, environment)
+
     def test_static_main_cli_accepts_explicit_reuse_capture_operation_id(self):
         with patch.object(staging193, "invoke") as invoke:
             result = staging193.main(["static-main", "--host", staging193.TARGET_HOST,
@@ -227,6 +250,72 @@ class OperatorAdmissionTests(unittest.TestCase):
                          "sealed-capture")
         self.assertIn(["export-static-main", "--operation-id", "new-build", "--source-sha", SHA],
                       [call[0] for call in calls])
+
+    def test_production_static_profile_cli_accepts_reusable_static_main_operation(self):
+        with patch.object(staging193, "invoke") as invoke:
+            result = staging193.main(["--profile", "production-static", "static-main",
+                "--host", staging193.INITIAL_PROD_HOST, "--operation-id", "production-static-20261025-1",
+                "--source-sha", SHA])
+        self.assertEqual(result, 0)
+        self.assertEqual(invoke.call_args.args[0].profile, "production-static")
+        self.assertEqual(invoke.call_args.args[0].operation_id, "production-static-20261025-1")
+
+    def test_production_static_reuses_static_main_engine_with_production_profile(self):
+        provenance = {"sourceSha": SHA, "runId": 123, "attempt": 1}
+        responses = [json.dumps({"phase": "browser-check-required", "staticTreeSha256": "c" * 64}).encode(),
+                     b"candidate bytes", json.dumps({"phase": "committed"}).encode()]
+        calls = []
+
+        def ssh(arguments, input_bytes=None, **kwargs):
+            calls.append((arguments, input_bytes, kwargs))
+            return responses.pop(0)
+
+        args = type("Args", (), {"profile": "production-static", "host": staging193.INITIAL_PROD_HOST,
+            "command": "static-main", "operation_id": "production-static-20261025-1",
+            "source_sha": SHA, "reuse_capture_operation_id": None})()
+        with patch.object(staging193, "validate_static_main_ci", return_value=provenance), \
+             patch.object(staging193, "make_archive", return_value=(b"source archive", "a" * 64)), \
+             patch.object(staging193, "ssh_remote", side_effect=ssh) as remote, \
+             patch.object(staging193, "browser_check") as browser:
+            staging193.invoke(args)
+
+        self.assertEqual(remote.call_args_list[0].kwargs.get("profile"), "production-static")
+        self.assertEqual(remote.call_args_list[1].kwargs.get("profile"), "production-static")
+        self.assertEqual(remote.call_args_list[2].kwargs.get("profile"), "production-static")
+        self.assertEqual(browser.call_args.args[4], "production-static")
+        self.assertEqual(browser.call_args.kwargs["chat_loader_src"], staging193.INITIAL_PROD_CHAT_LOADER_SRC)
+        self.assertTrue(all(call[0][0] in ("static-main", "export-static-main") for call in calls))
+
+    def test_production_static_profile_refuses_staging_host_before_ci_or_ssh(self):
+        for host in (staging193.TARGET_HOST, "193.124.115.99"):
+            with self.subTest(host=host):
+                args = type("Args", (), {"profile": "production-static", "host": host,
+                    "command": "static-main", "operation_id": "production-static-20261025-1",
+                    "source_sha": SHA})()
+                with patch.object(staging193, "validate_static_main_ci") as admit, \
+                     patch.object(staging193, "ssh_remote") as ssh, \
+                     self.assertRaisesRegex(staging193.Refusal,
+                         "bound to the authorized production-static host"):
+                    staging193.invoke(args)
+                admit.assert_not_called()
+                ssh.assert_not_called()
+
+    def test_production_static_profile_refuses_cms_mutating_commands_before_ci_or_ssh(self):
+        for command in ("cms-update", "static-publish", "recover"):
+            with self.subTest(command=command):
+                args = type("Args", (), {"profile": "production-static", "host": staging193.INITIAL_PROD_HOST,
+                    "command": command, "operation_id": "production-static-20261025-1",
+                    "source_sha": SHA, "backup_dir": None})()
+                with patch.object(staging193, "validate_sha_and_ci") as admit, \
+                     patch.object(staging193, "validate_static_main_ci") as static_admit, \
+                     patch.object(staging193, "make_archive", return_value=(b"archive", "a" * 64)), \
+                     patch.object(staging193, "ssh_remote", return_value=json.dumps({"phase": "cms-activated"}).encode()) as ssh, \
+                     self.assertRaisesRegex(staging193.Refusal,
+                         "production-static permits only static-main publication and recovery"):
+                    staging193.invoke(args)
+                admit.assert_not_called()
+                static_admit.assert_not_called()
+                ssh.assert_not_called()
 
     def _capture(self, argv):
         if argv[:2] == ["gh", "repo"]:
@@ -432,6 +521,24 @@ class OperatorAdmissionTests(unittest.TestCase):
             self.assertEqual(shlex.split(remote_command), ["/usr/local/sbin/ikpk-rehearsal", *args])
             self.assertIn("'release operator; $(touch /tmp/nope)'", remote_command)
             self.assertNotIn("; touch /tmp/nope", remote_command)
+
+    def test_production_static_ssh_uses_root_identity_and_namespaced_host_profile(self):
+        with tempfile.TemporaryDirectory(prefix="ikpk-production-static-ssh-") as temporary:
+            identity = Path(temporary) / "identity"
+            known_hosts = Path(temporary) / "known_hosts"
+            identity.write_text("test identity", encoding="utf-8")
+            known_hosts.write_text(f"{staging193.INITIAL_PROD_HOST} ssh-ed25519 AAAATEST\n", encoding="utf-8")
+            result = subprocess.CompletedProcess(["ssh"], 0, b"{}", b"")
+            with patch.object(staging193, "INITIAL_PROD_IDENTITY", identity), \
+                 patch.object(staging193, "INITIAL_PROD_KNOWN_HOSTS", known_hosts), \
+                 patch.object(staging193.subprocess, "run", return_value=result) as invoke:
+                staging193.ssh_remote(["status", "--operation-id", "production-static-20261025-1"],
+                                      profile="production-static")
+            argv = invoke.call_args.args[0]
+            self.assertIn(f"root@{staging193.INITIAL_PROD_HOST}", argv)
+            remote_command = shlex.split(argv[-1])
+            self.assertEqual(remote_command, ["/usr/local/sbin/ikpk-rehearsal", "--profile",
+                "production-static", "status", "--operation-id", "production-static-20261025-1"])
 
     def test_operator_refuses_an_unknown_host_before_ssh(self):
         with patch.object(staging193.subprocess, "run") as invoke:
