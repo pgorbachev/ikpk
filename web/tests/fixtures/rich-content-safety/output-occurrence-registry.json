@@ -61676,7 +61676,7 @@
       "slotId": "src:components/schedule/ScheduleControlsScript.astro:L1:C1:script",
       "route": "/raspisanie-i-tseny",
       "placement": "after:#header-search-close",
-      "identity": "script|data-schedule-controls=|body:329e8733a2d4f0ee",
+      "identity": "script|data-schedule-controls=|body:80aa030a39f97369",
       "count": 1,
       "builds": [
         "production",
