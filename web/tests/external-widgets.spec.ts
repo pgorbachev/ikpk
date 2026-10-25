@@ -692,6 +692,20 @@ test.describe('сторонний iframe не отменяет доступно�
 test.describe('плавающая кнопка чата не блокирует содержимое страницы', () => {
   test.describe.configure({ timeout: 60_000 });
 
+  test('320px course cards keep the long excerpt outside the title link', async ({ page }) => {
+    await guard(page);
+    await page.setViewportSize({ width: 320, height: 720 });
+    await page.goto(url('/institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya'));
+    const card = page.locator('[data-testid="course-group-seminar-card"]')
+      .filter({ has: page.locator('.course-group-seminar-title').filter({ hasText: 'ПК-6.' }) }).first();
+    const titleLink = card.locator('.course-group-seminar-title-link');
+    const main = card.locator('.course-group-seminar-main');
+    await expect(titleLink.locator('.course-group-seminar-title')).toHaveCount(1);
+    await expect(titleLink.locator('.course-group-seminar-excerpt')).toHaveCount(0);
+    await expect(main.locator('.course-group-seminar-excerpt'), 'long course excerpt must stay outside the clickable title').toHaveCount(1);
+    await expect(card.locator('.course-group-seminar-cta')).toHaveAttribute('href', await titleLink.getAttribute('href') ?? '');
+  });
+
   test('oracle rejects a center-hit link whose edge remains under the launcher', async ({ page }) => {
     await page.setContent(`<a id="edge-control" href="#" style="position:fixed;right:40px;bottom:20px;width:160px;height:40px;z-index:1">Edge fixture</a>
       <button id="fixture-launcher" style="position:fixed;right:0;bottom:0;width:80px;height:80px;z-index:2">Chat</button>`);
@@ -710,6 +724,10 @@ test.describe('плавающая кнопка чата не блокирует 
   for (const { name, path } of TEMPLATES) {
     test(`${name}: перекрытые controls и текст достижимы прокруткой`, async ({ page }) => {
       await guard(page);
+      // The strict scanner checks whole interactive rectangles for every required TD-52
+      // route at the narrowest phone viewport; it never substitutes child text fragments.
+      if (['home', 'course', 'seminar', 'seminar-dated', 'kontakty', 'statyi', 'raspisanie'].includes(name))
+        await page.setViewportSize({ width: 320, height: 720 });
       const response = await page.goto(url(path));
       if (name.startsWith('preview-') && response?.status() === 404)
         test.skip(true, 'черновик варианта отсутствует в боевой сборке');
@@ -724,6 +742,23 @@ test.describe('плавающая кнопка чата не блокирует 
       const overlaps = await page.evaluate((launcherAttr) => {
         const button = document.querySelector(`[${launcherAttr}]`) as HTMLElement | null;
         if (button === null) return { interactive: ['native launcher missing'], text: [] as string[] };
+        // Keep a scanner-level sensitivity fixture in every route run: its fixed control
+        // is horizontally clipped by its parent, yet the visible intersection touches
+        // the launcher. Its center is clear, so a center-only overlap oracle would accept it.
+        const candidateFixture = document.createElement('div');
+        candidateFixture.dataset.candidateFixtureClip = '';
+        Object.assign(candidateFixture.style, {
+          position: 'fixed', right: '100px', bottom: '0', width: '60px', height: '220px',
+          overflow: 'hidden', zIndex: '0', pointerEvents: 'none',
+        });
+        const fixtureControl = document.createElement('button');
+        fixtureControl.textContent = 'candidate-discovery-fixture';
+        Object.assign(fixtureControl.style, {
+          position: 'absolute', left: '0', top: '120px', width: '80px', height: '40px',
+          padding: '0', pointerEvents: 'auto',
+        });
+        candidateFixture.append(fixtureControl);
+        document.body.append(candidateFixture);
         const header = document.querySelector('header');
         const main = document.querySelector('main');
         const footer = document.querySelector('footer');
@@ -749,9 +784,30 @@ test.describe('плавающая кнопка чата не блокирует 
           }
           return clip;
         };
-        const visible = (r: DOMRect, el: Element) => {
+        const candidateFixtureRect = fixtureControl.getBoundingClientRect();
+        const candidateFixtureClip = clipBounds(fixtureControl);
+        const candidateLauncherRect = button.getBoundingClientRect();
+        const candidateFixtureGeometry = {
+          clippedAndOverlapped: candidateFixtureRect.right > candidateFixtureClip.right
+            && candidateFixtureRect.left < candidateLauncherRect.right && candidateFixtureRect.right > candidateLauncherRect.left
+            && candidateFixtureRect.top < candidateLauncherRect.bottom && candidateFixtureRect.bottom > candidateLauncherRect.top,
+          centerClear: candidateFixtureRect.left + candidateFixtureRect.width / 2 < candidateLauncherRect.left,
+        };
+        const clipFor = (r: DOMRect, el: Element) => {
           const clip = clipBounds(el);
-          return r.width > 0 && r.height > 0 && r.left >= clip.left - 1 && r.right <= clip.right + 1
+          if (r.width <= 0 || r.height <= 0) return null;
+          const intersection = {
+            left: Math.max(r.left, clip.left), right: Math.min(r.right, clip.right),
+            top: Math.max(r.top, clip.top), bottom: Math.min(r.bottom, clip.bottom),
+          };
+          return intersection.right > intersection.left && intersection.bottom > intersection.top
+            ? { clip, intersection } : null;
+        };
+        const fullyVisible = (r: DOMRect, el: Element) => {
+          const visible = clipFor(r, el);
+          if (!visible) return null;
+          const { clip } = visible;
+          return r.left >= clip.left - 1 && r.right <= clip.right + 1
             && r.top >= clip.top - 1 && r.bottom <= clip.bottom + 1 ? clip : null;
         };
         const intersects = (r: DOMRect, launcherBox: DOMRect) => r.left < launcherBox.right && r.right > launcherBox.left
@@ -787,7 +843,7 @@ test.describe('плавающая кнопка чата не блокирует 
           const style = getComputedStyle(el);
           if (style.visibility === 'hidden' || style.display === 'none') continue;
           const rect = el.getBoundingClientRect();
-          const shown = visible(rect, el);
+          const shown = clipFor(rect, el);
           if (shown && intersects(rect, sampleLauncher))
             controlTargets.push({ el, scrollTop: sampleTop, rect: [rect.left, rect.top, rect.right, rect.bottom], launcher: [sampleLauncher.left, sampleLauncher.top, sampleLauncher.right, sampleLauncher.bottom], label: `${el.tagName.toLowerCase()}: ${(el.textContent ?? '').trim().slice(0, 40)}` });
           }
@@ -803,7 +859,7 @@ test.describe('плавающая кнопка чата не блокирует 
           range.selectNodeContents(p);
           const fragments = [...range.getClientRects()];
           for (const [fragment, rect] of fragments.entries()) {
-            const shown = visible(rect, p);
+            const shown = clipFor(rect, p);
             if (shown && intersects(rect, sampleLauncher)) {
               textTargets.push({ el: p, fragment, scrollTop: sampleTop, rect: [rect.left, rect.top, rect.right, rect.bottom], launcher: [sampleLauncher.left, sampleLauncher.top, sampleLauncher.right, sampleLauncher.bottom], label: `${p.tagName.toLowerCase()}: ${(p.textContent ?? '').trim().slice(0, 40)}` });
             }
@@ -840,7 +896,7 @@ test.describe('плавающая кнопка чата не блокирует 
         };
         const testPosition = (el: Element, r: DOMRect, isControl: boolean) => {
           const currentLauncher = button.getBoundingClientRect();
-          const clip = visible(r, el);
+          const clip = fullyVisible(r, el);
           if (!clip || intersects(r, currentLauncher)) return { pass: false, currentLauncher, clip };
           if (!isControl) return { pass: true, currentLauncher, clip };
           const points = [.1, .5, .9].flatMap((fx) => [.1, .5, .9].map((fy) => [r.left + r.width * fx, r.top + r.height * fy]));
@@ -907,10 +963,22 @@ test.describe('плавающая кнопка чата не блокирует 
             diagnostics.push(`${item.label} ${last}`);
           }
         }
+        const candidateFixtureDetected = unreachableInteractive.some((label) => label.includes('candidate-discovery-fixture'));
+        // Keep the fixture's expected failure out of route-level acceptance results.
+        const fixtureIndex = unreachableInteractive.findIndex((label) => label.includes('candidate-discovery-fixture'));
+        if (fixtureIndex >= 0) unreachableInteractive.splice(fixtureIndex, 1);
+        for (let i = diagnostics.length - 1; i >= 0; i--)
+          if (diagnostics[i].includes('candidate-discovery-fixture')) diagnostics.splice(i, 1);
+        candidateFixture.remove();
         return { unreachableInteractive, unreachableText, diagnostics, reachableEvidence, checkedTargets: seenTargets.size,
           scanDurationMs: Math.round(performance.now() - scanStartedAt),
-          scrollportFound: scrollport !== null, checkedInteractive: controlTargets.length, checkedText: textTargets.length };
+          scrollportFound: scrollport !== null, checkedInteractive: controlTargets.length, checkedText: textTargets.length,
+          candidateFixtureDetected, candidateFixtureGeometry };
       }, 'data-chat-stub-launcher');
+
+      expect(overlaps.candidateFixtureGeometry.clippedAndOverlapped, `${path}: scanner fixture must really be clipped and overlap the launcher`).toBe(true);
+      expect(overlaps.candidateFixtureGeometry.centerClear, `${path}: scanner fixture center must remain clear of launcher`).toBe(true);
+      expect(overlaps.candidateFixtureDetected, `${path}: partially clipped launcher-overlapped fixture must enter and fail the scanner's candidate check`).toBe(true);
 
       if (['seminar-dated', 'article', 'kontakty', 'statyi'].includes(name)) {
         console.log(`${name} ${page.viewportSize()?.width} reachability evidence`, {

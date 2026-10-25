@@ -36,10 +36,12 @@ const lead = description ? clipLead(description) : '';
     <span class="cgs-chip cgs-chip--muted" data-start-empty hidden={Boolean(nearestDate)} data-testid="seminar-date-fallback">Даты пока не назначены</span>
     <a class="cgs-phone" data-start-empty hidden={Boolean(nearestDate)} href={MANAGER_PHONE_HREF}>уточняйте у менеджера: {MANAGER_PHONE}</a>
   </div>
-  <a href={href} class="course-group-seminar-main">
-    <h2 class="course-group-seminar-title">{seminar.name}</h2>
+  <div class="course-group-seminar-main">
+    <a href={href} class="course-group-seminar-title-link">
+      <h2 class="course-group-seminar-title">{seminar.name}</h2>
+    </a>
     {lead && <p class="course-group-seminar-excerpt">{lead}</p>}
-  </a>
+  </div>
   <div class="course-group-seminar-actions">
     <a href={href} class="course-group-seminar-cta" aria-label={`${nearestDate ? 'Записаться на семинар' : 'Подробнее о семинаре'} ${seminar.name}`}>
       {nearestDate ? 'Записаться на семинар' : 'Подробнее о семинаре'}
@@ -102,10 +104,15 @@ const lead = description ? clipLead(description) : '';
   .course-group-seminar-main {
     display: block;
     color: inherit;
+  }
+
+  .course-group-seminar-title-link {
+    display: block;
+    color: inherit;
     text-decoration: none;
   }
 
-  .course-group-seminar-main:hover {
+  .course-group-seminar-title-link:hover {
     text-decoration: none;
   }
 
