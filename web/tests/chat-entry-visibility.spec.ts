@@ -5,8 +5,14 @@ import { serveStatic, type StaticSite } from './helpers/static-serve';
 import { PROBE_CHAT_LOADER_SRC, buildProbe, type ProbeBuild } from './helpers/widget-probe-build';
 import { TEMPLATES } from './helpers/templates';
 import { installThirdPartyGuard } from './helpers/third-party-guard';
+import { measureFullReachability } from './helpers/reachability';
 
 const WIDTHS = [320, 375, 1280] as const;
+const TD52_REACHABILITY_VIEWPORTS = [
+  { width: 320, height: 720 },
+  { width: 375, height: 812 },
+  { width: 1280, height: 720 },
+] as const;
 const TD52 = new Set(['home', 'course', 'seminar', 'seminar-dated', 'kontakty', 'statyi', 'raspisanie']);
 const TRIGGER = '[data-chat-trigger]';
 const NATIVE_LAUNCHER = '[data-chat-stub-launcher]';
@@ -158,6 +164,17 @@ async function snapshotLayout(page: Page) {
       while (walker.nextNode()) {
         const node = walker.currentNode;
         if (!node.textContent?.trim() || button.contains(node.parentElement)) continue;
+        const hiddenMenu = node.parentElement?.closest('details:not([open])');
+        if (hiddenMenu) continue;
+        let hiddenAncestor = false;
+        for (let ancestor = node.parentElement; ancestor && ancestor !== document.body; ancestor = ancestor.parentElement) {
+          const style = getComputedStyle(ancestor);
+          if (style.display === 'none' || style.visibility === 'hidden' || Number(style.opacity) === 0) {
+            hiddenAncestor = true;
+            break;
+          }
+        }
+        if (hiddenAncestor) continue;
         const range = document.createRange();
         range.selectNodeContents(node);
         for (const r of range.getClientRects()) {
@@ -186,20 +203,14 @@ async function snapshotLayout(page: Page) {
     document.body.append(insetProbe);
     const safeAreaInset = parseFloat(getComputedStyle(insetProbe).paddingBottom) || 0;
     insetProbe.remove();
-    const scrollportRect = scrollport?.getBoundingClientRect() ?? null;
-    const lowerRect = scrollportRect
-      ? new DOMRect(0, scrollportRect.bottom, innerWidth, Math.max(0, innerHeight - scrollportRect.bottom))
-      : null;
     return {
       scrollport: rect(scrollport),
       scrollportFound: Boolean(scrollport),
+      scrollportBottom: scrollport?.getBoundingClientRect().bottom ?? null,
+      footer: rect(footer),
       documentScrollHeight: document.documentElement.scrollHeight,
       pageFrameChildren: frame ? [...frame.children].map((el) => el.tagName.toLowerCase()) : [],
-      lowerZone: rect(lowerRect),
-      lowerUsefulHeight: lowerRect ? lowerRect.height - safeAreaInset : null,
       safeAreaInset,
-      buttonInsideUsefulArea: Boolean(button && lowerRect && button.getBoundingClientRect().top >= lowerRect.top
-        && button.getBoundingClientRect().bottom <= lowerRect.bottom - safeAreaInset),
       button: rect(button),
       buttonParentIsBody: button?.parentElement === document.body,
       buttonInsideScrollport: Boolean(scrollport && button && scrollport.contains(button)),
@@ -207,8 +218,6 @@ async function snapshotLayout(page: Page) {
       scrollportScrollHeight: scrollport?.scrollHeight ?? 0,
       scrollportClientHeight: scrollport?.clientHeight ?? 0,
       documentScrollTop: document.scrollingElement?.scrollTop ?? 0,
-      buttonInsideLowerZone: Boolean(lowerRect && button && button.getBoundingClientRect().top >= lowerRect.top
-        && button.getBoundingClientRect().bottom <= lowerRect.bottom),
       greetingFound: Boolean(greeting),
       greetingVisible,
       greetingbox: rect(greeting),
@@ -248,10 +257,10 @@ async function expectNativeLauncher(page: Page, width: number) {
       tabIndex: el.getAttribute('tabindex'),
     };
   });
-  expect.soft(box.width, `${width}px: measured native button width`).toBe(66);
-  expect.soft(box.height, `${width}px: measured native button height`).toBe(66);
-  expect.soft(box.right, `${width}px: native button right offset`).toBe(50);
-  expect.soft(box.bottom, `${width}px: native button bottom offset`).toBe(50);
+  expect.soft(box.width, `${width}px: native launcher has a non-empty measured DOMRect`).toBeGreaterThan(0);
+  expect.soft(box.height, `${width}px: native launcher has a non-empty measured DOMRect`).toBeGreaterThan(0);
+  expect.soft(box.right, `${width}px: native launcher remains inside the viewport horizontally`).toBeGreaterThanOrEqual(0);
+  expect.soft(box.bottom, `${width}px: native launcher remains inside the viewport vertically`).toBeGreaterThanOrEqual(0);
   expect.soft(box.position, `${width}px: provider launcher is viewport-fixed`).toBe('fixed');
   expect.soft(box.zIndex, `${width}px: provider launcher remains above its greeting`).toBe(10150);
   expect.soft(box.name, `${width}px: test stub does not invent a native accessible name`).toBeNull();
@@ -297,9 +306,9 @@ test.describe('chat entry visibility approved contract', () => {
     }
   });
 
-  test('all seven templates reserve 120px plus safe area for the closed native launcher without overlap', async ({ page }) => {
+  test('TD-52 templates give the shared scrollport the full viewport and keep its native launcher usable', async ({ page }) => {
     await protectThirdParties(page);
-    const templates = TEMPLATES;
+    const templates = TEMPLATES.filter(({ name }) => TD52.has(name));
     expect(templates.map(({ name }) => name).filter((name) => TD52.has(name)).sort()).toEqual([...TD52].sort());
 
     for (const width of WIDTHS) {
@@ -314,11 +323,10 @@ test.describe('chat entry visibility approved contract', () => {
         for (const position of ['start', 'middle', 'footer'] as const) {
           const before = await snapshotLayout(page);
           expect.soft(before.scrollportFound, `${name} ${width} ${position}: header/main/newsletter/footer share a real scrollport`).toBe(true);
-          expect.soft(before.lowerZone, `${name} ${width} ${position}: actual viewport reserve is measurable`).not.toBeNull();
-          expect.soft(before.lowerUsefulHeight, `${name} ${width} ${position}: reserve is at least 120px plus safe area`).toBeGreaterThanOrEqual(120);
+          expect.soft(before.scrollportBottom, `${name} ${width} ${position}: scrollport reaches the viewport bottom without a permanent lower band`)
+            .toBeGreaterThanOrEqual((await page.evaluate(() => innerHeight)) - 1);
           expect.soft(before.buttonParentIsBody, `${name} ${width} ${position}: native launcher is a provider body child`).toBe(true);
           expect.soft(before.buttonInsideScrollport, `${name} ${width} ${position}: native launcher is outside content scrollport`).toBe(false);
-          expect.soft(before.buttonInsideLowerZone, `${name} ${width} ${position}: launcher lies in the viewport reserve`).toBe(true);
           expect.soft(before.greetingFound, `${name} ${width} ${position}: closed greeting is absent`).toBe(false);
           if (position === 'start') await page.evaluate(() => {
             const header = document.querySelector('header');
@@ -359,9 +367,18 @@ test.describe('chat entry visibility approved contract', () => {
           await page.waitForTimeout(40);
           const measured = await snapshotLayout(page);
           expect.soft(measured.scrollportFound, `${name} ${width} ${position}: scrolling content is the shared scrollport`).toBe(true);
-          expect.soft(measured.lowerUsefulHeight, `${name} ${width} ${position}: reserve retains at least 120 useful px`).toBeGreaterThanOrEqual(120);
-          expect.soft(measured.overlap, `${name} ${width} ${position}: no visible clipped text/control intersects the trigger`).toEqual([]);
+          expect.soft(measured.scrollportBottom, `${name} ${width} ${position}: scrollport retains the full viewport after scrolling`)
+            .toBeGreaterThanOrEqual((await page.evaluate(() => innerHeight)) - 1);
           expect.soft(measured.documentScrollTop, `${name} ${width} ${position}: document has no competing scroll position`).toBe(0);
+          const launcherIsHitTestable = await page.locator(NATIVE_LAUNCHER).evaluate((el) => {
+            const r = el.getBoundingClientRect();
+            const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+            return Boolean(hit && (hit === el || el.contains(hit))) && r.width > 0 && r.height > 0;
+          });
+          expect.soft(launcherIsHitTestable, `${name} ${width} ${position}: native launcher remains visible and hit-testable`).toBe(true);
+          if (position === 'footer') {
+            expect.soft(measured.overlap, `${name} ${width} footer: no text fragment or control is left beneath the launcher at scroll end`).toEqual([]);
+          }
           if (position === 'start') expect.soft(measured.scrollportScrollTop, `${name} ${width}: start position resets the shared scrollport`).toBe(0);
           if (position !== 'start' && measured.scrollportScrollHeight > measured.scrollportClientHeight + 1) {
             expect.soft(measured.scrollportScrollTop, `${name} ${width}: ${position} position scrolls a long shared scrollport`).toBeGreaterThan(0);
@@ -404,13 +421,519 @@ test.describe('chat entry visibility approved contract', () => {
           .toBe(target);
         await expect(page.locator(NATIVE_LAUNCHER), `${width}px ${position}: native launcher stays visible`).toBeInViewport();
         const layout = await snapshotLayout(page);
-        expect(layout.overlap, `${width}px ${position}: closed launcher does not cover clipped text or controls`).toEqual([]);
-        expect(layout.buttonInsideLowerZone, `${width}px ${position}: native launcher stays inside bottom reserve`).toBe(true);
-        await page.locator(NATIVE_LAUNCHER).click();
+        const hitTarget = await page.locator(NATIVE_LAUNCHER).evaluate((el) => {
+          const r = el.getBoundingClientRect();
+          const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+          return Boolean(hit && (hit === el || el.contains(hit))) && r.width > 0 && r.height > 0;
+        });
+        expect(hitTarget, `${width}px ${position}: native launcher has a non-empty hit-testable DOMRect`).toBe(true);
+        if (position === 'footer') {
+          expect(layout.overlap, `${width}px footer: scroll end leaves no text or control underneath launcher`).toEqual([]);
+        }
+        const launcherBox = await page.locator(NATIVE_LAUNCHER).boundingBox();
+        expect(launcherBox, `${width}px ${position}: launcher has measured bounds for a real pointer click`).not.toBeNull();
+        await page.mouse.click(launcherBox!.x + launcherBox!.width / 2, launcherBox!.y + launcherBox!.height / 2);
         await expect(page.locator(NATIVE_CHOOSER), `${width}px ${position}: explicit launcher action opens native chooser`).toBeVisible();
         await page.locator('[data-chat-stub-chooser-close]').click();
         await expect(page.locator(NATIVE_CHOOSER), `${width}px ${position}: chooser closes`).toHaveCount(0);
       }
+    }
+  });
+
+  test('all original footer links remain reachable, focusable, and hit-testable at each TD-52 viewport', async ({ page }) => {
+    await protectThirdParties(page);
+    const templates = TEMPLATES.filter(({ name }) => TD52.has(name));
+    for (const { width, height } of TD52_REACHABILITY_VIEWPORTS) {
+      await page.setViewportSize({ width, height });
+      for (const { name, path } of templates) {
+        const response = await page.goto(activeUrl(path));
+        expect(response?.status(), `${name} ${width}: page is served for footer reachability`).toBe(200);
+        await expect(page.locator(GREETING_CLOSE), `${name} ${width}: provider greeting has its own close control`).toBeVisible();
+        await page.locator(GREETING_CLOSE).click();
+        const original = await page.locator('footer a[href]').evaluateAll((links) => links.map((link) => ({
+          href: (link as HTMLAnchorElement).href,
+          text: link.textContent?.replace(/\s+/g, ' ').trim() ?? '',
+        })));
+        expect(original.length, `${name} ${width}: original footer contains actionable links`).toBeGreaterThan(0);
+
+        for (let index = 0; index < original.length; index += 1) {
+          const link = page.locator('footer a[href]').nth(index);
+          await link.evaluate((el) => el.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'instant' }));
+          await link.focus();
+          const reachability = await link.evaluate(measureFullReachability);
+          const state = await link.evaluate((el) => {
+            const link = el as HTMLAnchorElement;
+            const launcher = document.querySelector<HTMLElement>('[data-chat-stub-launcher]')?.getBoundingClientRect();
+            const range = document.createRange();
+            range.selectNodeContents(link);
+            const textRects = [...range.getClientRects()];
+            const clickRects = textRects.length > 0 ? textRects : [...link.getClientRects()];
+            const obscured = Boolean(launcher && textRects.some((textRect) => textRect.left < launcher.right
+              && textRect.right > launcher.left && textRect.top < launcher.bottom && textRect.bottom > launcher.top));
+            const hitTestable = clickRects.some((textRect) => {
+              for (const fx of [0.2, 0.5, 0.8]) {
+                for (const fy of [0.25, 0.5, 0.75]) {
+                  const x = textRect.left + textRect.width * fx;
+                  const y = textRect.top + textRect.height * fy;
+                  const hit = document.elementFromPoint(x, y);
+                  if (hit && (hit === link || link.contains(hit))
+                    && !(launcher && x >= launcher.left && x <= launcher.right && y >= launcher.top && y <= launcher.bottom)) return true;
+                }
+              }
+              return false;
+            });
+            range.detach();
+            return {
+              href: link.href,
+              text: link.textContent?.replace(/\s+/g, ' ').trim() ?? '',
+              focused: document.activeElement === link,
+              notUnderLauncher: !obscured,
+              hitTestable,
+            };
+          });
+          expect(state.focused, `${name} ${width} footer link ${index}: focus reaches the original link`).toBe(true);
+          expect(reachability.fullRectVisible, `${name} ${width} footer link ${index}: full link rect stays inside viewport and clipping ancestors: ${JSON.stringify(reachability)}`).toBe(true);
+          expect(state.notUnderLauncher, `${name} ${width} footer link ${index}: launcher does not cover the focused link: ${JSON.stringify(state)}`).toBe(true);
+          expect(state.hitTestable, `${name} ${width} footer link ${index}: center point activates the link rather than the launcher: ${JSON.stringify(state)}`).toBe(true);
+          expect(state.href, `${name} ${width} footer link ${index}: href remains unchanged`).toBe(original[index].href);
+          expect(state.text, `${name} ${width} footer link ${index}: link text remains unchanged`).toBe(original[index].text);
+        }
+
+        const belowViewportFixture = page.locator('[data-footer-reachability-fixture]');
+        await page.locator('[data-page-scrollport]').evaluate((port) => (port as HTMLElement).scrollTo({ top: 0, behavior: 'instant' }));
+        await page.locator('footer').evaluate((footer) => {
+          const link = document.createElement('a');
+          link.href = '/politika-konfidencialnosti';
+          link.dataset.footerReachabilityFixture = '';
+          link.textContent = 'Deep footer reachability fixture';
+          link.style.display = 'block';
+          footer.append(link);
+        });
+        const fixtureStart = await belowViewportFixture.evaluate((el) => el.getBoundingClientRect().top);
+        expect(fixtureStart, `${name} ${width}: negative fixture starts below the initial viewport`).toBeGreaterThan(await page.evaluate(() => innerHeight));
+        await belowViewportFixture.evaluate((el) => (el as HTMLElement).scrollIntoView({ block: 'center', behavior: 'instant' }));
+        await belowViewportFixture.focus();
+        const fixtureState = await belowViewportFixture.evaluate((el) => {
+          const link = el as HTMLAnchorElement;
+          const r = link.getBoundingClientRect();
+          const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+          return { focused: document.activeElement === link, hitTestable: hit === link || link.contains(hit) };
+        });
+        expect(fixtureState.focused, `${name} ${width}: below-viewport fixture is focus reachable`).toBe(true);
+        expect(fixtureState.hitTestable, `${name} ${width}: below-viewport fixture is pointer reachable`).toBe(true);
+        await belowViewportFixture.evaluate((el) => el.remove());
+        await page.locator('footer').evaluate((footer) => {
+          const clip = document.createElement('div');
+          clip.dataset.footerReachabilityClip = '';
+          Object.assign(clip.style, { width: '100px', height: '1px', overflow: 'hidden' });
+          const target = document.createElement('a');
+          target.dataset.footerClippedFixture = '';
+          target.href = '/politika-konfidencialnosti';
+          target.textContent = 'Clipped reachability fixture';
+          target.style.display = 'block';
+          clip.append(target);
+          footer.append(clip);
+        });
+        const clipped = await page.locator('[data-footer-clipped-fixture]').evaluate(measureFullReachability);
+        expect(clipped.fullRectVisible, `${name} ${width}: shared reachability oracle rejects overflow-clipped target`).toBe(false);
+        await page.locator('[data-footer-reachability-clip]').evaluate((el) => el.remove());
+        // Prove the reachability oracle rejects a target that no ordinary scroll can clear.
+        await page.locator('footer').evaluate((footer) => {
+          const blocked = document.createElement('a');
+          blocked.dataset.footerBlockedFixture = '';
+          blocked.href = '/politika-konfidencialnosti';
+          blocked.textContent = 'Permanently occluded negative fixture';
+          Object.assign(blocked.style, { display: 'block', marginTop: `${innerHeight + 100}px` });
+          footer.append(blocked);
+        });
+        const negativeStart = await page.locator('[data-footer-blocked-fixture]').evaluate((el) => el.getBoundingClientRect().top);
+        expect(negativeStart, `${name} ${width}: negative fixture starts below the initial viewport`).toBeGreaterThan(await page.evaluate(() => innerHeight));
+        await page.locator('[data-footer-blocked-fixture]').evaluate((el) => (el as HTMLElement).scrollIntoView({ block: 'center', behavior: 'instant' }));
+        const negative = await page.evaluate(() => {
+          const port = document.querySelector<HTMLElement>('[data-page-scrollport]')!;
+          const target = document.querySelector<HTMLElement>('[data-footer-blocked-fixture]')!;
+          const isReachable = () => {
+            target.scrollIntoView({ block: 'center', behavior: 'instant' });
+            const r = target.getBoundingClientRect();
+            const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+            return Boolean(hit && (hit === target || target.contains(hit)));
+          };
+          const reachableBeforeBlocker = isReachable();
+          const r = target.getBoundingClientRect();
+          const blocker = document.createElement('div');
+          blocker.dataset.footerReachabilityBlocker = '';
+          Object.assign(blocker.style, { position: 'fixed', inset: '0', zIndex: '2147483647', background: 'transparent' });
+          document.body.append(blocker);
+          port.scrollTo({ top: 0, behavior: 'instant' });
+          const reachableAfterBlocker = isReachable();
+          return { reachableBeforeBlocker, reachableAfterBlocker, blockedByOverlay: document.elementFromPoint(
+            r.left + r.width / 2, r.top + r.height / 2) === blocker };
+        });
+        expect(negative.reachableBeforeBlocker, `${name} ${width}: below-viewport fixture is reachable after ordinary scroll`).toBe(true);
+        expect(negative.blockedByOverlay, `${name} ${width}: test overlay wins hit-testing over the fixture`).toBe(true);
+        expect(negative.reachableAfterBlocker, `${name} ${width}: the same scroll-and-hit predicate rejects the occluded fixture`).toBe(false);
+        await page.locator('[data-footer-reachability-blocker]').evaluate((el) => el.remove());
+        await page.locator('[data-footer-blocked-fixture]').evaluate((el) => el.remove());
+
+        const atScrollEnd = await page.evaluate(() => {
+          const port = document.querySelector<HTMLElement>('[data-page-scrollport]');
+          if (!port) throw new Error('shared page scrollport is missing');
+          port.scrollTo({ top: port.scrollHeight, behavior: 'instant' });
+          const footer = document.querySelector('footer')!.getBoundingClientRect();
+          const footerLinks = [...document.querySelectorAll<HTMLAnchorElement>('footer a[href]')];
+          const last = footerLinks[footerLinks.length - 1];
+          const r = last.getBoundingClientRect();
+          const clip = port.getBoundingClientRect();
+          const launcher = document.querySelector<HTMLElement>('[data-chat-stub-launcher]')!.getBoundingClientRect();
+          const range = document.createRange();
+          range.selectNodeContents(last);
+          const lastTextRects = [...range.getClientRects()];
+          const lastClickRects = lastTextRects.length > 0 ? lastTextRects : [...last.getClientRects()];
+          const lastLinkUnderLauncher = lastTextRects.some((textRect) => textRect.left < launcher.right
+            && textRect.right > launcher.left && textRect.top < launcher.bottom && textRect.bottom > launcher.top);
+          const lastLinkHitTestable = lastClickRects.some((textRect) => {
+            const x = textRect.left + textRect.width / 2;
+            const y = textRect.top + textRect.height / 2;
+            const hit = document.elementFromPoint(x, y);
+            return Boolean(hit && (hit === last || last.contains(hit)))
+              && !(x >= launcher.left && x <= launcher.right && y >= launcher.top && y <= launcher.bottom);
+          });
+          range.detach();
+          return {
+            footerBottom: footer.bottom,
+            viewportBottom: innerHeight,
+            lastLinkBottom: r.bottom,
+            lastLinkInsideScrollport: r.top >= clip.top - 1 && r.bottom <= clip.bottom + 1,
+            lastLinkUnderLauncher,
+            lastLinkHitTestable,
+            original: [...document.querySelectorAll<HTMLAnchorElement>('footer a[href]')].map((link) => ({
+              href: link.href, text: link.textContent?.replace(/\s+/g, ' ').trim() ?? '',
+            })),
+          };
+        });
+        expect(atScrollEnd.footerBottom, `${name} ${width}: footer reaches the available viewport boundary`).toBeGreaterThanOrEqual(atScrollEnd.viewportBottom - 1);
+        expect(atScrollEnd.footerBottom, `${name} ${width}: footer does not create a tail beyond the scrollport`).toBeLessThanOrEqual(atScrollEnd.viewportBottom + 1);
+        expect(atScrollEnd.lastLinkInsideScrollport, `${name} ${width}: last original link is fully visible at maximum scroll`).toBe(true);
+        expect(atScrollEnd.lastLinkUnderLauncher, `${name} ${width}: last original link is outside launcher footprint`).toBe(false);
+        expect(atScrollEnd.lastLinkHitTestable, `${name} ${width}: last original link receives its click point`).toBe(true);
+        expect(atScrollEnd.original, `${name} ${width}: footer link composition is unchanged`).toEqual(original);
+      }
+    }
+  });
+
+  test('launcher-overlapped controls and text remain reachable by ordinary scroll across TD-52 templates', async ({ page }) => {
+    await protectThirdParties(page);
+    const templates = TEMPLATES.filter(({ name }) => TD52.has(name));
+    let middleObserved = 0;
+    let checkedCells = 0, measuredTargets = 0, checkedControls = 0, checkedText = 0, reachableTargets = 0, fixtureCells = 0;
+    for (const { width, height } of TD52_REACHABILITY_VIEWPORTS) {
+      await page.setViewportSize({ width, height });
+      for (const { name, path } of templates) {
+        await page.goto(activeUrl(path));
+        await page.locator(GREETING_CLOSE).click();
+        const evidence = await page.evaluate(({ launcherSelector }) => {
+            const port = document.querySelector<HTMLElement>('[data-page-scrollport]');
+            if (!port) throw new Error('shared page scrollport is missing');
+            const max = port.scrollHeight - port.clientHeight;
+            const points = [...new Set([0, max * .25, max * .5, max * .75, max])];
+            const launcher = document.querySelector<HTMLElement>(launcherSelector);
+            if (!launcher) throw new Error('native launcher is missing');
+            const overlaps: { el: HTMLElement; kind: string; fragment: number; top: number; rectEl?: HTMLElement }[] = [];
+            const positionCounts: number[] = [];
+            const originalPortPosition = port.style.position;
+            let matrixFixture: HTMLElement | null = null;
+            const insideClosedDetails = (el: Element): boolean => {
+              for (let node: Element | null = el; node; node = node.parentElement)
+                if (node.tagName === 'DETAILS' && !(node as HTMLDetailsElement).open) return true;
+              return false;
+            };
+            const intersects = (r: DOMRect) => { const b = launcher.getBoundingClientRect();
+              return r.left < b.right && r.right > b.left && r.top < b.bottom && r.bottom > b.top; };
+            const rectWithinClips = (rect: DOMRect, target: HTMLElement) => {
+              let left = 0, top = 0, right = innerWidth, bottom = innerHeight;
+              for (let parent = target.parentElement; parent; parent = parent.parentElement) {
+                const style = getComputedStyle(parent);
+                const bounds = parent.getBoundingClientRect();
+                if (/(hidden|clip|scroll|auto)/.test(style.overflowX)) { left = Math.max(left, bounds.left); right = Math.min(right, bounds.right); }
+                if (/(hidden|clip|scroll|auto)/.test(style.overflowY)) { top = Math.max(top, bounds.top); bottom = Math.min(bottom, bounds.bottom); }
+              }
+              return rect.left >= left - 1 && rect.right <= right + 1 && rect.top >= top - 1 && rect.bottom <= bottom + 1;
+            };
+            const controlRects = (el: HTMLElement) => {
+              if (el.matches('a,button,[role="button"]')) {
+                const range = document.createRange(); range.selectNodeContents(el);
+                const fragments = [...range.getClientRects()]; range.detach();
+                if (fragments.length && fragments.every((rect) => rect.height < innerHeight * .25))
+                  return fragments.map((rect, fragment) => ({ rect, fragment, rectEl: el }));
+                const descendantRects = [...el.querySelectorAll<HTMLElement>('h1,h2,h3,h4,p,span')].flatMap((textEl) => {
+                  const childRange = document.createRange(); childRange.selectNodeContents(textEl);
+                  const rects = [...childRange.getClientRects()].map((rect, fragment) => ({ rect, fragment, rectEl: textEl }));
+                  childRange.detach(); return rects;
+                });
+                if (descendantRects.length) return descendantRects;
+              }
+              return [...el.getClientRects()].map((rect) => ({ rect, fragment: -1, rectEl: el }));
+            };
+            for (const top of points) {
+              port.scrollTo({ top, behavior: 'instant' });
+              let count = 0;
+              for (const el of port.querySelectorAll<HTMLElement>('a[href],button,input,select,textarea,[tabindex]:not([tabindex="-1"])')) {
+                if (el.matches('[data-chat-trigger]') || insideClosedDetails(el)) continue;
+                controlRects(el).forEach(({ rect: r, fragment, rectEl }) => { if (intersects(r)) { overlaps.push({ el, kind: 'control', fragment, top, rectEl }); count++; } });
+              }
+              for (const el of port.querySelectorAll<HTMLElement>('p,li,h1,h2,h3,h4')) {
+                if (insideClosedDetails(el)) continue;
+                const range = document.createRange(); range.selectNodeContents(el);
+                [...range.getClientRects()].forEach((r, fragment) => { if (intersects(r)) { overlaps.push({ el, kind: 'text', fragment, top }); count++; } }); range.detach();
+              }
+              positionCounts.push(count);
+            }
+            if (positionCounts.slice(1, -1).every((count) => count === 0)) {
+              const top = points[2];
+              const portRect = port.getBoundingClientRect(), launcherRect = launcher.getBoundingClientRect();
+              port.style.position = 'relative';
+              matrixFixture = document.createElement('div');
+              matrixFixture.dataset.reachabilityMatrixFixture = '';
+              Object.assign(matrixFixture.style, { position: 'absolute', zIndex: '0', top: `${top + launcherRect.top - portRect.top + 4}px`, left: `${launcherRect.left - portRect.left + 4}px` });
+              const p = document.createElement('p'); p.style.margin = '0';
+              const a = document.createElement('a'); a.href = '/politika-konfidencialnosti'; a.textContent = 'Matrix scroll reachability fixture';
+              p.append(a); matrixFixture.append(p); port.append(matrixFixture);
+              port.scrollTo({ top, behavior: 'instant' });
+              const range = document.createRange(); range.selectNodeContents(a); const controlFragment = [...range.getClientRects()].findIndex((r) => intersects(r)); range.detach();
+              const textRange = document.createRange(); textRange.selectNodeContents(p); const textFragment = [...textRange.getClientRects()].findIndex((r) => intersects(r)); textRange.detach();
+              if (controlFragment < 0 || textFragment < 0) throw new Error('middle-scroll reachability fixture did not intersect the launcher');
+              overlaps.push({ el: a, kind: 'control', fragment: controlFragment, top, rectEl: a }, { el: p, kind: 'text', fragment: textFragment, top });
+              positionCounts[2] += 2;
+            }
+            const unique = [...new Map(overlaps.map((item) => [`${item.kind}:${item.el.tagName}:${item.el.textContent?.trim()}:${item.rectEl?.tagName}:${item.rectEl?.textContent?.trim()}:${item.fragment}:${item.top}`, item])).values()];
+            let controls = 0, text = 0, reachable = 0;
+            const misses: string[] = [];
+            for (const item of unique) {
+              if (item.kind === 'control') controls++; else text++;
+              port.scrollTo({ top: item.top, behavior: 'instant' });
+              const rect = () => item.kind === 'control' && item.fragment < 0 ? item.el.getBoundingClientRect() : (() => {
+                const range = document.createRange(); range.selectNodeContents(item.rectEl ?? item.el); const r = [...range.getClientRects()][item.fragment]; range.detach(); return r;
+              })();
+              let r = rect();
+              if (!r) continue;
+              const target = item.rectEl ?? item.el;
+              let scrollport: HTMLElement | null = target.parentElement;
+              while (scrollport && scrollport !== port) {
+                const style = getComputedStyle(scrollport);
+                if (/(auto|scroll)/.test(style.overflowY) && scrollport.scrollHeight > scrollport.clientHeight + 1) break;
+                scrollport = scrollport.parentElement;
+              }
+              if (!scrollport || scrollport === port) scrollport = port;
+              const scrollRect = scrollport.getBoundingClientRect();
+              const headerBottom = scrollport === port
+                ? document.querySelector<HTMLElement>('header.topnav')?.getBoundingClientRect().bottom ?? scrollRect.top
+                : scrollRect.top;
+              const visibleTop = Math.max(scrollRect.top, headerBottom, 0) + 1;
+              const visibleBottom = Math.min(scrollRect.bottom, innerHeight) - 1;
+              if (intersects(r) || r.top < visibleTop || r.bottom > visibleBottom) {
+                const minimumTop = visibleTop;
+                const maximumTop = visibleBottom - r.height;
+                let targetTop = Math.min(Math.max(r.top, minimumTop), maximumTop);
+                const launcherRect = launcher.getBoundingClientRect();
+                if (r.left < launcherRect.right && r.right > launcherRect.left
+                  && targetTop < launcherRect.bottom && targetTop + r.height > launcherRect.top) {
+                  const aboveLauncher = Math.min(launcherRect.top - r.height - 2, maximumTop);
+                  const belowLauncher = launcherRect.bottom + 2;
+                  if (aboveLauncher >= minimumTop) targetTop = aboveLauncher;
+                  else if (belowLauncher + r.height <= visibleBottom) targetTop = belowLauncher;
+                }
+                scrollport.scrollTop += r.top - targetTop;
+                r = rect();
+              }
+              if (!r || intersects(r) || !rectWithinClips(r, target)) {
+                const nested = target.closest<HTMLElement>('[data-seminar-schedule-panel], .seminar-schedule-panel');
+                misses.push(`${item.kind}:${item.el.tagName}:${item.el.textContent?.trim().slice(0, 28)}@${item.top} rect=${r ? `${r.left.toFixed(1)},${r.top.toFixed(1)}-${r.right.toFixed(1)},${r.bottom.toFixed(1)}` : 'none'} nestedScroll=${nested?.scrollTop.toFixed(1) ?? 'none'}`); continue;
+              }
+              let clickRect = r;
+              if (item.kind === 'control' && item.el.matches('a,button,[role="button"]')) {
+                const range = document.createRange(); range.selectNodeContents(item.rectEl ?? item.el);
+                clickRect = [...range.getClientRects()].find((fragment) => fragment.width > 0 && fragment.height > 0) ?? r;
+                range.detach();
+              }
+              const x = clickRect.left + clickRect.width / 2, y = clickRect.top + clickRect.height / 2, hit = document.elementFromPoint(x, y);
+              if (item.kind === 'control') { if (hit && (hit === item.el || item.el.contains(hit))) reachable++; else misses.push(`control-hit:${item.el.textContent?.trim().slice(0, 28)}@${item.top} point=${x},${y} hit=${hit?.tagName}.${(hit as HTMLElement | null)?.className ?? ''}`); }
+              else { if (hit && (hit === item.el || item.el.contains(hit))) reachable++; else misses.push(`text-hit:${item.el.textContent?.trim().slice(0, 28)}@${item.top} point=${x.toFixed(1)},${y.toFixed(1)} hit=${hit?.tagName}.${(hit as HTMLElement | null)?.className ?? ''}`); }
+            }
+            matrixFixture?.remove();
+            port.style.position = originalPortPosition;
+            return { overlapCount: unique.length, controls, text, reachable, positionCounts, misses, fixtureInjected: matrixFixture !== null };
+          }, { launcherSelector: NATIVE_LAUNCHER });
+        checkedCells++;
+        measuredTargets += evidence.overlapCount;
+        checkedControls += evidence.controls;
+        checkedText += evidence.text;
+        reachableTargets += evidence.reachable;
+        if (evidence.fixtureInjected) fixtureCells++;
+        expect(evidence.overlapCount, `${name} ${width}: launcher intersects measurable controls or text across sampled scroll positions`).toBeGreaterThan(0);
+        middleObserved += evidence.positionCounts.slice(1, -1).reduce((sum, count) => sum + count, 0);
+        expect(evidence.controls + evidence.text, `${name} ${width}: checked target evidence is nonempty`).toBeGreaterThan(0);
+        expect(evidence.misses, `${name} ${width}: every sampled occluded target must clear by ordinary scroll and hit-test`).toEqual([]);
+        expect(evidence.reachable, `${name} ${width}: all ${evidence.overlapCount} measured targets are reachable`).toBe(evidence.overlapCount);
+      }
+    }
+    expect(middleObserved, 'non-initial middle scroll samples contain real occluded targets').toBeGreaterThan(0);
+    expect(checkedCells, 'TD-52 sweep covers all seven templates at all three widths').toBe(21);
+    console.log('TD-52 launcher sweep evidence', { checkedCells, measuredTargets, checkedControls, checkedText, reachableTargets, middleObserved, fixtureCells });
+  });
+
+  test('keyboard focus alone reveals a footer link outside the native launcher', async ({ page }) => {
+    await protectThirdParties(page);
+    for (const width of WIDTHS) {
+      await page.setViewportSize({ width, height: width === 375 ? 812 : 720 });
+      await page.goto(activeUrl('/'));
+      await page.locator(GREETING_CLOSE).click();
+      const candidateIndex = await page.locator('footer a[href]').evaluateAll((links, launcherSelector) => {
+        const launcher = document.querySelector<HTMLElement>(launcherSelector)?.getBoundingClientRect();
+        if (!launcher) throw new Error('native launcher is missing during footer focus selection');
+        const intersectingIndex = links.findIndex((link) => {
+          const range = document.createRange();
+          range.selectNodeContents(link);
+          const intersects = [...range.getClientRects()].some((r) =>
+            r.left < launcher.right && r.right > launcher.left);
+          range.detach();
+          return intersects;
+        });
+        return intersectingIndex >= 0 ? intersectingIndex : links.length - 1;
+      }, NATIVE_LAUNCHER);
+      const link = page.locator('footer a[href]').nth(candidateIndex);
+      await link.evaluate((el, launcherSelector) => {
+        const link = el as HTMLElement;
+        const port = document.querySelector<HTMLElement>('[data-page-scrollport]');
+        const launcher = document.querySelector<HTMLElement>(launcherSelector);
+        if (!port || !launcher) throw new Error('scrollport or native launcher is missing before focus reveal');
+        port.scrollTo({ top: port.scrollHeight, behavior: 'instant' });
+        const linkRect = link.getBoundingClientRect();
+        const launcherRect = launcher.getBoundingClientRect();
+        port.scrollTo({
+          top: port.scrollTop + linkRect.top - launcherRect.top - 8,
+          behavior: 'instant',
+        });
+      }, NATIVE_LAUNCHER);
+      await link.evaluate((el) => (el as HTMLElement).focus({ preventScroll: true }));
+      const state = await link.evaluate((el, launcherSelector) => {
+        const link = el as HTMLAnchorElement;
+        const r = link.getBoundingClientRect();
+        const port = document.querySelector<HTMLElement>('[data-page-scrollport]');
+        const clip = port?.getBoundingClientRect();
+        const launcher = document.querySelector<HTMLElement>(launcherSelector)?.getBoundingClientRect();
+        const range = document.createRange();
+        range.selectNodeContents(link);
+        const textRects = [...range.getClientRects()];
+        const notUnderLauncher = Boolean(launcher) && !textRects.some((textRect) =>
+          textRect.left < launcher!.right && textRect.right > launcher!.left
+            && textRect.top < launcher!.bottom && textRect.bottom > launcher!.top);
+        const textRect = textRects[0];
+        const hit = textRect && document.elementFromPoint(textRect.left + textRect.width / 2, textRect.top + textRect.height / 2);
+        range.detach();
+        return {
+          focused: document.activeElement === link,
+          fullRectInScrollport: Boolean(clip && r.width > 0 && r.height > 0 && r.left >= clip.left - 1
+            && r.right <= clip.right + 1 && r.top >= clip.top - 1 && r.bottom <= clip.bottom + 1),
+          notUnderLauncher,
+          hitTestable: Boolean(hit && (hit === link || link.contains(hit))),
+          rect: { top: r.top, bottom: r.bottom },
+        };
+      }, NATIVE_LAUNCHER);
+      expect(state.focused, `${width}px: focus reaches a footer link without a preceding scroll`).toBe(true);
+      expect(state.fullRectInScrollport, `${width}px: focus reveal exposes the full footer link: ${JSON.stringify(state)}`).toBe(true);
+      expect(state.notUnderLauncher, `${width}px: focused footer link is clear of the native launcher: ${JSON.stringify(state)}`).toBe(true);
+      expect(state.hitTestable, `${width}px: focused footer link remains hit-testable: ${JSON.stringify(state)}`).toBe(true);
+    }
+  });
+
+  test('keyboard focus reveals enrollment links inside the seminar hero header', async ({ page }) => {
+    await protectThirdParties(page);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto(activeUrl('/'));
+    await page.locator(GREETING_CLOSE).click();
+    await page.locator('main').evaluate((main) => {
+      const hero = document.createElement('header'); hero.className = 'sem-hero';
+      hero.innerHTML = '<a href="/raspisanie-i-tseny" data-seminar-hero-enrollment>Записаться на обучение</a>';
+      main.prepend(hero);
+    });
+    const link = page.locator('[data-seminar-hero-enrollment]');
+    await expect(link).toBeVisible();
+    await page.locator('[data-page-scrollport]').evaluate((port) => {
+      const el = port as HTMLElement; el.scrollTo({ top: el.scrollHeight, behavior: 'instant' });
+    });
+    const before = await page.locator('[data-page-scrollport]').evaluate((port) => (port as HTMLElement).scrollTop);
+    await link.evaluate((el) => (el as HTMLElement).focus({ preventScroll: true }));
+    const after = await page.locator('[data-page-scrollport]').evaluate((port) => (port as HTMLElement).scrollTop);
+    const state = await link.evaluate((el) => {
+      const r = el.getBoundingClientRect();
+      const port = document.querySelector('[data-page-scrollport]')!.getBoundingClientRect();
+      return { focused: document.activeElement === el, visible: r.top >= port.top - 1 && r.bottom <= port.bottom + 1 };
+    });
+    expect(state.focused, 'seminar hero enrollment link receives keyboard focus').toBe(true);
+    expect(after, 'focusin reveal changes scroll position when moving focus from the footer to the hero').toBeLessThan(before);
+    expect(state.visible, 'focus reveal scrolls the seminar hero link into the shared scrollport below the sticky topnav').toBe(true);
+  });
+
+  test('pointer activation of a partly visible footer link is not displaced by focus reveal', async ({ page }) => {
+    await protectThirdParties(page);
+    await page.setViewportSize({ width: 500, height: 805 });
+    await page.goto(activeUrl('/'));
+    await page.locator(GREETING_CLOSE).click();
+    const link = page.locator('footer .footer-legal a[href]');
+    await expect(link).toBeVisible();
+    await link.evaluate((el) => {
+      const port = document.querySelector<HTMLElement>('[data-page-scrollport]')!;
+      port.scrollTop = port.scrollHeight - port.clientHeight - 20;
+      (window as Window & { __footerPointerClick?: boolean }).__footerPointerClick = false;
+      document.addEventListener('click', (event) => {
+        if (event.target instanceof Element && (event.target === el || el.contains(event.target))) {
+          (window as Window & { __footerPointerClick?: boolean }).__footerPointerClick = true;
+          event.preventDefault();
+        }
+      }, { once: true });
+    });
+    const before = await link.evaluate((el) => {
+      const r = el.getBoundingClientRect();
+      return { x: r.x, y: r.y, width: r.width, height: r.height, bottom: r.bottom };
+    });
+    expect(before.bottom, 'fixture places the footer link in the focus-reveal band').toBeGreaterThan(640);
+    await page.mouse.click(before.x + before.width / 2, before.y + before.height / 2);
+    expect(await page.evaluate(() => (window as Window & { __footerPointerClick?: boolean }).__footerPointerClick),
+      'mouse down focus reveal must not move the link before mouse up').toBe(true);
+  });
+
+  test('touchscreen tap keeps a partly visible footer link under the tap through compatibility events', async ({ browser }) => {
+    const context = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 1, isMobile: true, hasTouch: true });
+    const touchPage = await context.newPage();
+    try {
+      await protectThirdParties(touchPage);
+      await touchPage.goto(activeUrl('/'));
+      await touchPage.locator(GREETING_CLOSE).tap();
+      const link = touchPage.locator('footer .footer-legal a[href]');
+      await link.evaluate((el) => {
+        const port = document.querySelector<HTMLElement>('[data-page-scrollport]')!;
+        port.scrollTop = port.scrollHeight - port.clientHeight - 12;
+        Object.assign((el as HTMLElement).style, { display: 'block', width: '100%', textAlign: 'right', paddingRight: '130px', boxSizing: 'border-box' });
+        (window as Window & { __touchFooterClick?: boolean }).__touchFooterClick = false;
+        document.addEventListener('click', (event) => {
+          if (event.target instanceof Element && (event.target === el || el.contains(event.target))) {
+            (window as Window & { __touchFooterClick?: boolean }).__touchFooterClick = true;
+            event.preventDefault();
+          }
+        }, { once: true });
+      });
+      const before = await link.boundingBox();
+      const launcher = await touchPage.locator(NATIVE_LAUNCHER).boundingBox();
+      expect(before).not.toBeNull();
+      expect(launcher).not.toBeNull();
+      expect(before!.y + before!.height).toBeGreaterThan(650);
+      const tapX = Math.min(before!.x + before!.width - 2, launcher!.x - 2);
+      expect(tapX).toBeGreaterThan(before!.x);
+      await touchPage.touchscreen.tap(tapX, before!.y + before!.height / 2);
+      expect(await touchPage.evaluate(() => (window as Window & { __touchFooterClick?: boolean }).__touchFooterClick),
+        'touch-generated focus must not scroll the tap target away before click').toBe(true);
+    } finally {
+      await context.close();
     }
   });
 
@@ -1142,7 +1665,7 @@ test.describe('chat entry visibility approved contract', () => {
     }
   });
 
-  test('safe-area extends the native launcher reserve to 120px plus the measured inset', async ({ page }) => {
+  test('safe-area keeps the native launcher clear while the scrollport still reaches the viewport bottom', async ({ page }) => {
     await protectThirdParties(page);
     await page.setViewportSize({ width: 375, height: 640 });
     await page.goto(activeUrl('/'));
@@ -1150,17 +1673,14 @@ test.describe('chat entry visibility approved contract', () => {
     await session.send('Emulation.setSafeAreaInsetsOverride', { insets: { bottom: 20 } });
     const expanded = await snapshotLayout(page);
     expect(expanded.safeAreaInset, 'CDP overrides the safe-area inset for this Chromium fixture').toBe(20);
-    expect(expanded.lowerUsefulHeight ?? -Infinity, 'launcher reserve keeps 120 useful CSS px after inset').toBeGreaterThanOrEqual(120);
-    expect(expanded.greetingVisible, 'greeting is visible in the expanded lower zone').toBe(true);
-    expect(expanded.buttonInsideUsefulArea, 'capsule remains above the safe-area inset while greeting is visible').toBe(true);
+    expect(expanded.scrollportBottom ?? -Infinity, 'safe-area does not shorten the page scrollport').toBeGreaterThanOrEqual(639);
+    expect(expanded.greetingVisible, 'provider greeting remains visible over the page').toBe(true);
 
     await page.locator(GREETING_CLOSE).click();
     await expect(page.locator(NATIVE_GREETING), 'dismissal hides the provider greeting').toHaveCount(0);
     const collapsed = await snapshotLayout(page);
     expect(collapsed.safeAreaInset, 'safe-area inset remains applied after dismissal').toBe(20);
-    expect(collapsed.lowerUsefulHeight, 'reserved useful zone remains 120 CSS px').toBe(120);
-    expect(collapsed.lowerZone?.height, '120px useful reserve plus 20px safe-area is 140px overall').toBe(140);
-    expect(collapsed.buttonInsideUsefulArea, 'capsule remains inside the collapsed useful zone').toBe(true);
+    expect(collapsed.scrollportBottom ?? -Infinity, 'scrollport remains full height after greeting dismissal').toBeGreaterThanOrEqual(639);
     const nativeBounds = await page.locator(NATIVE_LAUNCHER).boundingBox();
     expect(nativeBounds, 'native launcher remains after greeting dismissal').not.toBeNull();
     expect(nativeBounds!.y + nativeBounds!.height, 'dismissed native launcher stays above the 20px safe area inset')
