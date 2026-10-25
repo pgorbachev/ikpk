@@ -93,13 +93,24 @@ const showFacade = config.state === 'address' && !isDemoOutput;
         const menuAnchor = header && header.querySelector('.topnav-mobile > summary');
         const visibleBottom = Math.min(portRect.bottom, offset + height);
         const visibleTop = Math.max(portRect.top, offset);
+        const footer = pageScrollport.querySelector('footer.footer');
+        const launcherClearance = footer ? parseFloat(getComputedStyle(footer).paddingBottom) || 0 : 0;
+        const launcherLeft = window.innerWidth - 116;
+        const launcherRight = window.innerWidth - 50;
+        const safePopupBottom = function (popupRect) {
+          const overlapsLauncherColumn = popupRect && popupRect.width > 0
+            && popupRect.left < launcherRight && popupRect.right > launcherLeft;
+          return overlapsLauncherColumn ? Math.max(visibleTop, visibleBottom - launcherClearance) : visibleBottom;
+        };
         document.querySelectorAll('.topnav-menu .dropdown').forEach(function (dropdown) {
           const parent = dropdown.parentElement;
           const anchor = parent && parent.querySelector(':scope > a, :scope > button');
           const anchorRect = anchor && anchor.getBoundingClientRect();
+          const dropdownRect = dropdown.getBoundingClientRect();
+          const dropdownBottom = safePopupBottom(dropdownRect);
           const below = anchorRect
-            ? Math.max(0, visibleBottom - Math.max(visibleTop, anchorRect.bottom))
-            : Math.max(0, visibleBottom - visibleTop);
+            ? Math.max(0, dropdownBottom - Math.max(visibleTop, anchorRect.bottom))
+            : Math.max(0, dropdownBottom - visibleTop);
           const above = anchorRect
             ? Math.max(0, Math.min(visibleBottom, anchorRect.top) - visibleTop)
             : 0;
@@ -109,9 +120,11 @@ const showFacade = config.state === 'address' && !isDemoOutput;
           setPosition('--chat-nav-dropdown-bottom', placeAbove ? '100%' : 'auto');
         });
         const anchorRect = menuAnchor && menuAnchor.getBoundingClientRect();
+        const menuDrawer = header && header.querySelector('.topnav-mobile .topnav-drawer');
+        const drawerBottom = safePopupBottom(menuDrawer && menuDrawer.getBoundingClientRect());
         const drawerBelow = anchorRect
-          ? Math.max(0, visibleBottom - Math.max(visibleTop, anchorRect.bottom + 8))
-          : visibleBottom - visibleTop;
+          ? Math.max(0, drawerBottom - Math.max(visibleTop, anchorRect.bottom + 8))
+          : drawerBottom - visibleTop;
         const drawerAbove = anchorRect
           ? Math.max(0, Math.min(visibleBottom, anchorRect.top - 8) - visibleTop)
           : 0;
@@ -125,7 +138,8 @@ const showFacade = config.state === 'address' && !isDemoOutput;
 
         if (header) {
           const headerRect = header.getBoundingClientRect();
-          const searchBelow = Math.max(0, visibleBottom - Math.max(visibleTop, headerRect.bottom));
+          const searchBottom = Math.max(visibleTop, visibleBottom - launcherClearance);
+          const searchBelow = Math.max(0, searchBottom - Math.max(visibleTop, headerRect.bottom));
           const searchAbove = Math.max(0, Math.min(visibleBottom, headerRect.top) - visibleTop);
           const placeSearchAbove = searchAbove > searchBelow;
           setPixel('--chat-search-max-height', placeSearchAbove ? searchAbove : searchBelow);
@@ -306,20 +320,37 @@ const showFacade = config.state === 'address' && !isDemoOutput;
       const revealFocusedField = function () {
         const focused = document.activeElement;
         if (!(focused instanceof HTMLElement) || !pageScrollport.contains(focused)
-          || !focused.matches('main input, main textarea, main select, main [contenteditable="true"]')) return;
+          || focused.closest('header')
+          || !focused.matches('a[href], button, input, textarea, select, [contenteditable="true"]')) return;
         const portRect = pageScrollport.getBoundingClientRect();
         const fieldRect = focused.getBoundingClientRect();
         const header = document.querySelector('header.topnav');
         const headerBottom = header ? header.getBoundingClientRect().bottom : portRect.top;
         const fieldVisibleTop = Math.max(portRect.top, viewport ? viewport.offsetTop : 0, Math.min(portRect.bottom, headerBottom));
-        const fieldVisibleBottom = Math.min(portRect.bottom, (viewport ? viewport.offsetTop : 0) + (viewport ? viewport.height : window.innerHeight));
+        const visibleBottom = (viewport ? viewport.offsetTop : 0) + (viewport ? viewport.height : window.innerHeight);
+        const footer = pageScrollport.querySelector('footer.footer');
+        const launcherLeft = window.innerWidth - 116;
+        const launcherRight = window.innerWidth - 50;
+        const overlapsLauncherColumn = fieldRect.left < launcherRight && fieldRect.right > launcherLeft;
+        const launcherClearance = overlapsLauncherColumn && footer
+          ? parseFloat(getComputedStyle(footer).paddingBottom) || 0
+          : 0;
+        const fieldVisibleBottom = Math.min(portRect.bottom, visibleBottom - launcherClearance);
         if (fieldRect.bottom > fieldVisibleBottom) {
           pageScrollport.scrollBy({ top: fieldRect.bottom - fieldVisibleBottom, behavior: 'instant' });
         } else if (fieldRect.top < fieldVisibleTop) {
           pageScrollport.scrollBy({ top: fieldRect.top - fieldVisibleTop, behavior: 'instant' });
         }
       };
+      pageScrollport.addEventListener('focusin', revealFocusedField);
       updateViewport();
+      const mobileMenu = document.querySelector('header.topnav details.topnav-mobile');
+      if (mobileMenu) mobileMenu.addEventListener('toggle', updateViewport);
+      const topnavMenu = document.querySelector('header.topnav .topnav-menu');
+      if (topnavMenu) {
+        topnavMenu.addEventListener('focusin', updateViewport);
+        topnavMenu.addEventListener('pointerover', updateViewport);
+      }
       window.addEventListener('pageshow', function () {
         transitionGeneration += 1;
         traversingHistory = false;

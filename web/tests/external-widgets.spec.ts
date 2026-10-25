@@ -686,13 +686,13 @@ test.describe('сторонний iframe не отменяет доступно�
   });
 });
 
-// ─── Перекрытие кнопкой чата ─────────────────────────────────────────────────
+// ─── Достижимость содержимого около плавающей кнопки чата ─────────────────────
 
-test.describe('кнопка чата не перекрывает содержимое страницы', () => {
+test.describe('плавающая кнопка чата не блокирует содержимое страницы', () => {
   test.describe.configure({ timeout: 60_000 });
 
   for (const { name, path } of TEMPLATES) {
-    test(`${name}: закрытая кнопка не накрывает интерактивные элементы и текст`, async ({ page }) => {
+    test(`${name}: перекрытые controls и текст достижимы прокруткой`, async ({ page }) => {
       await guard(page);
       const response = await page.goto(url(path));
       if (name.startsWith('preview-') && response?.status() === 404)
@@ -718,6 +718,7 @@ test.describe('кнопка чата не перекрывает содержи�
             && /(auto|scroll)/.test(style.overflowY) && el.scrollHeight > el.clientHeight + 1;
         }) ?? null;
         const clip = scrollport?.getBoundingClientRect() ?? new DOMRect(0, 0, innerWidth, innerHeight);
+        const initialScrollTop = scrollport?.scrollTop ?? 0;
         const visible = (r: DOMRect) => {
           const left = Math.max(r.left, clip.left, 0);
           const top = Math.max(r.top, clip.top, 0);
@@ -745,7 +746,7 @@ test.describe('кнопка чата не перекрывает содержи�
           return false;
         };
 
-        const interactive: string[] = [];
+        const controlTargets: { el: Element; label: string }[] = [];
         for (const el of document.querySelectorAll('a, button, input, select, textarea, [role="button"]')) {
           if (button.contains(el) || el.contains(button)) continue;
           if (insideClosedDetails(el)) continue;
@@ -753,12 +754,12 @@ test.describe('кнопка чата не перекрывает содержи�
           if (style.visibility === 'hidden' || style.display === 'none') continue;
           const shown = visible(el.getBoundingClientRect());
           if (shown && hit(shown))
-            interactive.push(`${el.tagName.toLowerCase()}: ${(el.textContent ?? '').trim().slice(0, 40)}`);
+            controlTargets.push({ el, label: `${el.tagName.toLowerCase()}: ${(el.textContent ?? '').trim().slice(0, 40)}` });
         }
 
         // РАМКА ТЕКСТА, а не рамка блока: блок во всю ширину пересекается с плавающим
         // элементом всегда, и такое измерение сообщает о перекрытии там, где его нет.
-        const text: string[] = [];
+        const textTargets: { el: Element; fragment: number; label: string }[] = [];
         for (const p of document.querySelectorAll('p, li, h1, h2, h3, h4')) {
           if (button.contains(p)) continue;
           if (insideClosedDetails(p)) continue;
@@ -766,16 +767,46 @@ test.describe('кнопка чата не перекрывает содержи�
           if (style.visibility === 'hidden' || style.display === 'none') continue;
           const range = document.createRange();
           range.selectNodeContents(p);
-          for (const rect of range.getClientRects()) {
+          const fragments = [...range.getClientRects()];
+          for (const [fragment, rect] of fragments.entries()) {
             const shown = visible(rect);
             if (shown && hit(shown)) {
-              text.push(`${p.tagName.toLowerCase()}: ${(p.textContent ?? '').trim().slice(0, 40)}`);
-              break;
+              textTargets.push({ el: p, fragment, label: `${p.tagName.toLowerCase()}: ${(p.textContent ?? '').trim().slice(0, 40)}` });
             }
           }
           range.detach();
         }
-        return { interactive, text, scrollportFound: scrollport !== null };
+        const unreachableInteractive: string[] = [];
+        for (const { el, label } of controlTargets) {
+          if (scrollport) scrollport.scrollTop = initialScrollTop;
+          let rect = el.getBoundingClientRect();
+          if (hit(rect) && scrollport) {
+            const targetTop = Math.max(clip.top + 1, box.top - rect.height - 2);
+            scrollport.scrollBy({ top: rect.top - targetTop, behavior: 'instant' });
+            rect = el.getBoundingClientRect();
+          }
+          const shown = visible(rect);
+          const center = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
+          if (!shown || rect.top < clip.top - 1 || rect.bottom > clip.bottom + 1 || hit(shown)
+            || !center || (center !== el && !el.contains(center))) unreachableInteractive.push(label);
+        }
+        const unreachableText: string[] = [];
+        for (const { el, fragment, label } of textTargets) {
+          if (scrollport) scrollport.scrollTop = initialScrollTop;
+          const range = document.createRange();
+          range.selectNodeContents(el);
+          let rect = [...range.getClientRects()][fragment];
+          if (rect && hit(rect) && scrollport) {
+            const targetTop = Math.max(clip.top + 1, box.top - rect.height - 2);
+            scrollport.scrollBy({ top: rect.top - targetTop, behavior: 'instant' });
+            rect = [...range.getClientRects()][fragment];
+          }
+          const shown = rect && visible(rect);
+          if (!rect || !shown || rect.top < clip.top - 1 || rect.bottom > clip.bottom + 1 || hit(shown))
+            unreachableText.push(label);
+          range.detach();
+        }
+        return { unreachableInteractive, unreachableText, scrollportFound: scrollport !== null };
       }, 'data-chat-stub-launcher');
 
       expect(
@@ -784,12 +815,12 @@ test.describe('кнопка чата не перекрывает содержи�
       ).toBe(true);
 
       expect(
-        overlaps.interactive.slice(0, 5),
-        `${path}: кнопка вызова чата накрывает интерактивные элементы`,
+        overlaps.unreachableInteractive?.slice(0, 5) ?? ['reachability results missing'],
+        `${path}: обычная прокрутка не вывела control целиком из-под launcher`,
       ).toEqual([]);
       expect(
-        overlaps.text.slice(0, 5),
-        `${path}: кнопка вызова чата накрывает рамку текста`,
+        overlaps.unreachableText?.slice(0, 5) ?? ['text reachability results missing'],
+        `${path}: обычная прокрутка не вывела текстовый фрагмент из-под launcher`,
       ).toEqual([]);
     });
   }

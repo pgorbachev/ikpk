@@ -158,6 +158,17 @@ async function snapshotLayout(page: Page) {
       while (walker.nextNode()) {
         const node = walker.currentNode;
         if (!node.textContent?.trim() || button.contains(node.parentElement)) continue;
+        const hiddenMenu = node.parentElement?.closest('details:not([open])');
+        if (hiddenMenu) continue;
+        let hiddenAncestor = false;
+        for (let ancestor = node.parentElement; ancestor && ancestor !== document.body; ancestor = ancestor.parentElement) {
+          const style = getComputedStyle(ancestor);
+          if (style.display === 'none' || style.visibility === 'hidden' || Number(style.opacity) === 0) {
+            hiddenAncestor = true;
+            break;
+          }
+        }
+        if (hiddenAncestor) continue;
         const range = document.createRange();
         range.selectNodeContents(node);
         for (const r of range.getClientRects()) {
@@ -529,6 +540,71 @@ test.describe('chat entry visibility approved contract', () => {
         expect(atScrollEnd.lastLinkHitTestable, `${name} ${width}: last original link receives its click point`).toBe(true);
         expect(atScrollEnd.original, `${name} ${width}: footer link composition is unchanged`).toEqual(original);
       }
+    }
+  });
+
+  test('keyboard focus alone reveals a footer link outside the native launcher', async ({ page }) => {
+    await protectThirdParties(page);
+    for (const width of WIDTHS) {
+      await page.setViewportSize({ width, height: width === 375 ? 812 : 720 });
+      await page.goto(activeUrl('/'));
+      await page.locator(GREETING_CLOSE).click();
+      const candidateIndex = await page.locator('footer a[href]').evaluateAll((links, launcherSelector) => {
+        const launcher = document.querySelector<HTMLElement>(launcherSelector)?.getBoundingClientRect();
+        if (!launcher) throw new Error('native launcher is missing during footer focus selection');
+        const intersectingIndex = links.findIndex((link) => {
+          const range = document.createRange();
+          range.selectNodeContents(link);
+          const intersects = [...range.getClientRects()].some((r) =>
+            r.left < launcher.right && r.right > launcher.left);
+          range.detach();
+          return intersects;
+        });
+        return intersectingIndex >= 0 ? intersectingIndex : links.length - 1;
+      }, NATIVE_LAUNCHER);
+      const link = page.locator('footer a[href]').nth(candidateIndex);
+      await link.evaluate((el, launcherSelector) => {
+        const link = el as HTMLElement;
+        const port = document.querySelector<HTMLElement>('[data-page-scrollport]');
+        const launcher = document.querySelector<HTMLElement>(launcherSelector);
+        if (!port || !launcher) throw new Error('scrollport or native launcher is missing before focus reveal');
+        port.scrollTo({ top: port.scrollHeight, behavior: 'instant' });
+        const linkRect = link.getBoundingClientRect();
+        const launcherRect = launcher.getBoundingClientRect();
+        port.scrollTo({
+          top: port.scrollTop + linkRect.top - launcherRect.top - 8,
+          behavior: 'instant',
+        });
+      }, NATIVE_LAUNCHER);
+      await link.evaluate((el) => (el as HTMLElement).focus({ preventScroll: true }));
+      const state = await link.evaluate((el, launcherSelector) => {
+        const link = el as HTMLAnchorElement;
+        const r = link.getBoundingClientRect();
+        const port = document.querySelector<HTMLElement>('[data-page-scrollport]');
+        const clip = port?.getBoundingClientRect();
+        const launcher = document.querySelector<HTMLElement>(launcherSelector)?.getBoundingClientRect();
+        const range = document.createRange();
+        range.selectNodeContents(link);
+        const textRects = [...range.getClientRects()];
+        const notUnderLauncher = Boolean(launcher) && !textRects.some((textRect) =>
+          textRect.left < launcher!.right && textRect.right > launcher!.left
+            && textRect.top < launcher!.bottom && textRect.bottom > launcher!.top);
+        const textRect = textRects[0];
+        const hit = textRect && document.elementFromPoint(textRect.left + textRect.width / 2, textRect.top + textRect.height / 2);
+        range.detach();
+        return {
+          focused: document.activeElement === link,
+          fullRectInScrollport: Boolean(clip && r.width > 0 && r.height > 0 && r.left >= clip.left - 1
+            && r.right <= clip.right + 1 && r.top >= clip.top - 1 && r.bottom <= clip.bottom + 1),
+          notUnderLauncher,
+          hitTestable: Boolean(hit && (hit === link || link.contains(hit))),
+          rect: { top: r.top, bottom: r.bottom },
+        };
+      }, NATIVE_LAUNCHER);
+      expect(state.focused, `${width}px: focus reaches a footer link without a preceding scroll`).toBe(true);
+      expect(state.fullRectInScrollport, `${width}px: focus reveal exposes the full footer link: ${JSON.stringify(state)}`).toBe(true);
+      expect(state.notUnderLauncher, `${width}px: focused footer link is clear of the native launcher: ${JSON.stringify(state)}`).toBe(true);
+      expect(state.hitTestable, `${width}px: focused footer link remains hit-testable: ${JSON.stringify(state)}`).toBe(true);
     }
   });
 
