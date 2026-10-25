@@ -7,7 +7,11 @@ import { TEMPLATES } from './helpers/templates';
 import { installThirdPartyGuard } from './helpers/third-party-guard';
 
 const WIDTHS = [320, 375, 1280] as const;
-const TD52_REACHABILITY_WIDTHS = [320, 390, 1440] as const;
+const TD52_REACHABILITY_VIEWPORTS = [
+  { width: 320, height: 720 },
+  { width: 375, height: 812 },
+  { width: 1280, height: 720 },
+] as const;
 const TD52 = new Set(['home', 'course', 'seminar', 'seminar-dated', 'kontakty', 'statyi', 'raspisanie']);
 const TRIGGER = '[data-chat-trigger]';
 const NATIVE_LAUNCHER = '[data-chat-stub-launcher]';
@@ -19,6 +23,28 @@ const PAYMENT_DIALOG = '.payment-dialog';
 const PAYMENT_ENTRY = '[data-payment-entry]';
 const PAYMENT_FORM = '[data-payment-form]';
 const GREETING_CLOSE = '[data-chat-stub-greeting-close]';
+
+function measureFullReachability(el: HTMLElement) {
+  const r = el.getBoundingClientRect();
+  const clips = [{ left: 0, top: 0, right: innerWidth, bottom: innerHeight }];
+  for (let parent = el.parentElement; parent; parent = parent.parentElement) {
+    const style = getComputedStyle(parent);
+    const clipX = /(hidden|clip|scroll|auto)/.test(style.overflowX);
+    const clipY = /(hidden|clip|scroll|auto)/.test(style.overflowY);
+    if (!clipX && !clipY) continue;
+    const bounds = parent.getBoundingClientRect();
+    clips.push({
+      left: clipX ? bounds.left : -Infinity,
+      right: clipX ? bounds.right : Infinity,
+      top: clipY ? bounds.top : -Infinity,
+      bottom: clipY ? bounds.bottom : Infinity,
+    });
+  }
+  const fullRectVisible = r.width > 0 && r.height > 0 && clips.every((clip) =>
+    r.left >= clip.left - 1 && r.right <= clip.right + 1
+      && r.top >= clip.top - 1 && r.bottom <= clip.bottom + 1);
+  return { fullRectVisible };
+}
 
 async function helperVisualState(page: Page) {
   return page.locator(KEYBOARD_HELPER).evaluate((el) => {
@@ -438,8 +464,8 @@ test.describe('chat entry visibility approved contract', () => {
   test('all original footer links remain reachable, focusable, and hit-testable at each TD-52 viewport', async ({ page }) => {
     await protectThirdParties(page);
     const templates = TEMPLATES.filter(({ name }) => TD52.has(name));
-    for (const width of TD52_REACHABILITY_WIDTHS) {
-      await page.setViewportSize({ width, height: width === 390 ? 844 : width === 1440 ? 900 : 720 });
+    for (const { width, height } of TD52_REACHABILITY_VIEWPORTS) {
+      await page.setViewportSize({ width, height });
       for (const { name, path } of templates) {
         const response = await page.goto(activeUrl(path));
         expect(response?.status(), `${name} ${width}: page is served for footer reachability`).toBe(200);
@@ -455,11 +481,9 @@ test.describe('chat entry visibility approved contract', () => {
           const link = page.locator('footer a[href]').nth(index);
           await link.evaluate((el) => el.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'instant' }));
           await link.focus();
+          const reachability = await link.evaluate(measureFullReachability);
           const state = await link.evaluate((el) => {
             const link = el as HTMLAnchorElement;
-            const r = link.getBoundingClientRect();
-            const port = document.querySelector<HTMLElement>('[data-page-scrollport]');
-            const clip = port?.getBoundingClientRect();
             const launcher = document.querySelector<HTMLElement>('[data-chat-stub-launcher]')?.getBoundingClientRect();
             const range = document.createRange();
             range.selectNodeContents(link);
@@ -484,14 +508,12 @@ test.describe('chat entry visibility approved contract', () => {
               href: link.href,
               text: link.textContent?.replace(/\s+/g, ' ').trim() ?? '',
               focused: document.activeElement === link,
-              fullRectInScrollport: Boolean(clip && r.width > 0 && r.height > 0 && r.left >= clip.left - 1
-                && r.right <= clip.right + 1 && r.top >= clip.top - 1 && r.bottom <= clip.bottom + 1),
               notUnderLauncher: !obscured,
               hitTestable,
             };
           });
           expect(state.focused, `${name} ${width} footer link ${index}: focus reaches the original link`).toBe(true);
-          expect(state.fullRectInScrollport, `${name} ${width} footer link ${index}: focus-reveal exposes the full link rect: ${JSON.stringify(state)}`).toBe(true);
+          expect(reachability.fullRectVisible, `${name} ${width} footer link ${index}: full link rect stays inside viewport and clipping ancestors: ${JSON.stringify(reachability)}`).toBe(true);
           expect(state.notUnderLauncher, `${name} ${width} footer link ${index}: launcher does not cover the focused link: ${JSON.stringify(state)}`).toBe(true);
           expect(state.hitTestable, `${name} ${width} footer link ${index}: center point activates the link rather than the launcher: ${JSON.stringify(state)}`).toBe(true);
           expect(state.href, `${name} ${width} footer link ${index}: href remains unchanged`).toBe(original[index].href);
@@ -521,6 +543,21 @@ test.describe('chat entry visibility approved contract', () => {
         expect(fixtureState.focused, `${name} ${width}: below-viewport fixture is focus reachable`).toBe(true);
         expect(fixtureState.hitTestable, `${name} ${width}: below-viewport fixture is pointer reachable`).toBe(true);
         await belowViewportFixture.evaluate((el) => el.remove());
+        await page.locator('footer').evaluate((footer) => {
+          const clip = document.createElement('div');
+          clip.dataset.footerReachabilityClip = '';
+          Object.assign(clip.style, { width: '100px', height: '1px', overflow: 'hidden' });
+          const target = document.createElement('a');
+          target.dataset.footerClippedFixture = '';
+          target.href = '/politika-konfidencialnosti';
+          target.textContent = 'Clipped reachability fixture';
+          target.style.display = 'block';
+          clip.append(target);
+          footer.append(clip);
+        });
+        const clipped = await page.locator('[data-footer-clipped-fixture]').evaluate(measureFullReachability);
+        expect(clipped.fullRectVisible, `${name} ${width}: shared reachability oracle rejects overflow-clipped target`).toBe(false);
+        await page.locator('[data-footer-reachability-clip]').evaluate((el) => el.remove());
         // Prove the reachability oracle rejects a target that no ordinary scroll can clear.
         await page.locator('footer').evaluate((footer) => {
           const blocked = document.createElement('a');
@@ -610,8 +647,8 @@ test.describe('chat entry visibility approved contract', () => {
     const templates = TEMPLATES.filter(({ name }) => TD52.has(name));
     let middleObserved = 0;
     let checkedCells = 0, measuredTargets = 0, checkedControls = 0, checkedText = 0, reachableTargets = 0, fixtureCells = 0;
-    for (const width of TD52_REACHABILITY_WIDTHS) {
-      await page.setViewportSize({ width, height: width === 390 ? 844 : width === 1440 ? 900 : 720 });
+    for (const { width, height } of TD52_REACHABILITY_VIEWPORTS) {
+      await page.setViewportSize({ width, height });
       for (const { name, path } of templates) {
         await page.goto(activeUrl(path));
         await page.locator(GREETING_CLOSE).click();
@@ -633,6 +670,16 @@ test.describe('chat entry visibility approved contract', () => {
             };
             const intersects = (r: DOMRect) => { const b = launcher.getBoundingClientRect();
               return r.left < b.right && r.right > b.left && r.top < b.bottom && r.bottom > b.top; };
+            const rectWithinClips = (rect: DOMRect, target: HTMLElement) => {
+              let left = 0, top = 0, right = innerWidth, bottom = innerHeight;
+              for (let parent = target.parentElement; parent; parent = parent.parentElement) {
+                const style = getComputedStyle(parent);
+                const bounds = parent.getBoundingClientRect();
+                if (/(hidden|clip|scroll|auto)/.test(style.overflowX)) { left = Math.max(left, bounds.left); right = Math.min(right, bounds.right); }
+                if (/(hidden|clip|scroll|auto)/.test(style.overflowY)) { top = Math.max(top, bounds.top); bottom = Math.min(bottom, bounds.bottom); }
+              }
+              return rect.left >= left - 1 && rect.right <= right + 1 && rect.top >= top - 1 && rect.bottom <= bottom + 1;
+            };
             const controlRects = (el: HTMLElement) => {
               if (el.matches('a,button,[role="button"]')) {
                 const range = document.createRange(); range.selectNodeContents(el);
@@ -690,17 +737,38 @@ test.describe('chat entry visibility approved contract', () => {
               })();
               let r = rect();
               if (!r) continue;
-              if (intersects(r)) {
-                const portTop = port.getBoundingClientRect().top;
-                const headerBottom = document.querySelector<HTMLElement>('header.topnav')?.getBoundingClientRect().bottom ?? portTop;
-                let targetTop = Math.max(portTop, headerBottom) + 1;
-                const beforeLauncher = launcher.getBoundingClientRect().top - r.height - 2;
-                if (beforeLauncher > targetTop) targetTop = beforeLauncher;
-                port.scrollBy({ top: r.top - targetTop, behavior: 'instant' });
+              const target = item.rectEl ?? item.el;
+              let scrollport: HTMLElement | null = target.parentElement;
+              while (scrollport && scrollport !== port) {
+                const style = getComputedStyle(scrollport);
+                if (/(auto|scroll)/.test(style.overflowY) && scrollport.scrollHeight > scrollport.clientHeight + 1) break;
+                scrollport = scrollport.parentElement;
+              }
+              if (!scrollport || scrollport === port) scrollport = port;
+              const scrollRect = scrollport.getBoundingClientRect();
+              const headerBottom = scrollport === port
+                ? document.querySelector<HTMLElement>('header.topnav')?.getBoundingClientRect().bottom ?? scrollRect.top
+                : scrollRect.top;
+              const visibleTop = Math.max(scrollRect.top, headerBottom, 0) + 1;
+              const visibleBottom = Math.min(scrollRect.bottom, innerHeight) - 1;
+              if (intersects(r) || r.top < visibleTop || r.bottom > visibleBottom) {
+                const minimumTop = visibleTop;
+                const maximumTop = visibleBottom - r.height;
+                let targetTop = Math.min(Math.max(r.top, minimumTop), maximumTop);
+                const launcherRect = launcher.getBoundingClientRect();
+                if (r.left < launcherRect.right && r.right > launcherRect.left
+                  && targetTop < launcherRect.bottom && targetTop + r.height > launcherRect.top) {
+                  const aboveLauncher = Math.min(launcherRect.top - r.height - 2, maximumTop);
+                  const belowLauncher = launcherRect.bottom + 2;
+                  if (aboveLauncher >= minimumTop) targetTop = aboveLauncher;
+                  else if (belowLauncher + r.height <= visibleBottom) targetTop = belowLauncher;
+                }
+                scrollport.scrollTop += r.top - targetTop;
                 r = rect();
               }
-              if (!r || intersects(r) || r.top < port.getBoundingClientRect().top - 1 || r.bottom > port.getBoundingClientRect().bottom + 1) {
-                misses.push(`${item.kind}:${item.el.tagName}:${item.el.textContent?.trim().slice(0, 28)}@${item.top} rect=${r ? `${r.top}-${r.bottom}` : 'none'}`); continue;
+              if (!r || intersects(r) || !rectWithinClips(r, target)) {
+                const nested = target.closest<HTMLElement>('[data-seminar-schedule-panel], .seminar-schedule-panel');
+                misses.push(`${item.kind}:${item.el.tagName}:${item.el.textContent?.trim().slice(0, 28)}@${item.top} rect=${r ? `${r.left.toFixed(1)},${r.top.toFixed(1)}-${r.right.toFixed(1)},${r.bottom.toFixed(1)}` : 'none'} nestedScroll=${nested?.scrollTop.toFixed(1) ?? 'none'}`); continue;
               }
               let clickRect = r;
               if (item.kind === 'control' && item.el.matches('a,button,[role="button"]')) {
@@ -710,7 +778,7 @@ test.describe('chat entry visibility approved contract', () => {
               }
               const x = clickRect.left + clickRect.width / 2, y = clickRect.top + clickRect.height / 2, hit = document.elementFromPoint(x, y);
               if (item.kind === 'control') { if (hit && (hit === item.el || item.el.contains(hit))) reachable++; else misses.push(`control-hit:${item.el.textContent?.trim().slice(0, 28)}@${item.top} point=${x},${y} hit=${hit?.tagName}.${(hit as HTMLElement | null)?.className ?? ''}`); }
-              else { if (hit && (hit === item.el || item.el.contains(hit))) reachable++; else misses.push(`text-hit:${item.el.textContent?.trim().slice(0, 28)}@${item.top}`); }
+              else { if (hit && (hit === item.el || item.el.contains(hit))) reachable++; else misses.push(`text-hit:${item.el.textContent?.trim().slice(0, 28)}@${item.top} point=${x.toFixed(1)},${y.toFixed(1)} hit=${hit?.tagName}.${(hit as HTMLElement | null)?.className ?? ''}`); }
             }
             matrixFixture?.remove();
             port.style.position = originalPortPosition;
@@ -814,14 +882,17 @@ test.describe('chat entry visibility approved contract', () => {
     await page.locator('[data-page-scrollport]').evaluate((port) => {
       const el = port as HTMLElement; el.scrollTo({ top: el.scrollHeight, behavior: 'instant' });
     });
-    await link.focus();
+    const before = await page.locator('[data-page-scrollport]').evaluate((port) => (port as HTMLElement).scrollTop);
+    await link.evaluate((el) => (el as HTMLElement).focus({ preventScroll: true }));
+    const after = await page.locator('[data-page-scrollport]').evaluate((port) => (port as HTMLElement).scrollTop);
     const state = await link.evaluate((el) => {
       const r = el.getBoundingClientRect();
       const port = document.querySelector('[data-page-scrollport]')!.getBoundingClientRect();
       return { focused: document.activeElement === el, visible: r.top >= port.top - 1 && r.bottom <= port.bottom + 1 };
     });
     expect(state.focused, 'seminar hero enrollment link receives keyboard focus').toBe(true);
-    expect(state.visible, 'focus reveal scrolls the seminar hero link into the shared scrollport').toBe(true);
+    expect(after, 'focusin reveal changes scroll position when moving focus from the footer to the hero').toBeLessThan(before);
+    expect(state.visible, 'focus reveal scrolls the seminar hero link into the shared scrollport below the sticky topnav').toBe(true);
   });
 
   test('pointer activation of a partly visible footer link is not displaced by focus reveal', async ({ page }) => {
