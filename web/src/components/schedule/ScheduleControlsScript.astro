@@ -10,6 +10,9 @@
     const pagination = document.querySelector('[data-schedule-pagination]');
     const empty = document.querySelector('[data-schedule-empty]');
     let currentPage = 1;
+    let focusPageResult = false;
+    let previouslyFocusedResult = null;
+    let previouslyFocusedResultHasTemporaryTabindex = false;
 
     if (!(search instanceof HTMLInputElement)
       || !(institute instanceof HTMLSelectElement)
@@ -126,6 +129,7 @@
       prev.disabled = currentPage === 1;
       prev.addEventListener('click', () => {
         currentPage = Math.max(1, currentPage - 1);
+        focusPageResult = true;
         applyFilters();
       });
       buttons.push(prev);
@@ -154,6 +158,7 @@
         button.addEventListener('click', () => {
           if (page === currentPage) return;
           currentPage = page;
+          focusPageResult = true;
           applyFilters();
         });
         buttons.push(button);
@@ -168,6 +173,7 @@
       next.disabled = currentPage === pageCount;
       next.addEventListener('click', () => {
         currentPage = Math.min(pageCount, currentPage + 1);
+        focusPageResult = true;
         applyFilters();
       });
       buttons.push(next);
@@ -190,6 +196,34 @@
 
       empty.hidden = filtered.length > 0;
       renderPagination(pageCount);
+
+      if (focusPageResult) {
+        focusPageResult = false;
+        requestAnimationFrame(() => {
+          const firstResult = filtered[start];
+          if (!(firstResult instanceof HTMLElement)) return;
+
+          const scrollport = firstResult.closest('[data-page-scrollport]');
+          if (scrollport instanceof HTMLElement) {
+            const resultTop = firstResult.getBoundingClientRect().top;
+            const portTop = scrollport.getBoundingClientRect().top;
+            const topInset = Number.parseFloat(getComputedStyle(scrollport).scrollPaddingTop) || 0;
+            scrollport.scrollTop += resultTop - portTop - topInset - 1;
+          } else {
+            const resultTop = firstResult.getBoundingClientRect().top;
+            const headerBottom = document.querySelector('.topnav')?.getBoundingClientRect().bottom || 0;
+            window.scrollTo(0, window.scrollY + resultTop - headerBottom - 8);
+          }
+
+          if (previouslyFocusedResultHasTemporaryTabindex && previouslyFocusedResult) {
+            previouslyFocusedResult.removeAttribute('tabindex');
+          }
+          previouslyFocusedResultHasTemporaryTabindex = !firstResult.hasAttribute('tabindex');
+          if (previouslyFocusedResultHasTemporaryTabindex) firstResult.setAttribute('tabindex', '-1');
+          firstResult.focus({ preventScroll: true });
+          previouslyFocusedResult = firstResult;
+        });
+      }
     };
 
     const onFilterChange = () => {
