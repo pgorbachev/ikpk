@@ -75,7 +75,6 @@
     "src:components/institutes/InstituteProgramCard.astro:L37:C1:style",
     "src:components/institutes/InstituteProgramsSection.astro:L45:C1:style",
     "src:components/institutes/InstituteTeacherCard.astro:L33:C1:style",
-    "src:components/MaintenanceNotice.astro:L8:C1:style",
     "src:components/MotionScript.astro:L11:C1:script",
     "src:components/NewsletterSignup.astro:L44:C1:style",
     "src:components/payment/PaymentForm.astro:L131:C1:script",

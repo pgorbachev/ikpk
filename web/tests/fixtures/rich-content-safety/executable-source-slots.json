@@ -536,14 +536,6 @@
     "identity": "style|body:c2e6851b278428bf"
   },
   {
-    "slotId": "src:components/MaintenanceNotice.astro:L8:C1:style",
-    "file": "components/MaintenanceNotice.astro",
-    "nodeKind": "element",
-    "locator": "components/MaintenanceNotice.astro:L8:C1:style",
-    "fingerprint": "9211caed2e50e7afbf8709e379c8dbc0bc1f1e0a5e6fff3e1f8301a971c8f9c4",
-    "identity": "style|body:0830de20854fd197"
-  },
-  {
     "slotId": "src:components/MotionScript.astro:L11:C1:script",
     "file": "components/MotionScript.astro",
     "nodeKind": "element",
