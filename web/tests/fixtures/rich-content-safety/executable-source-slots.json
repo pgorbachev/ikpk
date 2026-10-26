@@ -824,11 +824,11 @@
     "identity": "link|href=quoted:../styles/global.css|rel=quoted:stylesheet"
   },
   {
-    "slotId": "src:layouts/BaseLayout.astro:L102:C1:style",
+    "slotId": "src:layouts/BaseLayout.astro:L100:C1:style",
     "file": "layouts/BaseLayout.astro",
     "nodeKind": "element",
-    "locator": "layouts/BaseLayout.astro:L102:C1:style",
-    "fingerprint": "9bcf82684a1843d9082c9dd53f2a29ad5cf486c411cb87035e2c3c6caf4dfb4e",
+    "locator": "layouts/BaseLayout.astro:L100:C1:style",
+    "fingerprint": "a5fa1be74f421d242acde4c265b3bd9c652f104683050553634a666ca821367f",
     "identity": "style|body:c9201fc888e590d9"
   },
   {
@@ -840,11 +840,11 @@
     "identity": "link|href=quoted:../styles/global.css|rel=quoted:stylesheet"
   },
   {
-    "slotId": "src:layouts/TopNavLayout.astro:L81:C1:style",
+    "slotId": "src:layouts/TopNavLayout.astro:L79:C1:style",
     "file": "layouts/TopNavLayout.astro",
     "nodeKind": "element",
-    "locator": "layouts/TopNavLayout.astro:L81:C1:style",
-    "fingerprint": "25f2eae91f915776136bc2c339aa5801617decd95de0698b41f61d1da2cffda0",
+    "locator": "layouts/TopNavLayout.astro:L79:C1:style",
+    "fingerprint": "00f975057049f77749a05be594c98d35abce8b2a040ba4ab3fb9524f96fbf2b3",
     "identity": "style|body:309f315b55438bb4"
   },
   {
