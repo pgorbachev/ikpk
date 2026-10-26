@@ -61,7 +61,7 @@
     "parse5": "^8.0.1"
   },
   "devDependencies": {
-    "@astrojs/check": "^0.9.10",
+    "@astrojs/check": "^0.9.12",
     "@astrojs/compiler": "^2.13.1",
     "@axe-core/playwright": "^4.14.0",
     "@eslint/js": "^10.0.1",
