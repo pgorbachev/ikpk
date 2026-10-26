@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync, existsSync, statSync } from 'fs';
 import { join } from 'path';
 import { dist, walkHtml, walkFiles } from './helpers/dist-pages';
+import { isSitePageHtml } from './helpers/walk';
 import { attr, parseDocument, type Element, walk } from './helpers/dom';
 import { LEGACY_CTA_ATTR, LEGACY_CTA_UNRESOLVED_ATTR } from '../src/lib/html-cleaner.js';
 
@@ -733,7 +734,10 @@ import {
 describe('соцсети в футере', () => {
   it('принятый состав присутствует в подвале каждой страницы', () => {
     const offenders: string[] = [];
+    let checked = 0;
     for (const file of walkHtml()) {
+      if (!isSitePageHtml(file)) continue;
+      checked += 1;
       const html = readFileSync(file, 'utf-8');
       const column = socialColumn(html);
       const page = file.replace(dist, '') || '/';
@@ -748,6 +752,7 @@ describe('соцсети в футере', () => {
         }
       }
     }
+    expect(checked, 'в выводе нет страниц сайта для проверки подвала').toBeGreaterThan(0);
     expect(
       offenders.slice(0, 10),
       `принятый состав отсутствует в подвале (${offenders.length}):\n${offenders.slice(0, 10).join('\n')}`,

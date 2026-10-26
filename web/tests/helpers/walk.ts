@@ -1,5 +1,11 @@
 import { readdirSync, statSync } from 'fs';
-import { join } from 'path';
+import { basename, join } from 'path';
+
+/** Astro routes are index.html (plus 404.html); root public HTML files are static resources. */
+export function isSitePageHtml(file: string): boolean {
+  const name = basename(file);
+  return name === 'index.html' || name === '404.html';
+}
 
 /**
  * Обход дерева файлов — без привязки к каталогу вывода.

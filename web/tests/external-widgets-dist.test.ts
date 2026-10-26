@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, statSync, writeFileSy
 import { join, dirname } from 'node:path';
 import { tmpdir } from 'node:os';
 import { dist, walkHtml } from './helpers/dist-pages';
+import { isSitePageHtml } from './helpers/walk';
 import { attr, textOf } from './helpers/dom';
 import {
   CHAT_STATE_NAMES,
@@ -75,8 +76,10 @@ function outputPages(root: string = dist): Map<string, string> {
         'Пустой вывод считается «не выполнено», а не «нарушений нет». Собрать: npm run build',
     );
   const pages = new Map<string, string>();
-  for (const file of walkHtml(root))
+  for (const file of walkHtml(root)) {
+    if (!isSitePageHtml(file)) continue;
     pages.set(file.slice(root.length).replaceAll('\\', '/'), readFileSync(file, 'utf-8'));
+  }
   if (pages.size === 0)
     throw new Error(`предмета проверки нет: html-страниц в '${root}' нет`);
   return pages;
