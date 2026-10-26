@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { dist, walkHtml, readPage, allPages } from './helpers/dist-pages';
+import { isSitePageHtml } from './helpers/walk';
 import { attr, byClass, findAll, hasClass, parseDocument, textOf, walk } from './helpers/dom';
 import type { Element } from './helpers/dom';
 import { getInstitutes, getScheduleEntries, getSeminarBuildNow } from '../src/lib/data.js';
@@ -29,7 +30,7 @@ const offeredEntries = () => getScheduleEntries().filter(
 
 /** Все собранные страницы. Пустой список — «не смогла проверить», а не «дефектов нет». */
 function pages(): { path: string; html: string }[] {
-  const out = [...walkHtml()].map((file) => ({
+  const out = [...walkHtml()].filter(isSitePageHtml).map((file) => ({
     path: file.replace(dist, ''),
     html: readFileSync(file, 'utf-8'),
   }));

@@ -2,7 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, mkdtempSync, readFileSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { walkFiles } from './walk';
+import { isSitePageHtml, walkFiles } from './walk';
 
 /**
  * ПРОБНАЯ СБОРКА: тот же боевой конвейер, но с подставленной конфигурацией и в каталог
@@ -121,8 +121,10 @@ export function buildProbe(
     throw new Error(`пробная сборка «${label}» не создала каталога вывода '${root}'`);
 
   const pages = new Map<string, string>();
-  for (const file of walkFiles(root, ['.html']))
+  for (const file of walkFiles(root, ['.html'])) {
+    if (!isSitePageHtml(file)) continue;
     pages.set(file.slice(root.length).replaceAll('\\', '/'), readFileSync(file, 'utf-8'));
+  }
 
   // Пустой набор — «не выполнено», а не «нарушений нет»: все утверждения об отсутствии
   // ниже тривиально верны на пустом выводе. Каталог при этом всё равно убираем: иначе
