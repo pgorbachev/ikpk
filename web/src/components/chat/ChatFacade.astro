@@ -138,7 +138,7 @@ const showFacade = config.state === 'address' && !isDemoOutput;
 
         if (header) {
           const headerRect = header.getBoundingClientRect();
-          const searchBottom = Math.max(visibleTop, visibleBottom - launcherClearance);
+          const searchBottom = visibleBottom;
           const searchBelow = Math.max(0, searchBottom - Math.max(visibleTop, headerRect.bottom));
           const searchAbove = Math.max(0, Math.min(visibleBottom, headerRect.top) - visibleTop);
           const placeSearchAbove = searchAbove > searchBelow;
