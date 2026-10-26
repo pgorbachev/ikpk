@@ -103,6 +103,10 @@ body.layout-topnav--chat details.topnav-mobile .topnav-drawer {
   max-height: var(--chat-drawer-max-height, max(0px, calc(var(--chat-viewport-height, 100vh) - var(--chat-drawer-top-space, calc(var(--header-height, 60px) + 8px)))));
 }
 
+body.layout-topnav--chat:has(#header-search:not([hidden])) header.topnav {
+  z-index: 10170;
+}
+
 body.layout-topnav--chat header.topnav .header-search {
   top: var(--chat-search-top, 100%);
   bottom: var(--chat-search-bottom, auto);

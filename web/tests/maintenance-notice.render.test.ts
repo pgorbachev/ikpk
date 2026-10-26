@@ -5,7 +5,6 @@ import TopNavLayout from '../src/layouts/TopNavLayout.astro';
 import { attr, parseDocument, textOf, walk } from './helpers/dom';
 
 const TITLE = 'На сайте ведутся технические работы';
-const MESSAGE = 'Некоторые разделы могут работать некорректно. Приносим извинения за временные неудобства';
 const cases = [
   { name: 'BaseLayout', layout: BaseLayout, path: '/raspisanie-i-tseny', noindex: false },
   { name: 'TopNavLayout', layout: TopNavLayout, path: '/', noindex: false },
@@ -23,7 +22,7 @@ describe.each(cases)('maintenance notice: $name', ({ layout, path, noindex }) =>
     return { html, elements: [...walk(parseDocument(html))] };
   }
 
-  it('renders one complete notice before navigation, outside searchable content, without controls', async () => {
+  it('does not render the maintenance notice', async () => {
     const { elements } = await render();
     const body = elements.find((el) => el.tagName === 'body')!;
     const main = elements.find((el) => el.tagName === 'main')!;
@@ -32,22 +31,8 @@ describe.each(cases)('maintenance notice: $name', ({ layout, path, noindex }) =>
     expect(main).toBeDefined();
     expect(nav).toBeDefined();
     expect(textOf(main)).toContain('Содержимое страницы');
-    expect(textOf(body).split(TITLE).length - 1, 'notice missing or duplicated in initial HTML').toBe(1);
-    const notices = elements.filter((el) => attr(el, 'aria-label') === 'Технические работы');
-    expect(notices).toHaveLength(1);
-    const notice = notices[0];
-    expect(textOf(notice)).toContain(TITLE);
-    expect(textOf(notice)).toContain(MESSAGE);
-    expect(elements.indexOf(notice)).toBeLessThan(elements.indexOf(nav));
-    expect([...walk(main)]).not.toContain(notice);
-    for (const searchable of elements.filter((el) => attr(el, 'data-pagefind-body') !== null)) {
-      expect([...walk(searchable)]).not.toContain(notice);
-    }
-    expect([notice, ...walk(notice)].filter((el) =>
-      ['button', 'a', 'input', 'select', 'textarea', 'dialog', 'script', 'template'].includes(el.tagName)
-      || ['button', 'dialog'].includes(attr(el, 'role') ?? '')
-      || attr(el, 'hidden') !== null || attr(el, 'aria-hidden') === 'true',
-    )).toHaveLength(0);
+    expect(textOf(body)).not.toContain(TITLE);
+    expect(elements.filter((el) => attr(el, 'aria-label') === 'Технические работы')).toHaveLength(0);
   });
 
   it('preserves canonical, robots, live forms and analytics without enabling demo forms', async () => {

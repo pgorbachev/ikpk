@@ -44,8 +44,8 @@
     "file": "components/chat/ChatFacade.astro",
     "nodeKind": "element",
     "locator": "components/chat/ChatFacade.astro:L46:C1:script",
-    "fingerprint": "db7bcf5f38f8b4ef5cc4aa1949c9eb980ff7d586815deeee5a9f9fe2f81a76a5",
-    "identity": "script|is:inline=empty:|body:746300d83d778591"
+    "fingerprint": "86e952f82237f4effc0e41a17d3b4848f3d80d82e179408bb3ef12bb6740e619",
+    "identity": "script|is:inline=empty:|body:c8708bc37ab022ad"
   },
   {
     "slotId": "src:components/contacts/ContactShell.astro:L121:C9:svg",
@@ -536,14 +536,6 @@
     "identity": "style|body:c2e6851b278428bf"
   },
   {
-    "slotId": "src:components/MaintenanceNotice.astro:L8:C1:style",
-    "file": "components/MaintenanceNotice.astro",
-    "nodeKind": "element",
-    "locator": "components/MaintenanceNotice.astro:L8:C1:style",
-    "fingerprint": "9211caed2e50e7afbf8709e379c8dbc0bc1f1e0a5e6fff3e1f8301a971c8f9c4",
-    "identity": "style|body:0830de20854fd197"
-  },
-  {
     "slotId": "src:components/MotionScript.astro:L11:C1:script",
     "file": "components/MotionScript.astro",
     "nodeKind": "element",
@@ -832,11 +824,11 @@
     "identity": "link|href=quoted:../styles/global.css|rel=quoted:stylesheet"
   },
   {
-    "slotId": "src:layouts/BaseLayout.astro:L102:C1:style",
+    "slotId": "src:layouts/BaseLayout.astro:L100:C1:style",
     "file": "layouts/BaseLayout.astro",
     "nodeKind": "element",
-    "locator": "layouts/BaseLayout.astro:L102:C1:style",
-    "fingerprint": "9bcf82684a1843d9082c9dd53f2a29ad5cf486c411cb87035e2c3c6caf4dfb4e",
+    "locator": "layouts/BaseLayout.astro:L100:C1:style",
+    "fingerprint": "a5fa1be74f421d242acde4c265b3bd9c652f104683050553634a666ca821367f",
     "identity": "style|body:c9201fc888e590d9"
   },
   {
@@ -848,11 +840,11 @@
     "identity": "link|href=quoted:../styles/global.css|rel=quoted:stylesheet"
   },
   {
-    "slotId": "src:layouts/TopNavLayout.astro:L81:C1:style",
+    "slotId": "src:layouts/TopNavLayout.astro:L79:C1:style",
     "file": "layouts/TopNavLayout.astro",
     "nodeKind": "element",
-    "locator": "layouts/TopNavLayout.astro:L81:C1:style",
-    "fingerprint": "25f2eae91f915776136bc2c339aa5801617decd95de0698b41f61d1da2cffda0",
+    "locator": "layouts/TopNavLayout.astro:L79:C1:style",
+    "fingerprint": "00f975057049f77749a05be594c98d35abce8b2a040ba4ab3fb9524f96fbf2b3",
     "identity": "style|body:309f315b55438bb4"
   },
   {
