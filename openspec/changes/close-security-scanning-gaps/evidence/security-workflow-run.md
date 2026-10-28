@@ -2,7 +2,6 @@
 
 Workflow run: [Security #1864](https://github.com/pgorbachev/ikpk/actions/runs/40710673141)  
 Tested merge revision: `f985b06d7f14b6dddd0223b4a20e14ad009e2f34`  
-Implementation branch at this evidence point: `feat/security-scanning-gates`
 
 ## Results
 
