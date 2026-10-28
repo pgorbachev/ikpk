@@ -23,7 +23,7 @@ import { existsSync, readFileSync, statSync } from 'fs';
 import { join } from 'path';
 import { describe, it, expect } from 'vitest';
 import { parseDocument, textOf, attr, type Element, type ChildNode } from './dom';
-import { walkFiles } from './walk';
+import { isSitePageHtml, walkFiles } from './walk';
 
 /** Принятый состав. Перечень, а не вычитание: вычитание не ловит появление пятой сети. */
 export const ACCEPTED_ACCOUNTS = [
@@ -306,7 +306,7 @@ export function outputPages(root: string, buildCommand: string): string[] {
   };
   if (!existsSync(root)) fail('каталога вывода нет');
   if (!statSync(root).isDirectory()) fail('путь вывода — не каталог');
-  const pages = [...walkFiles(root, ['.html'])];
+  const pages = [...walkFiles(root, ['.html'])].filter(isSitePageHtml);
   if (pages.length === 0) fail('html-страниц в выводе нет');
   return pages;
 }

@@ -8,6 +8,7 @@ import {
 import { serveStatic, type StaticSite } from './helpers/static-serve';
 import { PROBE_CHAT_LOADER_SRC, buildProbe, type ProbeBuild } from './helpers/widget-probe-build';
 import { TEMPLATES } from './helpers/templates';
+import { measureFullReachability } from './helpers/reachability';
 import {
   CHAT_LOADER_KEY,
   FOREIGN_METRIKA_ID,
@@ -686,111 +687,334 @@ test.describe('сторонний iframe не отменяет доступно�
   });
 });
 
-// ─── Перекрытие кнопкой чата ─────────────────────────────────────────────────
+// ─── Достижимость содержимого около плавающей кнопки чата ─────────────────────
 
-test.describe('кнопка чата не перекрывает содержимое страницы', () => {
+test.describe('плавающая кнопка чата не блокирует содержимое страницы', () => {
   test.describe.configure({ timeout: 60_000 });
 
+  test('320px course cards keep the long excerpt outside the title link', async ({ page }) => {
+    await guard(page);
+    await page.setViewportSize({ width: 320, height: 720 });
+    await page.goto(url('/institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya'));
+    const card = page.locator('[data-testid="course-group-seminar-card"]')
+      .filter({ has: page.locator('.course-group-seminar-title').filter({ hasText: 'ПК-6.' }) }).first();
+    const titleLink = card.locator('.course-group-seminar-title-link');
+    const main = card.locator('.course-group-seminar-main');
+    await expect(titleLink.locator('.course-group-seminar-title')).toHaveCount(1);
+    await expect(titleLink.locator('.course-group-seminar-excerpt')).toHaveCount(0);
+    await expect(main.locator('.course-group-seminar-excerpt'), 'long course excerpt must stay outside the clickable title').toHaveCount(1);
+    await expect(card.locator('.course-group-seminar-cta')).toHaveAttribute('href', await titleLink.getAttribute('href') ?? '');
+  });
+
+  test('oracle rejects a center-hit link whose edge remains under the launcher', async ({ page }) => {
+    await page.setContent(`<a id="edge-control" href="#" style="position:fixed;right:40px;bottom:20px;width:160px;height:40px;z-index:1">Edge fixture</a>
+      <button id="fixture-launcher" style="position:fixed;right:0;bottom:0;width:80px;height:80px;z-index:2">Chat</button>`);
+    const link = page.locator('#edge-control');
+    const centerHit = await link.evaluate((el) => {
+      const r = el.getBoundingClientRect();
+      const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+      return hit === el || el.contains(hit);
+    });
+    const reachability = await link.evaluate(measureFullReachability, '#fixture-launcher');
+    expect(centerHit, 'the fixture center is clickable, so a center-only oracle would pass').toBe(true);
+    expect(reachability.fullRectVisible, 'the fixture is inside viewport and clipping ancestors').toBe(true);
+    expect(reachability.fullRectOutsideLauncher, 'the full link rectangle still overlaps the launcher').toBe(false);
+  });
+
   for (const { name, path } of TEMPLATES) {
-    test(`${name}: закрытая кнопка не накрывает интерактивные элементы и текст`, async ({ page }) => {
+    test(`${name}: перекрытые controls и текст достижимы прокруткой`, async ({ page }) => {
       await guard(page);
-      const response = await page.goto(url(path));
-      if (name.startsWith('preview-') && response?.status() === 404)
-        test.skip(true, 'черновик варианта отсутствует в боевой сборке');
-      // 404 — «проверять нечего», а не «перекрытий нет»: страница крошечная, и на ней
-      // ничего не перекрывается по построению.
-      expect(response?.status(), `${path}: страница не отдалась — проверялась бы 404`).toBe(200);
+      const projectViewport = page.viewportSize() ?? { width: 1280, height: 720 };
+      const td52 = ['home', 'course', 'seminar', 'seminar-dated', 'kontakty', 'statyi', 'raspisanie'].includes(name);
+      const scanViewports = td52 ? [projectViewport, { width: 320, height: 720 }] : [projectViewport];
+      const observedViewportWidths: number[] = [];
+      // Preserve each Playwright project's normal viewport, and add 320×720 for TD-52.
+      // The strict scanner checks whole interactive rectangles, never child text fragments.
+      for (const viewport of scanViewports) {
+        await page.setViewportSize(viewport);
+        const response = await page.goto(url(path));
+        if (name.startsWith('preview-') && response?.status() === 404)
+          test.skip(true, 'черновик варианта отсутствует в боевой сборке');
+        // 404 — «проверять нечего», а не «перекрытий нет»: страница крошечная, и на ней
+        // ничего не перекрывается по построению.
+        expect(response?.status(), `${path}: страница не отдалась — проверялась бы 404`).toBe(200);
 
-      await page.locator('[data-chat-stub-greeting-close]').click();
-      const launcher = page.locator('[data-chat-stub-launcher]');
-      await expect(launcher, `${path}: provider launcher отсутствует`).toBeVisible();
+        await page.locator('[data-chat-stub-greeting-close]').click();
+        const launcher = page.locator('[data-chat-stub-launcher]');
+        await expect(launcher, `${path}: provider launcher отсутствует`).toBeVisible();
 
-      const overlaps = await page.evaluate((launcherAttr) => {
-        const button = document.querySelector(`[${launcherAttr}]`) as HTMLElement | null;
-        if (button === null) return { interactive: ['native launcher missing'], text: [] as string[] };
-        const box = button.getBoundingClientRect();
-        const header = document.querySelector('header');
-        const main = document.querySelector('main');
-        const footer = document.querySelector('footer');
-        const scrollport = [...document.querySelectorAll<HTMLElement>('body *')].find((el) => {
-          const style = getComputedStyle(el);
-          return Boolean(header && main && footer && el.contains(header) && el.contains(main) && el.contains(footer))
-            && /(auto|scroll)/.test(style.overflowY) && el.scrollHeight > el.clientHeight + 1;
-        }) ?? null;
-        const clip = scrollport?.getBoundingClientRect() ?? new DOMRect(0, 0, innerWidth, innerHeight);
-        const visible = (r: DOMRect) => {
-          const left = Math.max(r.left, clip.left, 0);
-          const top = Math.max(r.top, clip.top, 0);
-          const right = Math.min(r.right, clip.right, innerWidth);
-          const bottom = Math.min(r.bottom, clip.bottom, innerHeight);
-          return right > left && bottom > top ? { left, top, right, bottom } : null;
-        };
-        const hit = (r: { left: number; top: number; right: number; bottom: number }): boolean =>
-          r.left < box.right && r.right > box.left && r.top < box.bottom && r.bottom > box.top;
+        observedViewportWidths.push(page.viewportSize()?.width ?? 0);
+        const overlaps = await page.evaluate((launcherAttr) => {
+          const button = document.querySelector(`[${launcherAttr}]`) as HTMLElement | null;
+          if (button === null) return {
+            unreachableInteractive: ['native launcher missing'], unreachableText: [], diagnostics: ['native launcher missing'],
+            reachableEvidence: [], checkedTargets: 0, scanDurationMs: 0, scrollportFound: false,
+            checkedInteractive: 0, checkedText: 0, candidateFixtureDetected: false,
+            candidateFixtureGeometry: { clippedAndOverlapped: false, centerClear: false },
+          };
+          // Keep a scanner-level sensitivity fixture in every route run: its fixed control
+          // is horizontally clipped by its parent, yet the visible intersection touches
+          // the launcher. Its center is clear, so a center-only overlap oracle would accept it.
+          const candidateFixture = document.createElement('div');
+          candidateFixture.dataset.candidateFixtureClip = '';
+          Object.assign(candidateFixture.style, {
+            position: 'fixed', right: '100px', bottom: '0', width: '60px', height: '220px',
+            overflow: 'hidden', zIndex: '0', pointerEvents: 'none',
+          });
+          const fixtureControl = document.createElement('button');
+          fixtureControl.textContent = 'candidate-discovery-fixture';
+          Object.assign(fixtureControl.style, {
+            position: 'absolute', left: '0', top: '120px', width: '80px', height: '40px',
+            padding: '0', pointerEvents: 'auto',
+          });
+          candidateFixture.append(fixtureControl);
+          document.body.append(candidateFixture);
+          const header = document.querySelector('header');
+          const main = document.querySelector('main');
+          const footer = document.querySelector('footer');
+          const scrollport = [...document.querySelectorAll<HTMLElement>('body *')].find((el) => {
+            const style = getComputedStyle(el);
+            return Boolean(header && main && footer && el.contains(header) && el.contains(main) && el.contains(footer))
+              && /(auto|scroll)/.test(style.overflowY) && el.scrollHeight > el.clientHeight + 1;
+          }) ?? null;
+          const initialScrollTop = scrollport?.scrollTop ?? 0;
+          const clipBounds = (el: Element) => {
+            const clip = { left: 0, top: 0, right: innerWidth, bottom: innerHeight };
+            for (let parent = el.parentElement; parent; parent = parent.parentElement) {
+              const style = getComputedStyle(parent);
+              const bounds = parent.getBoundingClientRect();
+              if (/(hidden|clip|scroll|auto)/.test(style.overflowX)) {
+                clip.left = Math.max(clip.left, bounds.left);
+                clip.right = Math.min(clip.right, bounds.right);
+              }
+              if (/(hidden|clip|scroll|auto)/.test(style.overflowY)) {
+                clip.top = Math.max(clip.top, bounds.top);
+                clip.bottom = Math.min(clip.bottom, bounds.bottom);
+              }
+            }
+            return clip;
+          };
+          const candidateFixtureRect = fixtureControl.getBoundingClientRect();
+          const candidateFixtureClip = clipBounds(fixtureControl);
+          const candidateLauncherRect = button.getBoundingClientRect();
+          const candidateFixtureGeometry = {
+            clippedAndOverlapped: candidateFixtureRect.right > candidateFixtureClip.right
+              && candidateFixtureRect.left < candidateLauncherRect.right && candidateFixtureRect.right > candidateLauncherRect.left
+              && candidateFixtureRect.top < candidateLauncherRect.bottom && candidateFixtureRect.bottom > candidateLauncherRect.top,
+            centerClear: candidateFixtureRect.left + candidateFixtureRect.width / 2 < candidateLauncherRect.left,
+          };
+          const clipFor = (r: DOMRect, el: Element) => {
+            const clip = clipBounds(el);
+            if (r.width <= 0 || r.height <= 0) return null;
+            const intersection = {
+              left: Math.max(r.left, clip.left), right: Math.min(r.right, clip.right),
+              top: Math.max(r.top, clip.top), bottom: Math.min(r.bottom, clip.bottom),
+            };
+            return intersection.right > intersection.left && intersection.bottom > intersection.top
+              ? { clip, intersection } : null;
+          };
+          const fullyVisible = (r: DOMRect, el: Element) => {
+            const visible = clipFor(r, el);
+            if (!visible) return null;
+            const { clip } = visible;
+            return r.left >= clip.left - 1 && r.right <= clip.right + 1
+              && r.top >= clip.top - 1 && r.bottom <= clip.bottom + 1 ? clip : null;
+          };
+          const intersects = (r: DOMRect, launcherBox: DOMRect) => r.left < launcherBox.right && r.right > launcherBox.left
+            && r.top < launcherBox.bottom && r.bottom > launcherBox.top;
 
-        // Закрытый `<details>` не прячет содержимое через display/visibility САМОГО
-        // потомка — это признак ПРЕДКА. У `.topnav-drawer` (мобильное меню, TopNav.astro,
-        // не тронут этим change) `position: absolute` выводит его геометрию из-под
-        // схлопывания, которым браузер прячет закрытый details: getBoundingClientRect
-        // потомков остаётся настоящим и ненулевым, хотя пользователь их не видит и не
-        // может нажать. Без этой проверки хит-тест ловит фантомное перекрытие с любым
-        // новым фиксированным элементом на мобильном — независимо от того, что нового
-        // элемента касается.
-        const insideClosedDetails = (el: Element): boolean => {
-          let node: Element | null = el;
-          while (node !== null) {
-            if (node.tagName === 'DETAILS' && !(node as HTMLDetailsElement).open) return true;
-            node = node.parentElement;
+          // Закрытый `<details>` не прячет содержимое через display/visibility САМОГО
+          // потомка — это признак ПРЕДКА. У `.topnav-drawer` (мобильное меню, TopNav.astro,
+          // не тронут этим change) `position: absolute` выводит его геометрию из-под
+          // схлопывания, которым браузер прячет закрытый details: getBoundingClientRect
+          // потомков остаётся настоящим и ненулевым, хотя пользователь их не видит и не
+          // может нажать. Без этой проверки хит-тест ловит фантомное перекрытие с любым
+          // новым фиксированным элементом на мобильном — независимо от того, что нового
+          // элемента касается.
+          const insideClosedDetails = (el: Element): boolean => {
+            let node: Element | null = el;
+            while (node !== null) {
+              if (node.tagName === 'DETAILS' && !(node as HTMLDetailsElement).open) return true;
+              node = node.parentElement;
+            }
+            return false;
+          };
+
+          const controlTargets: { el: Element; label: string; scrollTop: number; rect: number[]; launcher: number[] }[] = [];
+          const textTargets: { el: Element; fragment: number; label: string; scrollTop: number; rect: number[]; launcher: number[] }[] = [];
+          const sampleScrollTops = [...new Set([initialScrollTop, (scrollport?.scrollHeight ?? 0) / 2,
+            (scrollport?.scrollHeight ?? 0) - (scrollport?.clientHeight ?? 0)])];
+          for (const sampleTop of sampleScrollTops) {
+            if (scrollport) scrollport.scrollTop = sampleTop;
+            const sampleLauncher = button.getBoundingClientRect();
+            for (const el of document.querySelectorAll('a, button, input, select, textarea, [role="button"]')) {
+            if (button.contains(el) || el.contains(button)) continue;
+            if (insideClosedDetails(el)) continue;
+            const style = getComputedStyle(el);
+            if (style.visibility === 'hidden' || style.display === 'none') continue;
+            const rect = el.getBoundingClientRect();
+            const shown = clipFor(rect, el);
+            if (shown && intersects(rect, sampleLauncher))
+              controlTargets.push({ el, scrollTop: sampleTop, rect: [rect.left, rect.top, rect.right, rect.bottom], launcher: [sampleLauncher.left, sampleLauncher.top, sampleLauncher.right, sampleLauncher.bottom], label: `${el.tagName.toLowerCase()}: ${(el.textContent ?? '').trim().slice(0, 40)}` });
+            }
+
+          // РАМКА ТЕКСТА, а не рамка блока: блок во всю ширину пересекается с плавающим
+          // элементом всегда, и такое измерение сообщает о перекрытии там, где его нет.
+          for (const p of document.querySelectorAll('p, li, h1, h2, h3, h4')) {
+            if (button.contains(p)) continue;
+            if (insideClosedDetails(p)) continue;
+            const style = getComputedStyle(p);
+            if (style.visibility === 'hidden' || style.display === 'none') continue;
+            const range = document.createRange();
+            range.selectNodeContents(p);
+            const fragments = [...range.getClientRects()];
+            for (const [fragment, rect] of fragments.entries()) {
+              const shown = clipFor(rect, p);
+              if (shown && intersects(rect, sampleLauncher)) {
+                textTargets.push({ el: p, fragment, scrollTop: sampleTop, rect: [rect.left, rect.top, rect.right, rect.bottom], launcher: [sampleLauncher.left, sampleLauncher.top, sampleLauncher.right, sampleLauncher.bottom], label: `${p.tagName.toLowerCase()}: ${(p.textContent ?? '').trim().slice(0, 40)}` });
+              }
+            }
+            range.detach();
           }
-          return false;
-        };
-
-        const interactive: string[] = [];
-        for (const el of document.querySelectorAll('a, button, input, select, textarea, [role="button"]')) {
-          if (button.contains(el) || el.contains(button)) continue;
-          if (insideClosedDetails(el)) continue;
-          const style = getComputedStyle(el);
-          if (style.visibility === 'hidden' || style.display === 'none') continue;
-          const shown = visible(el.getBoundingClientRect());
-          if (shown && hit(shown))
-            interactive.push(`${el.tagName.toLowerCase()}: ${(el.textContent ?? '').trim().slice(0, 40)}`);
-        }
-
-        // РАМКА ТЕКСТА, а не рамка блока: блок во всю ширину пересекается с плавающим
-        // элементом всегда, и такое измерение сообщает о перекрытии там, где его нет.
-        const text: string[] = [];
-        for (const p of document.querySelectorAll('p, li, h1, h2, h3, h4')) {
-          if (button.contains(p)) continue;
-          if (insideClosedDetails(p)) continue;
-          const style = getComputedStyle(p);
-          if (style.visibility === 'hidden' || style.display === 'none') continue;
-          const range = document.createRange();
-          range.selectNodeContents(p);
-          for (const rect of range.getClientRects()) {
-            const shown = visible(rect);
-            if (shown && hit(shown)) {
-              text.push(`${p.tagName.toLowerCase()}: ${(p.textContent ?? '').trim().slice(0, 40)}`);
-              break;
+          }
+          const itemRect = (item: (typeof controlTargets)[number] | (typeof textTargets)[number]) => {
+            if ('fragment' in item) {
+              const range = document.createRange();
+              range.selectNodeContents(item.el);
+              const rect = [...range.getClientRects()][item.fragment];
+              range.detach();
+              return rect;
+            }
+            return (item.el as HTMLElement).getBoundingClientRect();
+          };
+          const scrollCandidates = (container: HTMLElement, target: Element, rect: DOMRect) => {
+            const max = Math.max(0, container.scrollHeight - container.clientHeight);
+            const launcherBox = button.getBoundingClientRect();
+            const clip = clipBounds(target);
+            const clearBand = Math.max(launcherBox.top - clip.top - rect.height,
+              clip.bottom - launcherBox.bottom - rect.height, 1);
+            const step = Math.max(1, Math.min(Math.floor(container.clientHeight / 2), Math.floor(clearBand / 2)));
+            return [...new Set([container.scrollTop, ...Array.from({ length: Math.floor(max / step) + 1 }, (_, i) => i * step), max])];
+          };
+          const clipsScrollers = (target: Element) => {
+            const ancestors: HTMLElement[] = [];
+            for (let parent = target.parentElement as HTMLElement | null; parent && parent !== scrollport; parent = parent.parentElement as HTMLElement | null) {
+              const style = getComputedStyle(parent);
+              if (/(auto|scroll)/.test(style.overflowY) && parent.scrollHeight > parent.clientHeight + 1) ancestors.push(parent);
+            }
+            return ancestors;
+          };
+          const testPosition = (el: Element, r: DOMRect, isControl: boolean) => {
+            const currentLauncher = button.getBoundingClientRect();
+            const clip = fullyVisible(r, el);
+            if (!clip || intersects(r, currentLauncher)) return { pass: false, currentLauncher, clip };
+            if (!isControl) return { pass: true, currentLauncher, clip };
+            const points = [.1, .5, .9].flatMap((fx) => [.1, .5, .9].map((fy) => [r.left + r.width * fx, r.top + r.height * fy]));
+            const hit = points.some(([x, y]) => {
+              if (x >= currentLauncher.left && x <= currentLauncher.right && y >= currentLauncher.top && y <= currentLauncher.bottom) return false;
+              const found = document.elementFromPoint(x, y);
+              return Boolean(found && (found === el || el.contains(found)));
+            });
+            return { pass: hit, currentLauncher, clip };
+          };
+          const unreachableInteractive: string[] = [];
+          const unreachableText: string[] = [];
+          const diagnostics: string[] = [];
+          const reachableEvidence: string[] = [];
+          const scanStartedAt = performance.now();
+          const candidates = [
+            ...controlTargets.map((item) => ({ ...item, kind: 'control' as const })),
+            ...textTargets.map((item) => ({ ...item, kind: 'text' as const })),
+          ];
+          const seenTargets = new Set<string>();
+          const targetIds = new WeakMap<Element, number>();
+          let nextTargetId = 0;
+          for (const item of candidates) {
+            if (!targetIds.has(item.el)) targetIds.set(item.el, nextTargetId++);
+            const identity = `${item.kind}:${targetIds.get(item.el)}:${'fragment' in item ? item.fragment : -1}`;
+            if (seenTargets.has(identity)) continue;
+            seenTargets.add(identity);
+            if (!itemRect(item)) {
+              (item.kind === 'control' ? unreachableInteractive : unreachableText).push(item.label);
+              diagnostics.push(`${item.label} no initial fragment rect`);
+              continue;
+            }
+            const nested = clipsScrollers(item.el);
+            let found = false;
+            let last = '';
+          const measure = () => {
+              const rect = itemRect(item);
+              if (!rect) return { pass: false, desc: 'no-rect' };
+              const result = testPosition(item.el, rect, item.kind === 'control');
+              last = `outer=${scrollport?.scrollTop.toFixed(0) ?? 'none'} nested=${nested.map((n) => n.scrollTop.toFixed(0)).join(',')} rect=${[rect.left, rect.top, rect.right, rect.bottom].map((n) => n.toFixed(1)).join(',')} launcher=${[result.currentLauncher.left, result.currentLauncher.top, result.currentLauncher.right, result.currentLauncher.bottom].map((n) => n.toFixed(1)).join(',')} clip=${result.clip ? [result.clip.left, result.clip.top, result.clip.right, result.clip.bottom].map((n) => n.toFixed(1)).join(',') : 'clipped'}`;
+              return { pass: result.pass, desc: last };
+            };
+            const walkNested = (index: number): boolean => {
+              if (index >= nested.length) return measure().pass;
+              const rect = itemRect(item);
+              if (!rect) return false;
+              for (const top of scrollCandidates(nested[index], item.el, rect)) {
+                nested[index].scrollTop = top;
+                if (walkNested(index + 1)) return true;
+              }
+              return false;
+            };
+            const startingRect = itemRect(item)!;
+            for (const outerTop of scrollport ? scrollCandidates(scrollport, item.el, startingRect) : [0]) {
+              if (scrollport) scrollport.scrollTop = outerTop;
+              if (walkNested(0)) {
+                found = true;
+                reachableEvidence.push(`${item.kind} ${item.label} before rect=${item.rect.map((n) => n.toFixed(1)).join(',')} launcher=${item.launcher.map((n) => n.toFixed(1)).join(',')} at ${last}`);
+                break;
+              }
+            }
+            if (!found) {
+              (item.kind === 'control' ? unreachableInteractive : unreachableText).push(item.label);
+              diagnostics.push(`${item.label} ${last}`);
             }
           }
-          range.detach();
+          const candidateFixtureDetected = unreachableInteractive.some((label) => label.includes('candidate-discovery-fixture'));
+          // Keep the fixture's expected failure out of route-level acceptance results.
+          const fixtureIndex = unreachableInteractive.findIndex((label) => label.includes('candidate-discovery-fixture'));
+          if (fixtureIndex >= 0) unreachableInteractive.splice(fixtureIndex, 1);
+          for (let i = diagnostics.length - 1; i >= 0; i--)
+            if (diagnostics[i].includes('candidate-discovery-fixture')) diagnostics.splice(i, 1);
+          candidateFixture.remove();
+          return { unreachableInteractive, unreachableText, diagnostics, reachableEvidence, checkedTargets: seenTargets.size,
+            scanDurationMs: Math.round(performance.now() - scanStartedAt),
+            scrollportFound: scrollport !== null, checkedInteractive: controlTargets.length, checkedText: textTargets.length,
+            candidateFixtureDetected, candidateFixtureGeometry };
+        }, 'data-chat-stub-launcher');
+
+        expect(overlaps.candidateFixtureGeometry.clippedAndOverlapped, `${path}: scanner fixture must really be clipped and overlap the launcher`).toBe(true);
+        expect(overlaps.candidateFixtureGeometry.centerClear, `${path}: scanner fixture center must remain clear of launcher`).toBe(true);
+        expect(overlaps.candidateFixtureDetected, `${path}: partially clipped launcher-overlapped fixture must enter and fail the scanner's candidate check`).toBe(true);
+
+        if (['seminar-dated', 'article', 'kontakty', 'statyi'].includes(name)) {
+          console.log(`${name} ${page.viewportSize()?.width} reachability evidence`, {
+            checkedTargets: overlaps.checkedTargets,
+            controls: overlaps.checkedInteractive,
+            textFragments: overlaps.checkedText,
+            scanDurationMs: overlaps.scanDurationMs,
+            reachable: overlaps.reachableEvidence,
+          });
         }
-        return { interactive, text, scrollportFound: scrollport !== null };
-      }, 'data-chat-stub-launcher');
 
-      expect(
-        overlaps.scrollportFound,
-        `${path}: header, main, newsletter and footer share a real scrollport`,
-      ).toBe(true);
-
-      expect(
-        overlaps.interactive.slice(0, 5),
-        `${path}: кнопка вызова чата накрывает интерактивные элементы`,
-      ).toEqual([]);
-      expect(
-        overlaps.text.slice(0, 5),
-        `${path}: кнопка вызова чата накрывает рамку текста`,
-      ).toEqual([]);
+        expect(
+          overlaps.scrollportFound,
+          `${path}: header, main, newsletter and footer share a real scrollport`,
+        ).toBe(true);
+        expect(
+          overlaps.unreachableInteractive?.slice(0, 5) ?? ['reachability results missing'],
+          `${path}: обычная прокрутка не вывела control целиком из-под launcher: ${overlaps.diagnostics?.join('; ')}`,
+        ).toEqual([]);
+        expect(
+          overlaps.unreachableText?.slice(0, 5) ?? ['text reachability results missing'],
+          `${path}: обычная прокрутка не вывела текстовый фрагмент из-под launcher: ${overlaps.diagnostics?.join('; ')}`,
+        ).toEqual([]);
+      }
+      expect(observedViewportWidths, `${path}: strict scanner must cover the project viewport and the required narrow viewport`)
+        .toEqual(scanViewports.map(({ width }) => width));
     });
   }
 

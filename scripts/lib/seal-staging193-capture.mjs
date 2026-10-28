@@ -6,7 +6,7 @@ import { readPublishedSqlite } from './server-capture-sqlite.mjs';
 const [directoryArg, operationId, sourceSha, schemaRootArg, profile = 'staging194', runIdRaw, attemptRaw] = process.argv.slice(2);
 if (!directoryArg || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(operationId ?? '')
     || !/^[a-f0-9]{40}$/.test(sourceSha ?? '') || !schemaRootArg
-    || !['staging194', 'initial-prod'].includes(profile)
+    || !['staging194', 'initial-prod', 'production-static'].includes(profile)
     || (profile === 'initial-prod' && (operationId !== 'initial-prod-20261019-A-01'
         || !/^[1-9][0-9]*$/.test(runIdRaw ?? '') || !/^[1-9][0-9]*$/.test(attemptRaw ?? '')))) {
   throw new Error('usage: node seal-staging193-capture.mjs BUNDLE OPERATION_ID SOURCE_SHA SCHEMA_ROOT');
@@ -51,7 +51,7 @@ findMedia(projected.collections);
 for (const url of referenced) if (!knownUrls.has(url)) throw new Error(`media referenced by database is missing: ${url}`);
 const manifest = {
   version: 1,
-  ...(profile === 'initial-prod' ? { profile, host: '89.111.184.196', siteUrl: 'https://ikpk.su',
+  ...(profile !== 'staging194' ? { profile, host: '89.111.184.196', siteUrl: 'https://ikpk.su',
     sourceId: 'initial-prod-server-db', runId: Number(runIdRaw), attempt: Number(attemptRaw) }
     : { host: '194.226.99.10', siteUrl: 'https://194.226.99.10', sourceId: 'demo193-cms' }),
   operationId,

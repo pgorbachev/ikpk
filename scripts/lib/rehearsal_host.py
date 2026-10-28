@@ -35,6 +35,7 @@ except ImportError:  # Installed wrapper places both files in one private module
 
 CONFIG_PATH = Path("/etc/ikpk/rehearsal.json")
 INITIAL_PROD_CONFIG_PATH = Path("/etc/ikpk/rehearsal-initial-prod.json")
+PRODUCTION_STATIC_CONFIG_PATH = Path("/etc/ikpk/rehearsal-production-static.json")
 TARGET_HOST = "194.226.99.10"
 INITIAL_PROD_HOST = "89.111.184.196"
 INITIAL_PROD_PAYMENT_ENDPOINT = "https://ikpk.su/api"
@@ -131,7 +132,7 @@ def _root_config(path: Path, expected_profile: str = "staging194") -> dict[str, 
     profile = data.get("profile", "staging194")
     if profile != expected_profile:
         raise HostFailure("host config does not match the selected fixed profile")
-    if profile == "initial-prod":
+    if profile in ("initial-prod", "production-static"):
         endpoint = data.get("paymentEndpointProd")
         try:
             parsed_endpoint = urlsplit(endpoint)
@@ -140,7 +141,7 @@ def _root_config(path: Path, expected_profile: str = "staging194") -> dict[str, 
         except (TypeError, ValueError):
             valid_endpoint = False
         if not valid_endpoint or parsed_endpoint.geturl() != INITIAL_PROD_PAYMENT_ENDPOINT:
-            raise HostFailure("initial-prod payment endpoint must match the observed production origin")
+            raise HostFailure("production payment endpoint must match the observed production origin")
     _validate_target_binding(data)
     return data
 
@@ -159,6 +160,24 @@ def _validate_target_binding(data: dict[str, Any]) -> None:
             raise HostFailure("host config is not bound to the fixed initial-prod operation")
         if data.get("siteBaseUrl") != "https://ikpk.su" or data.get("cmsHealthUrl") != "http://127.0.0.1:1337/_health":
             raise HostFailure("initial-prod origin or local CMS health endpoint is not fixed")
+        expected_origin = "https://ikpk.su"
+    elif profile == "production-static":
+        if data.get("allowedSourceRef") != "refs/heads/main" or data.get("targetHost") != INITIAL_PROD_HOST:
+            raise HostFailure("host config is not bound to the production-static main source policy")
+        if (data.get("siteBaseUrl") != "https://ikpk.su" or data.get("cmsHealthUrl") != "http://127.0.0.1:1337/_health"
+                or data.get("currentCms") != "/opt/ikpk-cms/current"
+                or data.get("cmsDatabase") != "/var/lib/ikpk-cms/trial/data/data.db"
+                or data.get("currentStatic") != "/var/www/ikpk/current"
+                or data.get("staticReleaseRoot") != "/var/www/ikpk/releases"
+                or data.get("stateDir") != "/var/lib/ikpk-rehearsal/production-static"
+                or data.get("backupRoot") != "/var/lib/ikpk-rehearsal/production-static/backups"
+                or data.get("releaseRoot") != "/var/lib/ikpk-rehearsal/production-static-sources"
+                or data.get("staticMainReleasePolicy") != "ci-only-approved"
+                or data.get("mediaRoots") != [
+                    {"path": "/opt/ikpk-cms/shared/uploads", "prefix": "/uploads/"},
+                    {"path": "/var/www/ikpk/current/media", "prefix": "/media/"}]
+                or data.get("cmsUnit") != "ikpk-cms.service"):
+            raise HostFailure("production-static config is not bound to current production CMS data")
         expected_origin = "https://ikpk.su"
     else:
         raise HostFailure("unknown rehearsal profile")
@@ -968,7 +987,7 @@ def _create_capture_bundle(config: dict[str, Any], operation_id: str, source_sha
     node = config.get("nodeBinary", "/usr/bin/node")
     seal_args = [node, str(source_root / "scripts/lib/seal-staging193-capture.mjs"),
         str(capture), operation_id, source_sha, str(source_root / "cms/src"), config.get("profile", "staging194")]
-    if config.get("profile") == "initial-prod":
+    if config.get("profile") in ("initial-prod", "production-static"):
         provenance = json.loads((source_root / ".ikpk-rehearsal-ci.json").read_text(encoding="utf-8"))
         seal_args.append(str(provenance["runId"]))
         seal_args.append(str(provenance["attempt"]))
@@ -1130,18 +1149,26 @@ def _build_static(config: dict[str, Any], source_root: Path, capture: Path,
                   operation_id: Optional[str] = None,
                   reused_capture: Optional[dict[str, str]] = None,
                   reuse_snapshot: bool = False) -> tuple[Path, str]:
-    if chat_loader_src is not None and (config.get("profile", "staging194") != "staging194"
+    if chat_loader_src is not None and (config.get("profile", "staging194") not in ("staging194", "production-static")
                                         or chat_loader_src != STAGING194_CHAT_LOADER_SRC):
-        raise HostFailure("only staging194 static-main may use the owner-approved chat loader")
+        raise HostFailure("only staging194 static-main may use the owner-approved chat loader; production-static uses the production profile")
     web = source_root / "web"
     _validate_prepared_web_dependencies(source_root)
     initial_prod = config.get("profile") == "initial-prod"
+    production_static = config.get("profile") == "production-static"
     capture_environment = {"CONTENT_SNAPSHOT_DIR": str(web / ".snapshot")}
     if initial_prod:
         capture_environment.update({"INITIAL_PROD_PROFILE": "1", "DEPLOY_MODE": "prod", "PAYMENT_ROLE": "prod",
                                    "PAYMENT_ENDPOINT_PROD": INITIAL_PROD_PAYMENT_ENDPOINT,
                                    "CHAT_LOADER_SRC": INITIAL_PROD_CHAT_LOADER_SRC})
         capture_args = ["--server-capture", "--profile", "initial-prod", str(capture)]
+        build_script = "build"
+        dist_name = "dist"
+    elif production_static:
+        capture_environment.update({"INITIAL_PROD_PROFILE": "1", "DEPLOY_MODE": "prod", "PAYMENT_ROLE": "prod",
+                                   "PAYMENT_ENDPOINT_PROD": INITIAL_PROD_PAYMENT_ENDPOINT,
+                                   "CHAT_LOADER_SRC": INITIAL_PROD_CHAT_LOADER_SRC})
+        capture_args = ["--server-capture", "--profile", "production-static", str(capture)]
         build_script = "build"
         dist_name = "dist"
     else:
@@ -1156,7 +1183,7 @@ def _build_static(config: dict[str, Any], source_root: Path, capture: Path,
             str(web / "scripts/capture-content-snapshot.ts"), *capture_args], timeout=1800,
             environment=capture_environment, read_only_path=read_only_paths)
     build_environment = dict(capture_environment)
-    if chat_loader_src is not None:
+    if chat_loader_src is not None and config.get("profile", "staging194") == "staging194":
         build_environment["CHAT_LOADER_PROFILE"] = "staging194-static-main"
     _run_as_cms(config, web, ["/usr/bin/npm", "run", build_script], timeout=1800,
                 environment=build_environment, read_only_path=read_only_paths)
@@ -1166,11 +1193,13 @@ def _build_static(config: dict[str, Any], source_root: Path, capture: Path,
     _preserve_hashed_assets(config, dist)
     snapshot = json.loads((web / ".snapshot/snapshot.json").read_text(encoding="utf-8"))
     source_identity = json.loads((source_root / ".ikpk-rehearsal-ci.json").read_text(encoding="utf-8"))
-    if initial_prod:
+    if initial_prod or production_static:
         proof = snapshot.get("captureProof", {})
-        if (snapshot.get("sourcePolicy") != "initial-production" or snapshot.get("sourceAge") != "source-bound"
+        expected_policy = "initial-production" if initial_prod else "production-static"
+        expected_capture_id = INITIAL_PROD_OPERATION_ID if initial_prod else operation_id
+        if (snapshot.get("sourcePolicy") != expected_policy or snapshot.get("sourceAge") != "source-bound"
                 or snapshot.get("origin", {}).get("sourceId") != "initial-prod-server-db"
-                or proof.get("captureId") != INITIAL_PROD_OPERATION_ID
+                or proof.get("captureId") != expected_capture_id
                 or proof.get("sourceSha") != source_identity.get("sourceSha")
                 or proof.get("runId") != source_identity.get("runId")
                 or proof.get("attempt") != source_identity.get("attempt")
@@ -1508,14 +1537,14 @@ STATIC_MAIN_ADDITIONAL_WORKFLOWS = ("Lint and Typecheck", "Security", "Lighthous
 def _static_main_release_policy(config: dict[str, Any]) -> str:
     policy = config.get("staticMainReleasePolicy")
     if policy != "ci-only-approved":
-        raise HostFailure("staging194 static-main requires the owner's explicit ci-only-approved policy")
+        raise HostFailure("static-main requires the owner's explicit ci-only-approved policy")
     return policy
 
 
 def _validate_static_main_admission(config: dict[str, Any], source_sha: str,
                                     provenance: dict[str, Any]) -> None:
-    if config.get("profile", "staging194") != "staging194":
-        raise HostFailure("static-main is bound to the staging194 host profile")
+    if config.get("profile", "staging194") not in ("staging194", "production-static"):
+        raise HostFailure("static-main is bound to the staging194 or production-static host profile")
     policy = _static_main_release_policy(config)
     if (not SHA_RE.fullmatch(source_sha) or provenance.get("repository") != "pgorbachev/ikpk"
             or provenance.get("ref") != "refs/heads/main" or provenance.get("sourceSha") != source_sha
@@ -1595,6 +1624,8 @@ def _static_main_protected_paths(config: dict[str, Any]) -> list[Path]:
     service = run(["/usr/bin/systemctl", "show", "--property=EnvironmentFiles", "--property=FragmentPath",
                    "--property=DropInPaths", config["cmsUnit"]]).stdout
     paths = {current_cms, database.parent, uploads}
+    if config.get("currentStatic"):
+        paths.add(_current_target(Path(config["currentStatic"])))
     paths.update(Path(item.removeprefix("-")).resolve(strict=True)
                  for item in re.findall(r"(?:^|[=\s])(-?/[^\s]+) \(ignore_errors=(?:yes|no)\)", service))
     values = {}
@@ -1891,6 +1922,10 @@ def _static_main_prepare(config: dict[str, Any], state: RehearsalState, operatio
     _validate_static_main_admission(config, source_sha, provenance)
     if state._read_marker() is not None:
         raise HostFailure("static-main refuses to run while a CMS maintenance marker exists")
+    if config.get("profile") == "production-static":
+        production_marker = Path("/var/lib/ikpk-rehearsal/initial-prod/maintenance.json")
+        if production_marker.exists() or Path(config["maintenanceFlag"]).exists():
+            raise HostFailure("production-static refuses to run while the production CMS maintenance marker exists")
     rows = _static_main_rows(state, operation_id)
     if rows:
         if _static_main_prepared(rows):
@@ -1993,8 +2028,9 @@ def _static_main_prepare(config: dict[str, Any], state: RehearsalState, operatio
                 or snapshot_proof.get("referenceDate") != reusable["referenceDate"]
                 or snapshot_proof.get("bundleDigest") != reusable["reusedCapture"]["bundleDigest"]):
             raise HostFailure("reused snapshot verifier disagrees with durable capture evidence")
+    chat_loader = INITIAL_PROD_CHAT_LOADER_SRC if config.get("profile") == "production-static" else STAGING194_CHAT_LOADER_SRC
     built, digest = _build_static(config, source_root, capture, read_only_paths=protected_paths,
-                                  chat_loader_src=STAGING194_CHAT_LOADER_SRC, operation_id=operation_id,
+                                  chat_loader_src=chat_loader, operation_id=operation_id,
                                   reused_capture=reusable["reusedCapture"] if reusable else None,
                                   reuse_snapshot=reusable is not None)
     if (reusable is not None
@@ -2499,8 +2535,12 @@ def dispatch(args: argparse.Namespace) -> dict[str, Any]:
         raise HostFailure("host command must run through the installed root-owned entrypoint")
     RehearsalState._validate_identity(args.operation_id, getattr(args, "source_sha", None))
     profile = getattr(args, "profile", "staging194")
-    config_path = INITIAL_PROD_CONFIG_PATH if profile == "initial-prod" else CONFIG_PATH
+    config_path = (INITIAL_PROD_CONFIG_PATH if profile == "initial-prod" else
+                   PRODUCTION_STATIC_CONFIG_PATH if profile == "production-static" else CONFIG_PATH)
     config = _root_config(config_path, expected_profile=profile)
+    if profile == "production-static" and args.action not in (
+            "static-main", "static-main-recover", "export-static-main", "status"):
+        raise HostFailure("production-static permits only static-main publication and recovery")
     if profile == "initial-prod" and args.action == "recover":
         raise HostFailure("initial-prod recovery is disabled; keep the production fence closed for owner direction")
     if profile == "initial-prod" and args.action not in ("validate-config",) and args.operation_id != INITIAL_PROD_OPERATION_ID:
@@ -2568,7 +2608,7 @@ def dispatch(args: argparse.Namespace) -> dict[str, Any]:
 
 def main(argv: Optional[list[str]] = None) -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--profile", choices=("staging194", "initial-prod"), default="staging194")
+    parser.add_argument("--profile", choices=("staging194", "initial-prod", "production-static"), default="staging194")
     sub = parser.add_subparsers(dest="action", required=True)
     sub.add_parser("validate-config")
     for name in ("cms-update", "static-publish", "static-main"):
@@ -2602,7 +2642,8 @@ def main(argv: Optional[list[str]] = None) -> int:
         if args.action == "validate-config":
             if os.geteuid() != 0:
                 raise HostFailure("host config validation must run through the installed root-owned entrypoint")
-            config_path = INITIAL_PROD_CONFIG_PATH if args.profile == "initial-prod" else CONFIG_PATH
+            config_path = (INITIAL_PROD_CONFIG_PATH if args.profile == "initial-prod" else
+                           PRODUCTION_STATIC_CONFIG_PATH if args.profile == "production-static" else CONFIG_PATH)
             config = _root_config(config_path, expected_profile=args.profile)
             for key in ("stateDir", "releaseRoot", "staticReleaseRoot", "backupRoot"):
                 path = Path(config[key])
@@ -2619,7 +2660,7 @@ def main(argv: Optional[list[str]] = None) -> int:
                     raise HostFailure("configured external media directory is unavailable")
             _current_target(Path(config["currentCms"]))
             _current_target(Path(config["currentStatic"]))
-            if args.profile == "staging194":
+            if args.profile in ("staging194", "production-static"):
                 _database_process_proof(_service_pid(config["cmsUnit"]), database)
             print(json.dumps({"configuration": str(config_path), "profile": args.profile, "valid": True}, sort_keys=True))
             return 0

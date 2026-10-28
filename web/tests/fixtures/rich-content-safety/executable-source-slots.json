@@ -44,8 +44,8 @@
     "file": "components/chat/ChatFacade.astro",
     "nodeKind": "element",
     "locator": "components/chat/ChatFacade.astro:L46:C1:script",
-    "fingerprint": "25510d5896470bdd0e5cd0debe811156fd0cdd0cdb870b3623ca074e40330b58",
-    "identity": "script|is:inline=empty:|body:d079f393eeed48d3"
+    "fingerprint": "86e952f82237f4effc0e41a17d3b4848f3d80d82e179408bb3ef12bb6740e619",
+    "identity": "script|is:inline=empty:|body:c8708bc37ab022ad"
   },
   {
     "slotId": "src:components/contacts/ContactShell.astro:L121:C9:svg",
@@ -136,12 +136,12 @@
     "identity": "svg|fill=quoted:none|viewBox=quoted:0 0 24 24"
   },
   {
-    "slotId": "src:components/course-groups/CourseGroupSeminarItem.astro:L52:C1:style",
+    "slotId": "src:components/course-groups/CourseGroupSeminarItem.astro:L54:C1:style",
     "file": "components/course-groups/CourseGroupSeminarItem.astro",
     "nodeKind": "element",
-    "locator": "components/course-groups/CourseGroupSeminarItem.astro:L52:C1:style",
-    "fingerprint": "7fabe04a6e888a126eed983033d5ec6b9d3d49de5b2d49d181d37f12ab93aa8a",
-    "identity": "style|body:a46d6650aafc400b"
+    "locator": "components/course-groups/CourseGroupSeminarItem.astro:L54:C1:style",
+    "fingerprint": "1320eadde7c253ae3bd16707b5b79cc56dbd27e04a89a7ae2c18f837eee3193c",
+    "identity": "style|body:136de030d3f851db"
   },
   {
     "slotId": "src:components/Footer.astro:L109:C1:style",
@@ -536,14 +536,6 @@
     "identity": "style|body:c2e6851b278428bf"
   },
   {
-    "slotId": "src:components/MaintenanceNotice.astro:L8:C1:style",
-    "file": "components/MaintenanceNotice.astro",
-    "nodeKind": "element",
-    "locator": "components/MaintenanceNotice.astro:L8:C1:style",
-    "fingerprint": "9211caed2e50e7afbf8709e379c8dbc0bc1f1e0a5e6fff3e1f8301a971c8f9c4",
-    "identity": "style|body:0830de20854fd197"
-  },
-  {
     "slotId": "src:components/MotionScript.astro:L11:C1:script",
     "file": "components/MotionScript.astro",
     "nodeKind": "element",
@@ -580,8 +572,8 @@
     "file": "components/schedule/ScheduleControlsScript.astro",
     "nodeKind": "element",
     "locator": "components/schedule/ScheduleControlsScript.astro:L1:C1:script",
-    "fingerprint": "41daf9fce365becad1aa0f1ee0e0cf432333cbd33b9a92141ce2a465b0a270c3",
-    "identity": "script|data-schedule-controls=empty:|is:inline=empty:|body:329e8733a2d4f0ee"
+    "fingerprint": "9311c2ca10e4da2406411ff733d00a5dea8f0e89eab8bdeb6b33ed746f006082",
+    "identity": "script|data-schedule-controls=empty:|is:inline=empty:|body:80aa030a39f97369"
   },
   {
     "slotId": "src:components/schedule/ScheduleEventCard.astro:L123:C1:style",
@@ -832,11 +824,11 @@
     "identity": "link|href=quoted:../styles/global.css|rel=quoted:stylesheet"
   },
   {
-    "slotId": "src:layouts/BaseLayout.astro:L102:C1:style",
+    "slotId": "src:layouts/BaseLayout.astro:L100:C1:style",
     "file": "layouts/BaseLayout.astro",
     "nodeKind": "element",
-    "locator": "layouts/BaseLayout.astro:L102:C1:style",
-    "fingerprint": "9bcf82684a1843d9082c9dd53f2a29ad5cf486c411cb87035e2c3c6caf4dfb4e",
+    "locator": "layouts/BaseLayout.astro:L100:C1:style",
+    "fingerprint": "a5fa1be74f421d242acde4c265b3bd9c652f104683050553634a666ca821367f",
     "identity": "style|body:c9201fc888e590d9"
   },
   {
@@ -848,11 +840,11 @@
     "identity": "link|href=quoted:../styles/global.css|rel=quoted:stylesheet"
   },
   {
-    "slotId": "src:layouts/TopNavLayout.astro:L81:C1:style",
+    "slotId": "src:layouts/TopNavLayout.astro:L79:C1:style",
     "file": "layouts/TopNavLayout.astro",
     "nodeKind": "element",
-    "locator": "layouts/TopNavLayout.astro:L81:C1:style",
-    "fingerprint": "25f2eae91f915776136bc2c339aa5801617decd95de0698b41f61d1da2cffda0",
+    "locator": "layouts/TopNavLayout.astro:L79:C1:style",
+    "fingerprint": "00f975057049f77749a05be594c98d35abce8b2a040ba4ab3fb9524f96fbf2b3",
     "identity": "style|body:309f315b55438bb4"
   },
   {

@@ -32,12 +32,13 @@ function verifyBundle(directory, schemaRoot, expectedProfile) {
   const manifestBytes = sealedFile(root, 'manifest.json', undefined).bytes;
   const manifest = JSON.parse(manifestBytes.toString('utf8'));
   const staging = expectedProfile === 'staging194';
+  const initial = expectedProfile === 'initial-prod';
   if (manifest.version !== 1
       || (staging && (manifest.host !== '194.226.99.10' || manifest.siteUrl !== 'https://194.226.99.10'
           || manifest.sourceId !== 'demo193-cms'))
-      || (!staging && (manifest.profile !== 'initial-prod' || manifest.host !== '89.111.184.196'
+      || (!staging && (manifest.profile !== expectedProfile || manifest.host !== '89.111.184.196'
           || manifest.siteUrl !== 'https://ikpk.su' || manifest.sourceId !== 'initial-prod-server-db'
-          || manifest.operationId !== 'initial-prod-20261019-A-01'
+          || (initial && manifest.operationId !== 'initial-prod-20261019-A-01')
           || !Number.isSafeInteger(manifest.runId) || manifest.runId <= 0
           || !Number.isSafeInteger(manifest.attempt) || manifest.attempt <= 0))
       || !/^[a-f0-9]{40}$/.test(manifest.sourceSha) || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(manifest.operationId)
@@ -102,4 +103,8 @@ export function verifyStaging193Bundle(directory, schemaRoot) {
 
 export function verifyInitialProdBundle(directory, schemaRoot) {
   return verifyBundle(directory, schemaRoot, 'initial-prod');
+}
+
+export function verifyProductionStaticBundle(directory, schemaRoot) {
+  return verifyBundle(directory, schemaRoot, 'production-static');
 }

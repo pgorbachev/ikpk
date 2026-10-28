@@ -12,7 +12,6 @@ interface Props {
 }
 
 import HeadMeta from '../components/HeadMeta.astro';
-import MaintenanceNotice from '../components/MaintenanceNotice.astro';
 import MotionScript from '../components/MotionScript.astro';
 import TopNav from '../components/topnav/TopNav.astro';
 import Footer from '../components/Footer.astro';
@@ -60,7 +59,6 @@ const chatPage = chatLoaderConfig().state === 'address' && !isDemoOutput;
         {import.meta.env.DEMO_PROFILE === 'demo193' ? 'Стейджинг-стенд' : 'Демо-стенд'}: формы заявки отключены, обращения в CRM не создаются
       </div>
     )}
-    <MaintenanceNotice />
     <TopNav />
     {/* noindex-страницы (превью вариантов) не индексируются и внутренним
         поиском Pagefind — иначе черновик всплыл бы в результатах на проде */}

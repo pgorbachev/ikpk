@@ -51,6 +51,10 @@ export interface InitialProductionCaptureProof {
   bundleDigest: string;
 }
 
+export interface ProductionStaticCaptureProof extends Omit<InitialProductionCaptureProof, 'captureId'> {
+  captureId: string;
+}
+
 interface SnapshotFields {
   content: SnapshotContent;
   referenceDate: string;
@@ -87,7 +91,15 @@ export interface InitialProductionSnapshot extends SnapshotFields {
   provenance?: never;
 }
 
-export type Snapshot = JournalSnapshot | DemoPublicationSnapshot | InitialProductionSnapshot;
+export interface ProductionStaticSnapshot extends SnapshotFields {
+  sourcePolicy: 'production-static';
+  sourceAge: 'source-bound';
+  captureProof: ProductionStaticCaptureProof;
+  origin: SnapshotOrigin & { kind: 'server-db'; sourceId: 'initial-prod-server-db'; capturedAt: string };
+  provenance?: never;
+}
+
+export type Snapshot = JournalSnapshot | DemoPublicationSnapshot | InitialProductionSnapshot | ProductionStaticSnapshot;
 
 /** Часовой пояс опорной даты живого снимка — задан явно, не наследуется от машины. */
 export const REFERENCE_TIMEZONE = 'Europe/Moscow';

@@ -11,17 +11,11 @@
  */
 
 .chat-facade {
-  /* This body-level sibling is the reserved lower row in the chat page frame. */
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  justify-content: flex-end;
-  gap: 10px;
-  width: 100%;
-  min-height: calc(120px + env(safe-area-inset-bottom, 0px));
-  box-sizing: border-box;
-  padding: 10px 1rem env(safe-area-inset-bottom, 0px);
+  /* The facade must not take a row from the page's real scrollport. */
+  position: fixed;
+  inset: 0;
+  z-index: 10160;
+  pointer-events: none;
 }
 
 .chat-trigger {
@@ -41,6 +35,7 @@
   color: #fff;
   box-shadow: none;
   cursor: pointer;
+  pointer-events: auto;
   font: inherit;
   font-size: 0.875rem;
 }
@@ -57,6 +52,14 @@
   box-shadow: var(--shadow-m);
 }
 
+.chat-trigger > span {
+  display: none;
+}
+
+.chat-trigger:focus-visible > span {
+  display: inline;
+}
+
 .chat-trigger:focus-visible:hover {
   background: var(--color-accent-700);
 }
@@ -70,7 +73,6 @@
 }
 
 body.layout-topnav--chat {
-  --chat-lower-zone-height: calc(120px + env(safe-area-inset-bottom, 0px));
   display: grid;
   grid-template-rows: minmax(0, 1fr) auto;
   height: calc(var(--chat-viewport-offset, 0px) + var(--chat-viewport-height, 100dvh));
@@ -98,13 +100,17 @@ body.layout-topnav--chat {
 body.layout-topnav--chat details.topnav-mobile .topnav-drawer {
   top: var(--chat-drawer-top, calc(100% + 8px));
   bottom: var(--chat-drawer-bottom, auto);
-  max-height: var(--chat-drawer-max-height, max(0px, calc(var(--chat-viewport-height, 100vh) - var(--chat-lower-zone-height) - var(--chat-drawer-top-space, calc(var(--header-height, 60px) + 8px)))));
+  max-height: var(--chat-drawer-max-height, max(0px, calc(var(--chat-viewport-height, 100vh) - var(--chat-drawer-top-space, calc(var(--header-height, 60px) + 8px)))));
+}
+
+body.layout-topnav--chat:has(#header-search:not([hidden])) header.topnav {
+  z-index: 10170;
 }
 
 body.layout-topnav--chat header.topnav .header-search {
   top: var(--chat-search-top, 100%);
   bottom: var(--chat-search-bottom, auto);
-  max-height: var(--chat-search-max-height, max(0px, calc(var(--chat-viewport-height, 100vh) - var(--chat-lower-zone-height) - var(--chat-search-top-space, var(--header-height, 60px)))));
+  max-height: var(--chat-search-max-height, max(0px, calc(var(--chat-viewport-height, 100vh) - var(--chat-search-top-space, var(--header-height, 60px)))));
   overflow-y: auto;
 }
 
@@ -112,6 +118,10 @@ body.layout-topnav--chat .topnav-menu .dropdown {
   box-sizing: border-box;
   max-height: var(--chat-nav-dropdown-max-height, 80vh);
   overflow-y: auto;
+}
+
+body.layout-topnav--chat footer.footer {
+  padding-bottom: calc(66px + 50px + 32px + env(safe-area-inset-bottom, 0px));
 }
 
 body.layout-topnav--chat .header-search-pagefind .pagefind-ui__drawer {

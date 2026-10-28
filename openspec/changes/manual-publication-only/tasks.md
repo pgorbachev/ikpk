@@ -14,11 +14,12 @@
 
 - [ ] Save a new record and media after release one, run a fresh admitted operation, and prove the record is served and migrations are not repeated.
 
-## 4. Staging194 static-only main exception
+## 4. Static-only main publication
 
 - [x] Admit exact current canonical `main` only after successful `Tests`, `Lint and Typecheck`, `Security`, and `Lighthouse CI` push runs with required jobs successful; build from a read-only current CMS/content/media capture and atomically switch only the static tree.
 - [x] Preserve CMS code, service, environment, DB/WAL, uploads, roles, and users; journal the prior static tree and require explicit compare-and-swap rollback with operator and reason. Paired `dev` and ordinary production policies remain unchanged.
 - [ ] Execute the approved static-only publication on staging194 for an exact admitted current `main` SHA; verify the externally served release/routes and unchanged CMS fingerprint, then exercise the installed explicit rollback and verify the exact prior static tree is served again.
+- [ ] Add reusable production-static config/state and fresh read-only production capture with an explicit static-only command allowlist; exercise its rollback only under a separately authorized production release.
 
 Owner-accepted staging194 A01 evidence: source `b06e9ea354c7fdbd58e347258a076b4a0860786b`; canonical Tests run 39226509667, attempt 1 (all five required jobs green); off-host DB/media backup SHA-256 `28bbc71b5a8762a6689c412caf65410f18a0406404d82e29b01f9d5294331db9`; 32/32 browser checks; 3,783 media responses returned HTTP 200; operation committed. This records the completed staging first-release tasks only.
 

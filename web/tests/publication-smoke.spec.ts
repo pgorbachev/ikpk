@@ -6,13 +6,14 @@ import { candidate } from './helpers/publication-candidate';
 import { attr, findAll, textOf } from './helpers/dom';
 import { walkHtml } from './helpers/dist-pages';
 import { installThirdPartyGuard } from './helpers/third-party-guard';
+import { usesPublicationCandidateCapture } from './helpers/publication-smoke-context';
 
 function context() {
   const snapshotDir = process.env.CONTENT_SNAPSHOT_DIR;
   const treeDir = process.env.PUBLICATION_TREE_DIR;
   const retained = process.env.PUBLICATION_RETAINED_TREE === '1';
   if ((!snapshotDir && !retained) || !treeDir || !isAbsolute(treeDir) || !process.env.PUBLICATION_BASE_URL) throw new Error('owned publication context required');
-  if (process.env.PUBLICATION_STAGING_CAPTURE === '1' || process.env.PUBLICATION_INITIAL_PRODUCTION_CAPTURE === '1') {
+  if (usesPublicationCandidateCapture()) {
     const owned = candidate();
     return { snapshot: owned.snapshot, treeDir: owned.treeDir };
   }
