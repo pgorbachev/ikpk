@@ -90,7 +90,7 @@ jobs:
       - name: Audit runtime dependencies
         run: |
           env -u NODE_ENV -u NPM_CONFIG_PRODUCTION -u NPM_CONFIG_OMIT npm audit --omit=dev --audit-level=high --json > audit-report.json || audit_status=$?
-          node ../scripts/security-audit-policy.mjs audit-report.json "${audit_status:-0}"
+          node ../scripts/security-audit-policy.mjs audit-report.json "${audit_status:-0}" cms package-lock.json ../.github/security-exceptions.json
 
       - name: Upload runtime audit report
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
@@ -141,7 +141,7 @@ jobs:
       - name: Audit runtime and development dependencies
         run: |
           env -u NODE_ENV -u NPM_CONFIG_PRODUCTION -u NPM_CONFIG_OMIT npm audit --include=dev --audit-level=high --json > audit-report.json || audit_status=$?
-          node ../scripts/security-audit-policy.mjs audit-report.json "${audit_status:-0}"
+          node ../scripts/security-audit-policy.mjs audit-report.json "${audit_status:-0}" "${{ matrix.package }}" package-lock.json ../.github/security-exceptions.json
       - name: Upload full dependency audit report
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         if: always()
@@ -196,7 +196,7 @@ jobs:
         working-directory: web
         run: env -u NODE_ENV -u NPM_CONFIG_PRODUCTION -u NPM_CONFIG_OMIT npm ci --include=dev --audit=false
       - name: Test audit validation and workflow contract
-        run: node --test scripts/security-policy.test.mjs
+        run: node --test scripts/security-policy.test.mjs scripts/security-exceptions.test.mjs
 
   security-policy:
     name: Security policy

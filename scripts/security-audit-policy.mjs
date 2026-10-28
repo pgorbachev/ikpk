@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import { matchSecurityExceptions } from './security-exception-policy.mjs';
 
 const severityLevels = ['critical', 'high', 'moderate', 'low', 'info'];
 
@@ -66,7 +67,12 @@ export function parseAuditReport(reportText) {
   return vulnerabilities;
 }
 
-export function auditResult(reportText, npmStatus) {
+export function auditResult(reportText, npmStatus, {
+  component = 'unknown',
+  lockfileText,
+  exceptionsPolicyText,
+  now = new Date(),
+} = {}) {
   if (npmStatus !== 0 && npmStatus !== 1) {
     throw new Error('npm audit exit status must be 0 or 1');
   }
@@ -81,16 +87,50 @@ export function auditResult(reportText, npmStatus) {
   if (npmStatus !== 0 && blockingFindings === 0) {
     throw new Error(`npm audit failed with exit ${npmStatus} and no high or critical findings`);
   }
-  return { counts, passed: npmStatus === 0 };
+  if (exceptionsPolicyText === undefined) {
+    return { counts, passed: npmStatus === 0, toleratedBlockingFindings: 0, blockingFindings };
+  }
+  if (typeof lockfileText !== 'string') throw new Error('security policy matching requires a package-lock file');
+  let lockfile;
+  let policy;
+  try {
+    lockfile = JSON.parse(lockfileText);
+    policy = JSON.parse(exceptionsPolicyText);
+  } catch (error) {
+    throw new Error('security policy JSON is invalid: ' + error.message, { cause: error });
+  }
+  if (!lockfile || lockfile.lockfileVersion !== 3 || !lockfile.packages || typeof lockfile.packages !== 'object') {
+    throw new Error('security policy requires a package-lock v3 file');
+  }
+  const report = JSON.parse(reportText); // parseAuditReport above validated this exact raw document.
+  const tolerated = matchSecurityExceptions(report, component, lockfile, policy, now);
+  const remainingBlocking = blockingFindings - tolerated.size;
+  return {
+    counts,
+    passed: remainingBlocking === 0,
+    toleratedBlockingFindings: tolerated.size,
+    blockingFindings: remainingBlocking,
+  };
 }
 
 if (process.argv[1] && new URL(import.meta.url).pathname === process.argv[1]) {
   try {
     const reportText = readFileSync(process.argv[2], 'utf8');
     const npmStatus = Number(process.argv[3]);
-    const { counts, passed } = auditResult(reportText, npmStatus);
+    const component = process.argv[4];
+    const lockfilePath = process.argv[5];
+    const exceptionsPath = process.argv[6];
+    if (!component || !lockfilePath || !exceptionsPath) {
+      throw new Error('usage: security-audit-policy.mjs REPORT NPM_STATUS COMPONENT LOCKFILE EXCEPTIONS_JSON');
+    }
+    const { counts, passed, toleratedBlockingFindings, blockingFindings } = auditResult(reportText, npmStatus, {
+      component,
+      lockfileText: readFileSync(lockfilePath, 'utf8'),
+      exceptionsPolicyText: readFileSync(exceptionsPath, 'utf8'),
+    });
     const status = passed ? 'passed' : 'blocked by high/critical findings';
     console.log(`npm audit ${status}: high=${counts.high} critical=${counts.critical} total=${counts.total}`);
+    console.log('security exception matching: tolerated=' + toleratedBlockingFindings + ' blocking=' + blockingFindings);
     if (!passed) process.exitCode = 1;
   } catch (error) {
     console.error(`Security audit measurement failed: ${error.message}`);
