@@ -109,7 +109,9 @@ test('declares complete package and CodeQL matrices with unconditional security 
   const cmsAudit = jobs['cms-dependency-audit'].steps.find((step) => step.name === 'Audit runtime dependencies');
   assert.match(cmsAudit.run, /security-audit-policy\.mjs audit-report\.json \"\$\{audit_status:-0\}\" cms package-lock\.json \.\.\/\.github\/security-exceptions\.json/);
   const activeExceptions = JSON.parse(readFileSync(new URL('../.github/security-exceptions.json', import.meta.url), 'utf8'));
-  assert.deepEqual(activeExceptions, { schema_version: 1, exceptions: [] });
+  assert.equal(activeExceptions.schema_version, 1);
+  assert.ok(Array.isArray(activeExceptions.exceptions));
+  assert.match(cmsAudit.env.SECURITY_EXCEPTION_POLICY_SHA256, /vars\.SECURITY_EXCEPTION_POLICY_SHA256/);
 
   const fullAuditSteps = jobs['full-dependency-audit'].steps;
   const install = fullAuditSteps.find((step) => step.name === 'Install complete dependency tree');
@@ -119,6 +121,7 @@ test('declares complete package and CodeQL matrices with unconditional security 
   assert.ok(audit.run.split('\n').some((line) => /^\s*env -u NODE_ENV -u NPM_CONFIG_PRODUCTION -u NPM_CONFIG_OMIT npm audit --include=dev --audit-level=high --json > audit-report\.json/.test(line)));
   assert.ok(audit.run.split('\n').some((line) => /^\s*node \.\.\/scripts\/security-audit-policy\.mjs audit-report\.json/.test(line)));
   assert.ok(audit.run.split('\n').some((line) => line.includes('\"${{ matrix.package }}\" package-lock.json ../.github/security-exceptions.json')));
+  assert.match(audit.env.SECURITY_EXCEPTION_POLICY_SHA256, /vars\.SECURITY_EXCEPTION_POLICY_SHA256/);
   assert.match(install.run, /-u NODE_ENV -u NPM_CONFIG_PRODUCTION -u NPM_CONFIG_OMIT/);
   assert.match(audit.run, /-u NODE_ENV -u NPM_CONFIG_PRODUCTION -u NPM_CONFIG_OMIT/);
   assert.equal(upload.if, 'always()');

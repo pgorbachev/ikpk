@@ -41,6 +41,9 @@ function validatePolicy(policy, lockfile, component, now) {
   if (!isRecord(policy) || policy.schema_version !== 1 || !Array.isArray(policy.exceptions)) {
     throw new Error('security exceptions must have schema_version 1 and an exceptions array');
   }
+  if (Object.keys(policy).some((key) => key !== 'schema_version' && key !== 'exceptions')) {
+    throw new Error('security exceptions have an unknown top-level field');
+  }
   const records = new Map();
   for (const exception of policy.exceptions) {
     if (!isRecord(exception)) throw new Error('security exception must be an object');
@@ -136,6 +139,39 @@ function validatePolicy(policy, lockfile, component, now) {
   return records;
 }
 
+function validateAuditGraph(report) {
+  const vulnerabilities = report.vulnerabilities;
+  for (const [name, entry] of Object.entries(vulnerabilities)) {
+    if (!isRecord(entry) || !severities.includes(entry.severity) || !Array.isArray(entry.via)) {
+      throw new Error('npm audit report has malformed via graph entry ' + name);
+    }
+    for (const cause of entry.via) {
+      let causeSeverity;
+      if (typeof cause === 'string') {
+        if (!Object.hasOwn(vulnerabilities, cause)) {
+          throw new Error('npm audit via graph has unresolved package reference ' + cause);
+        }
+        const child = vulnerabilities[cause];
+        if (!isRecord(child) || !severities.includes(child.severity) || !Array.isArray(child.via)) {
+          throw new Error('npm audit via graph references malformed package ' + cause);
+        }
+        causeSeverity = child.severity;
+      } else {
+        if (!isRecord(cause) || !severities.includes(cause.severity)) {
+          throw new Error('npm audit via graph has malformed advisory cause in ' + name);
+        }
+        causeSeverity = cause.severity;
+      }
+      // npm may summarize low/moderate differences by package. Never allow a
+      // high/critical cause to disappear under a nonblocking or weaker summary.
+      if (blocking.has(causeSeverity)
+        && (!blocking.has(entry.severity) || severities.indexOf(entry.severity) > severities.indexOf(causeSeverity))) {
+        throw new Error('npm audit via graph understates blocking severity at ' + name);
+      }
+    }
+  }
+}
+
 function approvedDirectAdvisory(component, packageName, ghsa, entry, directSeverity, records) {
   const exception = records.get(component + '\0' + packageName + '\0' + ghsa);
   return Boolean(exception && exception.decision === 'APPROVED'
@@ -149,14 +185,16 @@ export function toleratedBlockingEntries(report, component, records) {
   const memo = new Map();
   function isTolerated(name, visiting = new Set()) {
     if (memo.has(name)) return memo.get(name);
+    if (!Object.hasOwn(report.vulnerabilities, name)) return false;
     const entry = report.vulnerabilities[name];
-    if (!entry || !blocking.has(entry.severity) || !Array.isArray(entry.via) || visiting.has(name)) return false;
+    if (!entry || entry.severity !== 'high' || !Array.isArray(entry.via) || visiting.has(name)) return false;
     const next = new Set(visiting).add(name);
     let sawBlockingCause = false;
     for (const cause of entry.via) {
       if (typeof cause === 'string') {
+        if (!Object.hasOwn(report.vulnerabilities, cause)) return false;
         const child = report.vulnerabilities[cause];
-        if (!child) return false;
+        if (!child || !severities.includes(child.severity)) return false;
         if (blocking.has(child.severity)) {
           sawBlockingCause = true;
           if (!isTolerated(cause, next)) return false;
@@ -185,6 +223,7 @@ export function toleratedBlockingEntries(report, component, records) {
 
 export function matchSecurityExceptions(report, component, lockfile, policy, now = new Date()) {
   const records = validatePolicy(policy, lockfile, component, now);
+  validateAuditGraph(report);
   const tolerated = toleratedBlockingEntries(report, component, records);
   for (const exception of records.values()) {
     if (exception.component !== component) continue;

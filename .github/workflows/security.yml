@@ -88,6 +88,8 @@ jobs:
         run: env -u NODE_ENV -u NPM_CONFIG_PRODUCTION -u NPM_CONFIG_OMIT npm ci --include=dev --audit=false
 
       - name: Audit runtime dependencies
+        env:
+          SECURITY_EXCEPTION_POLICY_SHA256: ${{ vars.SECURITY_EXCEPTION_POLICY_SHA256 }}
         run: |
           env -u NODE_ENV -u NPM_CONFIG_PRODUCTION -u NPM_CONFIG_OMIT npm audit --omit=dev --audit-level=high --json > audit-report.json || audit_status=$?
           node ../scripts/security-audit-policy.mjs audit-report.json "${audit_status:-0}" cms package-lock.json ../.github/security-exceptions.json
@@ -139,6 +141,8 @@ jobs:
       - name: Install complete dependency tree
         run: env -u NODE_ENV -u NPM_CONFIG_PRODUCTION -u NPM_CONFIG_OMIT npm ci --include=dev --audit=false
       - name: Audit runtime and development dependencies
+        env:
+          SECURITY_EXCEPTION_POLICY_SHA256: ${{ vars.SECURITY_EXCEPTION_POLICY_SHA256 }}
         run: |
           env -u NODE_ENV -u NPM_CONFIG_PRODUCTION -u NPM_CONFIG_OMIT npm audit --include=dev --audit-level=high --json > audit-report.json || audit_status=$?
           node ../scripts/security-audit-policy.mjs audit-report.json "${audit_status:-0}" "${{ matrix.package }}" package-lock.json ../.github/security-exceptions.json

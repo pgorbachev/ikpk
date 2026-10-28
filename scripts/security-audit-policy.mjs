@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { matchSecurityExceptions } from './security-exception-policy.mjs';
 
@@ -71,6 +72,7 @@ export function auditResult(reportText, npmStatus, {
   component = 'unknown',
   lockfileText,
   exceptionsPolicyText,
+  trustedPolicySha256 = process.env.SECURITY_EXCEPTION_POLICY_SHA256,
   now = new Date(),
 } = {}) {
   if (npmStatus !== 0 && npmStatus !== 1) {
@@ -101,6 +103,13 @@ export function auditResult(reportText, npmStatus, {
   }
   if (!lockfile || lockfile.lockfileVersion !== 3 || !lockfile.packages || typeof lockfile.packages !== 'object') {
     throw new Error('security policy requires a package-lock v3 file');
+  }
+  if (Array.isArray(policy?.exceptions) && policy.exceptions.some((exception) => exception?.decision === 'APPROVED')) {
+    const expectedDigest = createHash('sha256').update(exceptionsPolicyText, 'utf8').digest('hex');
+    if (typeof trustedPolicySha256 !== 'string' || !/^[0-9a-f]{64}$/.test(trustedPolicySha256)
+      || trustedPolicySha256 !== expectedDigest) {
+      throw new Error('approved security exceptions do not match SECURITY_EXCEPTION_POLICY_SHA256');
+    }
   }
   const report = JSON.parse(reportText); // parseAuditReport above validated this exact raw document.
   const tolerated = matchSecurityExceptions(report, component, lockfile, policy, now);

@@ -1,7 +1,5 @@
 {
   "schema_version": 1,
-  "fixture_only": true,
-  "note": "Test-only synthetic approval values; never use as active exception policy.",
   "exceptions": [
     {
       "advisory": "GHSA-22jm-h49p-29qw",
