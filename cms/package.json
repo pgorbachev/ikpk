@@ -89,7 +89,8 @@
     },
     "@strapi/upload": {
       "qs": "6.16.0"
-    }
+    },
+    "zod@4": "4.6.6"
   },
   "strapi": {
     "uuid": "4fcbf31d-66ea-4201-a839-6bfdcd75bcdc",
