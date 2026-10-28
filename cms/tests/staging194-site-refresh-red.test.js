@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, unlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -45,9 +45,21 @@ test('194 не запускает обновление без компонент
     const db = join(root, 'cms.sqlite'); const uploads = join(root, 'uploads'); const out = join(root, 'captures');
     put(db, 'fixture'); mkdirSync(uploads); mkdirSync(out);
     const env = { IKPK_BUILD_WORKSPACE: root, IKPK_CAPTURE_PROFILE: 'staging194', IKPK_VERIFY_URL: 'https://194.226.99.10/release.json', IKPK_CAPTURE_DATABASE: db, IKPK_CAPTURE_MEDIA: uploads, IKPK_CAPTURE_ROOT: out, IKPK_MEDIA_CACHE: '/var/www/ikpk/current/media', IKPK_INSTALLED_COMMIT: 'a'.repeat(40) };
-    assert.equal(refreshReady(env), false, 'отсутствующий адаптер должен быть обнаружен до запуска сборки');
-    put(join(root, 'cms/scripts/capture-staging194.py'), '# fixture'); put(join(root, 'scripts/lib/seal-staging193-capture.mjs'), '// fixture');
-    assert.equal(refreshReady(env), true, 'подготовленный тестовый комплект должен пройти проверку');
+    const required = [
+      'cms/scripts/capture-staging194.py',
+      'scripts/lib/seal-staging193-capture.mjs',
+      'scripts/lib/staging193-capture-bundle.mjs',
+      'scripts/lib/server-capture-sqlite.mjs',
+    ];
+    for (const file of required) put(join(root, file), '# fixture');
+    assert.equal(refreshReady(env), true, 'полный тестовый комплект должен пройти проверку');
+    const acceptedMissing = [];
+    for (const file of required) {
+      unlinkSync(join(root, file));
+      if (refreshReady(env)) acceptedMissing.push(file);
+      put(join(root, file), '# fixture');
+    }
+    assert.deepEqual(acceptedMissing, [], 'отсутствие любого компонента снимка должно быть обнаружено до запуска сборки');
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 

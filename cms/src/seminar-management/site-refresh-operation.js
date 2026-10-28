@@ -157,8 +157,12 @@ export function workspaceReady(workspace) {
 export function refreshReady(env) {
   if (!workspaceReady(env?.IKPK_BUILD_WORKSPACE) || !env?.IKPK_VERIFY_URL) return false;
   if (env.IKPK_CAPTURE_PROFILE !== 'staging194') return true;
-  return existsSync(join(env.IKPK_BUILD_WORKSPACE, 'cms', 'scripts', 'capture-staging194.py')) &&
-    existsSync(join(env.IKPK_BUILD_WORKSPACE, 'scripts', 'lib', 'seal-staging193-capture.mjs'));
+  return [
+    'cms/scripts/capture-staging194.py',
+    'scripts/lib/seal-staging193-capture.mjs',
+    'scripts/lib/staging193-capture-bundle.mjs',
+    'scripts/lib/server-capture-sqlite.mjs',
+  ].every((path) => existsSync(join(env.IKPK_BUILD_WORKSPACE, path)));
 
 }
 
