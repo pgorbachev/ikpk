@@ -20,8 +20,8 @@
     "upgrade:dry": "npx @strapi/upgrade latest --dry"
   },
   "dependencies": {
-    "@strapi/plugin-users-permissions": "5.51.2",
-    "@strapi/strapi": "5.51.2",
+    "@strapi/plugin-users-permissions": "5.60.0",
+    "@strapi/strapi": "5.60.0",
     "better-sqlite3": "13.0.3",
     "react": "^18.0.0",
     "react-dom": "^18.0.0",
@@ -52,7 +52,7 @@
     "handlebars": "4.7.10",
     "js-yaml": "4.3.2",
     "lodash-es": "4.18.1",
-    "markdown-it": "14.3.2",
+    "markdown-it": "14.3.3",
     "nanoid": "3.3.18",
     "postcss": "8.5.23",
     "react-router": "6.30.6",
@@ -76,7 +76,7 @@
     },
     "@strapi/core": {
       "qs": "6.16.0",
-      "undici": "6.28.1"
+      "undici": "6.29.1"
     },
     "@strapi/i18n": {
       "qs": "6.16.0"
