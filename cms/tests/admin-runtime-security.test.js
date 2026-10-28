@@ -85,8 +85,8 @@ test(
 
     const loginSource = readFileSync(consumers.adminLogin, 'utf8');
     const routerSource = readFileSync(consumers.adminRouter, 'utf8');
-    assert.match(loginSource, /decodeURIComponent\(redirectTo\)/);
-    assert.match(loginSource, /navigate\(redirectUrl\)/);
+    assert.match(loginSource, /getRedirectTo\(searchString\)/);
+    assert.match(loginSource, /navigate\(getRedirectTo\(searchString\)\)/);
     assert.match(routerSource, /createBrowserRouter/);
 
     const routerDomEntry = createRequire(consumers.adminRouter).resolve('react-router-dom');

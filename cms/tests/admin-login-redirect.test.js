@@ -91,9 +91,7 @@ test(
 
     const loginSource = readFileSync(loginConsumer, 'utf8');
     const viteConfigSource = readFileSync(viteConfigModule, 'utf8');
-    assert.match(loginSource, /const redirectTo = query\.get\('redirectTo'\);/);
-    assert.match(loginSource, /const redirectUrl = redirectTo \? decodeURIComponent\(redirectTo\) : '\/';/);
-    assert.match(loginSource, /navigate\(redirectUrl\);/);
+    assert.match(loginSource, /navigate\(getRedirectTo\(searchString\)\);/);
 
     assert.match(viteConfigSource, /createAdminLoginRedirectPlugin/);
     assert.match(viteConfigSource, /plugins\s*:\s*\[[^\]]*createAdminLoginRedirectPlugin/s);
@@ -107,7 +105,10 @@ test(
     assert.ok(transformed, 'The transform must handle the exact pinned Strapi Login module');
     const transformedCode = typeof transformed === 'string' ? transformed : transformed.code;
     assert.match(transformedCode, /safeAdminRedirect\(redirectTo, window\.location\.origin\)/);
-    assert.match(transformedCode, /navigate\(redirectUrl\);/);
+    assert.match(
+      transformedCode,
+      /navigate\(safeAdminRedirect\(getRedirectTo\(searchString\), window\.location\.origin\)\);/
+    );
     assert.doesNotMatch(transformedCode, /decodeURIComponent\(redirectTo\)/);
   }
 );

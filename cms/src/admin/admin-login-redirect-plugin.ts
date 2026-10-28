@@ -4,10 +4,10 @@ import { createRequire } from 'node:module';
 import { dirname, resolve } from 'node:path';
 import type { Plugin } from 'vite';
 
-const PINNED_ADMIN_VERSION = '5.51.2';
-const PINNED_LOGIN_SHA256 = '0410dba55b124ef78a6ff8cd81177ae7eaf7d1251668151ab504c081a977334c';
-const ORIGINAL_REDIRECT = "const redirectUrl = redirectTo ? decodeURIComponent(redirectTo) : '/';";
-const SAFE_REDIRECT = 'const redirectUrl = safeAdminRedirect(redirectTo, window.location.origin);';
+const PINNED_ADMIN_VERSION = '5.60.0';
+const PINNED_LOGIN_SHA256 = 'e243637208f015298e323118b5ee69f3d8aa53b974a6e10edd780f027e3fd7be';
+const ORIGINAL_REDIRECT = 'navigate(getRedirectTo(searchString));';
+const SAFE_REDIRECT = 'navigate(safeAdminRedirect(getRedirectTo(searchString), window.location.origin));';
 const LOGIN_MODULE_SUFFIX = '/@strapi/admin/dist/admin/admin/src/pages/Auth/components/Login.mjs';
 const require = createRequire(import.meta.url);
 
