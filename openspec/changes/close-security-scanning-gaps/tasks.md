@@ -2,16 +2,16 @@
 
 - [x] 1.1 Два независимых read-only review спецификации завершены; findings отражены в `review.md`.
 - [x] 1.2 Владелец утвердил пакет и реализацию проверок в GitHub Actions; это не принимает будущие исключения.
-- [ ] 1.3 Держать audit-format, workflow-matrix и fail-closed policy tests в репозитории; выполнять их только в GitHub Checks по указанию владельца.
+- [x] 1.3 Держать audit-format, workflow-matrix и fail-closed policy tests в репозитории; GitHub Checks на `f985b06d7f14b6dddd0223b4a20e14ad009e2f34` прошли.
 
 ## 2. Security producers
 
-- [ ] 2.1 Получить на PR точные runtime/full audit reports по всем четырём пакетам. Не запускать локальные audit/scanner.
+- [x] 2.1 Получить на PR точные runtime/full audit reports по всем четырём пакетам. Run `40710673141`, artifacts и результаты: `evidence/security-workflow-run.md`. Не запускать локальные audit/scanner.
 - [ ] 2.2 После PR результатов исправить совместимые зависимости без `npm audit fix --force`; не удалять платформенные lockfile entries. Запустить затронутые build/test проверки только в GitHub Checks.
 - [ ] 2.3 Не добавлять исключения: сейчас ни одно не утверждено. High/critical остаются блокирующими; будущая запись потребует отдельного явного утверждения и ограниченного проверяемого механизма до её использования.
 - [x] 2.4 Добавить полный npm audit всех production/dev dependencies для web/cms/scripts/payments с отчётами; сохранить существующие runtime jobs, перевести CMS runtime на high threshold.
 - [x] 2.5 Добавить SHA-pinned CodeQL advanced analysis для javascript-typescript/python/actions и always-running Security policy aggregator, который принимает только success всех ожидаемых producers.
-- [ ] 2.6 Получить в GitHub Checks contract-test evidence, ошибки измерений и найденные advisory отдельно; не выполнять локальные тесты/scanners/audits.
+- [x] 2.6 Получить в GitHub Checks contract-test evidence, ошибки измерений и найденные advisory отдельно; policy tests passed, audit findings остаются блокирующими. Локальные tests/scanners/audits не выполнялись.
 
 ## 3. Ревью и GitHub enforcement
 
@@ -22,5 +22,5 @@
 
 ## 4. Приёмка
 
-- [ ] 4.1 Зафиксировать runtime/full audit thresholds, check names и ограничения (.astro, live app, authenticated flows, OS/infra); не заявлять DAST или защиту публикации.
+- [x] 4.1 Зафиксировать runtime/full audit thresholds, check names и ограничения (.astro, live app, authenticated flows, OS/infra); не заявлять DAST или защиту публикации.
 - [ ] 4.2 Передать владельцу финальный SHA, CI links и remediation findings; архивировать change только после выполнения оставшихся требований и GitHub enforcement.
