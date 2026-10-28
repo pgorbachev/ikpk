@@ -5,7 +5,8 @@ import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { childEnvironment, refreshReady } from '../src/seminar-management/site-refresh-operation.js';
+import { childEnvironment, refreshReady, siteBuildEnv } from '../src/seminar-management/site-refresh-operation.js';
+import { resolveDemo193Environment, STAGING194_STATIC_MAIN_CHAT_LOADER_SRC } from '../../web/scripts/demo193-profile.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const helper = join(here, '../scripts/capture-staging194.py');
@@ -57,7 +58,7 @@ test('дочерний процесс получает профиль и ист�
   assert.equal(env.CONTENT_ADMIN_PASSWORD, undefined);
 });
 
-test('операция 194 строит demo из нового серверного снимка и сохраняет настроенный виджет', () => {
+test('операция 194 строит demo из нового серверного снимка без чата', () => {
   const root = mkdtempSync(join(tmpdir(), 'ikpk194-worker-red-'));
   try {
     const ws = join(root, 'workspace'); const web = join(ws, 'web'); const site = join(root, 'site'); const captures = join(root, 'captures');
@@ -69,14 +70,63 @@ test('операция 194 строит demo из нового серверно�
     put(join(ws, 'cms/scripts/capture-staging194.py'), 'import os,sys,pathlib\np=pathlib.Path(os.environ["IKPK_CAPTURE_ROOT"])/sys.argv[1]\np.mkdir(parents=True)\n(p/"database.sqlite").write_text("updated-published")\n');
     put(join(ws, 'scripts/lib/seal-staging193-capture.mjs'), 'import fs from "node:fs"; const p=process.argv[2]; if(fs.readFileSync(p+"/database.sqlite","utf8")!=="updated-published")process.exit(2); fs.writeFileSync(p+"/sealed","yes");');
     put(join(web, 'node_modules/tsx/dist/cli.mjs'), 'import fs from "node:fs"; const a=process.argv.slice(2); const i=a.indexOf("--server-capture"); if(i<0||fs.readFileSync(a[i+1]+"/sealed","utf8")!=="yes") { console.error("sealed fresh capture required"); process.exit(41); } fs.mkdirSync(process.env.CONTENT_SNAPSHOT_DIR,{recursive:true}); fs.writeFileSync(process.env.CONTENT_SNAPSHOT_DIR+"/snapshot.json", JSON.stringify({snapshotId:"snap:new"}));');
-    const widget = 'https://example.test/configured-widget.js';
-    put(join(bin, 'npm'), `#!/bin/sh\n[ "$1 $2" = "run build:demo193" ] || { echo "wrong build profile" >&2; exit 42; }\n[ "$CHAT_LOADER_SRC" = "${widget}" ] || { echo "configured widget missing" >&2; exit 43; }\nmkdir -p dist-demo193\nprintf 'new published content' > dist-demo193/index.html\n`, 0o755);
+    put(join(bin, 'npm'), `#!/bin/sh\n[ "$1 $2" = "run build:demo193" ] || { echo "wrong build profile" >&2; exit 42; }\n[ "$CHAT_LOADER_SRC" = "none" ] || { echo "chat was not declared absent" >&2; exit 43; }\n[ -z "\${CHAT_LOADER_PROFILE+x}" ] || { echo "unexpected chat profile" >&2; exit 44; }\nmkdir -p dist-demo193\nprintf 'new published content' > dist-demo193/index.html\n`, 0o755);
     const runner = `import {readFileSync} from 'node:fs'; import {join} from 'node:path'; globalThis.fetch=async()=>({status:200,json:async()=>JSON.parse(readFileSync(join(process.env.IKPK_WEB_ROOT,'current','release.json'),'utf8'))}); const {executeRefresh}=await import(${JSON.stringify(worker)}); const r=await executeRefresh(); console.log(JSON.stringify(r));`;
-    const env = { ...process.env, PATH: `${bin}:${process.env.PATH}`, IKPK_BUILD_WORKSPACE: ws, IKPK_WEB_ROOT: site, IKPK_REFRESH_STATE: state, IKPK_CAPTURE_PROFILE: 'staging194', IKPK_VERIFY_URL: 'https://194.226.99.10/release.json', IKPK_CAPTURE_DATABASE: join(root,'source.sqlite'), IKPK_CAPTURE_MEDIA: join(root,'uploads'), IKPK_CAPTURE_ROOT: captures, IKPK_MEDIA_CACHE: '/var/www/ikpk/current/media', IKPK_INSTALLED_COMMIT: 'a'.repeat(40), CHAT_LOADER_SRC: widget };
+    const env = { ...process.env, PATH: `${bin}:${process.env.PATH}`, IKPK_BUILD_WORKSPACE: ws, IKPK_WEB_ROOT: site, IKPK_REFRESH_STATE: state, IKPK_CAPTURE_PROFILE: 'staging194', IKPK_VERIFY_URL: 'https://194.226.99.10/release.json', IKPK_CAPTURE_DATABASE: join(root,'source.sqlite'), IKPK_CAPTURE_MEDIA: join(root,'uploads'), IKPK_CAPTURE_ROOT: captures, IKPK_MEDIA_CACHE: '/var/www/ikpk/current/media', IKPK_INSTALLED_COMMIT: 'a'.repeat(40) };
+    delete env.CHAT_LOADER_SRC; delete env.CHAT_LOADER_PROFILE;
     const run = spawnSync(process.execPath, ['--input-type=module', '-e', runner], { env, encoding: 'utf8', timeout: 30000 });
     assert.equal(run.status, 0, run.stderr); const result = JSON.parse(run.stdout.trim());
     assert.equal(result.status, 'succeeded', JSON.stringify(result));
     assert.equal(JSON.parse(readFileSync(join(site,'current/release.json'),'utf8')).snapshotId, 'snap:new');
     assert.equal(readFileSync(join(site,'current/index.html'),'utf8'), 'new published content');
   } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+
+test('профиль публикации из CMS на 194 явно отключает чат и изолирует формы и оплату', () => {
+  const previousSrc = process.env.CHAT_LOADER_SRC;
+  const previousProfile = process.env.CHAT_LOADER_PROFILE;
+  try {
+    delete process.env.CHAT_LOADER_SRC;
+    delete process.env.CHAT_LOADER_PROFILE;
+    // Именно окружение дочернего процесса кнопки, без ручной настройки виджета на хосте.
+    const input = { ...childEnvironment(process.env), ...siteBuildEnv('/fixture/workspace', true) };
+    const actual = resolveDemo193Environment(input);
+    assert.equal(input.CHAT_LOADER_SRC, 'none');
+    assert.equal(input.CHAT_LOADER_PROFILE, undefined);
+    assert.equal(actual.CHAT_LOADER_PROFILE, undefined);
+    assert.equal(actual.CHAT_LOADER_SRC, 'none');
+    assert.equal(actual.DEMO_FORMS, 'stub');
+    assert.equal(actual.PAYMENT_ROLE, 'ci');
+    assert.equal(actual.DEPLOY_MODE, 'stand');
+    assert.equal(actual.DEMO_SITE_URL, 'https://194.226.99.10');
+  } finally {
+    if (previousSrc === undefined) delete process.env.CHAT_LOADER_SRC; else process.env.CHAT_LOADER_SRC = previousSrc;
+    if (previousProfile === undefined) delete process.env.CHAT_LOADER_PROFILE; else process.env.CHAT_LOADER_PROFILE = previousProfile;
+  }
+});
+
+test('отдельный static-main профиль сохраняет утверждённый Bitrix и не допускает неверный адрес', () => {
+  const source = { CHAT_LOADER_SRC: STAGING194_STATIC_MAIN_CHAT_LOADER_SRC };
+  const staticMain = resolveDemo193Environment({ ...source, CHAT_LOADER_PROFILE: 'staging194-static-main' });
+  assert.equal(staticMain.CHAT_LOADER_SRC, STAGING194_STATIC_MAIN_CHAT_LOADER_SRC);
+  assert.equal(staticMain.CHAT_LOADER_PROFILE, 'staging194-static-main');
+  assert.equal(resolveDemo193Environment(source).CHAT_LOADER_SRC, 'none');
+  assert.throws(() => resolveDemo193Environment({ ...source, CHAT_LOADER_PROFILE: 'wrong' }), /CHAT_LOADER_PROFILE/);
+  assert.throws(() => resolveDemo193Environment({ CHAT_LOADER_PROFILE: 'staging194-static-main', CHAT_LOADER_SRC: 'https://example.invalid/other.js' }), /owner-approved chat loader/);
+});
+
+test('обычный контур не получает дополнительные переменные профиля 194', () => {
+  const source = {
+    PATH: '/usr/bin', DEMO_PROFILE: 'demo193', DEMO_SITE_URL: 'https://194.226.99.10',
+    DEPLOY_MODE: 'stand', CHAT_OFFLINE_MESSAGE: 'absent',
+    DEMO_FORMS: 'stub', CHAT_LOADER_SRC: 'https://example.test/existing-loader.js',
+  };
+  const env = childEnvironment(source);
+  for (const key of ['DEMO_PROFILE', 'DEMO_SITE_URL', 'DEPLOY_MODE', 'CHAT_OFFLINE_MESSAGE']) {
+    assert.equal(env[key], undefined, `${key} не должен менять сборку другого контура`);
+  }
+  // Существующие разрешённые переменные продолжают передаваться.
+  assert.equal(env.DEMO_FORMS, 'stub');
+  assert.equal(env.CHAT_LOADER_SRC, source.CHAT_LOADER_SRC);
 });

@@ -155,7 +155,11 @@ export function workspaceReady(workspace) {
 
 /** Путь system unit: и дерево, и адрес проверки. Иначе сборка не стартует. */
 export function refreshReady(env) {
-  return workspaceReady(env && env.IKPK_BUILD_WORKSPACE) && Boolean(env && env.IKPK_VERIFY_URL);
+  if (!workspaceReady(env?.IKPK_BUILD_WORKSPACE) || !env?.IKPK_VERIFY_URL) return false;
+  if (env.IKPK_CAPTURE_PROFILE !== 'staging194') return true;
+  return existsSync(join(env.IKPK_BUILD_WORKSPACE, 'cms', 'scripts', 'capture-staging194.py')) &&
+    existsSync(join(env.IKPK_BUILD_WORKSPACE, 'scripts', 'lib', 'seal-staging193-capture.mjs'));
+
 }
 
 export function reuseDerivatives(workspace, cacheDir) {
@@ -222,26 +226,48 @@ const CHILD_KEYS = [
   'IKPK_VERIFY_HOST',
   'IKPK_REFRESH_STATE',
   'IKPK_INSTALLED_COMMIT',
+  'IKPK_CAPTURE_PROFILE',
+  'IKPK_CAPTURE_DATABASE',
+  'IKPK_CAPTURE_MEDIA',
+  'IKPK_CAPTURE_ROOT',
+  'DEMO_PROFILE',
+  'DEMO_SITE_URL',
+  'DEPLOY_MODE',
   'PAYMENT_ROLE',
   'DEMO_FORMS',
   'CHAT_LOADER_SRC',
+  'CHAT_OFFLINE_MESSAGE',
 ];
 
-export function childEnvironment(source) {
+export function childEnvironment(source, { includeCmsCredentials = true } = {}) {
   const env = { NODE_OPTIONS: '--max-old-space-size=480' };
   for (const key of CHILD_KEYS) {
+    if (source.IKPK_CAPTURE_PROFILE !== 'staging194' &&
+        ['DEMO_PROFILE', 'DEMO_SITE_URL', 'DEPLOY_MODE', 'CHAT_OFFLINE_MESSAGE',
+          'IKPK_CAPTURE_DATABASE', 'IKPK_CAPTURE_MEDIA', 'IKPK_CAPTURE_ROOT'].includes(key)) continue;
+    if (!includeCmsCredentials && ['CMS_URL', 'CMS_TOKEN', 'STRAPI_URL', 'STRAPI_API_TOKEN'].includes(key)) continue;
     if (source[key]) env[key] = source[key];
   }
   return env;
 }
 
 /** Окружение `npm run build`. Телеметрия Astro пишет в домашний каталог до проверки отключения. */
-export function siteBuildEnv(workspace) {
-  return {
+export function siteBuildEnv(workspace, staging194 = false) {
+  const env = {
     CONTENT_SNAPSHOT_DIR: join(workspace, 'web', '.snapshot'),
     NODE_OPTIONS: '--max-old-space-size=480',
     ASTRO_TELEMETRY_DISABLED: '1',
   };
+  if (staging194) Object.assign(env, {
+    DEMO_PROFILE: 'demo193',
+    DEMO_SITE_URL: 'https://194.226.99.10',
+    DEPLOY_MODE: 'stand',
+    PAYMENT_ROLE: 'ci',
+    DEMO_FORMS: 'stub',
+    CHAT_LOADER_SRC: 'none',
+    CHAT_OFFLINE_MESSAGE: 'absent',
+  });
+  return env;
 }
 
 export function switchCurrent(webRoot, releaseId) {
@@ -357,7 +383,12 @@ export async function runRefresh(deps) {
     pid: deps.pid,
     switched: false,
   });
-  const captured = await deps.capture();
+  let captured;
+  try {
+    captured = await deps.capture();
+  } catch (error) {
+    captured = { ok: false, detail: redact(error?.message || 'ошибка съёма') };
+  }
   if (!captured.ok) {
     return finish(deps, {
       status: 'failed',
