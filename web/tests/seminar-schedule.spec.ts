@@ -595,10 +595,19 @@ for (const width of [768, 375] as const) {
         `цена названа для ${NAMED_COST_DATES} дат, а у самой заполненной страницы их ${MOST_DATES.dates}: при большем числе потолок покраснеет от данных, при меньшем станет вакуумным. Число надо переснять на текущих данных и обновить NAMED_COST`,
       ).toBe(NAMED_COST_DATES);
 
-      const asBuilt = (await box(page.locator(DESCRIPTION), 'описание')).y;
+      const description = await box(page.locator(DESCRIPTION), 'описание');
+      // Названная цена относится к раскладке страницы из мокапа, а технический
+      // баннер — общее оформление над сайтом. Вычитаем только фактическую высоту
+      // видимого баннера: при выключенном флаге и на демо это 0. Отступ расписание →
+      // описание выше остаётся отдельным и неизменным инвариантом.
+      const maintenanceNotice = page.locator('.maintenance-notice');
+      const maintenanceHeight = await maintenanceNotice.isVisible()
+        ? (await box(maintenanceNotice, 'баннер технических работ')).height
+        : 0;
+      const descriptionYWithoutGlobalBanner = description.y - maintenanceHeight;
       expect(
-        Math.round(asBuilt),
-        `описание на ${Math.round(asBuilt)} px при названной цене ${NAMED_COST[width]} (страница ${MOST_DATES.path}, дат ${MOST_DATES.dates})`,
+        Math.round(descriptionYWithoutGlobalBanner),
+        `описание на ${Math.round(descriptionYWithoutGlobalBanner)} px после исключения общей высоты баннера (фактически ${Math.round(description.y)} px) при названной цене ${NAMED_COST[width]} (страница ${MOST_DATES.path}, дат ${MOST_DATES.dates})`,
       ).toBeLessThanOrEqual(NAMED_COST[width]);
     });
   });
