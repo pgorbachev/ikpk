@@ -70,16 +70,36 @@ test('unknown advisories, stale nodes, ranges, and severity escalation fail clos
   range.exceptions[0].lock_nodes[0].version = '>=1.29.0';
   assert.throws(() => evaluate({ exceptions: range }), /invalid lock node version/);
 
+  const wildcardComponent = clone(policy);
+  wildcardComponent.exceptions[0].component = '*';
+  assert.throws(() => evaluate({ exceptions: wildcardComponent }), /unknown component/);
+
+  const wildcardPackage = clone(policy);
+  wildcardPackage.exceptions[0].package = '*';
+  assert.throws(() => evaluate({ exceptions: wildcardPackage }), /invalid package/);
+
+  const unrelatedPath = clone(policy);
+  unrelatedPath.exceptions[0].lock_nodes[0].path = 'node_modules/other';
+  assert.throws(() => evaluate({ exceptions: unrelatedPath }), /path does not match package/);
+
   const escalated = clone(JSON.parse(reportText));
   escalated.vulnerabilities['@modelcontextprotocol/sdk'].severity = 'critical';
   escalated.metadata.vulnerabilities.high -= 1;
   escalated.metadata.vulnerabilities.critical += 1;
   assert.throws(() => evaluate({ audit: escalated }), /did not match severity and node scope/);
+
+  const criticalCause = clone(JSON.parse(reportText));
+  criticalCause.vulnerabilities['@modelcontextprotocol/sdk'].via[0].severity = 'critical';
+  assert.throws(() => evaluate({ audit: criticalCause }), /did not match severity and node scope/);
 });
 
 test('expired, malformed, and pending records cannot tolerate findings', () => {
   assert.throws(() => evaluate({ at: new Date('2026-11-11T00:00:00Z') }), /is expired/);
   assert.throws(() => evaluate({ at: new Date('invalid') }), /valid evaluation time/);
+
+  const impossibleDate = clone(policy);
+  impossibleDate.exceptions[0].expires_at = '2026-02-30T00:00:00Z';
+  assert.throws(() => evaluate({ exceptions: impossibleDate }), /invalid UTC expiry/);
 
   const malformed = clone(policy);
   malformed.exceptions[0].source_evidence.revision = 'short';

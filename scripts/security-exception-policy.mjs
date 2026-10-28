@@ -13,6 +13,8 @@ const evidenceFields = new Set([
   'published_package', 'published_packages',
 ]);
 const ghsaPattern = /^GHSA-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}$/;
+const componentNames = new Set(['web', 'cms', 'scripts', 'payments']);
+const packagePattern = /^(?:@[a-z0-9~][a-z0-9._~-]*\/)?[a-z0-9~][a-z0-9._~-]*$/;
 const versionPattern = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/;
 
 function isRecord(value) {
@@ -49,7 +51,8 @@ function validatePolicy(policy, lockfile, component, now) {
       if (!(key in exception)) throw new Error('security exception is missing ' + key);
     }
     requireText(exception.component, 'component');
-    requireText(exception.package, 'package');
+    if (!componentNames.has(exception.component)) throw new Error('security exception has unknown component');
+    requireText(exception.package, 'package', packagePattern);
     requireText(exception.advisory, 'advisory', ghsaPattern);
     if (exception.observed_report_severity !== 'high' || exception.accepted_max_severity !== 'high') {
       throw new Error('security exception severity must be observed and capped at high');
@@ -67,7 +70,7 @@ function validatePolicy(policy, lockfile, component, now) {
       throw new Error('security exception has invalid UTC expiry');
     }
     const expiry = Date.parse(expiryText);
-    if (!Number.isFinite(expiry) || new Date(expiry).toISOString() !== expiryText) {
+    if (!Number.isFinite(expiry) || new Date(expiry).toISOString().slice(0, 19) + 'Z' !== expiryText) {
       throw new Error('security exception has invalid UTC expiry');
     }
     if (exception.component === component && now.getTime() >= expiry) {
@@ -82,7 +85,10 @@ function validatePolicy(policy, lockfile, component, now) {
       if (!isRecord(node) || Object.keys(node).length !== 2 || !('path' in node) || !('version' in node)) {
         throw new Error('security exception has malformed lock node');
       }
-      requireText(node.path, 'lock node path', /^node_modules\//);
+      requireText(node.path, 'lock node path', /^node_modules\/(?!.*(?:^|\/)\.\.?\/)(?!.*\*)[^\s]+$/);
+      if (!(node.path === 'node_modules/' + exception.package || node.path.endsWith('/node_modules/' + exception.package))) {
+        throw new Error('security exception lock node path does not match package');
+      }
       requireText(node.version, 'lock node version', versionPattern);
       if (nodePaths.has(node.path)) throw new Error('security exception repeats a lock node');
       nodePaths.add(node.path);
@@ -130,17 +136,18 @@ function validatePolicy(policy, lockfile, component, now) {
   return records;
 }
 
-function approvedDirectAdvisory(component, packageName, ghsa, entry, records) {
+function approvedDirectAdvisory(component, packageName, ghsa, entry, directSeverity, records) {
   const exception = records.get(component + '\0' + packageName + '\0' + ghsa);
   return Boolean(exception && exception.decision === 'APPROVED'
     && exception.accepted_max_severity === 'high'
+    && directSeverity === 'high'
     && entry.severity === 'high'
     && sameNodePaths(entry.nodes, exception.lock_nodes));
 }
 
 export function toleratedBlockingEntries(report, component, records) {
   const memo = new Map();
-  function tolerated(name, visiting = new Set()) {
+  function isTolerated(name, visiting = new Set()) {
     if (memo.has(name)) return memo.get(name);
     const entry = report.vulnerabilities[name];
     if (!entry || !blocking.has(entry.severity) || !Array.isArray(entry.via) || visiting.has(name)) return false;
@@ -152,7 +159,7 @@ export function toleratedBlockingEntries(report, component, records) {
         if (!child) return false;
         if (blocking.has(child.severity)) {
           sawBlockingCause = true;
-          if (!tolerated(cause, next)) return false;
+          if (!isTolerated(cause, next)) return false;
         }
         continue;
       }
@@ -162,18 +169,18 @@ export function toleratedBlockingEntries(report, component, records) {
       const ghsa = typeof cause.url === 'string'
         ? cause.url.match(/^https:\/\/github\.com\/advisories\/(GHSA-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4})$/)?.[1]
         : undefined;
-      if (!ghsa || !approvedDirectAdvisory(component, entry.name, ghsa, entry, records)) return false;
+      if (!ghsa || !approvedDirectAdvisory(component, entry.name, ghsa, entry, cause.severity, records)) return false;
     }
     const result = sawBlockingCause;
     memo.set(name, result);
     return result;
   }
 
-  const tolerated = new Set();
+  const toleratedNames = new Set();
   for (const [name, entry] of Object.entries(report.vulnerabilities)) {
-    if (blocking.has(entry.severity) && tolerated(name)) tolerated.add(name);
+    if (blocking.has(entry.severity) && isTolerated(name)) toleratedNames.add(name);
   }
-  return tolerated;
+  return toleratedNames;
 }
 
 export function matchSecurityExceptions(report, component, lockfile, policy, now = new Date()) {
@@ -182,13 +189,13 @@ export function matchSecurityExceptions(report, component, lockfile, policy, now
   for (const exception of records.values()) {
     if (exception.component !== component) continue;
     const entry = report.vulnerabilities[exception.package];
-    const hasAdvisory = entry?.via?.some((cause) => isRecord(cause)
+    const matchingCause = entry?.via?.find((cause) => isRecord(cause)
       && cause.url === 'https://github.com/advisories/' + exception.advisory);
-    if (!hasAdvisory || !sameNodePaths(entry.nodes, exception.lock_nodes)) {
+    if (!matchingCause || !sameNodePaths(entry.nodes, exception.lock_nodes)) {
       throw new Error('security exception ' + exception.advisory + ' does not match this audit report');
     }
     if (exception.decision === 'APPROVED'
-      && !approvedDirectAdvisory(component, exception.package, exception.advisory, entry, records)) {
+      && !approvedDirectAdvisory(component, exception.package, exception.advisory, entry, matchingCause.severity, records)) {
       throw new Error('approved security exception ' + exception.advisory + ' did not match severity and node scope');
     }
   }
