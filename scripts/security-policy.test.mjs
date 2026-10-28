@@ -8,6 +8,7 @@ import { evaluateSecurityPolicy } from './verify-security-policy.mjs';
 const requireWebDependency = createRequire(new URL('../web/package.json', import.meta.url));
 const { parse: parseYaml } = requireWebDependency('yaml');
 const workflow = parseYaml(readFileSync(new URL('../.github/workflows/security.yml', import.meta.url), 'utf8'));
+const jobs = workflow.jobs;
 const cleanAudit = JSON.stringify({
   auditReportVersion: 2,
   vulnerabilities: {},
@@ -57,7 +58,7 @@ test('validates a real npm audit v2 report and rejects truncated or inconsistent
       vulnerabilities: { critical: 0, high: 0, moderate: 0, low: 0, info: 0, total: 0 },
       dependencies: { prod: 0, dev: 0, optional: 0, peer: 0, peerOptional: 0, total: 0 },
     },
-  })), /non-empty/);
+  })), /empty dependency inventory/);
 });
 
 test('distinguishes passing audits, blocking findings, and measurement errors', () => {
@@ -88,9 +89,12 @@ test('fails closed for failed, skipped, neutral, cancelled, pending, and missing
 });
 
 test('declares complete package and CodeQL matrices with unconditional security producers', () => {
-  const jobs = workflow.jobs;
   assert.deepEqual(jobs['full-dependency-audit'].strategy.matrix.package, ['web', 'cms', 'scripts', 'payments']);
   assert.deepEqual(jobs['codeql-analysis'].strategy.matrix.language, ['javascript-typescript', 'python', 'actions']);
+  assert.equal(jobs['full-dependency-audit'].strategy.matrix.exclude, undefined);
+  assert.equal(jobs['full-dependency-audit'].strategy.matrix.include, undefined);
+  assert.equal(jobs['codeql-analysis'].strategy.matrix.exclude, undefined);
+  assert.equal(jobs['codeql-analysis'].strategy.matrix.include, undefined);
   for (const id of ['secret-scan', 'dependency-audit', 'cms-dependency-audit', 'full-dependency-audit', 'codeql-analysis', 'security-policy-tests']) {
     const allowedConditions = {
       'cms-dependency-audit': {
@@ -107,7 +111,8 @@ test('declares complete package and CodeQL matrices with unconditional security 
   const audit = fullAuditSteps.find((step) => step.name === 'Audit runtime and development dependencies');
   const upload = fullAuditSteps.find((step) => step.name === 'Upload full dependency audit report');
   assert.match(install.run, /npm ci --include=dev --audit=false/);
-  assert.match(audit.run, /npm audit --include=dev --audit-level=high --json/);
+  assert.ok(audit.run.split('\n').some((line) => /^\s*env -u NODE_ENV -u NPM_CONFIG_PRODUCTION -u NPM_CONFIG_OMIT npm audit --include=dev --audit-level=high --json > audit-report\.json/.test(line)));
+  assert.ok(audit.run.split('\n').some((line) => /^\s*node \.\.\/scripts\/security-audit-policy\.mjs audit-report\.json/.test(line)));
   assert.match(install.run, /-u NODE_ENV -u NPM_CONFIG_PRODUCTION -u NPM_CONFIG_OMIT/);
   assert.match(audit.run, /-u NODE_ENV -u NPM_CONFIG_PRODUCTION -u NPM_CONFIG_OMIT/);
   assert.equal(upload.if, 'always()');
@@ -138,10 +143,12 @@ test('aggregate runs always and maps every declared producer result explicitly',
 });
 
 test('runs without path filters on PR, main push, and weekly schedule', () => {
-  assert.ok(workflow.on.pull_request);
+  assert.equal(workflow.name, 'Security');
+  assert.ok(Object.hasOwn(workflow.on, 'pull_request'));
   assert.deepEqual(workflow.on.push.branches, ['main']);
   assert.ok(workflow.on.schedule.some(({ cron }) => cron));
-  assert.equal(workflow.on.pull_request.paths, undefined);
-  assert.equal(workflow.on.pull_request.paths_ignore, undefined);
+  assert.equal((workflow.on.pull_request ?? {}).paths, undefined);
+  assert.equal((workflow.on.pull_request ?? {}).paths_ignore, undefined);
   assert.equal(workflow.on.push.paths, undefined);
+  assert.equal(workflow.jobs['dependency-audit'].name, 'Runtime dependency audit (${{ matrix.package }})');
 });
