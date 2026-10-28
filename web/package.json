@@ -83,6 +83,6 @@
     "lighthouse": "13.6.0",
     "proxy-agent": "8.0.2",
     "basic-ftp": "6.2.3",
-    "tmp": "0.2.6"
+    "tmp": "0.2.7"
   }
 }
