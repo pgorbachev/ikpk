@@ -26,6 +26,7 @@ function repositoryWorkflows(): Source[] {
 const NON_PUBLISHING_ACTIONS = new Set([
   'actions/checkout', 'actions/setup-node', 'actions/upload-artifact', 'actions/download-artifact',
   'actions/github-script', 'dependabot/fetch-metadata', 'gitleaks/gitleaks-action',
+  'github/codeql-action/init', 'github/codeql-action/analyze',
   'pgorbachev/ikpk/.github/workflows/dependabot-auto-merge-policy.yml',
   'pgorbachev/ikpk/.github/workflows/dependabot-rebase-policy.yml',
 ]);
