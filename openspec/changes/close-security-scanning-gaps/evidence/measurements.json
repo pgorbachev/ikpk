@@ -1,0 +1,69 @@
+{
+  "sourceSha": "4be9d1d8fdc683d4611d3bd87706d8e572592a41",
+  "measuredAtUtc": "2026-10-28T13:28:37.713106+00:00",
+  "npmVersion": "11.6.2",
+  "command": "npm audit --include=dev --package-lock-only --json",
+  "scope": "lockfile, includes devDependencies; no install, lifecycle execution or exploit validation",
+  "results": [
+    {
+      "package": "web",
+      "exit": 1,
+      "counts": {
+        "info": 0,
+        "low": 2,
+        "moderate": 6,
+        "high": 16,
+        "critical": 1,
+        "total": 25
+      },
+      "error": null,
+      "lockfileSha256": "b632471eb0d519a857c7b7cc84dfb722c398d204cedcaab3ed92879d4699289a",
+      "reportSha256": "3ff67ab04a7ac2e150bd27bbfd631f9203cda5bb11a94a29b196ddd162e16fbc"
+    },
+    {
+      "package": "cms",
+      "exit": 1,
+      "counts": {
+        "info": 0,
+        "low": 2,
+        "moderate": 17,
+        "high": 30,
+        "critical": 1,
+        "total": 50
+      },
+      "error": null,
+      "lockfileSha256": "4be79ac4368e27425fa0c33b814382d69f04cfcf4429f8c5a67299918122f919",
+      "reportSha256": "5a67425ffb66ea8bb0424d2db549507968677f2bedd467908e877ec80f6abb1c"
+    },
+    {
+      "package": "scripts",
+      "exit": 1,
+      "counts": {
+        "info": 0,
+        "low": 0,
+        "moderate": 1,
+        "high": 3,
+        "critical": 2,
+        "total": 6
+      },
+      "error": null,
+      "lockfileSha256": "e227e52a7cf75027863c97d41bfc8c710c7d39e87befc2a57d0897811d8ea2bc",
+      "reportSha256": "cff4d3debfb4a4ce6b3d7335c1632bdcfcebb1959d6e10175bb1c4180c6ee947"
+    },
+    {
+      "package": "payments",
+      "exit": 1,
+      "counts": {
+        "info": 0,
+        "low": 0,
+        "moderate": 0,
+        "high": 1,
+        "critical": 0,
+        "total": 1
+      },
+      "error": null,
+      "lockfileSha256": "3c03a00312f21ba357ebbc9e7f100b457f0abf3536bd017795eef93b70a41b9f",
+      "reportSha256": "1f8869589e98016214d6a857c7f9d642cd9a975a758fc9ad35546cc3739dd007"
+    }
+  ]
+}

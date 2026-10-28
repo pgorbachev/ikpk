@@ -1,0 +1,11 @@
+# Security checks
+
+`.github/workflows/security.yml` runs on pull requests, pushes to `main`, manual dispatch, and weekly schedule.
+
+The workflow keeps the existing runtime audits for web, scripts, and payments. The CMS runtime audit now uses the same high threshold. A separate complete npm audit covers production and development dependencies for web, CMS, scripts, and payments. Both runtime and complete audits block high and critical findings; moderate and low findings remain in the uploaded full JSON reports. An invalid or incomplete report, installation failure, or audit service error fails the producer.
+
+CodeQL Advanced Setup analyzes JavaScript/TypeScript, Python, and GitHub Actions with the security-extended query suite. It does not claim analysis of Astro templates. The scan does not run the application or receive application, CMS, SSH, or payment-provider secrets. Security policy tests run on GitHub Actions and cover report validation, matrix completeness, and fail-closed treatment of missing, failed, skipped, neutral, cancelled, and pending producer states.
+
+The always-running `Security policy` job accepts only a successful result from every declared producer. It is the aggregate context intended for required-check configuration. The existing `Runtime dependency audit (payments)` check is required on `main`; the new aggregate, full audits, CMS runtime audit, and CodeQL checks still need their separate required-check/code-scanning ruleset rollout. The presence of a job alone does not prove that GitHub requires it for merge.
+
+No vulnerability exceptions are configured or accepted. High and critical findings remain blocking until remediated. Any future exception needs a separate explicit owner decision and bounded, testable matching and expiry support before it can be used. A green check means the configured sources and checks completed at the tested revision; it is not a live server, authenticated application, host/OS, infrastructure, or penetration test, and it does not gate a new publication by itself.

@@ -35,8 +35,8 @@ updates:
       prefix: "chore(deps)"
 
   # ─── CMS ────────────────────────────────────────────────────────────────────
-  # Здесь `audit:prod` намеренно report-only из-за upstream-advisory в Strapi, поэтому
-  # обновления особенно легко не заметить: гейт про них молчит по построению.
+  # Runtime `audit:prod` и полный dependency-аудит блокируют high/critical; обновления
+  # Strapi проверяются теми же обязательными результатами, что и остальные пакеты.
   - package-ecosystem: npm
     directory: /cms
     schedule:

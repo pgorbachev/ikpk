@@ -15,7 +15,7 @@
     "test:e2e": "node --test \"tests/e2e/*.test.js\"",
     "strapi": "strapi",
     "typecheck": "tsc --noEmit",
-    "audit:prod": "npm audit --omit=dev --audit-level=critical",
+    "audit:prod": "npm audit --omit=dev --audit-level=high",
     "upgrade": "npx @strapi/upgrade latest",
     "upgrade:dry": "npx @strapi/upgrade latest --dry"
   },
