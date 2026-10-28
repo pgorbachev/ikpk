@@ -45,6 +45,8 @@
   "overrides": {
     "sharp": "0.35.5",
     "brace-expansion": "5.0.12",
+    "body-parser": "2.4.0",
+    "follow-redirects": "1.16.1",
     "minimatch@3": {
       "brace-expansion": "1.1.21"
     },
@@ -76,7 +78,7 @@
     },
     "@strapi/core": {
       "qs": "6.16.0",
-      "undici": "6.28.1"
+      "undici": "6.29.1"
     },
     "@strapi/i18n": {
       "qs": "6.16.0"
