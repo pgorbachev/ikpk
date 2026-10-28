@@ -18,6 +18,17 @@ const newBody = 'VERIFIED-STATIC-PAYLOAD-0123456789-ABCDEFGHIJKLMNO';
 const oldBody = 'previous verified release';
 const options = { timeout: 15000 };
 
+function parseCompleteJsonLines(text) {
+  const endOfLastCompleteLine = text.lastIndexOf('\n');
+  if (endOfLastCompleteLine < 0) return [];
+  return text.slice(0, endOfLastCompleteLine).split('\n').filter(Boolean).map((line) => JSON.parse(line));
+}
+
+test('JSONL polling ignores an incomplete trailing record but rejects malformed complete records', () => {
+  assert.deepEqual(parseCompleteJsonLines('{"kind":"ready"}\n{"kind":"partial"'), [{ kind: 'ready' }]);
+  assert.throws(() => parseCompleteJsonLines('{"kind":"ready"}\n{bad json}\n'), SyntaxError);
+});
+
 // Independent oracle for the public digest format agreed with the coordinator.
 function digest(root) {
   const files = [];
@@ -64,7 +75,7 @@ function setup(t, fault = {}) {
   config.authorize = createTestAuthorizer(operation);
   const transport = createSshTransport(config);
   const pendingPath = join(root, '.publication-pending.json');
-  const connections = () => readFileSync(logPath, 'utf8').trim().split('\n').filter(Boolean).map((line) => JSON.parse(line));
+  const connections = () => parseCompleteJsonLines(readFileSync(logPath, 'utf8'));
   t.after(() => {
     for (const entry of connections().filter((entry) => entry.kind === 'connection')) {
       try { process.kill(entry.pid, 'SIGTERM'); } catch { /* The fake SSH already finished. */ }
