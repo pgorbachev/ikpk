@@ -119,6 +119,36 @@ export function seminarPublicationError(name) {
   return text(name) ? null : 'Заполните название семинара.';
 }
 
+/**
+ * Matches web/src/lib/schedule-window.ts startBoundary: use the displayed Moscow
+ * calendar day, accept a single explicit "Начало в HH:MM", otherwise use midnight.
+ */
+export function scheduleEntryIsBeforeStart(entry, now = Date.now()) {
+  const { startAt, additionalText } = entry ?? {};
+  if (typeof startAt !== 'string' || !startAt) return false;
+  let day = /^\d{4}-\d{2}-\d{2}$/.test(startAt) ? startAt : '';
+  if (!day) {
+    const instant = new Date(startAt);
+    if (Number.isNaN(instant.getTime())) return false;
+    const parts = new Intl.DateTimeFormat('en-GB', {
+      timeZone: 'Europe/Moscow', year: 'numeric', month: '2-digit', day: '2-digit',
+    }).formatToParts(instant);
+    const values = Object.fromEntries(parts.map(({ type, value }) => [type, value]));
+    day = `${values.year}-${values.month}-${values.day}`;
+  }
+  const matches = Array.from(String(additionalText ?? '').matchAll(
+    /(?:^|[^\p{L}\p{N}])начало\s+в\s+(\d{1,2})[:-](\d{2})(?!\d)/giu,
+  ));
+  const hour = matches.length === 1 ? Number(matches[0][1]) : Number.NaN;
+  const minute = matches.length === 1 ? Number(matches[0][2]) : Number.NaN;
+  const time = hour >= 0 && hour <= 23 && minute >= 0 && minute <= 59
+    ? `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`
+    : '00:00';
+  const boundary = Date.parse(`${day}T${time}:00+03:00`);
+  const current = typeof now === 'number' ? now : new Date(now).getTime();
+  return Number.isFinite(boundary) && Number.isFinite(current) && current < boundary;
+}
+
 export const SEMINAR_SLUG_PATTERN = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 
 /**
