@@ -150,8 +150,8 @@ describe('staging193 sealed SQLite capture', () => {
     db.exec(`UPDATE teachers SET legacy_id='legacy-1' WHERE id=3;
       INSERT INTO teachers (id,document_id,name,slug,trait,legacy_id,published_at)
         VALUES (30,'second','Second teacher','second','teacher','legacy-2','2026-10-01');
-      INSERT INTO schedule_entries (id,document_id,name,city,published_at)
-        VALUES (40,'event-40','Event','City','2026-10-01');
+      INSERT INTO schedule_entries (id,document_id,name,city,start_at,end_at,entry_status,published_at)
+        VALUES (40,'event-40','Event','City','2099-03-17T00:00:00.000Z','2099-03-21T00:00:00.000Z','active','2026-10-01');
       INSERT INTO schedule_entries_teachers_lnk (id,schedule_entry_id,teacher_id,teacher_ord)
         VALUES (1,40,30,2), (2,40,4,1);`);
     db.close();
@@ -169,8 +169,8 @@ describe('staging193 sealed SQLite capture', () => {
     fixtureDatabase(database);
     const db = new DatabaseSync(database);
     db.exec(`UPDATE teachers SET document_id='only-draft' WHERE id=4;
-      INSERT INTO schedule_entries (id,document_id,name,city,published_at)
-        VALUES (40,'event-40','Event','City','2026-10-01');
+      INSERT INTO schedule_entries (id,document_id,name,city,start_at,end_at,entry_status,published_at)
+        VALUES (40,'event-40','Event','City','2099-03-17T00:00:00.000Z','2099-03-21T00:00:00.000Z','active','2026-10-01');
       INSERT INTO schedule_entries_teachers_lnk (id,schedule_entry_id,teacher_id,teacher_ord)
         VALUES (1,40,4,1);`);
     db.close();
@@ -184,8 +184,8 @@ describe('staging193 sealed SQLite capture', () => {
     fixtureDatabase(database);
     const db = new DatabaseSync(database);
     db.exec(`UPDATE teachers SET legacy_id='legacy-1', name='' WHERE id=3;
-      INSERT INTO schedule_entries (id,document_id,name,city,published_at)
-        VALUES (40,'event-40','Event','City','2026-10-01');
+      INSERT INTO schedule_entries (id,document_id,name,city,start_at,end_at,entry_status,published_at)
+        VALUES (40,'event-40','Event','City','2099-03-17T00:00:00.000Z','2099-03-21T00:00:00.000Z','active','2026-10-01');
       INSERT INTO schedule_entries_teachers_lnk (id,schedule_entry_id,teacher_id,teacher_ord)
         VALUES (1,40,3,1);`);
     db.close();
@@ -198,12 +198,34 @@ describe('staging193 sealed SQLite capture', () => {
     const database = join(root, 'database.sqlite');
     fixtureDatabase(database);
     const db = new DatabaseSync(database);
-    db.exec(`INSERT INTO schedule_entries (id,document_id,name,city,published_at)
-      VALUES (40,'event-40','Event','City','2026-10-01');`);
+    db.exec(`INSERT INTO schedule_entries (id,document_id,name,city,start_at,end_at,entry_status,published_at)
+      VALUES (40,'event-40','Event','City','2099-03-17T00:00:00.000Z','2099-03-21T00:00:00.000Z','active','2026-10-01');`);
     db.close();
     const captured = readPublishedSqlite(database, schemaRoot).collections['schedule-entries'] as
       { teachers: unknown[] }[];
     expect(captured[0].teachers).toEqual([]);
+  });
+
+  it('does not block the snapshot for unresolved event teachers in past or cancelled events', () => {
+    const root = mkdtempSync(join(tmpdir(), 'event-teachers-inactive-'));
+    temporaryRoots.push(root);
+    const database = join(root, 'database.sqlite');
+    fixtureDatabase(database);
+    const db = new DatabaseSync(database);
+    db.exec(`UPDATE teachers SET document_id='only-draft' WHERE id=4;
+      INSERT INTO schedule_entries (id,document_id,name,city,start_at,end_at,entry_status,published_at)
+        VALUES (40,'past-event','Past event','City','2020-03-17T00:00:00.000Z','2020-03-21T00:00:00.000Z','active','2020-01-01'),
+               (41,'cancelled-event','Cancelled event','City','2099-03-17T00:00:00.000Z','2099-03-21T00:00:00.000Z','cancelled','2026-10-01'),
+               (42,'undated-event','Undated event','City',NULL,NULL,'active','2026-10-01'),
+               (43,'completed-event','Completed event','City','2099-03-17T00:00:00.000Z','2099-03-21T00:00:00.000Z','completed','2026-10-01');
+      INSERT INTO schedule_entries_teachers_lnk (id,schedule_entry_id,teacher_id,teacher_ord)
+        VALUES (1,40,4,1), (2,41,4,1), (3,42,4,1), (4,43,4,1);`);
+    db.close();
+    const captured = readPublishedSqlite(database, schemaRoot).collections['schedule-entries'] as
+      { documentId: string; teachers: unknown[] }[];
+    expect(captured.map((event) => [event.documentId, event.teachers])).toEqual([
+      ['past-event', []], ['cancelled-event', []], ['undated-event', []], ['completed-event', []],
+    ]);
   });
 
   it('rejects a capture manifest from a different host or stale site URL', () => {

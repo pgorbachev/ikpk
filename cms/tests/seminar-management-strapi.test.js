@@ -727,6 +727,149 @@ describe('семинары в собранном Strapi', { timeout: 360000 }, (
     assert.deepEqual((await get(entries, other.documentId)).teachers.map((t) => t.documentId), [one.documentId]);
   });
 
+  async function protectionFixture(suffix, { startAt, endAt, entryStatus = 'active', additionalText } = {}) {
+    const teachers = app.documents('api::teacher.teacher');
+    const entries = app.documents('api::schedule-entry.schedule-entry');
+    const seminars = app.documents('api::seminar.seminar');
+    const teacher = await teachers.create({ status: 'published', data: {
+      name: `Преподаватель ${suffix}`, slug: `event-protection-${suffix}`,
+      trait: 'teacher', legacy_id: `event-protection-${suffix}`,
+    } });
+    const seminar = await seminars.create({ status: 'published', data: {
+      name: `Семинар защиты ${suffix}`, ...validSeminarPublicationFields, course_group: publishedProgram.documentId,
+    } });
+    const event = await entries.create({ status: 'published', data: {
+      seminar: seminar.documentId, teachers: [teacher.documentId], city: 'Москва', entry_status: entryStatus,
+      startAt, endAt: endAt ?? startAt, ...(additionalText ? { additionalText } : {}),
+    } });
+    return { teachers, entries, seminar, teacher, event };
+  }
+
+  for (const action of ['unpublish', 'delete']) {
+    test(`защита преподавателя: будущее опубликованное активное проведение блокирует ${action}`, async () => {
+      const future = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString();
+      const { teachers, entries, teacher, event } = await protectionFixture(`future-${action}`, { startAt: future });
+      await assert.rejects(() => teachers[action]({ documentId: teacher.documentId }), /проведен|семинар/i);
+      assert.ok(await teachers.findOne({ documentId: teacher.documentId, status: 'published' }),
+        `${action} не должен удалять опубликованного преподавателя`);
+      const saved = await entries.findOne({ documentId: event.documentId, status: 'published', populate: ['teachers'] });
+      assert.deepEqual(saved.teachers.map(t => t.documentId), [teacher.documentId], 'связь проведения сохранена');
+    });
+  }
+
+  test('защита преподавателя: прошедшие и отменённые проведения не запрещают unpublish и delete', async () => {
+    const past = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString();
+    const future = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString();
+    for (const [kind, startAt, entryStatus] of [
+      ['past', past, 'active'], ['cancelled', future, 'cancelled'], ['completed', future, 'completed'],
+    ]) {
+      for (const action of ['unpublish', 'delete']) {
+        const current = await protectionFixture(`${kind}-${action}`, { startAt, entryStatus });
+        await current.teachers[action]({ documentId: current.teacher.documentId });
+        assert.equal(await current.teachers.findOne({ documentId: current.teacher.documentId, status: 'published' }), null,
+          `${kind}: ${action} не должен быть заблокирован`);
+      }
+    }
+  });
+
+  test('защита преподавателя: правка черновика не меняет опубликованные данные и допустима', async () => {
+    const future = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString();
+    const { teachers, teacher } = await protectionFixture('draft-edit', { startAt: future });
+    await teachers.update({ documentId: teacher.documentId, data: { name: 'Имя в черновике' } });
+    const draft = await teachers.findOne({ documentId: teacher.documentId, status: 'draft' });
+    const published = await teachers.findOne({ documentId: teacher.documentId, status: 'published' });
+    assert.equal(draft.name, 'Имя в черновике');
+    assert.equal(published.name, teacher.name);
+  });
+
+  test('защита преподавателя: черновая отмена не снимает защиту опубликованного проведения', async () => {
+    const future = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString();
+    const { teachers, entries, teacher, event } = await protectionFixture('draft-cancellation', { startAt: future });
+    await entries.update({ documentId: event.documentId, data: { entry_status: 'cancelled' } });
+    const published = await entries.findOne({ documentId: event.documentId, status: 'published' });
+    assert.equal(published.entry_status, 'active', 'отмена пока существует только в черновике');
+    await assert.rejects(() => teachers.unpublish({ documentId: teacher.documentId }), /проведен|семинар/i);
+    assert.ok(await teachers.findOne({ documentId: teacher.documentId, status: 'published' }));
+  });
+
+  test('защита преподавателя: проведение с отсутствующей датой не считается будущим', async () => {
+    const future = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString();
+    const { teachers, teacher, event } = await protectionFixture('missing-date', { startAt: future });
+    // Симулируем историческую опубликованную запись без даты: обычная публикация сейчас её не допускает.
+    await app.db.query('api::schedule-entry.schedule-entry').update({ where: { id: event.id }, data: { startAt: null } });
+    await teachers.unpublish({ documentId: teacher.documentId });
+    assert.equal(await teachers.findOne({ documentId: teacher.documentId, status: 'published' }), null);
+  });
+
+  test('защита преподавателя: граница начала при отсутствии времени — полночь Москвы', async (t) => {
+    const { teachers, teacher } = await protectionFixture('midnight', { startAt: '2026-10-28T21:00:00.000Z' });
+    t.mock.timers.enable({ apis: ['Date'], now: new Date('2026-10-28T20:59:00.000Z') });
+    await assert.rejects(() => teachers.unpublish({ documentId: teacher.documentId }), /проведен|семинар/i);
+    t.mock.timers.setTime(Date.parse('2026-10-28T21:01:00.000Z'));
+    await teachers.unpublish({ documentId: teacher.documentId });
+    assert.equal(await teachers.findOne({ documentId: teacher.documentId, status: 'published' }), null);
+  });
+
+  test('защита преподавателя: одно явное время начала задаёт московскую границу', async (t) => {
+    const { teachers, teacher } = await protectionFixture('explicit-time', {
+      startAt: '2026-10-28T21:00:00.000Z', additionalText: 'Начало в 10:30',
+    });
+    t.mock.timers.enable({ apis: ['Date'], now: new Date('2026-10-29T07:29:00.000Z') });
+    await assert.rejects(() => teachers.unpublish({ documentId: teacher.documentId }), /проведен|семинар/i);
+    t.mock.timers.setTime(Date.parse('2026-10-29T07:31:00.000Z'));
+    await teachers.unpublish({ documentId: teacher.documentId });
+    assert.equal(await teachers.findOne({ documentId: teacher.documentId, status: 'published' }), null);
+  });
+
+  test('защита преподавателя: неоднозначное время не продлевает границу после полуночи Москвы', async (t) => {
+    const { teachers, teacher } = await protectionFixture('ambiguous-time', {
+      startAt: '2026-10-28T21:00:00.000Z', additionalText: 'Начало в 10:30 или начало в 11:30',
+    });
+    t.mock.timers.enable({ apis: ['Date'], now: new Date('2026-10-29T07:29:00.000Z') });
+    await teachers.unpublish({ documentId: teacher.documentId });
+    assert.equal(await teachers.findOne({ documentId: teacher.documentId, status: 'published' }), null);
+  });
+
+  for (const action of ['create', 'update']) {
+    test(`защита преподавателя: прямой published ${action} не обходит проверку связи`, async () => {
+      const { teachers, entries, seminar, teacher, event } = await protectionFixture(`direct-${action}`, {
+        startAt: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
+      });
+      const draftTeacher = await teachers.create({ data: { name: 'Неопубликованный прямой',
+        slug: `event-protection-draft-${action}`, trait: 'teacher', legacy_id: `direct-draft-${action}` } });
+      const data = { seminar: seminar.documentId, teachers: [draftTeacher.documentId], city: 'Москва', entry_status: 'active',
+        startAt: '2030-03-17T00:00:00.000Z', endAt: '2030-03-21T00:00:00.000Z' };
+      if (action === 'create') {
+        await assert.rejects(() => entries.create({ status: 'published', data }), /преподавател/i);
+      } else {
+        await assert.rejects(() => entries.update({ documentId: event.documentId, status: 'published',
+          data: { teachers: [draftTeacher.documentId] } }), /преподавател/i);
+        const saved = await entries.findOne({ documentId: event.documentId, status: 'published', populate: ['teachers'] });
+        assert.deepEqual(saved.teachers.map(t => t.documentId), [teacher.documentId]);
+      }
+    });
+  }
+
+  test('защита преподавателя: одновременная публикация проведения и снятие преподавателя сохраняют инвариант', async () => {
+    for (let n = 0; n < 3; n++) {
+      const { teachers, entries, teacher, event } = await protectionFixture(`concurrent-${n}`, {
+        startAt: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
+      });
+      await entries.unpublish({ documentId: event.documentId });
+      const results = await Promise.allSettled([
+        entries.publish({ documentId: event.documentId }),
+        teachers.unpublish({ documentId: teacher.documentId }),
+      ]);
+      assert.ok(results.some(result => result.status === 'fulfilled'), 'хотя бы одна операция должна завершиться');
+      const publishedEvent = await entries.findOne({ documentId: event.documentId, status: 'published', populate: ['teachers'] });
+      const publishedTeacher = await teachers.findOne({ documentId: teacher.documentId, status: 'published' });
+      if (publishedEvent) {
+        assert.ok(publishedTeacher, 'опубликованное будущее проведение не может потерять преподавателя');
+        assert.deepEqual(publishedEvent.teachers.map(t => t.documentId), [teacher.documentId]);
+      }
+    }
+  });
+
   test('съём читает тип, закрытый для публичной роли', async () => {
     process.env.IKPK_ENABLE_CAPTURE_TOKEN_BOOTSTRAP = '1';
     const { bootstrapCaptureTokenForRehearsal } = loadCommonjs(
