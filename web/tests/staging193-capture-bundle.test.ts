@@ -141,6 +141,71 @@ afterEach(() => {
 });
 
 describe('staging193 sealed SQLite capture', () => {
+  it('resolves a published event teacher by document identity and preserves relation order', () => {
+    const root = mkdtempSync(join(tmpdir(), 'event-teachers-order-'));
+    temporaryRoots.push(root);
+    const database = join(root, 'database.sqlite');
+    fixtureDatabase(database);
+    const db = new DatabaseSync(database);
+    db.exec(`UPDATE teachers SET legacy_id='legacy-1' WHERE id=3;
+      INSERT INTO teachers (id,document_id,name,slug,trait,legacy_id,published_at)
+        VALUES (30,'second','Second teacher','second','teacher','legacy-2','2026-10-01');
+      INSERT INTO schedule_entries (id,document_id,name,city,published_at)
+        VALUES (40,'event-40','Event','City','2026-10-01');
+      INSERT INTO schedule_entries_teachers_lnk (id,schedule_entry_id,teacher_id,teacher_ord)
+        VALUES (1,40,30,2), (2,40,4,1);`);
+    db.close();
+
+    const captured = readPublishedSqlite(database, schemaRoot).collections['schedule-entries'] as
+      { teachers: { documentId: string; name: string; legacy_id: string }[] }[];
+    expect(captured[0].teachers.map((teacher) => [teacher.documentId, teacher.name, teacher.legacy_id]))
+      .toEqual([['teacher', 'Teacher', 'legacy-1'], ['second', 'Second teacher', 'legacy-2']]);
+  });
+
+  it('refuses an event teacher that has no published counterpart rather than treating the relation as empty', () => {
+    const root = mkdtempSync(join(tmpdir(), 'event-teachers-unpublished-'));
+    temporaryRoots.push(root);
+    const database = join(root, 'database.sqlite');
+    fixtureDatabase(database);
+    const db = new DatabaseSync(database);
+    db.exec(`UPDATE teachers SET document_id='only-draft' WHERE id=4;
+      INSERT INTO schedule_entries (id,document_id,name,city,published_at)
+        VALUES (40,'event-40','Event','City','2026-10-01');
+      INSERT INTO schedule_entries_teachers_lnk (id,schedule_entry_id,teacher_id,teacher_ord)
+        VALUES (1,40,4,1);`);
+    db.close();
+    expect(() => readPublishedSqlite(database, schemaRoot)).toThrow(/(teacher|преподавател)/i);
+  });
+
+  it('refuses a linked published event teacher whose name was emptied later', () => {
+    const root = mkdtempSync(join(tmpdir(), 'event-teachers-empty-name-'));
+    temporaryRoots.push(root);
+    const database = join(root, 'database.sqlite');
+    fixtureDatabase(database);
+    const db = new DatabaseSync(database);
+    db.exec(`UPDATE teachers SET legacy_id='legacy-1', name='' WHERE id=3;
+      INSERT INTO schedule_entries (id,document_id,name,city,published_at)
+        VALUES (40,'event-40','Event','City','2026-10-01');
+      INSERT INTO schedule_entries_teachers_lnk (id,schedule_entry_id,teacher_id,teacher_ord)
+        VALUES (1,40,3,1);`);
+    db.close();
+    expect(() => readPublishedSqlite(database, schemaRoot)).toThrow(/(teacher|преподавател)/i);
+  });
+
+  it('keeps an intentionally empty event teacher relation empty', () => {
+    const root = mkdtempSync(join(tmpdir(), 'event-teachers-empty-'));
+    temporaryRoots.push(root);
+    const database = join(root, 'database.sqlite');
+    fixtureDatabase(database);
+    const db = new DatabaseSync(database);
+    db.exec(`INSERT INTO schedule_entries (id,document_id,name,city,published_at)
+      VALUES (40,'event-40','Event','City','2026-10-01');`);
+    db.close();
+    const captured = readPublishedSqlite(database, schemaRoot).collections['schedule-entries'] as
+      { teachers: unknown[] }[];
+    expect(captured[0].teachers).toEqual([]);
+  });
+
   it('rejects a capture manifest from a different host or stale site URL', () => {
     for (const change of [{ host: '193.124.115.99' }, { siteUrl: 'https://193.124.115.99' }]) {
       const bundle = sealedBundle();

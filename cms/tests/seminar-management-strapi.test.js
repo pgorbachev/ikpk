@@ -186,7 +186,7 @@ describe('семинары в собранном Strapi', { timeout: 360000 }, (
       'plugin::content-manager.explorer.create',
       'api::schedule-entry.schedule-entry',
     );
-    for (const field of ['seminar', 'startAt', 'endAt', 'city']) {
+    for (const field of ['seminar', 'startAt', 'endAt', 'city', 'teachers']) {
       assert.ok(entryFields.includes(field), `create entry missing ${field}`);
     }
     assert.equal(
@@ -200,6 +200,8 @@ describe('семинары в собранном Strapi', { timeout: 360000 }, (
     assert.ok(
       fieldsOf('plugin::content-manager.explorer.read', 'api::teacher.teacher').includes('name'),
     );
+    assert.equal(rows.some((row) =>
+      row.action === 'plugin::content-manager.explorer.update' && row.subject === 'api::teacher.teacher'), false);
   });
 
   // Найдено при приёмке 07.10.2026: «мой семинар» не находил «Мой семинар Новый». Поиск админки
@@ -651,6 +653,78 @@ describe('семинары в собранном Strapi', { timeout: 360000 }, (
       },
     });
     assert.equal(midnight.admin_label, '1 октября 2026 · Москва');
+  });
+
+  test('черновик проведения может ссылаться на неопубликованного преподавателя, но его публикация отклоняется', async () => {
+    const seminars = app.documents('api::seminar.seminar');
+    const entries = app.documents('api::schedule-entry.schedule-entry');
+    const teachers = app.documents('api::teacher.teacher');
+    const seminar = await seminars.create({
+      status: 'published',
+      data: { name: 'Семинар для неопубликованного преподавателя', ...validSeminarPublicationFields,
+        course_group: publishedProgram.documentId },
+    });
+    const teacher = await teachers.create({ data: {
+      name: 'Черновой преподаватель', slug: 'draft-event-teacher', trait: 'teacher', legacy_id: 'draft-event-101',
+    } });
+    const entry = await entries.create({ data: {
+      seminar: seminar.documentId, teachers: [teacher.documentId], city: 'Москва',
+      startAt: '2027-03-17T00:00:00.000Z', endAt: '2027-03-21T00:00:00.000Z',
+    } });
+    assert.equal(entry.publishedAt ?? null, null, 'черновик должен сохраняться');
+    await assert.rejects(() => entries.publish({ documentId: entry.documentId }), /преподавател/i);
+    assert.equal(await entries.findOne({ documentId: entry.documentId, status: 'published' }), null);
+  });
+
+  test('при публикации проведения нужны имя и legacy_id опубликованной версии преподавателя', async () => {
+    const seminars = app.documents('api::seminar.seminar');
+    const entries = app.documents('api::schedule-entry.schedule-entry');
+    const teachers = app.documents('api::teacher.teacher');
+    const seminar = await seminars.create({
+      status: 'published',
+      data: { name: 'Семинар для опубликованного преподавателя', ...validSeminarPublicationFields,
+        course_group: publishedProgram.documentId },
+    });
+    const teacher = await teachers.create({ status: 'published', data: {
+      name: 'Преподаватель без идентификатора', slug: 'event-teacher-without-legacy', trait: 'teacher',
+    } });
+    await teachers.update({ documentId: teacher.documentId, data: { legacy_id: 'draft-only-identifier' } });
+    const entry = await entries.create({ data: {
+      seminar: seminar.documentId, teachers: [teacher.documentId], city: 'Москва',
+      startAt: '2027-03-17T00:00:00.000Z', endAt: '2027-03-21T00:00:00.000Z',
+    } });
+    await assert.rejects(() => entries.publish({ documentId: entry.documentId }), /преподавател/i);
+    assert.equal(await entries.findOne({ documentId: entry.documentId, status: 'published' }), null);
+  });
+
+  test('назначение преподавателя одному проведению не меняет другое проведение и общий семинар', async () => {
+    const seminars = app.documents('api::seminar.seminar');
+    const entries = app.documents('api::schedule-entry.schedule-entry');
+    const teachers = app.documents('api::teacher.teacher');
+    const one = await teachers.create({ status: 'published', data: {
+      name: 'Первый преподаватель', slug: 'event-teacher-one', trait: 'teacher', legacy_id: 'event-teacher-201',
+    } });
+    const two = await teachers.create({ status: 'published', data: {
+      name: 'Второй преподаватель', slug: 'event-teacher-two', trait: 'teacher', legacy_id: 'event-teacher-202',
+    } });
+    const seminar = await seminars.create({ status: 'published', data: {
+      name: 'Семинар с разными преподавателями', ...validSeminarPublicationFields,
+      course_group: publishedProgram.documentId, teachers: [one.documentId],
+    } });
+    const data = { seminar: seminar.documentId, city: 'Москва', entry_status: 'active',
+      startAt: '2027-03-17T00:00:00.000Z', endAt: '2027-03-21T00:00:00.000Z' };
+    const event = await entries.create({ status: 'published', data: { ...data, teachers: [two.documentId] } });
+    const other = await entries.create({ status: 'published', data: { ...data, teachers: [one.documentId] } });
+    const get = (api, documentId) => api.findOne({ documentId, status: 'published', populate: ['teachers'] });
+    assert.deepEqual((await get(entries, event.documentId)).teachers.map((t) => t.documentId), [two.documentId]);
+    assert.deepEqual((await get(entries, other.documentId)).teachers.map((t) => t.documentId), [one.documentId]);
+    assert.deepEqual((await get(seminars, seminar.documentId)).teachers.map((t) => t.documentId), [one.documentId]);
+    await entries.update({ documentId: event.documentId, data: { teachers: [one.documentId] } });
+    assert.deepEqual((await get(entries, event.documentId)).teachers.map((t) => t.documentId), [two.documentId],
+      'неопубликованная правка проведения не меняет опубликованную связь');
+    await entries.publish({ documentId: event.documentId });
+    assert.deepEqual((await get(entries, event.documentId)).teachers.map((t) => t.documentId), [one.documentId]);
+    assert.deepEqual((await get(entries, other.documentId)).teachers.map((t) => t.documentId), [one.documentId]);
   });
 
   test('съём читает тип, закрытый для публичной роли', async () => {

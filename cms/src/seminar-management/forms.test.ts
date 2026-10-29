@@ -76,3 +76,13 @@ test('изображение проведения редактируется, а
   assert.equal(collectionFlag?.editable, false);
   assert.ok(!inForm.has('isEventCollection'), 'исходный флаг коллекции не должен добавлять новый UI');
 });
+
+test('редактор может выбрать преподавателей конкретного проведения в форме', async () => {
+  const config = await configurations().then((saved) => saved.get('api::schedule-entry.schedule-entry'));
+  assert.ok(config);
+  const teacher = config.metadatas.teachers?.edit;
+  assert.equal(teacher?.visible, true, 'связь преподавателей должна быть видна');
+  assert.equal(teacher?.editable, true, 'связь преподавателей должна быть редактируемой');
+  assert.equal(teacher?.label, 'Преподаватели проведения');
+  assert.ok(config.layouts.edit.flat().some((cell) => cell.name === 'teachers'));
+});
