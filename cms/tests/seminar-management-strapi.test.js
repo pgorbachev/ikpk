@@ -697,6 +697,35 @@ describe('семинары в собранном Strapi', { timeout: 360000 }, (
     assert.equal(await entries.findOne({ documentId: entry.documentId, status: 'published' }), null);
   });
 
+  test('числовой startAt не обходит требование преподавателя при create и update status=published', async () => {
+    const seminars = app.documents('api::seminar.seminar');
+    const entries = app.documents('api::schedule-entry.schedule-entry');
+    const seminar = await seminars.create({
+      status: 'published',
+      data: { name: 'Семинар для числового startAt', ...validSeminarPublicationFields,
+        course_group: publishedProgram.documentId },
+    });
+    const startAt = 1_893_456_000_000;
+    const endAt = 1_893_542_400_000;
+    const entryData = {
+      seminar: seminar.documentId, city: 'Москва', entry_status: 'active', startAt, endAt, teachers: [],
+    };
+
+    await assert.rejects(
+      () => entries.create({ status: 'published', data: entryData }),
+      /преподавател/i,
+      'create со status=published должен пройти ту же teacher-проверку, что прямой publish',
+    );
+
+    const draft = await entries.create({ data: entryData });
+    await assert.rejects(
+      () => entries.update({ documentId: draft.documentId, status: 'published', data: {} }),
+      /преподавател/i,
+      'update со status=published не должен обходить проверку',
+    );
+    assert.equal(await entries.findOne({ documentId: draft.documentId, status: 'published' }), null);
+  });
+
   test('назначение преподавателя одному проведению не меняет другое проведение и общий семинар', async () => {
     const seminars = app.documents('api::seminar.seminar');
     const entries = app.documents('api::schedule-entry.schedule-entry');

@@ -145,6 +145,10 @@ describe('семинар из админки доходит до опублик�
   const institute = { name: 'Институт Сквозной Проверки', slug: 'institut-skvoznoj-proverki' };
   const group = { name: 'Курсы сквозной проверки', slug: 'kursy-skvoznoj-proverki' };
   const teacherName = 'Проверкина Анна Петровна';
+  const eventTeacherNames = [
+    teacherName,
+    ...Array.from({ length: 5 }, (_, index) => `Браузерный преподаватель ${index + 2}`),
+  ];
   const seminar = {
     name: 'Семинар сквозной проверки',
     slug: 'seminar-skvoznoj-proverki',
@@ -270,6 +274,15 @@ describe('семинар из админки доходит до опублик�
       trait: 'teacher',
       institute: inst.documentId,
     });
+    for (const [index, name] of eventTeacherNames.slice(1).entries()) {
+      await publish('api::teacher.teacher', {
+        name,
+        slug: `browser-event-teacher-${index + 2}`,
+        legacy_id: `browser-event-teacher-${index + 2}`,
+        trait: 'teacher',
+        institute: inst.documentId,
+      });
+    }
     await publish('api::article.article', {
       title: 'Статья сквозной проверки',
       slug: 'statya-skvoznoj-proverki',
@@ -323,6 +336,7 @@ describe('семинар из админки доходит до опублик�
       additionalText: '<p>Взять удобную одежду.</p>',
       duration: '3 дня',
       seminar: { connect: [{ documentId: seminarDocumentId }] },
+      teachers: { connect: [{ documentId: teachers.results[0].documentId }] },
     });
     await admin('POST', `/content-manager/collection-types/api::schedule-entry.schedule-entry/${entry.data.documentId}/actions/publish`, {});
 
@@ -333,7 +347,7 @@ describe('семинар из админки доходит до опублик�
     assert.ok(seminarPage.includes('Описание, набранное редактором в админке.'), 'нет описания семинара');
     assert.ok(seminarPage.includes('Самара'), 'нет города проведения');
     assert.match(seminarPage, /41 500 ₽/, 'нет цены проведения');
-    // Преподаватель указан только у семинара: поле преподавателей проведения в админке скрыто.
+    // У преподавателя семинара та же подпись, но связь проведения хранится отдельно.
     assert.ok(seminarPage.includes(teacherName), 'преподаватель семинара не дошёл до страницы');
     assert.ok(!seminarPage.includes('уточняется'), 'на странице «Преподаватель уточняется»');
 
@@ -480,8 +494,45 @@ describe('семинар из админки доходит до опублик�
       await setMoment('Окончание', new Date(uiStart.getTime() + day), '18:00');
       await pageUi.getByRole('textbox', { name: 'Город' }).fill('Казань');
       await pageUi.getByRole('textbox', { name: 'Цена', exact: true }).fill('36600');
+      for (const name of eventTeacherNames) {
+        await pick('Преподаватели проведения', name, name);
+      }
       await pageUi.getByRole('button', { name: 'Сохранить' }).click();
+
+      const uiSeminarRecord = (await app.documents('api::seminar.seminar').findMany({
+        filters: { name: uiSeminar.name }, status: 'published',
+      }))[0];
+      const uiDraftEntry = (await app.documents('api::schedule-entry.schedule-entry').findMany({
+        status: 'draft', populate: ['seminar'],
+      })).find((entry) => entry.seminar?.documentId === uiSeminarRecord.documentId);
+      assert.ok(uiDraftEntry, 'черновик проведения должен сохраниться');
+
+      const relationPages = new Set();
+      pageUi.on('response', (response) => {
+        const url = new URL(response.url());
+        if (!url.pathname.includes('/content-manager/relations/') || !url.pathname.endsWith('/teachers')) return;
+        const pageNumber = url.searchParams.get('page');
+        if (pageNumber) relationPages.add(pageNumber);
+      });
+      const pageTwoLoaded = pageUi.waitForResponse((response) => {
+        const url = new URL(response.url());
+        return url.pathname.includes('/content-manager/relations/') && url.pathname.endsWith('/teachers') &&
+          url.searchParams.get('page') === '2';
+      }, { timeout: 10_000 });
+      await pageUi.goto(`${base}/admin/content-manager/collection-types/api::schedule-entry.schedule-entry/${uiDraftEntry.documentId}`);
+      await pageTwoLoaded;
+      await pageUi.getByRole('combobox', { name: 'Преподаватели проведения (6)' }).waitFor();
+      await pageUi.getByRole('button', { name: 'Load More' }).waitFor({ state: 'detached' });
+      assert.ok(relationPages.has('2'), 'форма должна автоматически загрузить связи после первых пяти');
+      await pageUi.getByRole('button', { name: 'Опубликовать' }).waitFor();
       await publishForm();
+
+      const publishedEntry = await app.documents('api::schedule-entry.schedule-entry').findOne({
+        documentId: uiDraftEntry.documentId, status: 'published', populate: ['teachers'],
+      });
+      assert.deepEqual(publishedEntry.teachers.map(({ name }) => name), eventTeacherNames,
+        'публикация штатной кнопкой должна подтвердить и сохранить весь текущий список по порядку');
+      if (process.env.E2E_TEACHER_RELATIONS_ONLY === 'true') return;
 
       // Кнопка «Обновить сайт» — на её собственной странице админки.
       await pageUi.getByRole('link', { name: 'Обновить сайт' }).click();

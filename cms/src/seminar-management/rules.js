@@ -125,8 +125,9 @@ export function seminarPublicationError(name) {
  */
 export function scheduleEntryIsBeforeStart(entry, now = Date.now()) {
   const { startAt, additionalText } = entry ?? {};
-  if (typeof startAt !== 'string' || !startAt) return false;
-  let day = /^\d{4}-\d{2}-\d{2}$/.test(startAt) ? startAt : '';
+  const isEpochMilliseconds = typeof startAt === 'number' && Number.isFinite(startAt);
+  if (!isEpochMilliseconds && (typeof startAt !== 'string' || !startAt)) return false;
+  let day = typeof startAt === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(startAt) ? startAt : '';
   if (!day) {
     const instant = new Date(startAt);
     if (Number.isNaN(instant.getTime())) return false;
