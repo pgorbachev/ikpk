@@ -23,6 +23,7 @@
  *    локально. Проверяется тело провижининга, а не транспорт.
  */
 import { createHash } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -230,7 +231,7 @@ export class ProvisionTarget {
   /**
    * stand.env требует дерево сборки и SHA его источника. В контейнер копируются только
    * scripts и deploy, поэтому здесь минимальные web/package-lock.json, media-originals,
-   * cms/src, закреплённые файлы снимка и чистый git-коммит. node_modules astro/tsx и штамп lock уже на месте: npm ci в
+   * cms/src, компоненты capture, закреплённые файлы снимка и чистый git-коммит. node_modules astro/tsx и штамп lock уже на месте: npm ci в
    * каждом сценарии не запускается.
    */
   private seedSiteBuildFixture(): void {
@@ -243,13 +244,17 @@ export class ProvisionTarget {
     this.write('/repo/web/package.json', '{"name":"web","private":true}\n');
     this.write('/repo/media-originals/.gitkeep', '');
     this.write('/repo/cms/src/.gitkeep', '');
+    this.write('/repo/cms/scripts/capture-staging194.py', readFileSync(join(REPO_ROOT, 'cms/scripts/capture-staging194.py'), 'utf8'));
     this.write('/repo/fixtures/content-snapshot/collapsible_panels.json', '{}\n');
     this.write('/repo/fixtures/content-snapshot/url_map.csv', 'from,to\n');
     this.write('/var/lib/ikpk-site-build/web/node_modules/astro/package.json', '{}\n');
     this.write('/var/lib/ikpk-site-build/web/node_modules/tsx/package.json', '{}\n');
     this.write('/var/lib/ikpk-site-build/.deps-stamp', `${stamp}\n`);
     this.execOrThrow(
-      'git init -b main /repo >/dev/null && git -C /repo config user.email fixture@example.com && git -C /repo config user.name fixture && git -C /repo add web media-originals cms fixtures && git -C /repo commit -m fixture >/dev/null',
+      'git init -b main /repo >/dev/null && git -C /repo config user.email fixture@example.com && ' +
+        'git -C /repo config user.name fixture && git -C /repo add web media-originals cms fixtures ' +
+        'scripts/lib/seal-staging193-capture.mjs scripts/lib/staging193-capture-bundle.mjs ' +
+        'scripts/lib/server-capture-sqlite.mjs && git -C /repo commit -m fixture >/dev/null',
     );
   }
 

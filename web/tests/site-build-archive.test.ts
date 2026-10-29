@@ -5,9 +5,9 @@
  * каталога увозил бы web/.env на стенд, хотя объявленный SHA этого файла не содержит.
  */
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 const REPO = join(import.meta.dirname, '..', '..');
@@ -27,8 +27,22 @@ describe('архив дерева сборки', () => {
       mkdirSync(join(repo, 'media-originals'), { recursive: true });
       mkdirSync(join(repo, 'cms', 'src', 'api', 'institute', 'content-types', 'institute'), { recursive: true });
       mkdirSync(join(repo, 'fixtures', 'content-snapshot'), { recursive: true });
+      // Архив берёт именно коммит: цепочка capture должна находиться в нём.
+      const captureFiles = [
+        'cms/scripts/capture-staging194.py',
+        'scripts/lib/seal-staging193-capture.mjs',
+        'scripts/lib/staging193-capture-bundle.mjs',
+        'scripts/lib/server-capture-sqlite.mjs',
+      ];
+      for (const file of captureFiles) {
+        mkdirSync(dirname(join(repo, file)), { recursive: true });
+        copyFileSync(join(REPO, file), join(repo, file));
+      }
       writeFileSync(join(repo, 'web', '.gitignore'), '.env\n.env.production\n');
+      writeFileSync(join(repo, '.gitignore'), 'cms/.env\nweb/node_modules/\nweb/dist/\n');
       writeFileSync(join(repo, 'web', 'package-lock.json'), '{"name":"web"}\n');
+      mkdirSync(join(repo, 'web', 'scripts'), { recursive: true });
+      writeFileSync(join(repo, 'web', 'scripts', 'capture-content-snapshot.ts'), 'capture\n');
       writeFileSync(join(repo, 'media-originals', '.gitkeep'), '');
       writeFileSync(join(repo, 'fixtures', 'content-snapshot', 'collapsible_panels.json'), '{}\n');
       writeFileSync(join(repo, 'fixtures', 'content-snapshot', 'url_map.csv'), 'from,to\n');
@@ -39,13 +53,20 @@ describe('архив дерева сборки', () => {
       execFileSync('git', ['init', '-b', 'main', repo], { stdio: 'pipe' });
       git(repo, ['config', 'user.email', 'fixture@example.com']);
       git(repo, ['config', 'user.name', 'fixture']);
-      git(repo, ['add', 'web', 'media-originals', 'cms', 'fixtures']);
+      git(repo, ['add', '.gitignore', 'web', 'media-originals', 'cms', 'fixtures', 'scripts']);
       git(repo, ['commit', '-m', 'fixture']);
       writeFileSync(join(repo, 'web', '.env'), 'SECRET=operator\n');
       writeFileSync(join(repo, 'web', '.env.production'), 'SECRET=production\n');
 
       const porcelain = git(repo, ['status', '--porcelain', '--', 'web', 'media-originals']);
       expect(porcelain, 'игнорируемый .env не должен делать статус грязным').toBe('');
+
+      writeFileSync(join(repo, 'cms', '.env'), 'SECRET=cms\n');
+      mkdirSync(join(repo, 'web', 'node_modules'), { recursive: true });
+      mkdirSync(join(repo, 'web', 'dist'), { recursive: true });
+      writeFileSync(join(repo, 'web', 'node_modules', 'cache.txt'), 'generated');
+      writeFileSync(join(repo, 'web', 'dist', 'index.html'), 'generated');
+      writeFileSync(join(repo, 'web', 'untracked-secret.txt'), 'untracked');
 
       const worktreeList = execFileSync(
         'tar',
@@ -58,6 +79,9 @@ describe('архив дерева сборки', () => {
       const archive = execFileSync('bash', ['-c', script], { encoding: 'buffer' });
       execFileSync('tar', ['-C', dest, '-xzf', '-'], { input: archive });
 
+      for (const file of captureFiles) {
+        expect(readFileSync(join(dest, file))).toEqual(readFileSync(join(REPO, file)));
+      }
       expect(existsSync(join(dest, 'web', 'package-lock.json'))).toBe(true);
       expect(
         existsSync(join(dest, 'cms', 'src', 'api', 'institute', 'content-types', 'institute', 'schema.json')),
@@ -66,6 +90,10 @@ describe('архив дерева сборки', () => {
       expect(existsSync(join(dest, 'fixtures', 'content-snapshot', 'url_map.csv'))).toBe(true);
       expect(existsSync(join(dest, 'web', '.env'))).toBe(false);
       expect(existsSync(join(dest, 'web', '.env.production'))).toBe(false);
+      for (const file of ['cms/.env', 'web/node_modules/cache.txt', 'web/dist/index.html', 'web/untracked-secret.txt']) {
+        expect(existsSync(join(dest, file)), `${file} не должен попасть в архив`).toBe(false);
+      }
+      expect(existsSync(join(dest, 'web', 'scripts', 'capture-content-snapshot.ts'))).toBe(true);
       expect(readFileSync(join(dest, 'web', 'package-lock.json'), 'utf8')).toContain('"name":"web"');
     } finally {
       rmSync(repo, { recursive: true, force: true });

@@ -9,6 +9,10 @@ site_build_archive() {
   # а сборка читает collapsible_panels.json безусловно. Без этих двух файлов кнопка
   # доходит до рендера /oplata и падает ENOENT.
   git -C "$root" archive --format=tar.gz HEAD -- web media-originals cms/src \
+    cms/scripts/capture-staging194.py \
+    scripts/lib/seal-staging193-capture.mjs \
+    scripts/lib/staging193-capture-bundle.mjs \
+    scripts/lib/server-capture-sqlite.mjs \
     fixtures/content-snapshot/collapsible_panels.json \
     fixtures/content-snapshot/url_map.csv
 }
