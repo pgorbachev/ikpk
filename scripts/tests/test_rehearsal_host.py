@@ -700,13 +700,39 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
             snapshot_call = next(item for item in calls if "capture-content-snapshot.ts" in " ".join(item[0]))
             build_call = next(item for item in calls if item[0][:3] == ["/usr/bin/npm", "run", "build:demo193"])
             self.assertEqual(snapshot_call[1], expected)
-            self.assertEqual(build_call[1], expected)
+            self.assertEqual(build_call[1], {**expected, "MAINTENANCE_BANNER": "off"})
             release = json.loads((dist / "release.json").read_text(encoding="utf-8"))
             self.assertEqual(release["commit"], "a" * 40)
             self.assertEqual(stat.S_IMODE((dist / "release.json").stat().st_mode), 0o644,
                              "release metadata must be readable by the static web server")
             self.assertEqual((dist / "_astro/legacy.0123456789.css").read_text(encoding="utf-8"),
                              "previous hash asset")
+
+    def test_static_build_passes_maintenance_banner_config_to_build_environment(self):
+        for profile in ("staging194", "initial-prod", "production-static"):
+            for configured, expected in ((None, "off"), ("off", "off"), ("on", "on")):
+                with self.subTest(profile=profile, maintenance_banner=configured):
+                    config = {"profile": profile, "siteBaseUrl": "https://194.226.99.10"}
+                    if configured is not None:
+                        config["maintenanceBanner"] = configured
+                    # Stop at the child build command: no static output or host mutation is needed.
+                    with patch.object(rehearsal_host, "_validate_prepared_web_dependencies"), \
+                         patch.object(rehearsal_host, "_run_as_cms", side_effect=RuntimeError("build observed")) as run:
+                        with self.assertRaisesRegex(RuntimeError, "build observed"):
+                            rehearsal_host._build_static(config, Path("/unused/candidate"),
+                                                         Path("/unused/capture"), reuse_snapshot=True)
+                    run.assert_called_once()
+                    self.assertEqual(run.call_args.kwargs["environment"].get("MAINTENANCE_BANNER"), expected)
+
+    def test_static_build_rejects_invalid_maintenance_config_before_child_commands(self):
+        for value in ("sometimes", "ON", "", True, 1, None):
+            with self.subTest(maintenance_banner=value):
+                with patch.object(rehearsal_host, "_validate_prepared_web_dependencies"), \
+                     patch.object(rehearsal_host, "_run_as_cms") as run:
+                    with self.assertRaisesRegex(rehearsal_host.HostFailure, "maintenanceBanner"):
+                        rehearsal_host._build_static({"maintenanceBanner": value, "siteBaseUrl": "https://194.226.99.10"},
+                                                     Path("/unused"), Path("/unused"))
+                run.assert_not_called()
 
     def test_static_build_can_include_the_owner_approved_staging194_chat_loader(self):
         with tempfile.TemporaryDirectory(prefix="ikpk-static-chat-env-") as temporary:

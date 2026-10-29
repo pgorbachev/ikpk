@@ -1,0 +1,45 @@
+---
+import { isDemoForms } from '../lib/forms';
+import { isDemoOutput } from '../lib/external-widgets';
+import { isMaintenanceBannerEnabled } from '../lib/maintenance-banner';
+---
+
+{isMaintenanceBannerEnabled && !isDemoForms && !isDemoOutput && (
+<section class="maintenance-notice" aria-label="Технические работы" data-pagefind-ignore>
+  <div>
+    <strong>На сайте ведутся технические работы</strong>
+    <span>Некоторые разделы могут работать некорректно. Приносим извинения за временные неудобства.</span>
+  </div>
+</section>
+)}
+
+<style>
+  .maintenance-notice {
+    background: #fff3d6;
+    color: #503710;
+    border-bottom: 1px solid #e9c06b;
+    padding: 14px 24px;
+  }
+
+  .maintenance-notice > div {
+    max-width: 1200px;
+    margin: 0 auto;
+    display: flex;
+    align-items: baseline;
+    justify-content: center;
+    flex-wrap: wrap;
+    column-gap: 12px;
+    row-gap: 3px;
+  }
+
+  strong { font-size: 16px; line-height: 1.5; }
+  span { font-size: 14px; line-height: 1.5; }
+
+  @media (max-width: 640px) {
+    .maintenance-notice { padding: 12px 16px; }
+    .maintenance-notice > div { display: block; }
+    strong, span { display: block; }
+    strong { font-size: 15px; }
+    span { margin-top: 4px; }
+  }
+</style>

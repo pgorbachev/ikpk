@@ -80,6 +80,13 @@ def sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
+def _maintenance_banner(config: dict[str, Any]) -> str:
+    value = config.get("maintenanceBanner", "off")
+    if value not in ("on", "off"):
+        raise HostFailure("maintenanceBanner must be on or off")
+    return value
+
+
 def _root_config(path: Path, expected_profile: str = "staging194") -> dict[str, Any]:
     try:
         info = path.lstat()
@@ -91,6 +98,7 @@ def _root_config(path: Path, expected_profile: str = "staging194") -> dict[str, 
         data = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError) as error:
         raise HostFailure("host config is not valid JSON") from error
+    _maintenance_banner(data)
     missing = REQUIRED_CONFIG - data.keys()
     if missing:
         raise HostFailure(f"host config missing fields: {', '.join(sorted(missing))}")
@@ -1152,6 +1160,7 @@ def _build_static(config: dict[str, Any], source_root: Path, capture: Path,
     if chat_loader_src is not None and (config.get("profile", "staging194") not in ("staging194", "production-static")
                                         or chat_loader_src != STAGING194_CHAT_LOADER_SRC):
         raise HostFailure("only staging194 static-main may use the owner-approved chat loader; production-static uses the production profile")
+    maintenance_banner = _maintenance_banner(config)
     web = source_root / "web"
     _validate_prepared_web_dependencies(source_root)
     initial_prod = config.get("profile") == "initial-prod"
@@ -1182,7 +1191,7 @@ def _build_static(config: dict[str, Any], source_root: Path, capture: Path,
         _run_as_cms(config, web, [str(web / "node_modules/.bin/tsx"),
             str(web / "scripts/capture-content-snapshot.ts"), *capture_args], timeout=1800,
             environment=capture_environment, read_only_path=read_only_paths)
-    build_environment = dict(capture_environment)
+    build_environment = dict(capture_environment, MAINTENANCE_BANNER=maintenance_banner)
     if chat_loader_src is not None and config.get("profile", "staging194") == "staging194":
         build_environment["CHAT_LOADER_PROFILE"] = "staging194-static-main"
     _run_as_cms(config, web, ["/usr/bin/npm", "run", build_script], timeout=1800,
