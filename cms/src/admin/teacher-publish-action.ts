@@ -4,6 +4,15 @@ import { getTeacherRelationsStatus, subscribeTeacherRelationsStatus } from './te
 
 const SCHEDULE_ENTRY_MODEL = 'api::schedule-entry.schedule-entry';
 
+export function shouldGuardTeacherPublication(databaseClient: unknown): boolean {
+  return databaseClient !== 'postgres' && databaseClient !== 'mysql';
+}
+
+function runtimeRequiresTeacherGuard(): boolean {
+  const strapiWindow = window as Window & { strapi?: { flags?: Record<string, unknown> } };
+  return shouldGuardTeacherPublication(strapiWindow.strapi?.flags?.ikpkDatabaseClient);
+}
+
 export function guardPublishDescription<T extends {
   disabled?: boolean;
   onClick?: (event: unknown) => unknown;
@@ -34,13 +43,14 @@ export function guardScheduleEntryPublish(action: DocumentActionComponent): Docu
   const guarded: DocumentActionComponent = (props) => {
     const documentId = props.documentId ?? props.document?.documentId;
     const isScheduleEntry = props.model === SCHEDULE_ENTRY_MODEL;
+    const guardEnabled = runtimeRequiresTeacherGuard();
     useSyncExternalStore(
-      (listener) => documentId ? subscribeTeacherRelationsStatus(documentId, listener) : () => {},
-      () => documentId ? getTeacherRelationsStatus(documentId) : undefined,
+      (listener) => guardEnabled && documentId ? subscribeTeacherRelationsStatus(documentId, listener) : () => {},
+      () => guardEnabled && documentId ? getTeacherRelationsStatus(documentId) : undefined,
       () => undefined,
     );
     useEffect(() => {
-      if (!isScheduleEntry || !documentId) return undefined;
+      if (!guardEnabled || !isScheduleEntry || !documentId) return undefined;
       const guardPublishShortcut = (event: KeyboardEvent) => {
         if (!(event.metaKey || event.ctrlKey) || !event.shiftKey || event.key.toLowerCase() !== 'enter') return;
         if (getTeacherRelationsStatus(documentId) === 'ready') return;
@@ -49,10 +59,10 @@ export function guardScheduleEntryPublish(action: DocumentActionComponent): Docu
       };
       window.addEventListener('keydown', guardPublishShortcut, true);
       return () => window.removeEventListener('keydown', guardPublishShortcut, true);
-    }, [documentId, isScheduleEntry]);
+    }, [documentId, isScheduleEntry, guardEnabled]);
     const description = action(props);
 
-    if (!isScheduleEntry || !documentId) return description;
+    if (!guardEnabled || !isScheduleEntry || !documentId) return description;
 
     return guardPublishDescription(description, documentId, getTeacherRelationsStatus);
   };
@@ -65,7 +75,7 @@ export function guardScheduleEntryPublish(action: DocumentActionComponent): Docu
 export function guardScheduleEntryBulkPublish(action: BulkActionComponent): BulkActionComponent {
   const guarded: BulkActionComponent = (props) => {
     const description = action(props);
-    if (props.model !== SCHEDULE_ENTRY_MODEL || description?.actionType !== 'publish') return description;
+    if (!runtimeRequiresTeacherGuard() || props.model !== SCHEDULE_ENTRY_MODEL || description?.actionType !== 'publish') return description;
     return { ...description, disabled: true, onClick: () => true };
   };
   return guarded;

@@ -90,6 +90,11 @@ describe('семинары в собранном Strapi', { timeout: 360000 }, (
     await app.listen();
     base = `http://127.0.0.1:${process.env.PORT}`;
 
+    const projectType = await fetch(`${base}/admin/project-type`);
+    const projectTypeBody = await projectType.json();
+    assert.equal(projectType.status, 200, 'runtime database capability is available without an admin role');
+    assert.equal(projectTypeBody.data.flags.ikpkDatabaseClient, app.config.get('database.connection.client'));
+
     const role = await app.service('admin::role').findOne({ code: 'content-admin' });
     assert.equal(role.code, 'content-admin');
     assert.notEqual(role.code, 'strapi-super-admin');

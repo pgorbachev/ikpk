@@ -649,7 +649,7 @@ describe('семинар из админки доходит до опублик�
         'публикация штатной кнопкой должна подтвердить и сохранить весь текущий список по порядку');
 
       const bulkDraftCity = 'Черновик для проверки массовой публикации';
-      await app.documents('api::schedule-entry.schedule-entry').create({
+      const bulkDraftEntry = await app.documents('api::schedule-entry.schedule-entry').create({
         data: {
           seminar: uiSeminarRecord.documentId,
           teachers: publishedEntry.teachers.map(({ documentId }) => documentId),
@@ -679,6 +679,67 @@ describe('семинар из админки доходит до опублик�
       await seminarBulkPublish.waitFor();
       assert.equal(await seminarBulkPublish.isDisabled(), false,
         'массовая публикация семинаров остаётся штатной');
+
+      // Сборка portable: имитируем runtime Postgres через существующий Strapi project-type
+      // response. Эта browser session проверяет реальные компоненты/роуты, а не mocked UI.
+      let nonSqliteProjectTypeCalls = 0;
+      await pageUi.route('**/admin/project-type', async (route) => {
+        const response = await route.fetch();
+        const body = await response.json();
+        body.data.flags.ikpkDatabaseClient = 'postgres';
+        nonSqliteProjectTypeCalls += 1;
+        await route.fulfill({ response, body: JSON.stringify(body) });
+      });
+      await pageUi.reload();
+      await pageUi.waitForFunction(() => globalThis.window.strapi?.flags?.ikpkDatabaseClient === 'postgres');
+      assert.ok(nonSqliteProjectTypeCalls > 0, 'admin использовал runtime database capability, а не значение сборки');
+      const runtimeTeacherPageOne = (url) => {
+        const parsed = new URL(url);
+        return parsed.pathname === `/content-manager/relations/api::schedule-entry.schedule-entry/${bulkDraftEntry.documentId}/teachers` &&
+          parsed.searchParams.get('page') === '1';
+      };
+      const runtimePageOneResponse = pageUi.waitForResponse((response) => runtimeTeacherPageOne(response.url()) && response.ok());
+      const runtimePageTwoRequests = [];
+      pageUi.on('request', (request) => {
+        const parsed = new URL(request.url());
+        if (parsed.pathname === `/content-manager/relations/api::schedule-entry.schedule-entry/${bulkDraftEntry.documentId}/teachers` &&
+          parsed.searchParams.get('page') === '2') runtimePageTwoRequests.push(request.url());
+      });
+      await pageUi.goto(`${base}/admin/content-manager/collection-types/api::schedule-entry.schedule-entry/${bulkDraftEntry.documentId}`);
+      await runtimePageOneResponse;
+      assert.equal(await pageUi.getByRole('button', { name: /Load More|Загрузить ещё/ }).count(), 1,
+        'runtime Postgres сохраняет штатную pagination связи');
+      await pageUi.waitForTimeout(300);
+      assert.deepEqual(runtimePageTwoRequests, [], 'runtime Postgres не запускает SQLite автозагрузку страниц');
+      const runtimePublishButton = pageUi.getByRole('button', { name: 'Опубликовать' });
+      await runtimePublishButton.waitFor();
+      assert.equal(await runtimePublishButton.isDisabled(), false,
+        'runtime Postgres не блокирует штатную публикацию формы');
+      await publishForm();
+      const runtimePublishedEntry = await app.documents('api::schedule-entry.schedule-entry').findOne({
+        documentId: bulkDraftEntry.documentId, status: 'published', populate: ['teachers'],
+      });
+      assert.deepEqual(runtimePublishedEntry.teachers.map(({ name }) => name), eventTeacherNames,
+        'штатная публикация сохраняет существующую связь при runtime non-SQLite');
+      const runtimeBulkCity = 'Черновик для non-SQLite bulk action';
+      await app.documents('api::schedule-entry.schedule-entry').create({
+        data: {
+          seminar: uiSeminarRecord.documentId,
+          teachers: publishedEntry.teachers.map(({ documentId }) => documentId),
+          startAt: new Date(uiStart.getTime() + 4 * day).toISOString(),
+          endAt: new Date(uiStart.getTime() + 5 * day).toISOString(),
+          city: runtimeBulkCity,
+          entry_status: 'active',
+        },
+      });
+      await pageUi.goto(`${base}/admin/content-manager/collection-types/api::schedule-entry.schedule-entry`);
+      const runtimeBulkRow = pageUi.getByRole('row').filter({ hasText: runtimeBulkCity });
+      await runtimeBulkRow.waitFor();
+      await runtimeBulkRow.getByRole('checkbox').check();
+      const runtimeBulkPublish = pageUi.getByRole('button', { name: 'Опубликовать' });
+      await runtimeBulkPublish.waitFor();
+      assert.equal(await runtimeBulkPublish.isDisabled(), false,
+        'runtime non-SQLite сохраняет штатную массовую публикацию проведений');
       if (process.env.E2E_TEACHER_RELATIONS_ONLY === 'true') return;
 
       // Кнопка «Обновить сайт» — на её собственной странице админки.

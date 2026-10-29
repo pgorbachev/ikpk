@@ -1,6 +1,14 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { guardPublishDescription } from './teacher-publish-action';
+import { guardPublishDescription, shouldGuardTeacherPublication } from './teacher-publish-action';
+
+test('backend capability сохраняет обычное поведение на известных non-SQLite БД и блокирует неизвестную', () => {
+  assert.equal(shouldGuardTeacherPublication('postgres'), false);
+  assert.equal(shouldGuardTeacherPublication('mysql'), false);
+  assert.equal(shouldGuardTeacherPublication('sqlite'), true);
+  assert.equal(shouldGuardTeacherPublication(undefined), true);
+  assert.equal(shouldGuardTeacherPublication('unknown-driver'), true);
+});
 
 test('неполный список подавляет confirmation dialog и не публикует после открытия предупреждения', async () => {
   let status: string | undefined = 'ready';
