@@ -870,6 +870,106 @@ describe('семинары в собранном Strapi', { timeout: 360000 }, (
     }
   });
 
+  async function reactivationFixture(suffix, initial) {
+    const entries = app.documents('api::schedule-entry.schedule-entry');
+    const teachers = app.documents('api::teacher.teacher');
+    const seminars = app.documents('api::seminar.seminar');
+    const teacher = await teachers.create({ status: 'published', data: {
+      name: `Преподаватель возврата ${suffix}`, slug: `reactivation-${suffix}`,
+      trait: 'teacher', legacy_id: `reactivation-${suffix}`,
+    } });
+    const seminar = await seminars.create({ status: 'published', data: {
+      name: `Семинар возврата ${suffix}`, ...validSeminarPublicationFields,
+      course_group: publishedProgram.documentId, teachers: [teacher.documentId],
+    } });
+    const event = await entries.create({ status: 'published', data: {
+      seminar: seminar.documentId, city: 'Москва', teachers: [], ...initial,
+    } });
+    return { entries, teacher, event };
+  }
+
+  const futureActive = {
+    entry_status: 'active', startAt: '2099-03-17T00:00:00.000Z', endAt: '2099-03-21T00:00:00.000Z',
+  };
+  for (const [kind, initial] of [
+    ['отменённого', { ...futureActive, entry_status: 'cancelled' }],
+    ['прошедшего', { entry_status: 'active', startAt: '2000-03-17T00:00:00.000Z', endAt: '2000-03-21T00:00:00.000Z' }],
+    ['архивного', { ...futureActive, entry_status: 'completed' }],
+  ]) {
+    for (const method of ['publish', 'update']) {
+      for (const hasTeacher of [false, true]) {
+        test(`возврат проведения: ${method} ${kind} в будущее ${hasTeacher ? 'с преподавателем' : 'без преподавателя'}`, async () => {
+          const suffix = `${kind === 'отменённого' ? 'cancelled' : kind === 'прошедшего' ? 'past' : 'completed'}-${method}-${hasTeacher}`;
+          const { entries, teacher, event } = await reactivationFixture(suffix, initial);
+          const data = { ...futureActive, teachers: hasTeacher ? [teacher.documentId] : [] };
+          let publish;
+          if (method === 'publish') {
+            await entries.update({ documentId: event.documentId, data });
+            const draft = await entries.findOne({ documentId: event.documentId, status: 'draft', populate: ['teachers'] });
+            assert.equal(draft.entry_status, 'active', 'черновой перенос разрешён без преподавателя');
+            assert.deepEqual(draft.teachers.map(t => t.documentId), hasTeacher ? [teacher.documentId] : []);
+            publish = () => entries.publish({ documentId: event.documentId });
+          } else {
+            publish = () => entries.update({ documentId: event.documentId, status: 'published', data });
+          }
+          if (!hasTeacher) {
+            await assert.rejects(publish, /преподавател/i);
+            const saved = await entries.findOne({ documentId: event.documentId, status: 'published', populate: ['teachers'] });
+            assert.equal(saved.entry_status, initial.entry_status);
+            assert.equal(saved.startAt, initial.startAt);
+            assert.deepEqual(saved.teachers, []);
+          } else {
+            await publish();
+            const saved = await entries.findOne({ documentId: event.documentId, status: 'published', populate: ['teachers'] });
+            assert.equal(saved.entry_status, 'active');
+            assert.equal(saved.startAt, futureActive.startAt);
+            assert.deepEqual(saved.teachers.map(t => t.documentId), [teacher.documentId]);
+          }
+        });
+      }
+    }
+  }
+
+  for (const method of ['publish', 'update']) {
+    test(`возврат проведения: ${method} обычной правки будущего legacy без преподавателя сохраняет fallback`, async () => {
+      const { entries, event } = await reactivationFixture(`legacy-${method}`, futureActive);
+      if (method === 'publish') {
+        await entries.update({ documentId: event.documentId, data: { city: 'Санкт-Петербург' } });
+        await entries.publish({ documentId: event.documentId });
+      } else {
+        await entries.update({ documentId: event.documentId, status: 'published', data: { city: 'Санкт-Петербург' } });
+      }
+      const saved = await entries.findOne({ documentId: event.documentId, status: 'published', populate: ['teachers'] });
+      assert.equal(saved.city, 'Санкт-Петербург');
+      assert.deepEqual(saved.teachers, []);
+    });
+  }
+
+  for (const status of ['draft', 'published']) {
+    test(`возврат проведения: новое ${status} проведение без преподавателя сохраняется с fallback`, async () => {
+      const { entries, event } = await reactivationFixture(`new-${status}`, futureActive);
+      const created = await entries.create({ status, data: {
+        seminar: (await entries.findOne({ documentId: event.documentId, populate: ['seminar'] })).seminar.documentId,
+        city: 'Москва', ...futureActive, teachers: [],
+      } });
+      const saved = await entries.findOne({ documentId: created.documentId, status, populate: ['teachers'] });
+      assert.ok(saved);
+      assert.deepEqual(saved.teachers, []);
+    });
+  }
+
+  test('возврат проведения: черновой перенос без преподавателя допустим и не меняет опубликованную запись', async () => {
+    const initial = { ...futureActive, entry_status: 'cancelled' };
+    const { entries, event } = await reactivationFixture('draft-only', initial);
+    await entries.update({ documentId: event.documentId, data: { ...futureActive, teachers: [] } });
+    const draft = await entries.findOne({ documentId: event.documentId, status: 'draft', populate: ['teachers'] });
+    const published = await entries.findOne({ documentId: event.documentId, status: 'published', populate: ['teachers'] });
+    assert.equal(draft.entry_status, 'active');
+    assert.deepEqual(draft.teachers, []);
+    assert.equal(published.entry_status, 'cancelled');
+    assert.deepEqual(published.teachers, []);
+  });
+
   test('съём читает тип, закрытый для публичной роли', async () => {
     process.env.IKPK_ENABLE_CAPTURE_TOKEN_BOOTSTRAP = '1';
     const { bootstrapCaptureTokenForRehearsal } = loadCommonjs(
