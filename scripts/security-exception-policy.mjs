@@ -1,7 +1,7 @@
 const severities = ['critical', 'high', 'moderate', 'low', 'info'];
 const blocking = new Set(['high', 'critical']);
 const recordFields = new Set([
-  'component', 'package', 'advisory', 'lock_nodes', 'observed_report_severity',
+  'component', 'package', 'advisory', 'advisory_url', 'lock_nodes', 'observed_report_severity',
   'accepted_max_severity', 'owner', 'decision', 'decision_reference', 'expires_at',
   'reason', 'applicability', 'mitigation', 'source_evidence',
 ]);
@@ -57,6 +57,9 @@ function validatePolicy(policy, lockfile, component, now) {
     if (!componentNames.has(exception.component)) throw new Error('security exception has unknown component');
     requireText(exception.package, 'package', packagePattern);
     requireText(exception.advisory, 'advisory', ghsaPattern);
+    if (exception.advisory_url !== 'https://github.com/advisories/' + exception.advisory) {
+      throw new Error('security exception advisory URL does not match advisory');
+    }
     if (exception.observed_report_severity !== 'high' || exception.accepted_max_severity !== 'high') {
       throw new Error('security exception severity must be observed and capped at high');
     }

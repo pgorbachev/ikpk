@@ -89,7 +89,12 @@ test('clean web, scripts, and payments reports pass with an explicit empty polic
 test('unknown advisories, stale nodes, ranges, and severity escalation fail closed', () => {
   const unknown = clone(policy);
   unknown.exceptions[0].advisory = 'GHSA-aaaa-bbbb-cccc';
+  unknown.exceptions[0].advisory_url = 'https://github.com/advisories/' + unknown.exceptions[0].advisory;
   assert.throws(() => evaluate({ exceptions: unknown }), /does not match this audit report/);
+
+  const mismatchedUrl = clone(policy);
+  mismatchedUrl.exceptions[0].advisory_url = 'https://github.com/advisories/GHSA-aaaa-bbbb-cccc';
+  assert.throws(() => evaluate({ exceptions: mismatchedUrl }), /advisory URL does not match advisory/);
 
   const stale = clone(policy);
   stale.exceptions[0].lock_nodes[0].version = '1.29.1';
