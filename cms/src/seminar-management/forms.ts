@@ -120,12 +120,6 @@ async function applyOne(strapi, uid, fields, settings, list, hidden) {
 }
 
 export async function applyEditorForms(strapi) {
-  const databaseClient = strapi.config?.get?.('database.connection.client')
-    ?? process.env.DATABASE_CLIENT
-    ?? 'sqlite';
-  const hiddenEntryFields = new Set(HIDDEN);
-  if (databaseClient !== 'sqlite') hiddenEntryFields.add('teachers');
-
   await applyOne(
     strapi,
     SEMINAR_UID,
@@ -148,6 +142,6 @@ export async function applyEditorForms(strapi) {
       defaultSortOrder: 'ASC',
     },
     ['admin_label', 'city', 'entry_status', 'startAt'],
-    hiddenEntryFields,
+    HIDDEN,
   );
 }

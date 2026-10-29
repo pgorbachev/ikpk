@@ -74,12 +74,10 @@ export function readPublishedSqlite(database, schemaRoot) {
       const byDocument = new Map();
       for (const row of tableRows.values()) {
         if (!published(uid, row)) continue;
-        if (byDocument.has(row.document_id)) throw new Error(`schema incompatible: duplicate published document in ${uid}`);
         byDocument.set(row.document_id, row);
       }
       publishedByDocument.set(uid, byDocument);
     }
-    const captureNow = Date.now();
     function scalarRecord(uid, row) {
       const result = { id: row.id };
       if (uid.startsWith('api::')) {
@@ -106,27 +104,15 @@ export function readPublishedSqlite(database, schemaRoot) {
         if (attr.type === 'relation') {
           const r = relationSpec(uid, name, attr);
           const links = db.prepare(`SELECT ${quote(r.to)} AS target FROM ${quote(r.table)} WHERE ${quote(r.from)}=? ORDER BY ${r.order ? `${quote(r.order)},` : ''}${quote(r.to)}`).all(row.id);
-          const strictEventTeachers = uid === 'api::schedule-entry.schedule-entry' && name === 'teachers' &&
-            out.entry_status === 'active' && scheduleEntryIsBeforeStart(out, captureNow);
           const related = links.flatMap((link) => {
             const target = rows.get(attr.target).get(link.target);
-            if (!target) {
-              if (strictEventTeachers) {
-                throw new Error(`invalid teacher relation: проведение ${out.admin_label ?? out.documentId}, преподаватель #${link.target} отсутствует`);
-              }
-              throw new Error(`broken relation: ${uid}.${name}#${link.target}`);
-            }
+            if (!target) throw new Error(`broken relation: ${uid}.${name}#${link.target}`);
             // A draft relation is not published content. Do not silently substitute its draft fields.
             let resolved = published(attr.target, target) ? target : null;
-            if (strictEventTeachers) {
+            if (uid === 'api::schedule-entry.schedule-entry' && name === 'teachers' &&
+                attr.target === 'api::teacher.teacher') {
               const documentId = target.document_id;
               resolved = documentId ? publishedByDocument.get(attr.target)?.get(documentId) ?? null : null;
-              const teacher = resolved ? scalarRecord(attr.target, resolved) : null;
-              if (!teacher || typeof teacher.name !== 'string' || !teacher.name.trim() ||
-                  typeof teacher.legacy_id !== 'string' || !teacher.legacy_id.trim()) {
-                const teacherLabel = teacher?.name || target.name || target.document_id || `#${link.target}`;
-                throw new Error(`invalid teacher relation: проведение ${out.admin_label ?? out.documentId}, преподаватель «${teacherLabel}» не имеет опубликованной версии с именем и legacy_id`);
-              }
             }
             return resolved ? [scalarRecord(attr.target, resolved)] : [];
           });
@@ -174,28 +160,4 @@ function dateTime(value) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) throw new Error('schema incompatible datetime');
   return date.toISOString();
-}
-
-function scheduleEntryIsBeforeStart(entry, now) {
-  if (typeof entry.startAt !== 'string' || !entry.startAt) return false;
-  let day = /^\d{4}-\d{2}-\d{2}$/.test(entry.startAt) ? entry.startAt : '';
-  if (!day) {
-    const instant = new Date(entry.startAt);
-    if (Number.isNaN(instant.getTime())) return false;
-    const parts = new Intl.DateTimeFormat('en-GB', {
-      timeZone: 'Europe/Moscow', year: 'numeric', month: '2-digit', day: '2-digit',
-    }).formatToParts(instant);
-    const values = Object.fromEntries(parts.map(({ type, value }) => [type, value]));
-    day = `${values.year}-${values.month}-${values.day}`;
-  }
-  const matches = Array.from(String(entry.additionalText ?? '').matchAll(
-    /(?:^|[^\p{L}\p{N}])начало\s+в\s+(\d{1,2})[:-](\d{2})(?!\d)/giu,
-  ));
-  const hour = matches.length === 1 ? Number(matches[0][1]) : Number.NaN;
-  const minute = matches.length === 1 ? Number(matches[0][2]) : Number.NaN;
-  const time = hour >= 0 && hour <= 23 && minute >= 0 && minute <= 59
-    ? `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`
-    : '00:00';
-  const boundary = Date.parse(`${day}T${time}:00+03:00`);
-  return Number.isFinite(boundary) && now < boundary;
 }

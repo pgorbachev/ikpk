@@ -145,10 +145,6 @@ describe('семинар из админки доходит до опублик�
   const institute = { name: 'Институт Сквозной Проверки', slug: 'institut-skvoznoj-proverki' };
   const group = { name: 'Курсы сквозной проверки', slug: 'kursy-skvoznoj-proverki' };
   const teacherName = 'Проверкина Анна Петровна';
-  const eventTeacherNames = [
-    teacherName,
-    ...Array.from({ length: 10 }, (_, index) => `Браузерный преподаватель ${index + 2}`),
-  ];
   const seminar = {
     name: 'Семинар сквозной проверки',
     slug: 'seminar-skvoznoj-proverki',
@@ -274,15 +270,6 @@ describe('семинар из админки доходит до опублик�
       trait: 'teacher',
       institute: inst.documentId,
     });
-    for (const [index, name] of eventTeacherNames.slice(1).entries()) {
-      await publish('api::teacher.teacher', {
-        name,
-        slug: `browser-event-teacher-${index + 2}`,
-        legacy_id: `browser-event-teacher-${index + 2}`,
-        trait: 'teacher',
-        institute: inst.documentId,
-      });
-    }
     await publish('api::article.article', {
       title: 'Статья сквозной проверки',
       slug: 'statya-skvoznoj-proverki',
@@ -336,7 +323,6 @@ describe('семинар из админки доходит до опублик�
       additionalText: '<p>Взять удобную одежду.</p>',
       duration: '3 дня',
       seminar: { connect: [{ documentId: seminarDocumentId }] },
-      teachers: { connect: [{ documentId: teachers.results[0].documentId }] },
     });
     await admin('POST', `/content-manager/collection-types/api::schedule-entry.schedule-entry/${entry.data.documentId}/actions/publish`, {});
 
@@ -347,7 +333,7 @@ describe('семинар из админки доходит до опублик�
     assert.ok(seminarPage.includes('Описание, набранное редактором в админке.'), 'нет описания семинара');
     assert.ok(seminarPage.includes('Самара'), 'нет города проведения');
     assert.match(seminarPage, /41 500 ₽/, 'нет цены проведения');
-    // У преподавателя семинара та же подпись, но связь проведения хранится отдельно.
+    // Преподаватель указан только у семинара: поле преподавателей проведения в админке скрыто.
     assert.ok(seminarPage.includes(teacherName), 'преподаватель семинара не дошёл до страницы');
     assert.ok(!seminarPage.includes('уточняется'), 'на странице «Преподаватель уточняется»');
 
@@ -452,7 +438,7 @@ describe('семинар из админки доходит до опублик�
       };
       await pageUi.getByRole('textbox', { name: 'Название' }).fill(uiSeminar.name);
       await pick('Программа', 'браузера', uiGroup.name);
-      for (const name of eventTeacherNames) await pick('Преподаватели', name, name);
+      await pick('Преподаватели', 'Проверкина', teacherName);
       await pageUi.getByRole('combobox', { name: 'Выдаваемые документы' }).click();
       await pageUi.getByRole('option', { name: 'not-issued', exact: true }).click();
       const seoField = pageUi.getByText('SEO', { exact: true })
@@ -478,26 +464,6 @@ describe('семинар из админки доходит до опублик�
       await shot('ui-03-filled');
       await pageUi.getByRole('button', { name: 'Сохранить' }).click();
       await publishForm();
-      const uiSeminarRecord = (await app.documents('api::seminar.seminar').findMany({
-        filters: { name: uiSeminar.name }, status: 'published',
-      }))[0];
-      assert.ok(uiSeminarRecord, 'опубликованный семинар должен быть доступен для проверки формы');
-      let seminarPageTwoRequests = 0;
-      const seminarRelationsPage = (url) => {
-        const parsed = new URL(url);
-        return parsed.pathname.includes('/content-manager/relations/') && parsed.pathname.endsWith('/teachers');
-      };
-      pageUi.on('request', (request) => {
-        const url = new URL(request.url());
-        if (seminarRelationsPage(url.toString()) && url.searchParams.get('page') === '2') seminarPageTwoRequests += 1;
-      });
-      await pageUi.goto(`${base}/admin/content-manager/collection-types/api::seminar.seminar/${uiSeminarRecord.documentId}`);
-      await pageUi.waitForResponse((response) => seminarRelationsPage(response.url()) &&
-        new URL(response.url()).searchParams.get('page') === '1' && response.ok(), { timeout: 10_000 });
-      await pageUi.waitForTimeout(500);
-      assert.equal(seminarPageTwoRequests, 0, 'список преподавателей семинара не должен менять штатную постраничную загрузку');
-      assert.equal(await pageUi.getByRole('button', { name: /Load More|Загрузить ещё/ }).count(), 1,
-        'форма семинара должна сохранить штатную кнопку Load More');
       await pageUi.goto(`${base}/admin/content-manager/collection-types/api::schedule-entry.schedule-entry/create`);
       await pageUi.getByRole('textbox', { name: 'Город' }).or(pageUi.locator('input[name="city"]')).first().waitFor();
       await pick('Семинар', 'браузера', new RegExp(uiSeminar.name));
@@ -514,233 +480,8 @@ describe('семинар из админки доходит до опублик�
       await setMoment('Окончание', new Date(uiStart.getTime() + day), '18:00');
       await pageUi.getByRole('textbox', { name: 'Город' }).fill('Казань');
       await pageUi.getByRole('textbox', { name: 'Цена', exact: true }).fill('36600');
-      for (const name of eventTeacherNames) {
-        await pick('Преподаватели проведения', name, name);
-      }
       await pageUi.getByRole('button', { name: 'Сохранить' }).click();
-
-      const uiDraftEntry = (await app.documents('api::schedule-entry.schedule-entry').findMany({
-        status: 'draft', populate: ['seminar'],
-      })).find((entry) => entry.seminar?.documentId === uiSeminarRecord.documentId);
-      assert.ok(uiDraftEntry, 'черновик проведения должен сохраниться');
-
-      let releasePageTwo;
-      let pageTwoRequested;
-      const pageTwoRequestStarted = new Promise((resolve) => { pageTwoRequested = resolve; });
-      const pageTwoGate = new Promise((resolve) => { releasePageTwo = resolve; });
-      const teacherRelationsPage = (url) => {
-        const parsed = new URL(url);
-        return parsed.pathname.includes('/content-manager/relations/') && parsed.pathname.endsWith('/teachers');
-      };
-      const pageTwoRoute = (url) => teacherRelationsPage(url) && new URL(url).searchParams.get('page') === '2';
-      const pageThreeRoute = (url) => teacherRelationsPage(url) && new URL(url).searchParams.get('page') === '3';
-      let pageThreeRequestCount = 0;
-      await pageUi.route(pageTwoRoute, async (route) => {
-        pageTwoRequested();
-        await pageTwoGate;
-        await route.fulfill({ status: 500, contentType: 'application/json', body: '{"error":"injected page 2 failure"}' });
-      });
-      await pageUi.route(pageThreeRoute, async (route) => {
-        pageThreeRequestCount += 1;
-        await route.abort();
-      });
-      let publishAttempts = 0;
-      const publishAbortRoute = (url) => new URL(url).pathname.includes('/actions/publish');
-      await pageUi.route(publishAbortRoute, async (route) => {
-        publishAttempts += 1;
-        await route.abort();
-      });
-      await pageUi.goto(`${base}/admin/content-manager/collection-types/api::schedule-entry.schedule-entry/${uiDraftEntry.documentId}`);
-      await pageTwoRequestStarted;
-      const publishButton = pageUi.getByRole('button', { name: 'Опубликовать' });
-      await publishButton.waitFor();
-      const disabledWhilePageTwoPending = await publishButton.isDisabled();
-      await publishButton.evaluate((button) => button.click());
-      await pageUi.keyboard.press('ControlOrMeta+Shift+Enter');
-      releasePageTwo();
-      const pageTwoError = await pageUi.waitForResponse((response) =>
-        pageTwoRoute(response.url()) && response.status() === 500, { timeout: 10_000 });
-      assert.equal(pageTwoError.status(), 500);
-      await pageUi.waitForTimeout(300);
-      const disabledAfterPageTwoError = await publishButton.isDisabled();
-      const publishAttemptsWhileIncomplete = publishAttempts;
-      const pageThreeRequestsAfterError = pageThreeRequestCount;
-      const listErrorVisible = await pageUi.getByText('Не удалось загрузить полный список преподавателей проведения.', { exact: true })
-        .isVisible().catch(() => false);
-
-      assert.equal(disabledWhilePageTwoPending, true, 'publish disabled while page 2 is pending');
-      assert.equal(disabledAfterPageTwoError, true, 'publish remains disabled after page 2 fails');
-      assert.equal(publishAttemptsWhileIncomplete, 0, 'publish action must not reach the server while list is incomplete');
-      assert.equal(pageThreeRequestsAfterError, 0, 'failed page 2 must not be skipped in favor of page 3');
-      assert.equal(listErrorVisible, true, 'list-loading failure must be visible in the form');
-
-      await pageUi.unroute(pageTwoRoute);
-      await pageUi.unroute(pageThreeRoute);
-      await pageUi.unroute(publishAbortRoute);
-      const requestedPages = new Set();
-      pageUi.on('response', (response) => {
-        const url = new URL(response.url());
-        if (teacherRelationsPage(url.toString()) && url.searchParams.get('page')) requestedPages.add(url.searchParams.get('page'));
-      });
-      await pageUi.reload();
-      await pageUi.waitForResponse((response) => pageTwoRoute(response.url()) && response.ok(), { timeout: 10_000 });
-      await pageUi.waitForResponse((response) => teacherRelationsPage(response.url()) &&
-        new URL(response.url()).searchParams.get('page') === '3' && response.ok(), { timeout: 10_000 });
-      await pageUi.getByRole('combobox', { name: 'Преподаватели проведения (11)' }).waitFor();
-      const bodyText = await pageUi.locator('body').innerText();
-      let previousTeacherIndex = -1;
-      for (const name of eventTeacherNames) {
-        const index = bodyText.indexOf(name);
-        assert.notEqual(index, -1, `полный список не показал «${name}»`);
-        assert.ok(index > previousTeacherIndex, `в форме нарушен порядок преподавателей возле «${name}»`);
-        previousTeacherIndex = index;
-      }
-      assert.deepEqual([...requestedPages].sort(), ['1', '2', '3']);
-      assert.equal(await pageUi.getByRole('button', { name: /Load More|Загрузить ещё/ }).count(), 0,
-        'список должен быть полностью загружен без дополнительного клика');
-      const spaNavigate = async (pathname) => {
-        await pageUi.evaluate((nextPath) => {
-          globalThis.history.pushState({}, '', nextPath);
-          globalThis.dispatchEvent(new globalThis.PopStateEvent('popstate', { state: globalThis.history.state }));
-        }, pathname);
-        await pageUi.waitForURL(`${base}${pathname}`);
-      };
-      const scheduleEditPath = `/admin/content-manager/collection-types/api::schedule-entry.schedule-entry/${uiDraftEntry.documentId}`;
-      const publishBeforeSpaReopen = pageUi.getByRole('button', { name: 'Опубликовать' });
-      await publishBeforeSpaReopen.waitFor();
-      assert.equal(await publishBeforeSpaReopen.isDisabled(), false,
-        'полный список разблокирует publish до повторного открытия');
-      await spaNavigate(`/admin/content-manager/collection-types/api::seminar.seminar/${uiSeminarRecord.documentId}`);
-      let releaseFirstTeacherPage;
-      let requestFirstTeacherPage;
-      const firstTeacherPageRequested = new Promise((resolve) => { requestFirstTeacherPage = resolve; });
-      const firstTeacherPageGate = new Promise((resolve) => { releaseFirstTeacherPage = resolve; });
-      const firstTeacherPageRoute = (url) => {
-        const parsed = new URL(url);
-        return parsed.pathname === `/content-manager/relations/api::schedule-entry.schedule-entry/${uiDraftEntry.documentId}/teachers` &&
-          parsed.searchParams.get('page') === '1';
-      };
-      await pageUi.route(firstTeacherPageRoute, async (route) => {
-        requestFirstTeacherPage();
-        await firstTeacherPageGate;
-        await route.continue();
-      });
-      await spaNavigate(scheduleEditPath);
-      await firstTeacherPageRequested;
-      const pendingFirstPagePublish = pageUi.getByRole('button', { name: 'Опубликовать' });
-      const disabledOnSpaReopen = await pendingFirstPagePublish.isDisabled();
-      assert.equal(disabledOnSpaReopen, true,
-        'новое SPA-открытие того же documentId блокирует publish до первой страницы списка');
-      const publishAttemptsBeforePendingClick = publishAttempts;
-      await pendingFirstPagePublish.evaluate((button) => button.click());
-      assert.equal(publishAttempts, publishAttemptsBeforePendingClick,
-        'публикация при новой загрузке первого списка преподавателей не достигает publish action');
-      releaseFirstTeacherPage();
-      await pageUi.waitForResponse((response) => firstTeacherPageRoute(response.url()) && response.ok(), { timeout: 10_000 });
-      await pageUi.waitForFunction(() => [...globalThis.document.querySelectorAll('button')]
-        .some((button) => button.textContent?.trim() === 'Опубликовать' && !button.disabled), null, { timeout: 10_000 });
-      await pageUi.unroute(firstTeacherPageRoute);
-
       await publishForm();
-      const publishedEntry = await app.documents('api::schedule-entry.schedule-entry').findOne({
-        documentId: uiDraftEntry.documentId, status: 'published', populate: ['teachers'],
-      });
-      assert.deepEqual(publishedEntry.teachers.map(({ name }) => name), eventTeacherNames,
-        'публикация штатной кнопкой должна подтвердить и сохранить весь текущий список по порядку');
-
-      const bulkDraftCity = 'Черновик для проверки массовой публикации';
-      const bulkDraftEntry = await app.documents('api::schedule-entry.schedule-entry').create({
-        data: {
-          seminar: uiSeminarRecord.documentId,
-          teachers: publishedEntry.teachers.map(({ documentId }) => documentId),
-          startAt: new Date(uiStart.getTime() + 2 * day).toISOString(),
-          endAt: new Date(uiStart.getTime() + 3 * day).toISOString(),
-          city: bulkDraftCity,
-          entry_status: 'active',
-        },
-      });
-      await pageUi.goto(`${base}/admin/content-manager/collection-types/api::schedule-entry.schedule-entry`);
-      const bulkEntryRow = pageUi.getByRole('row').filter({ hasText: bulkDraftCity });
-      await bulkEntryRow.waitFor();
-      await bulkEntryRow.getByRole('checkbox').check();
-      const scheduleBulkPublish = pageUi.getByRole('button', { name: 'Опубликовать' });
-      await scheduleBulkPublish.waitFor();
-      assert.equal(await scheduleBulkPublish.isDisabled(), true,
-        'массовая публикация проведений отключена, потому что штатный action не подтверждает полный список');
-
-      const bulkDraftSeminar = await app.documents('api::seminar.seminar').create({
-        data: { name: 'Черновик семинара для массовой публикации', course_group: uiGroup.documentId },
-      });
-      await pageUi.goto(`${base}/admin/content-manager/collection-types/api::seminar.seminar`);
-      const bulkSeminarRow = pageUi.getByRole('row').filter({ hasText: bulkDraftSeminar.name });
-      await bulkSeminarRow.waitFor();
-      await bulkSeminarRow.getByRole('checkbox').check();
-      const seminarBulkPublish = pageUi.getByRole('button', { name: 'Опубликовать' });
-      await seminarBulkPublish.waitFor();
-      assert.equal(await seminarBulkPublish.isDisabled(), false,
-        'массовая публикация семинаров остаётся штатной');
-
-      // Сборка portable: имитируем runtime Postgres через существующий Strapi project-type
-      // response. Эта browser session проверяет реальные компоненты/роуты, а не mocked UI.
-      let nonSqliteProjectTypeCalls = 0;
-      await pageUi.route('**/admin/project-type', async (route) => {
-        const response = await route.fetch();
-        const body = await response.json();
-        body.data.flags.ikpkDatabaseClient = 'postgres';
-        nonSqliteProjectTypeCalls += 1;
-        await route.fulfill({ response, body: JSON.stringify(body) });
-      });
-      await pageUi.reload();
-      await pageUi.waitForFunction(() => globalThis.window.strapi?.flags?.ikpkDatabaseClient === 'postgres');
-      assert.ok(nonSqliteProjectTypeCalls > 0, 'admin использовал runtime database capability, а не значение сборки');
-      const runtimeTeacherPageOne = (url) => {
-        const parsed = new URL(url);
-        return parsed.pathname === `/content-manager/relations/api::schedule-entry.schedule-entry/${bulkDraftEntry.documentId}/teachers` &&
-          parsed.searchParams.get('page') === '1';
-      };
-      const runtimePageOneResponse = pageUi.waitForResponse((response) => runtimeTeacherPageOne(response.url()) && response.ok());
-      const runtimePageTwoRequests = [];
-      pageUi.on('request', (request) => {
-        const parsed = new URL(request.url());
-        if (parsed.pathname === `/content-manager/relations/api::schedule-entry.schedule-entry/${bulkDraftEntry.documentId}/teachers` &&
-          parsed.searchParams.get('page') === '2') runtimePageTwoRequests.push(request.url());
-      });
-      await pageUi.goto(`${base}/admin/content-manager/collection-types/api::schedule-entry.schedule-entry/${bulkDraftEntry.documentId}`);
-      await runtimePageOneResponse;
-      assert.equal(await pageUi.getByRole('button', { name: /Load More|Загрузить ещё/ }).count(), 1,
-        'runtime Postgres сохраняет штатную pagination связи');
-      await pageUi.waitForTimeout(300);
-      assert.deepEqual(runtimePageTwoRequests, [], 'runtime Postgres не запускает SQLite автозагрузку страниц');
-      const runtimePublishButton = pageUi.getByRole('button', { name: 'Опубликовать' });
-      await runtimePublishButton.waitFor();
-      assert.equal(await runtimePublishButton.isDisabled(), false,
-        'runtime Postgres не блокирует штатную публикацию формы');
-      await publishForm();
-      const runtimePublishedEntry = await app.documents('api::schedule-entry.schedule-entry').findOne({
-        documentId: bulkDraftEntry.documentId, status: 'published', populate: ['teachers'],
-      });
-      assert.deepEqual(runtimePublishedEntry.teachers.map(({ name }) => name), eventTeacherNames,
-        'штатная публикация сохраняет существующую связь при runtime non-SQLite');
-      const runtimeBulkCity = 'Черновик для non-SQLite bulk action';
-      await app.documents('api::schedule-entry.schedule-entry').create({
-        data: {
-          seminar: uiSeminarRecord.documentId,
-          teachers: publishedEntry.teachers.map(({ documentId }) => documentId),
-          startAt: new Date(uiStart.getTime() + 4 * day).toISOString(),
-          endAt: new Date(uiStart.getTime() + 5 * day).toISOString(),
-          city: runtimeBulkCity,
-          entry_status: 'active',
-        },
-      });
-      await pageUi.goto(`${base}/admin/content-manager/collection-types/api::schedule-entry.schedule-entry`);
-      const runtimeBulkRow = pageUi.getByRole('row').filter({ hasText: runtimeBulkCity });
-      await runtimeBulkRow.waitFor();
-      await runtimeBulkRow.getByRole('checkbox').check();
-      const runtimeBulkPublish = pageUi.getByRole('button', { name: 'Опубликовать' });
-      await runtimeBulkPublish.waitFor();
-      assert.equal(await runtimeBulkPublish.isDisabled(), false,
-        'runtime non-SQLite сохраняет штатную массовую публикацию проведений');
-      if (process.env.E2E_TEACHER_RELATIONS_ONLY === 'true') return;
 
       // Кнопка «Обновить сайт» — на её собственной странице админки.
       await pageUi.getByRole('link', { name: 'Обновить сайт' }).click();

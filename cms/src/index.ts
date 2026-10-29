@@ -30,11 +30,6 @@ export default {
    * из скрипта или другого плагина).
    */
   async bootstrap({ strapi }: { strapi: Core.Strapi }) {
-    // Expose the actual loaded connection through Strapi's existing public project-type
-    // response. The admin bundle is portable and cannot decide this at build time.
-    const databaseClient = strapi.config.get('database.connection.client');
-    strapi.config.set('admin.flags.ikpkDatabaseClient', databaseClient);
-
     strapi.db.lifecycles.subscribe({
       models: ['plugin::upload.file'],
       beforeCreate(event) {

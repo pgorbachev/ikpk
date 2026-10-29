@@ -1,6 +1,5 @@
 import type { ComponentType } from 'react';
 import type { StrapiApp } from '@strapi/strapi/admin';
-import { guardScheduleEntryBulkPublish, guardScheduleEntryPublish } from './teacher-publish-action';
 
 function RefreshIcon() {
   return (
@@ -36,12 +35,6 @@ export default {
     // (cms/tests/admin-locale.test.js читает `config.locales` без `require`).
     void import('./admin-localization').then(({ ensureDefaultAdminLocale }) =>
       ensureDefaultAdminLocale(window.localStorage),
-    );
-    app.getPlugin('content-manager').apis.addDocumentAction((actions) =>
-      actions.map((action) => action.type === 'publish' ? guardScheduleEntryPublish(action) : action),
-    );
-    app.getPlugin('content-manager').apis.addBulkAction((actions) =>
-      actions.map(guardScheduleEntryBulkPublish),
     );
     app.addMenuLink({
       to: '/site-refresh',
