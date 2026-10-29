@@ -39,7 +39,10 @@ describe('архив дерева сборки', () => {
         copyFileSync(join(REPO, file), join(repo, file));
       }
       writeFileSync(join(repo, 'web', '.gitignore'), '.env\n.env.production\n');
+      writeFileSync(join(repo, '.gitignore'), 'cms/.env\nweb/node_modules/\nweb/dist/\n');
       writeFileSync(join(repo, 'web', 'package-lock.json'), '{"name":"web"}\n');
+      mkdirSync(join(repo, 'web', 'scripts'), { recursive: true });
+      writeFileSync(join(repo, 'web', 'scripts', 'capture-content-snapshot.ts'), 'capture\n');
       writeFileSync(join(repo, 'media-originals', '.gitkeep'), '');
       writeFileSync(join(repo, 'fixtures', 'content-snapshot', 'collapsible_panels.json'), '{}\n');
       writeFileSync(join(repo, 'fixtures', 'content-snapshot', 'url_map.csv'), 'from,to\n');
@@ -50,13 +53,20 @@ describe('архив дерева сборки', () => {
       execFileSync('git', ['init', '-b', 'main', repo], { stdio: 'pipe' });
       git(repo, ['config', 'user.email', 'fixture@example.com']);
       git(repo, ['config', 'user.name', 'fixture']);
-      git(repo, ['add', 'web', 'media-originals', 'cms', 'fixtures', 'scripts']);
+      git(repo, ['add', '.gitignore', 'web', 'media-originals', 'cms', 'fixtures', 'scripts']);
       git(repo, ['commit', '-m', 'fixture']);
       writeFileSync(join(repo, 'web', '.env'), 'SECRET=operator\n');
       writeFileSync(join(repo, 'web', '.env.production'), 'SECRET=production\n');
 
       const porcelain = git(repo, ['status', '--porcelain', '--', 'web', 'media-originals']);
       expect(porcelain, 'игнорируемый .env не должен делать статус грязным').toBe('');
+
+      writeFileSync(join(repo, 'cms', '.env'), 'SECRET=cms\n');
+      mkdirSync(join(repo, 'web', 'node_modules'), { recursive: true });
+      mkdirSync(join(repo, 'web', 'dist'), { recursive: true });
+      writeFileSync(join(repo, 'web', 'node_modules', 'cache.txt'), 'generated');
+      writeFileSync(join(repo, 'web', 'dist', 'index.html'), 'generated');
+      writeFileSync(join(repo, 'web', 'untracked-secret.txt'), 'untracked');
 
       const worktreeList = execFileSync(
         'tar',
@@ -80,6 +90,10 @@ describe('архив дерева сборки', () => {
       expect(existsSync(join(dest, 'fixtures', 'content-snapshot', 'url_map.csv'))).toBe(true);
       expect(existsSync(join(dest, 'web', '.env'))).toBe(false);
       expect(existsSync(join(dest, 'web', '.env.production'))).toBe(false);
+      for (const file of ['cms/.env', 'web/node_modules/cache.txt', 'web/dist/index.html', 'web/untracked-secret.txt']) {
+        expect(existsSync(join(dest, file)), `${file} не должен попасть в архив`).toBe(false);
+      }
+      expect(existsSync(join(dest, 'web', 'scripts', 'capture-content-snapshot.ts'))).toBe(true);
       expect(readFileSync(join(dest, 'web', 'package-lock.json'), 'utf8')).toContain('"name":"web"');
     } finally {
       rmSync(repo, { recursive: true, force: true });
