@@ -68,15 +68,11 @@ export function readPublishedSqlite(database, schemaRoot) {
     const rows = new Map();
     for (const [uid, schema] of Object.entries(schemas)) rows.set(uid, new Map(db.prepare(`SELECT * FROM ${quote(schema.collectionName)} ORDER BY id`).all().map((r) => [r.id, r])));
     const published = (uid, row) => row && (!uid.startsWith('api::') || row.published_at !== null);
-    const publishedByDocument = new Map();
-    for (const [uid, tableRows] of rows) {
-      if (!uid.startsWith('api::')) continue;
-      const byDocument = new Map();
-      for (const row of tableRows.values()) {
-        if (!published(uid, row)) continue;
-        byDocument.set(row.document_id, row);
+    const publishedTeachersByDocument = new Map();
+    for (const row of rows.get('api::teacher.teacher').values()) {
+      if (published('api::teacher.teacher', row)) {
+        publishedTeachersByDocument.set(row.document_id, row);
       }
-      publishedByDocument.set(uid, byDocument);
     }
     function scalarRecord(uid, row) {
       const result = { id: row.id };
@@ -112,7 +108,7 @@ export function readPublishedSqlite(database, schemaRoot) {
             if (uid === 'api::schedule-entry.schedule-entry' && name === 'teachers' &&
                 attr.target === 'api::teacher.teacher') {
               const documentId = target.document_id;
-              resolved = documentId ? publishedByDocument.get(attr.target)?.get(documentId) ?? null : null;
+              resolved = documentId ? publishedTeachersByDocument.get(documentId) ?? null : null;
             }
             return resolved ? [scalarRecord(attr.target, resolved)] : [];
           });
