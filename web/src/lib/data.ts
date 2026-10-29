@@ -547,8 +547,7 @@ export function normalizeScheduleEntry(raw: ScheduleEntry | Record<string, unkno
   };
 }
 
-// Преподавателей проведения админка не даёт заполнить (поле скрыто), а у семинара — даёт.
-// Пустое поле проведения поэтому значит «как у семинара», а не «преподаватель неизвестен».
+// Пустая связь проведения сохраняет прежнюю подстановку преподавателей семинара.
 function withSeminarTeachers(entry: ScheduleEntry): ScheduleEntry {
   if (entry.teachers?.length || !entry.seminar?.slug) return entry;
   const seminar = getSeminars().find((candidate) => candidate.slug === entry.seminar.slug);

@@ -141,6 +141,33 @@ afterEach(() => {
 });
 
 describe('staging193 sealed SQLite capture', () => {
+  it('resolves a draft-linked event teacher to its published version and keeps an unpublished-only teacher empty', () => {
+    const root = mkdtempSync(join(tmpdir(), 'event-teacher-capture-'));
+    temporaryRoots.push(root);
+    const database = join(root, 'database.sqlite');
+    fixtureDatabase(database);
+    const db = new DatabaseSync(database);
+    db.exec(`INSERT INTO teachers (id, document_id, name, slug, trait, published_at)
+        VALUES (5,'draft-only','Draft only','draft-only','teacher',NULL);
+      INSERT INTO schedule_entries (id, document_id, name, city, start_at, end_at, entry_status, published_at)
+        VALUES (40,'event-linked-draft','Event with published teacher','City','2099-03-17T00:00:00.000Z','2099-03-21T00:00:00.000Z','active','2026-10-01'),
+               (41,'event-draft-only','Event with unpublished-only teacher','City','2099-03-17T00:00:00.000Z','2099-03-21T00:00:00.000Z','active','2026-10-01');
+      INSERT INTO schedule_entries_teachers_lnk (id, schedule_entry_id, teacher_id, teacher_ord)
+        VALUES (1,40,4,1), (2,41,5,1);`);
+    db.close();
+
+    const captured = readPublishedSqlite(database, schemaRoot) as unknown as {
+      collections: Record<string, unknown[]>;
+    };
+    const events = captured.collections['schedule-entries'] as
+      { documentId: string; teachers: { documentId: string; name: string }[] }[];
+    expect(events.map((event) => [event.documentId, event.teachers.map((teacher) => [teacher.documentId, teacher.name])]))
+      .toEqual([
+        ['event-linked-draft', [['teacher', 'Teacher']]],
+        ['event-draft-only', []],
+      ]);
+  });
+
   it('rejects a capture manifest from a different host or stale site URL', () => {
     for (const change of [{ host: '193.124.115.99' }, { siteUrl: 'https://193.124.115.99' }]) {
       const bundle = sealedBundle();

@@ -68,6 +68,12 @@ export function readPublishedSqlite(database, schemaRoot) {
     const rows = new Map();
     for (const [uid, schema] of Object.entries(schemas)) rows.set(uid, new Map(db.prepare(`SELECT * FROM ${quote(schema.collectionName)} ORDER BY id`).all().map((r) => [r.id, r])));
     const published = (uid, row) => row && (!uid.startsWith('api::') || row.published_at !== null);
+    const publishedTeachersByDocument = new Map();
+    for (const row of rows.get('api::teacher.teacher').values()) {
+      if (published('api::teacher.teacher', row)) {
+        publishedTeachersByDocument.set(row.document_id, row);
+      }
+    }
     function scalarRecord(uid, row) {
       const result = { id: row.id };
       if (uid.startsWith('api::')) {
@@ -98,7 +104,13 @@ export function readPublishedSqlite(database, schemaRoot) {
             const target = rows.get(attr.target).get(link.target);
             if (!target) throw new Error(`broken relation: ${uid}.${name}#${link.target}`);
             // A draft relation is not published content. Do not silently substitute its draft fields.
-            return published(attr.target, target) ? [scalarRecord(attr.target, target)] : [];
+            let resolved = published(attr.target, target) ? target : null;
+            if (uid === 'api::schedule-entry.schedule-entry' && name === 'teachers' &&
+                attr.target === 'api::teacher.teacher') {
+              const documentId = target.document_id;
+              resolved = documentId ? publishedTeachersByDocument.get(documentId) ?? null : null;
+            }
+            return resolved ? [scalarRecord(attr.target, resolved)] : [];
           });
           out[name] = cardinality(related, attr.relation.endsWith('Many'), `${uid}.${name}`);
         } else if (attr.type === 'media') {

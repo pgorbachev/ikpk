@@ -26,6 +26,7 @@ const SEMINAR_FIELDS = [
 
 const ENTRY_FIELDS = [
   ['seminar', 'Семинар', 6, true, ''],
+  ['teachers', 'Преподаватели проведения', 6, true, 'Выбор применяется только к этому проведению.'],
   ['startAt', 'Начало', 6, true, ''],
   ['endAt', 'Окончание', 6, true, ''],
   ['image', 'Изображение', 6, true, ''],
@@ -41,7 +42,7 @@ const ENTRY_FIELDS = [
 ];
 
 // The approved migration carries this source flag as data without adding editor UI.
-const HIDDEN = new Set(['name', 'admin_label', 'legacy_id', 'teachers', 'isEventCollection']);
+const HIDDEN = new Set(['name', 'admin_label', 'legacy_id', 'isEventCollection']);
 
 function labelOf(fields, name, fallback) {
   const found = fields.find((field) => field[0] === name);
