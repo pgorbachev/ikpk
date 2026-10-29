@@ -120,7 +120,7 @@ test('unknown advisories, stale nodes, ranges, and severity escalation fail clos
   escalated.vulnerabilities['@modelcontextprotocol/sdk'].severity = 'critical';
   escalated.metadata.vulnerabilities.high -= 1;
   escalated.metadata.vulnerabilities.critical += 1;
-  assert.throws(() => evaluate({ audit: escalated }), /did not match severity and node scope/);
+  assert.throws(() => evaluate({ audit: escalated }), /understates blocking severity/);
 
   const criticalCause = clone(JSON.parse(reportText));
   criticalCause.vulnerabilities['@modelcontextprotocol/sdk'].via[0].severity = 'critical';
@@ -156,7 +156,7 @@ test('new GHSA, lock node, hidden cause, inherited reference, and critical aggre
   criticalParent.vulnerabilities['@strapi/core'].severity = 'critical';
   criticalParent.metadata.vulnerabilities.high -= 1;
   criticalParent.metadata.vulnerabilities.critical += 1;
-  assert.equal(evaluate({ audit: criticalParent }).passed, false);
+  assert.throws(() => evaluate({ audit: criticalParent }), /understates blocking severity/);
 
   const mixedParent = clone(JSON.parse(reportText));
   mixedParent.vulnerabilities['@strapi/core'].via.push({
