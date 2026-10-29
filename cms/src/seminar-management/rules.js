@@ -125,15 +125,13 @@ export function seminarPublicationError(name) {
  */
 export function scheduleEntryIsBeforeStart(entry, now = Date.now()) {
   const { startAt, additionalText } = entry ?? {};
-  const isEpochMilliseconds = typeof startAt === 'number' && Number.isFinite(startAt);
-  if (!isEpochMilliseconds && (typeof startAt !== 'string' || !startAt)) return false;
+  const dateTime = scheduleDateTime(startAt);
+  if (!dateTime) return false;
   let day = typeof startAt === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(startAt) ? startAt : '';
   if (!day) {
-    const instant = new Date(startAt);
-    if (Number.isNaN(instant.getTime())) return false;
     const parts = new Intl.DateTimeFormat('en-GB', {
       timeZone: 'Europe/Moscow', year: 'numeric', month: '2-digit', day: '2-digit',
-    }).formatToParts(instant);
+    }).formatToParts(dateTime);
     const values = Object.fromEntries(parts.map(({ type, value }) => [type, value]));
     day = `${values.year}-${values.month}-${values.day}`;
   }
@@ -148,6 +146,25 @@ export function scheduleEntryIsBeforeStart(entry, now = Date.now()) {
   const boundary = Date.parse(`${day}T${time}:00+03:00`);
   const current = typeof now === 'number' ? now : new Date(now).getTime();
   return Number.isFinite(boundary) && Number.isFinite(current) && current < boundary;
+}
+
+/**
+ * Strapi's datetime parser accepts Date instances and parses numbers after
+ * String(value): 2030 means ISO year 2030, not 2,030 milliseconds after epoch.
+ * Large numeric epoch values are also accepted by Document Service, so retain
+ * that representation as a fallback when the ISO string is not parseable.
+ */
+function scheduleDateTime(value) {
+  if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value;
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    const isoDate = new Date(String(value));
+    if (!Number.isNaN(isoDate.getTime())) return isoDate;
+    const epochDate = new Date(value);
+    return Number.isNaN(epochDate.getTime()) ? null : epochDate;
+  }
+  if (typeof value !== 'string' || !value) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
 }
 
 export const SEMINAR_SLUG_PATTERN = /^[a-z0-9]+(-[a-z0-9]+)*$/;

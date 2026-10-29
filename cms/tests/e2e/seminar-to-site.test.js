@@ -147,7 +147,7 @@ describe('семинар из админки доходит до опублик�
   const teacherName = 'Проверкина Анна Петровна';
   const eventTeacherNames = [
     teacherName,
-    ...Array.from({ length: 5 }, (_, index) => `Браузерный преподаватель ${index + 2}`),
+    ...Array.from({ length: 10 }, (_, index) => `Браузерный преподаватель ${index + 2}`),
   ];
   const seminar = {
     name: 'Семинар сквозной проверки',
@@ -452,7 +452,7 @@ describe('семинар из админки доходит до опублик�
       };
       await pageUi.getByRole('textbox', { name: 'Название' }).fill(uiSeminar.name);
       await pick('Программа', 'браузера', uiGroup.name);
-      await pick('Преподаватели', 'Проверкина', teacherName);
+      for (const name of eventTeacherNames) await pick('Преподаватели', name, name);
       await pageUi.getByRole('combobox', { name: 'Выдаваемые документы' }).click();
       await pageUi.getByRole('option', { name: 'not-issued', exact: true }).click();
       const seoField = pageUi.getByText('SEO', { exact: true })
@@ -478,6 +478,26 @@ describe('семинар из админки доходит до опублик�
       await shot('ui-03-filled');
       await pageUi.getByRole('button', { name: 'Сохранить' }).click();
       await publishForm();
+      const uiSeminarRecord = (await app.documents('api::seminar.seminar').findMany({
+        filters: { name: uiSeminar.name }, status: 'published',
+      }))[0];
+      assert.ok(uiSeminarRecord, 'опубликованный семинар должен быть доступен для проверки формы');
+      let seminarPageTwoRequests = 0;
+      const seminarRelationsPage = (url) => {
+        const parsed = new URL(url);
+        return parsed.pathname.includes('/content-manager/relations/') && parsed.pathname.endsWith('/teachers');
+      };
+      pageUi.on('request', (request) => {
+        const url = new URL(request.url());
+        if (seminarRelationsPage(url.toString()) && url.searchParams.get('page') === '2') seminarPageTwoRequests += 1;
+      });
+      await pageUi.goto(`${base}/admin/content-manager/collection-types/api::seminar.seminar/${uiSeminarRecord.documentId}`);
+      await pageUi.waitForResponse((response) => seminarRelationsPage(response.url()) &&
+        new URL(response.url()).searchParams.get('page') === '1' && response.ok(), { timeout: 10_000 });
+      await pageUi.waitForTimeout(500);
+      assert.equal(seminarPageTwoRequests, 0, 'список преподавателей семинара не должен менять штатную постраничную загрузку');
+      assert.equal(await pageUi.getByRole('button', { name: /Load More|Загрузить ещё/ }).count(), 1,
+        'форма семинара должна сохранить штатную кнопку Load More');
       await pageUi.goto(`${base}/admin/content-manager/collection-types/api::schedule-entry.schedule-entry/create`);
       await pageUi.getByRole('textbox', { name: 'Город' }).or(pageUi.locator('input[name="city"]')).first().waitFor();
       await pick('Семинар', 'браузера', new RegExp(uiSeminar.name));
@@ -499,31 +519,85 @@ describe('семинар из админки доходит до опублик�
       }
       await pageUi.getByRole('button', { name: 'Сохранить' }).click();
 
-      const uiSeminarRecord = (await app.documents('api::seminar.seminar').findMany({
-        filters: { name: uiSeminar.name }, status: 'published',
-      }))[0];
       const uiDraftEntry = (await app.documents('api::schedule-entry.schedule-entry').findMany({
         status: 'draft', populate: ['seminar'],
       })).find((entry) => entry.seminar?.documentId === uiSeminarRecord.documentId);
       assert.ok(uiDraftEntry, 'черновик проведения должен сохраниться');
 
-      const relationPages = new Set();
+      let releasePageTwo;
+      let pageTwoRequested;
+      const pageTwoRequestStarted = new Promise((resolve) => { pageTwoRequested = resolve; });
+      const pageTwoGate = new Promise((resolve) => { releasePageTwo = resolve; });
+      const teacherRelationsPage = (url) => {
+        const parsed = new URL(url);
+        return parsed.pathname.includes('/content-manager/relations/') && parsed.pathname.endsWith('/teachers');
+      };
+      const pageTwoRoute = (url) => teacherRelationsPage(url) && new URL(url).searchParams.get('page') === '2';
+      const pageThreeRoute = (url) => teacherRelationsPage(url) && new URL(url).searchParams.get('page') === '3';
+      let pageThreeRequestCount = 0;
+      await pageUi.route(pageTwoRoute, async (route) => {
+        pageTwoRequested();
+        await pageTwoGate;
+        await route.fulfill({ status: 500, contentType: 'application/json', body: '{"error":"injected page 2 failure"}' });
+      });
+      await pageUi.route(pageThreeRoute, async (route) => {
+        pageThreeRequestCount += 1;
+        await route.abort();
+      });
+      let publishAttempts = 0;
+      const publishAbortRoute = (url) => new URL(url).pathname.includes('/actions/publish');
+      await pageUi.route(publishAbortRoute, async (route) => {
+        publishAttempts += 1;
+        await route.abort();
+      });
+      await pageUi.goto(`${base}/admin/content-manager/collection-types/api::schedule-entry.schedule-entry/${uiDraftEntry.documentId}`);
+      await pageTwoRequestStarted;
+      const publishButton = pageUi.getByRole('button', { name: 'Опубликовать' });
+      await publishButton.waitFor();
+      const disabledWhilePageTwoPending = await publishButton.isDisabled();
+      await publishButton.evaluate((button) => button.click());
+      await pageUi.keyboard.press('ControlOrMeta+Shift+Enter');
+      releasePageTwo();
+      const pageTwoError = await pageUi.waitForResponse((response) =>
+        pageTwoRoute(response.url()) && response.status() === 500, { timeout: 10_000 });
+      assert.equal(pageTwoError.status(), 500);
+      await pageUi.waitForTimeout(300);
+      const disabledAfterPageTwoError = await publishButton.isDisabled();
+      const publishAttemptsWhileIncomplete = publishAttempts;
+      const pageThreeRequestsAfterError = pageThreeRequestCount;
+      const listErrorVisible = await pageUi.getByText('Не удалось загрузить полный список преподавателей проведения.', { exact: true })
+        .isVisible().catch(() => false);
+
+      assert.equal(disabledWhilePageTwoPending, true, 'publish disabled while page 2 is pending');
+      assert.equal(disabledAfterPageTwoError, true, 'publish remains disabled after page 2 fails');
+      assert.equal(publishAttemptsWhileIncomplete, 0, 'publish action must not reach the server while list is incomplete');
+      assert.equal(pageThreeRequestsAfterError, 0, 'failed page 2 must not be skipped in favor of page 3');
+      assert.equal(listErrorVisible, true, 'list-loading failure must be visible in the form');
+
+      await pageUi.unroute(pageTwoRoute);
+      await pageUi.unroute(pageThreeRoute);
+      await pageUi.unroute(publishAbortRoute);
+      const requestedPages = new Set();
       pageUi.on('response', (response) => {
         const url = new URL(response.url());
-        if (!url.pathname.includes('/content-manager/relations/') || !url.pathname.endsWith('/teachers')) return;
-        const pageNumber = url.searchParams.get('page');
-        if (pageNumber) relationPages.add(pageNumber);
+        if (teacherRelationsPage(url.toString()) && url.searchParams.get('page')) requestedPages.add(url.searchParams.get('page'));
       });
-      const pageTwoLoaded = pageUi.waitForResponse((response) => {
-        const url = new URL(response.url());
-        return url.pathname.includes('/content-manager/relations/') && url.pathname.endsWith('/teachers') &&
-          url.searchParams.get('page') === '2';
-      }, { timeout: 10_000 });
-      await pageUi.goto(`${base}/admin/content-manager/collection-types/api::schedule-entry.schedule-entry/${uiDraftEntry.documentId}`);
-      await pageTwoLoaded;
-      await pageUi.getByRole('combobox', { name: 'Преподаватели проведения (6)' }).waitFor();
-      await pageUi.getByRole('button', { name: 'Load More' }).waitFor({ state: 'detached' });
-      assert.ok(relationPages.has('2'), 'форма должна автоматически загрузить связи после первых пяти');
+      await pageUi.reload();
+      await pageUi.waitForResponse((response) => pageTwoRoute(response.url()) && response.ok(), { timeout: 10_000 });
+      await pageUi.waitForResponse((response) => teacherRelationsPage(response.url()) &&
+        new URL(response.url()).searchParams.get('page') === '3' && response.ok(), { timeout: 10_000 });
+      await pageUi.getByRole('combobox', { name: 'Преподаватели проведения (11)' }).waitFor();
+      const bodyText = await pageUi.locator('body').innerText();
+      let previousTeacherIndex = -1;
+      for (const name of eventTeacherNames) {
+        const index = bodyText.indexOf(name);
+        assert.notEqual(index, -1, `полный список не показал «${name}»`);
+        assert.ok(index > previousTeacherIndex, `в форме нарушен порядок преподавателей возле «${name}»`);
+        previousTeacherIndex = index;
+      }
+      assert.deepEqual([...requestedPages].sort(), ['1', '2', '3']);
+      assert.equal(await pageUi.getByRole('button', { name: /Load More|Загрузить ещё/ }).count(), 0,
+        'список должен быть полностью загружен без дополнительного клика');
       await pageUi.getByRole('button', { name: 'Опубликовать' }).waitFor();
       await publishForm();
 

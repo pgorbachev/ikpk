@@ -1,5 +1,8 @@
 import type { ComponentType } from 'react';
 import type { StrapiApp } from '@strapi/strapi/admin';
+import { guardScheduleEntryPublish } from './teacher-publish-action';
+
+declare const __IKPK_DATABASE_CLIENT__: string;
 
 function RefreshIcon() {
   return (
@@ -36,6 +39,11 @@ export default {
     void import('./admin-localization').then(({ ensureDefaultAdminLocale }) =>
       ensureDefaultAdminLocale(window.localStorage),
     );
+    if (__IKPK_DATABASE_CLIENT__ === 'sqlite') {
+      app.getPlugin('content-manager').apis.addDocumentAction((actions) =>
+        actions.map((action) => action.type === 'publish' ? guardScheduleEntryPublish(action) : action),
+      );
+    }
     app.addMenuLink({
       to: '/site-refresh',
       icon: RefreshIcon,

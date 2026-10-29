@@ -726,6 +726,61 @@ describe('семинары в собранном Strapi', { timeout: 360000 }, (
     assert.equal(await entries.findOne({ documentId: draft.documentId, status: 'published' }), null);
   });
 
+  test('числовые ISO годы startAt не интерпретируются как epoch milliseconds', async () => {
+    const seminars = app.documents('api::seminar.seminar');
+    const entries = app.documents('api::schedule-entry.schedule-entry');
+    const seminar = await seminars.create({
+      status: 'published',
+      data: { name: 'Семинар для numeric ISO years', ...validSeminarPublicationFields,
+        course_group: publishedProgram.documentId },
+    });
+    const entryData = {
+      seminar: seminar.documentId, city: 'Москва', entry_status: 'active',
+      startAt: 2030, endAt: 2031, teachers: [],
+    };
+
+    await assert.rejects(
+      () => entries.create({ status: 'published', data: entryData }),
+      /преподавател/i,
+      'Strapi parseISO(String(2030)) трактует startAt как 2030 год, это будущее',
+    );
+
+    const draft = await entries.create({ data: entryData });
+    await assert.rejects(
+      () => entries.update({ documentId: draft.documentId, status: 'published', data: {} }),
+      /преподавател/i,
+    );
+    assert.equal(await entries.findOne({ documentId: draft.documentId, status: 'published' }), null);
+  });
+
+  test('Date startAt, принятый Document Service, не обходит проверку преподавателя', async () => {
+    const seminars = app.documents('api::seminar.seminar');
+    const entries = app.documents('api::schedule-entry.schedule-entry');
+    const seminar = await seminars.create({
+      status: 'published',
+      data: { name: 'Семинар для Date startAt', ...validSeminarPublicationFields,
+        course_group: publishedProgram.documentId },
+    });
+    const entryData = {
+      seminar: seminar.documentId, city: 'Москва', entry_status: 'active',
+      startAt: new Date('2030-01-01T00:00:00.000Z'),
+      endAt: new Date('2030-01-02T00:00:00.000Z'), teachers: [],
+    };
+
+    await assert.rejects(
+      () => entries.create({ status: 'published', data: entryData }),
+      /преподавател/i,
+      'Strapi parseType accepts Date instances as future datetimes',
+    );
+
+    const draft = await entries.create({ data: entryData });
+    await assert.rejects(
+      () => entries.update({ documentId: draft.documentId, status: 'published', data: {} }),
+      /преподавател/i,
+    );
+    assert.equal(await entries.findOne({ documentId: draft.documentId, status: 'published' }), null);
+  });
+
   test('назначение преподавателя одному проведению не меняет другое проведение и общий семинар', async () => {
     const seminars = app.documents('api::seminar.seminar');
     const entries = app.documents('api::schedule-entry.schedule-entry');
