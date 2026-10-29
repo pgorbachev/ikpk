@@ -1,0 +1,1613 @@
+{
+  "auditReportVersion": 2,
+  "vulnerabilities": {
+    "@humanfs/node": {
+      "name": "@humanfs/node",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        {
+          "source": 1158499,
+          "name": "@humanfs/node",
+          "dependency": "@humanfs/node",
+          "title": "humanfs: Recursive copy follows symlinked files and copies data from outside the source tree",
+          "url": "https://github.com/advisories/GHSA-p498-v437-472g",
+          "severity": "moderate",
+          "cwe": [
+            "CWE-22"
+          ],
+          "cvss": {
+            "score": 0,
+            "vectorString": null
+          },
+          "range": "<0.16.8"
+        }
+      ],
+      "effects": [],
+      "range": "<0.16.8",
+      "nodes": [
+        "node_modules/@humanfs/node"
+      ],
+      "fixAvailable": true
+    },
+    "@modelcontextprotocol/sdk": {
+      "name": "@modelcontextprotocol/sdk",
+      "severity": "high",
+      "isDirect": false,
+      "via": [
+        {
+          "source": 1241339,
+          "name": "@modelcontextprotocol/sdk",
+          "dependency": "@modelcontextprotocol/sdk",
+          "title": "MCP TypeScript SDK: OAuth client could send credentials to an authorization server chosen by the MCP server",
+          "url": "https://github.com/advisories/GHSA-6qxp-vccf-f47h",
+          "severity": "high",
+          "cwe": [
+            "CWE-345",
+            "CWE-522"
+          ],
+          "cvss": {
+            "score": 7.5,
+            "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N"
+          },
+          "range": ">=1.12.0 <1.31.0"
+        },
+        {
+          "source": 1242628,
+          "name": "@modelcontextprotocol/sdk",
+          "dependency": "@modelcontextprotocol/sdk",
+          "title": "MCP TypeScript SDK: Experimental tasks were not tied to the session that created them",
+          "url": "https://github.com/advisories/GHSA-22jm-h49p-29qw",
+          "severity": "high",
+          "cwe": [
+            "CWE-639",
+            "CWE-862"
+          ],
+          "cvss": {
+            "score": 8.6,
+            "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:L/A:L"
+          },
+          "range": ">=1.24.0 <1.32.0"
+        },
+        {
+          "source": 1242630,
+          "name": "@modelcontextprotocol/sdk",
+          "dependency": "@modelcontextprotocol/sdk",
+          "title": "MCP TypeScript client SDK: HTTP client transports and OAuth requests followed cross-origin redirects and re-sent custom headers and request bodies",
+          "url": "https://github.com/advisories/GHSA-6prh-2h8m-c8cw",
+          "severity": "moderate",
+          "cwe": [
+            "CWE-200"
+          ],
+          "cvss": {
+            "score": 6.5,
+            "vectorString": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:H/I:L/A:N"
+          },
+          "range": "<1.32.0"
+        },
+        {
+          "source": 1242649,
+          "name": "@modelcontextprotocol/sdk",
+          "dependency": "@modelcontextprotocol/sdk",
+          "title": "MCP TypeScript SDK: One HTTP request within the default size limit could exhaust server memory during validation",
+          "url": "https://github.com/advisories/GHSA-46jr-4wx8-v453",
+          "severity": "high",
+          "cwe": [
+            "CWE-770"
+          ],
+          "cvss": {
+            "score": 7.5,
+            "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+          },
+          "range": ">=1.3.0 <1.32.0"
+        },
+        {
+          "source": 1242667,
+          "name": "@modelcontextprotocol/sdk",
+          "dependency": "@modelcontextprotocol/sdk",
+          "title": "MCP TypeScript SDK: Server bearer authentication accepted tokens issued for another service",
+          "url": "https://github.com/advisories/GHSA-rvq5-wwqv-78pq",
+          "severity": "moderate",
+          "cwe": [
+            "CWE-863"
+          ],
+          "cvss": {
+            "score": 6.8,
+            "vectorString": "CVSS:3.1/AV:N/AC:H/PR:L/UI:N/S:U/C:H/I:H/A:N"
+          },
+          "range": ">=1.6.0 <1.32.0"
+        },
+        {
+          "source": 1243488,
+          "name": "@modelcontextprotocol/sdk",
+          "dependency": "@modelcontextprotocol/sdk",
+          "title": "MCP TypeScript SDK: HTTP server transports and handlers did not limit request body size or JSON-RPC batch length",
+          "url": "https://github.com/advisories/GHSA-f897-62hf-6gxq",
+          "severity": "high",
+          "cwe": [
+            "CWE-770"
+          ],
+          "cvss": {
+            "score": 7.5,
+            "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+          },
+          "range": ">=1.10.0 <1.30.1"
+        }
+      ],
+      "effects": [
+        "@strapi/core",
+        "@strapi/types"
+      ],
+      "range": "<=1.31.0",
+      "nodes": [
+        "node_modules/@modelcontextprotocol/sdk"
+      ],
+      "fixAvailable": {
+        "name": "@strapi/strapi",
+        "version": "5.60.0",
+        "isSemVerMajor": false
+      }
+    },
+    "@rushstack/node-core-library": {
+      "name": "@rushstack/node-core-library",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        "ajv"
+      ],
+      "effects": [
+        "@rushstack/terminal"
+      ],
+      "range": "5.0.0 - 5.20.2",
+      "nodes": [
+        "node_modules/@rushstack/node-core-library"
+      ],
+      "fixAvailable": true
+    },
+    "@rushstack/terminal": {
+      "name": "@rushstack/terminal",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        "@rushstack/node-core-library"
+      ],
+      "effects": [
+        "@rushstack/ts-command-line"
+      ],
+      "range": "0.11.1 - 0.22.2",
+      "nodes": [
+        "node_modules/@rushstack/terminal"
+      ],
+      "fixAvailable": true
+    },
+    "@rushstack/ts-command-line": {
+      "name": "@rushstack/ts-command-line",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        "@rushstack/terminal"
+      ],
+      "effects": [],
+      "range": "4.21.1 - 5.3.2",
+      "nodes": [
+        "node_modules/@rushstack/ts-command-line"
+      ],
+      "fixAvailable": true
+    },
+    "@strapi/admin": {
+      "name": "@strapi/admin",
+      "severity": "high",
+      "isDirect": false,
+      "via": [
+        "@strapi/data-transfer",
+        "@strapi/permissions",
+        "@strapi/types",
+        "@strapi/utils",
+        "qs",
+        "react-router-dom",
+        "zod"
+      ],
+      "effects": [
+        "@strapi/content-releases",
+        "@strapi/email",
+        "@strapi/review-workflows",
+        "@strapi/strapi"
+      ],
+      "range": "*",
+      "nodes": [
+        "node_modules/@strapi/admin"
+      ],
+      "fixAvailable": {
+        "name": "@strapi/strapi",
+        "version": "5.60.0",
+        "isSemVerMajor": false
+      }
+    },
+    "@strapi/cloud-cli": {
+      "name": "@strapi/cloud-cli",
+      "severity": "high",
+      "isDirect": false,
+      "via": [
+        "@strapi/utils"
+      ],
+      "effects": [],
+      "range": "<=0.0.0-next.ffc36acb308febe288f1a31b62cbbb75b286585c || >=5.0.0-beta.15",
+      "nodes": [
+        "node_modules/@strapi/cloud-cli"
+      ],
+      "fixAvailable": true
+    },
+    "@strapi/content-manager": {
+      "name": "@strapi/content-manager",
+      "severity": "high",
+      "isDirect": false,
+      "via": [
+        "@strapi/admin",
+        "@strapi/types",
+        "@strapi/utils",
+        "qs",
+        "react-router-dom",
+        "zod"
+      ],
+      "effects": [
+        "@strapi/content-releases",
+        "@strapi/review-workflows"
+      ],
+      "range": "<=0.0.0-next.ffc36acb308febe288f1a31b62cbbb75b286585c || >=5.0.0-beta.6",
+      "nodes": [
+        "node_modules/@strapi/content-manager"
+      ],
+      "fixAvailable": {
+        "name": "@strapi/strapi",
+        "version": "5.60.0",
+        "isSemVerMajor": false
+      }
+    },
+    "@strapi/content-releases": {
+      "name": "@strapi/content-releases",
+      "severity": "high",
+      "isDirect": false,
+      "via": [
+        "@strapi/admin",
+        "@strapi/content-manager",
+        "@strapi/database",
+        "@strapi/types",
+        "@strapi/utils",
+        "qs",
+        "react-router-dom"
+      ],
+      "effects": [
+        "@strapi/strapi"
+      ],
+      "range": "<=0.0.0-next.ffc36acb308febe288f1a31b62cbbb75b286585c || >=4.18.1-beta.0",
+      "nodes": [
+        "node_modules/@strapi/content-releases"
+      ],
+      "fixAvailable": {
+        "name": "@strapi/strapi",
+        "version": "5.60.0",
+        "isSemVerMajor": false
+      }
+    },
+    "@strapi/content-type-builder": {
+      "name": "@strapi/content-type-builder",
+      "severity": "high",
+      "isDirect": false,
+      "via": [
+        "@strapi/admin",
+        "@strapi/generators",
+        "@strapi/utils",
+        "qs",
+        "react-router-dom",
+        "zod"
+      ],
+      "effects": [],
+      "range": "<=0.0.0-next.ffc36acb308febe288f1a31b62cbbb75b286585c || >=5.0.0-beta.6",
+      "nodes": [
+        "node_modules/@strapi/content-type-builder"
+      ],
+      "fixAvailable": true
+    },
+    "@strapi/core": {
+      "name": "@strapi/core",
+      "severity": "high",
+      "isDirect": false,
+      "via": [
+        "@modelcontextprotocol/sdk",
+        "@strapi/admin",
+        "@strapi/database",
+        "@strapi/generators",
+        "@strapi/openapi",
+        "@strapi/permissions",
+        "@strapi/types",
+        "@strapi/utils",
+        "koa-body",
+        "koa-session",
+        "qs",
+        "zod"
+      ],
+      "effects": [],
+      "range": "*",
+      "nodes": [
+        "node_modules/@strapi/core"
+      ],
+      "fixAvailable": true
+    },
+    "@strapi/data-transfer": {
+      "name": "@strapi/data-transfer",
+      "severity": "high",
+      "isDirect": false,
+      "via": [
+        "@strapi/types",
+        "@strapi/utils",
+        "stream-json"
+      ],
+      "effects": [
+        "@strapi/admin",
+        "@strapi/strapi"
+      ],
+      "range": "*",
+      "nodes": [
+        "node_modules/@strapi/data-transfer"
+      ],
+      "fixAvailable": {
+        "name": "@strapi/strapi",
+        "version": "5.60.0",
+        "isSemVerMajor": false
+      }
+    },
+    "@strapi/database": {
+      "name": "@strapi/database",
+      "severity": "high",
+      "isDirect": false,
+      "via": [
+        "@strapi/utils"
+      ],
+      "effects": [
+        "@strapi/upload"
+      ],
+      "range": "<=0.0.0-next.ffc36acb308febe288f1a31b62cbbb75b286585c || >=5.0.0-alpha.0",
+      "nodes": [
+        "node_modules/@strapi/database"
+      ],
+      "fixAvailable": true
+    },
+    "@strapi/email": {
+      "name": "@strapi/email",
+      "severity": "high",
+      "isDirect": false,
+      "via": [
+        "@strapi/admin",
+        "@strapi/provider-email-sendmail",
+        "@strapi/utils",
+        "react-router-dom",
+        "zod"
+      ],
+      "effects": [],
+      "range": "<=0.0.0-next.ffc36acb308febe288f1a31b62cbbb75b286585c || >=5.0.0-beta.6",
+      "nodes": [
+        "node_modules/@strapi/email"
+      ],
+      "fixAvailable": true
+    },
+    "@strapi/generators": {
+      "name": "@strapi/generators",
+      "severity": "high",
+      "isDirect": false,
+      "via": [
+        "@strapi/utils"
+      ],
+      "effects": [],
+      "range": "<=0.0.0-next.ffc36acb308febe288f1a31b62cbbb75b286585c || >=5.0.0-alpha.0",
+      "nodes": [
+        "node_modules/@strapi/generators"
+      ],
+      "fixAvailable": true
+    },
+    "@strapi/i18n": {
+      "name": "@strapi/i18n",
+      "severity": "high",
+      "isDirect": false,
+      "via": [
+        "@strapi/admin",
+        "@strapi/content-manager",
+        "@strapi/utils",
+        "qs",
+        "react-router-dom",
+        "zod"
+      ],
+      "effects": [],
+      "range": "<=0.0.0-next.ffc36acb308febe288f1a31b62cbbb75b286585c || >=5.0.0-beta.6",
+      "nodes": [
+        "node_modules/@strapi/i18n"
+      ],
+      "fixAvailable": true
+    },
+    "@strapi/openapi": {
+      "name": "@strapi/openapi",
+      "severity": "high",
+      "isDirect": false,
+      "via": [
+        "zod"
+      ],
+      "effects": [
+        "@strapi/core",
+        "@strapi/strapi"
+      ],
+      "range": "<=0.0.0-next.ffc36acb308febe288f1a31b62cbbb75b286585c || >=5.20.0",
+      "nodes": [
+        "node_modules/@strapi/openapi"
+      ],
+      "fixAvailable": {
+        "name": "@strapi/strapi",
+        "version": "5.60.0",
+        "isSemVerMajor": false
+      }
+    },
+    "@strapi/permissions": {
+      "name": "@strapi/permissions",
+      "severity": "high",
+      "isDirect": false,
+      "via": [
+        "@strapi/utils",
+        "qs"
+      ],
+      "effects": [
+        "@strapi/admin",
+        "@strapi/strapi",
+        "@strapi/types"
+      ],
+      "range": ">=4.14.0-alpha.0",
+      "nodes": [
+        "node_modules/@strapi/permissions"
+      ],
+      "fixAvailable": {
+        "name": "@strapi/strapi",
+        "version": "5.60.0",
+        "isSemVerMajor": false
+      }
+    },
+    "@strapi/plugin-users-permissions": {
+      "name": "@strapi/plugin-users-permissions",
+      "severity": "high",
+      "isDirect": true,
+      "via": [
+        "@strapi/utils",
+        "react-router-dom",
+        "zod"
+      ],
+      "effects": [],
+      "range": "<=0.0.0-next.ffc36acb308febe288f1a31b62cbbb75b286585c || >=5.0.0-alpha.0",
+      "nodes": [
+        "node_modules/@strapi/plugin-users-permissions"
+      ],
+      "fixAvailable": {
+        "name": "@strapi/plugin-users-permissions",
+        "version": "5.19.0",
+        "isSemVerMajor": true
+      }
+    },
+    "@strapi/provider-email-sendmail": {
+      "name": "@strapi/provider-email-sendmail",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        "nodemailer"
+      ],
+      "effects": [
+        "@strapi/email"
+      ],
+      "range": "<=0.0.0-next.fd8661800b5e6f888e7cf6ef40e3e14d9d0b9cbf || >=5.46.0",
+      "nodes": [
+        "node_modules/@strapi/provider-email-sendmail"
+      ],
+      "fixAvailable": true
+    },
+    "@strapi/provider-upload-local": {
+      "name": "@strapi/provider-upload-local",
+      "severity": "high",
+      "isDirect": false,
+      "via": [
+        "@strapi/utils"
+      ],
+      "effects": [],
+      "range": "<=0.0.0-next.ffc36acb308febe288f1a31b62cbbb75b286585c || >=5.0.0-alpha.0",
+      "nodes": [
+        "node_modules/@strapi/provider-upload-local"
+      ],
+      "fixAvailable": true
+    },
+    "@strapi/review-workflows": {
+      "name": "@strapi/review-workflows",
+      "severity": "high",
+      "isDirect": false,
+      "via": [
+        "@strapi/admin",
+        "@strapi/content-manager",
+        "@strapi/utils",
+        "react-router-dom"
+      ],
+      "effects": [],
+      "range": "*",
+      "nodes": [
+        "node_modules/@strapi/review-workflows"
+      ],
+      "fixAvailable": true
+    },
+    "@strapi/strapi": {
+      "name": "@strapi/strapi",
+      "severity": "high",
+      "isDirect": true,
+      "via": [
+        "@strapi/admin",
+        "@strapi/cloud-cli",
+        "@strapi/content-manager",
+        "@strapi/content-releases",
+        "@strapi/content-type-builder",
+        "@strapi/core",
+        "@strapi/data-transfer",
+        "@strapi/database",
+        "@strapi/email",
+        "@strapi/generators",
+        "@strapi/i18n",
+        "@strapi/openapi",
+        "@strapi/permissions",
+        "@strapi/review-workflows",
+        "@strapi/types",
+        "@strapi/upload",
+        "@strapi/utils",
+        "fork-ts-checker-webpack-plugin",
+        "react-router-dom",
+        "vite",
+        "webpack-dev-middleware"
+      ],
+      "effects": [],
+      "range": "*",
+      "nodes": [
+        "node_modules/@strapi/strapi"
+      ],
+      "fixAvailable": {
+        "name": "@strapi/strapi",
+        "version": "5.60.0",
+        "isSemVerMajor": false
+      }
+    },
+    "@strapi/types": {
+      "name": "@strapi/types",
+      "severity": "high",
+      "isDirect": false,
+      "via": [
+        "@modelcontextprotocol/sdk",
+        "@strapi/database",
+        "@strapi/permissions",
+        "@strapi/utils",
+        "koa-body",
+        "zod"
+      ],
+      "effects": [
+        "@strapi/admin",
+        "@strapi/content-manager",
+        "@strapi/content-releases",
+        "@strapi/data-transfer",
+        "@strapi/strapi"
+      ],
+      "range": "<=0.0.0-next.ffc36acb308febe288f1a31b62cbbb75b286585c || >=4.14.0",
+      "nodes": [
+        "node_modules/@strapi/types"
+      ],
+      "fixAvailable": {
+        "name": "@strapi/strapi",
+        "version": "5.60.0",
+        "isSemVerMajor": false
+      }
+    },
+    "@strapi/upload": {
+      "name": "@strapi/upload",
+      "severity": "high",
+      "isDirect": false,
+      "via": [
+        "@strapi/admin",
+        "@strapi/database",
+        "@strapi/provider-upload-local",
+        "@strapi/utils",
+        "qs",
+        "react-router-dom",
+        "zod"
+      ],
+      "effects": [],
+      "range": "<=0.0.0-next.ffc36acb308febe288f1a31b62cbbb75b286585c || >=5.0.0-beta.6",
+      "nodes": [
+        "node_modules/@strapi/upload"
+      ],
+      "fixAvailable": true
+    },
+    "@strapi/utils": {
+      "name": "@strapi/utils",
+      "severity": "high",
+      "isDirect": false,
+      "via": [
+        "zod"
+      ],
+      "effects": [
+        "@strapi/cloud-cli",
+        "@strapi/data-transfer",
+        "@strapi/database",
+        "@strapi/generators",
+        "@strapi/permissions",
+        "@strapi/provider-upload-local"
+      ],
+      "range": "<=0.0.0-next.ffc36acb308febe288f1a31b62cbbb75b286585c || >=5.0.0-alpha.0",
+      "nodes": [
+        "node_modules/@strapi/utils"
+      ],
+      "fixAvailable": {
+        "name": "@strapi/strapi",
+        "version": "5.60.0",
+        "isSemVerMajor": false
+      }
+    },
+    "ajv": {
+      "name": "ajv",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        {
+          "source": 1113715,
+          "name": "ajv",
+          "dependency": "ajv",
+          "title": "ajv has ReDoS when using `$data` option",
+          "url": "https://github.com/advisories/GHSA-2g4f-4pwh-qvx6",
+          "severity": "moderate",
+          "cwe": [
+            "CWE-400",
+            "CWE-1333"
+          ],
+          "cvss": {
+            "score": 0,
+            "vectorString": null
+          },
+          "range": ">=7.0.0-alpha.0 <8.18.0"
+        }
+      ],
+      "effects": [
+        "@rushstack/node-core-library"
+      ],
+      "range": "7.0.0-alpha.0 - 8.17.1",
+      "nodes": [
+        "node_modules/@rushstack/node-core-library/node_modules/ajv"
+      ],
+      "fixAvailable": true
+    },
+    "deepmerge": {
+      "name": "deepmerge",
+      "severity": "low",
+      "isDirect": false,
+      "via": [
+        {
+          "source": 1243505,
+          "name": "deepmerge",
+          "dependency": "deepmerge",
+          "title": "deepmerge mergeObject() allows prototype poisoning of returned objects",
+          "url": "https://github.com/advisories/GHSA-gcqx-w48m-w2h4",
+          "severity": "low",
+          "cwe": [
+            "CWE-1321"
+          ],
+          "cvss": {
+            "score": 5.3,
+            "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:L/A:N"
+          },
+          "range": ">=4.2.0 <=4.3.1"
+        }
+      ],
+      "effects": [
+        "fork-ts-checker-webpack-plugin"
+      ],
+      "range": ">=4.2.0",
+      "nodes": [
+        "node_modules/deepmerge"
+      ],
+      "fixAvailable": true
+    },
+    "esbuild": {
+      "name": "esbuild",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        {
+          "source": 1102341,
+          "name": "esbuild",
+          "dependency": "esbuild",
+          "title": "esbuild enables any website to send any requests to the development server and read the response",
+          "url": "https://github.com/advisories/GHSA-67mh-4wv8-2f99",
+          "severity": "moderate",
+          "cwe": [
+            "CWE-346"
+          ],
+          "cvss": {
+            "score": 5.3,
+            "vectorString": "CVSS:3.1/AV:N/AC:H/PR:N/UI:R/S:U/C:H/I:N/A:N"
+          },
+          "range": "<=0.24.2"
+        }
+      ],
+      "effects": [
+        "vite"
+      ],
+      "range": "<=0.24.2",
+      "nodes": [
+        "node_modules/vite/node_modules/esbuild"
+      ],
+      "fixAvailable": {
+        "name": "@strapi/strapi",
+        "version": "5.60.0",
+        "isSemVerMajor": false
+      }
+    },
+    "fast-uri": {
+      "name": "fast-uri",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        {
+          "source": 1243098,
+          "name": "fast-uri",
+          "dependency": "fast-uri",
+          "title": "fast-uri vulnerable to URI scheme spoofing via percent-encoded scheme decoding",
+          "url": "https://github.com/advisories/GHSA-w74x-v6f9-j3xg",
+          "severity": "moderate",
+          "cwe": [
+            "CWE-172",
+            "CWE-180"
+          ],
+          "cvss": {
+            "score": 6.1,
+            "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:C/C:L/I:L/A:N"
+          },
+          "range": ">=3.0.0 <3.1.9"
+        },
+        {
+          "source": 1243101,
+          "name": "fast-uri",
+          "dependency": "fast-uri",
+          "title": "fast-uri vulnerable to improper path equivalence in relative reference normalization",
+          "url": "https://github.com/advisories/GHSA-xhq7-xmqj-769h",
+          "severity": "low",
+          "cwe": [
+            "CWE-41"
+          ],
+          "cvss": {
+            "score": 3.7,
+            "vectorString": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:N/I:L/A:N"
+          },
+          "range": ">=3.0.0 <3.1.9"
+        },
+        {
+          "source": 1243104,
+          "name": "fast-uri",
+          "dependency": "fast-uri",
+          "title": "fast-uri vulnerable to host confusion via unchecked WHATWG host canonicalization",
+          "url": "https://github.com/advisories/GHSA-wjr9-j795-jxcr",
+          "severity": "moderate",
+          "cwe": [
+            "CWE-20",
+            "CWE-436"
+          ],
+          "cvss": {
+            "score": 4.8,
+            "vectorString": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:L/I:L/A:N"
+          },
+          "range": ">=3.1.3 <3.1.9"
+        },
+        {
+          "source": 1243107,
+          "name": "fast-uri",
+          "dependency": "fast-uri",
+          "title": "fast-uri vulnerable to scheme injection via an unescaped first-segment colon in suffix references",
+          "url": "https://github.com/advisories/GHSA-333x-w4r6-6crp",
+          "severity": "low",
+          "cwe": [
+            "CWE-41",
+            "CWE-116"
+          ],
+          "cvss": {
+            "score": 3.7,
+            "vectorString": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:N/I:L/A:N"
+          },
+          "range": ">=3.0.0 <3.1.9"
+        }
+      ],
+      "effects": [],
+      "range": "3.0.0 - 3.1.8",
+      "nodes": [
+        "node_modules/fast-uri"
+      ],
+      "fixAvailable": true
+    },
+    "fork-ts-checker-webpack-plugin": {
+      "name": "fork-ts-checker-webpack-plugin",
+      "severity": "low",
+      "isDirect": false,
+      "via": [
+        "deepmerge"
+      ],
+      "effects": [],
+      "range": ">=5.0.0-alpha.1",
+      "nodes": [
+        "node_modules/fork-ts-checker-webpack-plugin"
+      ],
+      "fixAvailable": true
+    },
+    "hono": {
+      "name": "hono",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        {
+          "source": 1193729,
+          "name": "hono",
+          "dependency": "hono",
+          "title": "Hono: Incomplete fix for CVE-2026-39408: `toSSG()` still writes files outside the output directory",
+          "url": "https://github.com/advisories/GHSA-gqvv-2mrq-wpjv",
+          "severity": "moderate",
+          "cwe": [
+            "CWE-22"
+          ],
+          "cvss": {
+            "score": 6.5,
+            "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:N/I:H/A:N"
+          },
+          "range": "<4.13.5"
+        },
+        {
+          "source": 1193730,
+          "name": "hono",
+          "dependency": "hono",
+          "title": "Hono: Unbounded dot-notation nesting in `parseBody()` can cause memory exhaustion",
+          "url": "https://github.com/advisories/GHSA-g6gw-c38x-mqfc",
+          "severity": "moderate",
+          "cwe": [
+            "CWE-400"
+          ],
+          "cvss": {
+            "score": 5.3,
+            "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:L"
+          },
+          "range": "<4.13.5"
+        },
+        {
+          "source": 1193731,
+          "name": "hono",
+          "dependency": "hono",
+          "title": "Hono: Query parser reads parameters after the URL fragment, causing cache-key and proxy interpretation differentials",
+          "url": "https://github.com/advisories/GHSA-crvj-82cr-hjcx",
+          "severity": "moderate",
+          "cwe": [
+            "CWE-444"
+          ],
+          "cvss": {
+            "score": 5.9,
+            "vectorString": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:N/I:H/A:N"
+          },
+          "range": "<4.13.5"
+        },
+        {
+          "source": 1240640,
+          "name": "hono",
+          "dependency": "hono",
+          "title": "hono/jsx renders plain strings unescaped in boundary components, leading to XSS",
+          "url": "https://github.com/advisories/GHSA-hxh3-vqpv-xpqv",
+          "severity": "moderate",
+          "cwe": [
+            "CWE-79"
+          ],
+          "cvss": {
+            "score": 4.7,
+            "vectorString": "CVSS:3.1/AV:N/AC:H/PR:N/UI:R/S:C/C:L/I:L/A:N"
+          },
+          "range": "<4.13.7"
+        },
+        {
+          "source": 1242595,
+          "name": "hono",
+          "dependency": "hono",
+          "title": "Hono: `serveStatic` decodes the request path a second time, leading to bypass of middleware on static paths",
+          "url": "https://github.com/advisories/GHSA-5r4p-p66f-jhc7",
+          "severity": "moderate",
+          "cwe": [
+            "CWE-174"
+          ],
+          "cvss": {
+            "score": 5.3,
+            "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:N/A:N"
+          },
+          "range": ">=4.12.4 <4.13.11"
+        }
+      ],
+      "effects": [],
+      "range": "<=4.13.10",
+      "nodes": [
+        "node_modules/hono"
+      ],
+      "fixAvailable": true
+    },
+    "ip-address": {
+      "name": "ip-address",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        {
+          "source": 1239948,
+          "name": "ip-address",
+          "dependency": "ip-address",
+          "title": "ip-address: Address6.isLinkLocal() recognizes fe80::/64 rather than fe80::/10, allowing SSRF and trust-boundary bypass to on-link hosts",
+          "url": "https://github.com/advisories/GHSA-rpw4-54j3-4h4q",
+          "severity": "moderate",
+          "cwe": [
+            "CWE-697",
+            "CWE-918"
+          ],
+          "cvss": {
+            "score": 0,
+            "vectorString": null
+          },
+          "range": "<=10.5.0"
+        },
+        {
+          "source": 1239949,
+          "name": "ip-address",
+          "dependency": "ip-address",
+          "title": "ip-address: no classifier recognizes the NAT64 local-use range 64:ff9b:1::/48, allowing SSRF and trust-boundary bypass",
+          "url": "https://github.com/advisories/GHSA-2vr4-cq9g-pvrc",
+          "severity": "moderate",
+          "cwe": [
+            "CWE-918"
+          ],
+          "cvss": {
+            "score": 0,
+            "vectorString": null
+          },
+          "range": ">=10.2.0 <=10.5.0"
+        },
+        {
+          "source": 1240097,
+          "name": "ip-address",
+          "dependency": "ip-address",
+          "title": "ip-address: isInSubnet() and isHostInSubnet() compare addresses of different families as if they shared an address space, allowing an allowlist check to admit an address outside its range",
+          "url": "https://github.com/advisories/GHSA-j6r3-76f7-8jcv",
+          "severity": "moderate",
+          "cwe": [
+            "CWE-697",
+            "CWE-843"
+          ],
+          "cvss": {
+            "score": 0,
+            "vectorString": null
+          },
+          "range": "<=10.7.0"
+        },
+        {
+          "source": 1240098,
+          "name": "ip-address",
+          "dependency": "ip-address",
+          "title": "ip-address: Address6 builds a parse diagnostic proportional to the input with no length bound, allowing a single long string to stall or crash the process",
+          "url": "https://github.com/advisories/GHSA-h3mg-xc3c-68pw",
+          "severity": "moderate",
+          "cwe": [
+            "CWE-400",
+            "CWE-770"
+          ],
+          "cvss": {
+            "score": 0,
+            "vectorString": null
+          },
+          "range": "<=10.7.0"
+        },
+        {
+          "source": 1242883,
+          "name": "ip-address",
+          "dependency": "ip-address",
+          "title": "ip-address: Address6 matches a zone identifier in quadratic time ahead of its length limit, allowing a single long string to stall the process",
+          "url": "https://github.com/advisories/GHSA-rxp7-6hxx-x8q5",
+          "severity": "moderate",
+          "cwe": [
+            "CWE-1333"
+          ],
+          "cvss": {
+            "score": 0,
+            "vectorString": null
+          },
+          "range": "<=10.7.3"
+        }
+      ],
+      "effects": [],
+      "range": "<=10.7.3",
+      "nodes": [
+        "node_modules/ip-address"
+      ],
+      "fixAvailable": true
+    },
+    "koa-body": {
+      "name": "koa-body",
+      "severity": "high",
+      "isDirect": false,
+      "via": [
+        "zod"
+      ],
+      "effects": [
+        "@strapi/core",
+        "@strapi/types"
+      ],
+      "range": "6.0.0 - 6.0.1",
+      "nodes": [
+        "node_modules/koa-body"
+      ],
+      "fixAvailable": {
+        "name": "@strapi/strapi",
+        "version": "5.60.0",
+        "isSemVerMajor": false
+      }
+    },
+    "koa-session": {
+      "name": "koa-session",
+      "severity": "high",
+      "isDirect": false,
+      "via": [
+        "zod"
+      ],
+      "effects": [
+        "@strapi/core"
+      ],
+      "range": ">=7.0.0",
+      "nodes": [
+        "node_modules/koa-session"
+      ],
+      "fixAvailable": true
+    },
+    "nodemailer": {
+      "name": "nodemailer",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        {
+          "source": 1243091,
+          "name": "nodemailer",
+          "dependency": "nodemailer",
+          "title": "Nodemailer: A nested comment ends early in addressparser, releasing the rest of the comment as a recipient",
+          "url": "https://github.com/advisories/GHSA-8c8m-p3m8-cjg8",
+          "severity": "moderate",
+          "cwe": [
+            "CWE-20",
+            "CWE-436"
+          ],
+          "cvss": {
+            "score": 6.5,
+            "vectorString": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:H/I:L/A:N"
+          },
+          "range": ">=3.0.0 <10.1.4"
+        },
+        {
+          "source": 1243092,
+          "name": "nodemailer",
+          "dependency": "nodemailer",
+          "title": "Nodemailer: A \";\" inside a quoted string or comment ends an address group early in addressparser, turning display text into a recipient",
+          "url": "https://github.com/advisories/GHSA-m943-m63m-w62w",
+          "severity": "moderate",
+          "cwe": [
+            "CWE-20",
+            "CWE-436"
+          ],
+          "cvss": {
+            "score": 6.5,
+            "vectorString": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:H/I:L/A:N"
+          },
+          "range": ">=3.0.0 <10.1.4"
+        },
+        {
+          "source": 1243093,
+          "name": "nodemailer",
+          "dependency": "nodemailer",
+          "title": "Nodemailer: A \">\" inside a quoted local part ends an angle-addr early in addressparser, delivering to a domain the header does not name",
+          "url": "https://github.com/advisories/GHSA-85x2-q946-cp5h",
+          "severity": "moderate",
+          "cwe": [
+            "CWE-20",
+            "CWE-436"
+          ],
+          "cvss": {
+            "score": 6.5,
+            "vectorString": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:H/I:L/A:N"
+          },
+          "range": ">=3.0.0 <10.1.4"
+        }
+      ],
+      "effects": [
+        "@strapi/provider-email-sendmail"
+      ],
+      "range": "3.0.0 - 10.1.3",
+      "nodes": [
+        "node_modules/nodemailer"
+      ],
+      "fixAvailable": true
+    },
+    "postcss-selector-parser": {
+      "name": "postcss-selector-parser",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        {
+          "source": 1153169,
+          "name": "postcss-selector-parser",
+          "dependency": "postcss-selector-parser",
+          "title": "postcss-selector-parser allows denial of service through uncontrolled AST recursion",
+          "url": "https://github.com/advisories/GHSA-w9m9-85wc-3x92",
+          "severity": "low",
+          "cwe": [
+            "CWE-404"
+          ],
+          "cvss": {
+            "score": 4.3,
+            "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:N/I:N/A:L"
+          },
+          "range": ">=7.1.0 <7.1.3"
+        },
+        {
+          "source": 1243380,
+          "name": "postcss-selector-parser",
+          "dependency": "postcss-selector-parser",
+          "title": "PostCSS: Quadratic complexity in flat selector parsing allows CPU exhaustion",
+          "url": "https://github.com/advisories/GHSA-rj75-hqrm-r3gf",
+          "severity": "moderate",
+          "cwe": [
+            "CWE-400",
+            "CWE-407"
+          ],
+          "cvss": {
+            "score": 5.9,
+            "vectorString": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:N/I:N/A:H"
+          },
+          "range": ">=7.0.0 <7.1.6"
+        }
+      ],
+      "effects": [],
+      "range": "7.0.0 - 7.1.5",
+      "nodes": [
+        "node_modules/postcss-selector-parser"
+      ],
+      "fixAvailable": true
+    },
+    "qs": {
+      "name": "qs",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        {
+          "source": 1243452,
+          "name": "qs",
+          "dependency": "qs",
+          "title": "qs : qs.stringify with arrayFormat 'comma' throws an uncaught TypeError on array elements carrying a non-callable own toString (DoS)",
+          "url": "https://github.com/advisories/GHSA-6pq8-jhm2-2vcw",
+          "severity": "moderate",
+          "cwe": [
+            "CWE-248",
+            "CWE-704"
+          ],
+          "cvss": {
+            "score": 5.3,
+            "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:L"
+          },
+          "range": ">=6.7.0 <=6.16.0"
+        }
+      ],
+      "effects": [
+        "@strapi/admin",
+        "@strapi/content-manager",
+        "@strapi/content-releases",
+        "@strapi/content-type-builder",
+        "@strapi/core",
+        "@strapi/i18n",
+        "@strapi/permissions",
+        "@strapi/upload"
+      ],
+      "range": "6.7.0 - 6.16.0",
+      "nodes": [
+        "node_modules/qs"
+      ],
+      "fixAvailable": {
+        "name": "@strapi/strapi",
+        "version": "5.60.0",
+        "isSemVerMajor": false
+      }
+    },
+    "react-router": {
+      "name": "react-router",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        {
+          "source": 1124268,
+          "name": "react-router",
+          "dependency": "react-router",
+          "title": "React Router: Open redirect via backslash in <Link> and useNavigate (CVE-2025-68470 bypass)",
+          "url": "https://github.com/advisories/GHSA-wrjc-x8rr-h8h6",
+          "severity": "moderate",
+          "cwe": [
+            "CWE-601"
+          ],
+          "cvss": {
+            "score": 0,
+            "vectorString": null
+          },
+          "range": ">=6.0.0 <7.18.0"
+        },
+        {
+          "source": 1124272,
+          "name": "react-router",
+          "dependency": "react-router",
+          "title": "React Router: Arbitrary Constructor Injection via deserializeErrors() in React Router SSR Hydration",
+          "url": "https://github.com/advisories/GHSA-337j-9hxr-rhxg",
+          "severity": "moderate",
+          "cwe": [
+            "CWE-470"
+          ],
+          "cvss": {
+            "score": 6.1,
+            "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:C/C:L/I:L/A:N"
+          },
+          "range": ">=6.4.0 <7.18.0"
+        }
+      ],
+      "effects": [
+        "react-router-dom"
+      ],
+      "range": "6.0.0 - 7.17.0",
+      "nodes": [
+        "node_modules/react-router"
+      ],
+      "fixAvailable": {
+        "name": "react-router-dom",
+        "version": "7.18.5",
+        "isSemVerMajor": true
+      }
+    },
+    "react-router-dom": {
+      "name": "react-router-dom",
+      "severity": "moderate",
+      "isDirect": true,
+      "via": [
+        "react-router"
+      ],
+      "effects": [
+        "@strapi/plugin-users-permissions"
+      ],
+      "range": "6.0.0-alpha.0 - 7.17.0",
+      "nodes": [
+        "node_modules/react-router-dom"
+      ],
+      "fixAvailable": {
+        "name": "react-router-dom",
+        "version": "7.18.5",
+        "isSemVerMajor": true
+      }
+    },
+    "stream-json": {
+      "name": "stream-json",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        {
+          "source": 1164823,
+          "name": "stream-json",
+          "dependency": "stream-json",
+          "title": "stream-json: pick/ignore/filter/replace filters are O(depth²) on nested input — small crafted JSON blocks the event loop for seconds→minutes (DoS)",
+          "url": "https://github.com/advisories/GHSA-528h-pc64-c93x",
+          "severity": "moderate",
+          "cwe": [
+            "CWE-407"
+          ],
+          "cvss": {
+            "score": 6.2,
+            "vectorString": "CVSS:3.1/AV:L/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+          },
+          "range": "<=3.4.0"
+        },
+        {
+          "source": 1241262,
+          "name": "stream-json",
+          "dependency": "stream-json",
+          "title": "stream-json: JSONC parser and verifier re-scan the whole accumulated comment on every input chunk",
+          "url": "https://github.com/advisories/GHSA-hqr4-qq8f-hg3x",
+          "severity": "moderate",
+          "cwe": [
+            "CWE-407"
+          ],
+          "cvss": {
+            "score": 6.2,
+            "vectorString": "CVSS:3.1/AV:L/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+          },
+          "range": "<=3.5.0"
+        },
+        {
+          "source": 1241263,
+          "name": "stream-json",
+          "dependency": "stream-json",
+          "title": "stream-json has a prototype pollution issue: Assembler writes this.current[this.key] on plain objects",
+          "url": "https://github.com/advisories/GHSA-mjw6-4jj6-33hc",
+          "severity": "moderate",
+          "cwe": [
+            "CWE-1321"
+          ],
+          "cvss": {
+            "score": 5.1,
+            "vectorString": "CVSS:3.1/AV:L/AC:L/PR:N/UI:N/S:U/C:N/I:L/A:L"
+          },
+          "range": "<3.6.0"
+        }
+      ],
+      "effects": [
+        "@strapi/data-transfer"
+      ],
+      "range": "<=3.5.0",
+      "nodes": [
+        "node_modules/stream-json"
+      ],
+      "fixAvailable": {
+        "name": "@strapi/strapi",
+        "version": "5.60.0",
+        "isSemVerMajor": false
+      }
+    },
+    "vite": {
+      "name": "vite",
+      "severity": "high",
+      "isDirect": false,
+      "via": [
+        {
+          "source": 1116229,
+          "name": "vite",
+          "dependency": "vite",
+          "title": "Vite Vulnerable to Path Traversal in Optimized Deps `.map` Handling",
+          "url": "https://github.com/advisories/GHSA-4w7w-66w2-5vf9",
+          "severity": "moderate",
+          "cwe": [
+            "CWE-22",
+            "CWE-200"
+          ],
+          "cvss": {
+            "score": 0,
+            "vectorString": null
+          },
+          "range": "<=6.4.1"
+        },
+        {
+          "source": 1120784,
+          "name": "vite",
+          "dependency": "vite",
+          "title": "launch-editor: NTLMv2 hash disclosure via UNC path handling on Windows",
+          "url": "https://github.com/advisories/GHSA-v6wh-96g9-6wx3",
+          "severity": "moderate",
+          "cwe": [
+            "CWE-73",
+            "CWE-522"
+          ],
+          "cvss": {
+            "score": 0,
+            "vectorString": null
+          },
+          "range": "<=6.4.2"
+        },
+        {
+          "source": 1242622,
+          "name": "vite",
+          "dependency": "vite",
+          "title": "launch-editor: escapeCmdArgs() omits % escaping on Windows",
+          "url": "https://github.com/advisories/GHSA-698v-4r3x-3vcv",
+          "severity": "moderate",
+          "cwe": [
+            "CWE-78"
+          ],
+          "cvss": {
+            "score": 0,
+            "vectorString": null
+          },
+          "range": "<=6.4.3"
+        },
+        {
+          "source": 1242651,
+          "name": "vite",
+          "dependency": "vite",
+          "title": "launch-editor: Editor CLI flag misinterpretation causing arbitrary command execution for some editors",
+          "url": "https://github.com/advisories/GHSA-r825-w8mm-5pxw",
+          "severity": "moderate",
+          "cwe": [
+            "CWE-88"
+          ],
+          "cvss": {
+            "score": 0,
+            "vectorString": null
+          },
+          "range": "<=6.4.3"
+        },
+        {
+          "source": 1242658,
+          "name": "vite",
+          "dependency": "vite",
+          "title": "launch-editor: `fs.existsSync()` existence check can be bypassed on Windows",
+          "url": "https://github.com/advisories/GHSA-587h-7wmj-h5pm",
+          "severity": "high",
+          "cwe": [
+            "CWE-77"
+          ],
+          "cvss": {
+            "score": 0,
+            "vectorString": null
+          },
+          "range": "<=6.4.3"
+        },
+        {
+          "source": 1242724,
+          "name": "vite",
+          "dependency": "vite",
+          "title": "Vite: Cross origin script execution through Vite custom middleware",
+          "url": "https://github.com/advisories/GHSA-9jrq-w75r-8gcw",
+          "severity": "low",
+          "cwe": [
+            "CWE-80"
+          ],
+          "cvss": {
+            "score": 0,
+            "vectorString": null
+          },
+          "range": "<=6.4.3"
+        },
+        {
+          "source": 1242730,
+          "name": "vite",
+          "dependency": "vite",
+          "title": "Vite: Files outside `server.fs.allow` could be served when project paths match system paths on non-Windows machine",
+          "url": "https://github.com/advisories/GHSA-rq7h-c2jc-7f22",
+          "severity": "moderate",
+          "cwe": [
+            "CWE-22",
+            "CWE-284"
+          ],
+          "cvss": {
+            "score": 0,
+            "vectorString": null
+          },
+          "range": "<=6.4.3"
+        },
+        {
+          "source": 1243432,
+          "name": "vite",
+          "dependency": "vite",
+          "title": "vite: `server.fs.deny` bypass on Windows alternate paths",
+          "url": "https://github.com/advisories/GHSA-fx2h-pf6j-xcff",
+          "severity": "moderate",
+          "cwe": [
+            "CWE-22",
+            "CWE-200"
+          ],
+          "cvss": {
+            "score": 0,
+            "vectorString": null
+          },
+          "range": "<=6.4.2"
+        },
+        "esbuild"
+      ],
+      "effects": [
+        "@strapi/strapi"
+      ],
+      "range": "<=6.4.3",
+      "nodes": [
+        "node_modules/vite"
+      ],
+      "fixAvailable": {
+        "name": "@strapi/strapi",
+        "version": "5.60.0",
+        "isSemVerMajor": false
+      }
+    },
+    "webpack-dev-middleware": {
+      "name": "webpack-dev-middleware",
+      "severity": "high",
+      "isDirect": false,
+      "via": [
+        {
+          "source": 1240027,
+          "name": "webpack-dev-middleware",
+          "dependency": "webpack-dev-middleware",
+          "title": "webpack-dev-middleware vulnerable to Path Traversal via non-slash-terminated publicPath",
+          "url": "https://github.com/advisories/GHSA-g84c-rxfj-3j2c",
+          "severity": "high",
+          "cwe": [
+            "CWE-22"
+          ],
+          "cvss": {
+            "score": 7.4,
+            "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:C/C:H/I:N/A:N"
+          },
+          "range": "<7.4.5"
+        }
+      ],
+      "effects": [
+        "@strapi/strapi"
+      ],
+      "range": "<7.4.5",
+      "nodes": [
+        "node_modules/webpack-dev-middleware"
+      ],
+      "fixAvailable": {
+        "name": "@strapi/strapi",
+        "version": "5.60.0",
+        "isSemVerMajor": false
+      }
+    },
+    "zod": {
+      "name": "zod",
+      "severity": "high",
+      "isDirect": false,
+      "via": [
+        {
+          "source": 1243066,
+          "name": "zod",
+          "dependency": "zod",
+          "title": "Zod can exhaust memory while validating oversized constrained collections",
+          "url": "https://github.com/advisories/GHSA-mrhx-c7xc-m3w5",
+          "severity": "high",
+          "cwe": [
+            "CWE-770"
+          ],
+          "cvss": {
+            "score": 7.5,
+            "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+          },
+          "range": "<4.6.6"
+        }
+      ],
+      "effects": [
+        "@strapi/admin",
+        "@strapi/content-manager",
+        "@strapi/content-type-builder",
+        "@strapi/core",
+        "@strapi/email",
+        "@strapi/i18n",
+        "@strapi/openapi",
+        "@strapi/plugin-users-permissions",
+        "@strapi/types",
+        "@strapi/upload",
+        "@strapi/utils",
+        "koa-body",
+        "koa-session"
+      ],
+      "range": "<4.6.6",
+      "nodes": [
+        "node_modules/zod"
+      ],
+      "fixAvailable": {
+        "name": "@strapi/plugin-users-permissions",
+        "version": "5.19.0",
+        "isSemVerMajor": true
+      }
+    }
+  },
+  "metadata": {
+    "vulnerabilities": {
+      "info": 0,
+      "low": 2,
+      "moderate": 16,
+      "high": 26,
+      "critical": 0,
+      "total": 44
+    },
+    "dependencies": {
+      "prod": 1359,
+      "dev": 68,
+      "optional": 117,
+      "peer": 1,
+      "peerOptional": 0,
+      "total": 1544
+    }
+  }
+}

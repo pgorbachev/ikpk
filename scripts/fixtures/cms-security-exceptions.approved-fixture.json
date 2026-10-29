@@ -1,0 +1,387 @@
+{
+  "schema_version": 1,
+  "exceptions": [
+    {
+      "advisory": "GHSA-22jm-h49p-29qw",
+      "advisory_url": "https://github.com/advisories/GHSA-22jm-h49p-29qw",
+      "component": "cms",
+      "package": "@modelcontextprotocol/sdk",
+      "lock_nodes": [
+        {
+          "path": "node_modules/@modelcontextprotocol/sdk",
+          "version": "1.29.0"
+        }
+      ],
+      "observed_report_severity": "high",
+      "accepted_max_severity": "high",
+      "owner": "pgorbachev",
+      "decision": "APPROVED",
+      "decision_reference": "fixture-only contract test; not a human approval",
+      "expires_at": "2026-11-11T00:00:00Z",
+      "reason": "Temporary review candidate for MCP TypeScript SDK: Experimental tasks were not tied to the session that created them. GitHub Actions security run 40722772948 and artifact IDs in source_evidence map this advisory to this package; do not infer applicability from aggregate parent counts.",
+      "applicability": "The published @strapi/core 5.51.2 package imports MCP SDK server APIs (`McpServer`, StreamableHTTPServerTransport) and its MCP provider only starts when `server.mcp.enabled === true` (default false). The app config has no MCP setting; live deployment configuration remains unknown. Core has no SDK OAuth client import; its OAuth discovery fallback returns “OAuth is not supported”. Server/task advisories could apply if the MCP endpoint is enabled; the OAuth client GHSA is not shown on the inspected Strapi call path.",
+      "mitigation": "Keep server.mcp.enabled false unless the endpoint is deliberately enabled; verify production configuration. This does not fix vulnerable SDK code or address any client API used outside inspected Strapi core.",
+      "source_evidence": {
+        "repository": "pgorbachev/ikpk",
+        "revision": "6cc76754537caa5c0f00023b022188d04e279120",
+        "workflow_run_id": 40722772948,
+        "full_report_artifact_id": 12830718312,
+        "runtime_report_artifact_id": 12832280515,
+        "runtime_report_contains_package": true,
+        "full_report_affected_entries": [
+          "@modelcontextprotocol/sdk"
+        ],
+        "reported_ranges": [
+          "<=1.31.0"
+        ],
+        "limitation": "GitHub Actions npm audit report is evidence of npm advisory mapping and lock paths, not proof of exploitability or mitigation effectiveness.",
+        "official_sources": [
+          "https://github.com/advisories/GHSA-22jm-h49p-29qw",
+          "https://strapi.io/blog/how-to-extend-strapi-s-mcp-server-with-a-custom-tools-via-a-plugin"
+        ],
+        "package_lock": "cms/package-lock.json",
+        "locked_versions": [
+          {
+            "path": "node_modules/@modelcontextprotocol/sdk",
+            "version": "1.29.0"
+          }
+        ],
+        "published_package": {
+          "name": "@strapi/core",
+          "version": "5.51.2",
+          "resolved": "https://registry.npmjs.org/@strapi/core/-/core-5.51.2.tgz",
+          "integrity": "sha512-yW6ApH/K4ZruibPIJeNcMakZTkQZNfEMsL40s0Nbqye+f7nGjtif5pm2bz4pR9ajPF6aX42LDrM6yPnd/O24DA=="
+        }
+      }
+    },
+    {
+      "advisory": "GHSA-46jr-4wx8-v453",
+      "advisory_url": "https://github.com/advisories/GHSA-46jr-4wx8-v453",
+      "component": "cms",
+      "package": "@modelcontextprotocol/sdk",
+      "lock_nodes": [
+        {
+          "path": "node_modules/@modelcontextprotocol/sdk",
+          "version": "1.29.0"
+        }
+      ],
+      "observed_report_severity": "high",
+      "accepted_max_severity": "high",
+      "owner": "pgorbachev",
+      "decision": "APPROVED",
+      "decision_reference": "fixture-only contract test; not a human approval",
+      "expires_at": "2026-11-11T00:00:00Z",
+      "reason": "Temporary review candidate for MCP TypeScript SDK: One HTTP request within the default size limit could exhaust server memory during validation. GitHub Actions security run 40722772948 and artifact IDs in source_evidence map this advisory to this package; do not infer applicability from aggregate parent counts.",
+      "applicability": "The published @strapi/core 5.51.2 package imports MCP SDK server APIs (`McpServer`, StreamableHTTPServerTransport) and its MCP provider only starts when `server.mcp.enabled === true` (default false). The app config has no MCP setting; live deployment configuration remains unknown. Core has no SDK OAuth client import; its OAuth discovery fallback returns “OAuth is not supported”. Server/task advisories could apply if the MCP endpoint is enabled; the OAuth client GHSA is not shown on the inspected Strapi call path.",
+      "mitigation": "Keep server.mcp.enabled false unless the endpoint is deliberately enabled; verify production configuration. This does not fix vulnerable SDK code or address any client API used outside inspected Strapi core.",
+      "source_evidence": {
+        "repository": "pgorbachev/ikpk",
+        "revision": "6cc76754537caa5c0f00023b022188d04e279120",
+        "workflow_run_id": 40722772948,
+        "full_report_artifact_id": 12830718312,
+        "runtime_report_artifact_id": 12832280515,
+        "runtime_report_contains_package": true,
+        "full_report_affected_entries": [
+          "@modelcontextprotocol/sdk"
+        ],
+        "reported_ranges": [
+          "<=1.31.0"
+        ],
+        "limitation": "GitHub Actions npm audit report is evidence of npm advisory mapping and lock paths, not proof of exploitability or mitigation effectiveness.",
+        "official_sources": [
+          "https://github.com/advisories/GHSA-46jr-4wx8-v453",
+          "https://strapi.io/blog/how-to-extend-strapi-s-mcp-server-with-a-custom-tools-via-a-plugin"
+        ],
+        "package_lock": "cms/package-lock.json",
+        "locked_versions": [
+          {
+            "path": "node_modules/@modelcontextprotocol/sdk",
+            "version": "1.29.0"
+          }
+        ],
+        "published_package": {
+          "name": "@strapi/core",
+          "version": "5.51.2",
+          "resolved": "https://registry.npmjs.org/@strapi/core/-/core-5.51.2.tgz",
+          "integrity": "sha512-yW6ApH/K4ZruibPIJeNcMakZTkQZNfEMsL40s0Nbqye+f7nGjtif5pm2bz4pR9ajPF6aX42LDrM6yPnd/O24DA=="
+        }
+      }
+    },
+    {
+      "advisory": "GHSA-587h-7wmj-h5pm",
+      "advisory_url": "https://github.com/advisories/GHSA-587h-7wmj-h5pm",
+      "component": "cms",
+      "package": "vite",
+      "lock_nodes": [
+        {
+          "path": "node_modules/vite",
+          "version": "5.4.21"
+        }
+      ],
+      "observed_report_severity": "high",
+      "accepted_max_severity": "high",
+      "owner": "pgorbachev",
+      "decision": "APPROVED",
+      "decision_reference": "fixture-only contract test; not a human approval",
+      "expires_at": "2026-11-11T00:00:00Z",
+      "reason": "Temporary review candidate for launch-editor: `fs.existsSync()` existence check can be bypassed on Windows. GitHub Actions security run 40722772948 and artifact IDs in source_evidence map this advisory to this package; do not infer applicability from aggregate parent counts.",
+      "applicability": "Canonical GHSA covers Vite 5.4.21 and identifies impact only on Windows when an attacker controls the launch-editor file argument. Published Strapi 5.51.2 defaults admin dev/build to Vite; the CMS audit runner is Ubuntu. Production host OS, developer/admin build hosts, and development server exposure are unknown.",
+      "mitigation": "Do not expose the development server; verify all CMS admin build/development hosts are non-Windows or upgrade Vite through a compatible Strapi release. Linux-only CI does not establish production/developer host OS.",
+      "source_evidence": {
+        "repository": "pgorbachev/ikpk",
+        "revision": "6cc76754537caa5c0f00023b022188d04e279120",
+        "workflow_run_id": 40722772948,
+        "full_report_artifact_id": 12830718312,
+        "runtime_report_artifact_id": 12832280515,
+        "runtime_report_contains_package": true,
+        "full_report_affected_entries": [
+          "vite"
+        ],
+        "reported_ranges": [
+          "<=6.4.3"
+        ],
+        "limitation": "GitHub Actions npm audit report is evidence of npm advisory mapping and lock paths, not proof of exploitability or mitigation effectiveness.",
+        "official_sources": [
+          "https://github.com/advisories/GHSA-587h-7wmj-h5pm",
+          "https://registry.npmjs.org/strapi/-/strapi-5.51.2.tgz"
+        ],
+        "package_lock": "cms/package-lock.json",
+        "locked_versions": [
+          {
+            "path": "node_modules/vite",
+            "version": "5.4.21"
+          }
+        ],
+        "published_package": {
+          "name": "@strapi/strapi",
+          "version": "5.51.2",
+          "resolved": "https://registry.npmjs.org/@strapi/strapi/-/strapi-5.51.2.tgz",
+          "integrity": "sha512-0kN/FncNs36U3NlNsV3W67loCp0g1kD6Ky0dJVC/9FhoCnnfc2dZn6RUfkIfNOBuxoIHRJbdW7OGYwU7GSsXBg=="
+        }
+      }
+    },
+    {
+      "advisory": "GHSA-6qxp-vccf-f47h",
+      "advisory_url": "https://github.com/advisories/GHSA-6qxp-vccf-f47h",
+      "component": "cms",
+      "package": "@modelcontextprotocol/sdk",
+      "lock_nodes": [
+        {
+          "path": "node_modules/@modelcontextprotocol/sdk",
+          "version": "1.29.0"
+        }
+      ],
+      "observed_report_severity": "high",
+      "accepted_max_severity": "high",
+      "owner": "pgorbachev",
+      "decision": "APPROVED",
+      "decision_reference": "fixture-only contract test; not a human approval",
+      "expires_at": "2026-11-11T00:00:00Z",
+      "reason": "Temporary review candidate for MCP TypeScript SDK: OAuth client could send credentials to an authorization server chosen by the MCP server. GitHub Actions security run 40722772948 and artifact IDs in source_evidence map this advisory to this package; do not infer applicability from aggregate parent counts.",
+      "applicability": "The published @strapi/core 5.51.2 package imports MCP SDK server APIs (`McpServer`, StreamableHTTPServerTransport) and its MCP provider only starts when `server.mcp.enabled === true` (default false). The app config has no MCP setting; live deployment configuration remains unknown. Core has no SDK OAuth client import; its OAuth discovery fallback returns “OAuth is not supported”. Server/task advisories could apply if the MCP endpoint is enabled; the OAuth client GHSA is not shown on the inspected Strapi call path.",
+      "mitigation": "Keep server.mcp.enabled false unless the endpoint is deliberately enabled; verify production configuration. This does not fix vulnerable SDK code or address any client API used outside inspected Strapi core.",
+      "source_evidence": {
+        "repository": "pgorbachev/ikpk",
+        "revision": "6cc76754537caa5c0f00023b022188d04e279120",
+        "workflow_run_id": 40722772948,
+        "full_report_artifact_id": 12830718312,
+        "runtime_report_artifact_id": 12832280515,
+        "runtime_report_contains_package": true,
+        "full_report_affected_entries": [
+          "@modelcontextprotocol/sdk"
+        ],
+        "reported_ranges": [
+          "<=1.31.0"
+        ],
+        "limitation": "GitHub Actions npm audit report is evidence of npm advisory mapping and lock paths, not proof of exploitability or mitigation effectiveness.",
+        "official_sources": [
+          "https://github.com/advisories/GHSA-6qxp-vccf-f47h",
+          "https://strapi.io/blog/how-to-extend-strapi-s-mcp-server-with-a-custom-tools-via-a-plugin"
+        ],
+        "package_lock": "cms/package-lock.json",
+        "locked_versions": [
+          {
+            "path": "node_modules/@modelcontextprotocol/sdk",
+            "version": "1.29.0"
+          }
+        ],
+        "published_package": {
+          "name": "@strapi/core",
+          "version": "5.51.2",
+          "resolved": "https://registry.npmjs.org/@strapi/core/-/core-5.51.2.tgz",
+          "integrity": "sha512-yW6ApH/K4ZruibPIJeNcMakZTkQZNfEMsL40s0Nbqye+f7nGjtif5pm2bz4pR9ajPF6aX42LDrM6yPnd/O24DA=="
+        }
+      }
+    },
+    {
+      "advisory": "GHSA-f897-62hf-6gxq",
+      "advisory_url": "https://github.com/advisories/GHSA-f897-62hf-6gxq",
+      "component": "cms",
+      "package": "@modelcontextprotocol/sdk",
+      "lock_nodes": [
+        {
+          "path": "node_modules/@modelcontextprotocol/sdk",
+          "version": "1.29.0"
+        }
+      ],
+      "observed_report_severity": "high",
+      "accepted_max_severity": "high",
+      "owner": "pgorbachev",
+      "decision": "APPROVED",
+      "decision_reference": "fixture-only contract test; not a human approval",
+      "expires_at": "2026-11-11T00:00:00Z",
+      "reason": "Temporary review candidate for MCP TypeScript SDK: HTTP server transports and handlers did not limit request body size or JSON-RPC batch length. GitHub Actions security run 40722772948 and artifact IDs in source_evidence map this advisory to this package; do not infer applicability from aggregate parent counts.",
+      "applicability": "The published @strapi/core 5.51.2 package imports MCP SDK server APIs (`McpServer`, StreamableHTTPServerTransport) and its MCP provider only starts when `server.mcp.enabled === true` (default false). The app config has no MCP setting; live deployment configuration remains unknown. Core has no SDK OAuth client import; its OAuth discovery fallback returns “OAuth is not supported”. Server/task advisories could apply if the MCP endpoint is enabled; the OAuth client GHSA is not shown on the inspected Strapi call path.",
+      "mitigation": "Keep server.mcp.enabled false unless the endpoint is deliberately enabled; verify production configuration. This does not fix vulnerable SDK code or address any client API used outside inspected Strapi core.",
+      "source_evidence": {
+        "repository": "pgorbachev/ikpk",
+        "revision": "6cc76754537caa5c0f00023b022188d04e279120",
+        "workflow_run_id": 40722772948,
+        "full_report_artifact_id": 12830718312,
+        "runtime_report_artifact_id": 12832280515,
+        "runtime_report_contains_package": true,
+        "full_report_affected_entries": [
+          "@modelcontextprotocol/sdk"
+        ],
+        "reported_ranges": [
+          "<=1.31.0"
+        ],
+        "limitation": "GitHub Actions npm audit report is evidence of npm advisory mapping and lock paths, not proof of exploitability or mitigation effectiveness.",
+        "official_sources": [
+          "https://github.com/advisories/GHSA-f897-62hf-6gxq",
+          "https://strapi.io/blog/how-to-extend-strapi-s-mcp-server-with-a-custom-tools-via-a-plugin"
+        ],
+        "package_lock": "cms/package-lock.json",
+        "locked_versions": [
+          {
+            "path": "node_modules/@modelcontextprotocol/sdk",
+            "version": "1.29.0"
+          }
+        ],
+        "published_package": {
+          "name": "@strapi/core",
+          "version": "5.51.2",
+          "resolved": "https://registry.npmjs.org/@strapi/core/-/core-5.51.2.tgz",
+          "integrity": "sha512-yW6ApH/K4ZruibPIJeNcMakZTkQZNfEMsL40s0Nbqye+f7nGjtif5pm2bz4pR9ajPF6aX42LDrM6yPnd/O24DA=="
+        }
+      }
+    },
+    {
+      "advisory": "GHSA-g84c-rxfj-3j2c",
+      "advisory_url": "https://github.com/advisories/GHSA-g84c-rxfj-3j2c",
+      "component": "cms",
+      "package": "webpack-dev-middleware",
+      "lock_nodes": [
+        {
+          "path": "node_modules/webpack-dev-middleware",
+          "version": "6.1.3"
+        }
+      ],
+      "observed_report_severity": "high",
+      "accepted_max_severity": "high",
+      "owner": "pgorbachev",
+      "decision": "APPROVED",
+      "decision_reference": "fixture-only contract test; not a human approval",
+      "expires_at": "2026-11-11T00:00:00Z",
+      "reason": "Temporary review candidate for webpack-dev-middleware vulnerable to Path Traversal via non-slash-terminated publicPath. GitHub Actions security run 40722772948 and artifact IDs in source_evidence map this advisory to this package; do not infer applicability from aggregate parent counts.",
+      "applicability": "Published @strapi/strapi 5.51.2 imports webpack-dev-middleware only from its webpack admin watcher. The CLI defaults to Vite and treats webpack as deprecated/explicit. Both stock webpack configs set publicPath to `${basePath.replace(/\\/$/, '')}/`, which ends in a slash and matches the advisory workaround. Custom webpack configuration and live admin watcher use are unknown; npm still reports the package in both runtime and full reports.",
+      "mitigation": "Use Strapi’s default Vite bundler and stock config; if webpack is used, verify the effective publicPath still ends with `/`. This leaves the vulnerable dependency present and does not cover custom runtime configuration.",
+      "source_evidence": {
+        "repository": "pgorbachev/ikpk",
+        "revision": "6cc76754537caa5c0f00023b022188d04e279120",
+        "workflow_run_id": 40722772948,
+        "full_report_artifact_id": 12830718312,
+        "runtime_report_artifact_id": 12832280515,
+        "runtime_report_contains_package": true,
+        "full_report_affected_entries": [
+          "webpack-dev-middleware"
+        ],
+        "reported_ranges": [
+          "<7.4.5"
+        ],
+        "limitation": "GitHub Actions npm audit report is evidence of npm advisory mapping and lock paths, not proof of exploitability or mitigation effectiveness.",
+        "official_sources": [
+          "https://github.com/advisories/GHSA-g84c-rxfj-3j2c",
+          "https://registry.npmjs.org/strapi/-/strapi-5.51.2.tgz"
+        ],
+        "package_lock": "cms/package-lock.json",
+        "locked_versions": [
+          {
+            "path": "node_modules/webpack-dev-middleware",
+            "version": "6.1.3"
+          }
+        ],
+        "published_package": {
+          "name": "@strapi/strapi",
+          "version": "5.51.2",
+          "resolved": "https://registry.npmjs.org/@strapi/strapi/-/strapi-5.51.2.tgz",
+          "integrity": "sha512-0kN/FncNs36U3NlNsV3W67loCp0g1kD6Ky0dJVC/9FhoCnnfc2dZn6RUfkIfNOBuxoIHRJbdW7OGYwU7GSsXBg=="
+        }
+      }
+    },
+    {
+      "advisory": "GHSA-mrhx-c7xc-m3w5",
+      "advisory_url": "https://github.com/advisories/GHSA-mrhx-c7xc-m3w5",
+      "component": "cms",
+      "package": "zod",
+      "lock_nodes": [
+        {
+          "path": "node_modules/zod",
+          "version": "3.25.76"
+        }
+      ],
+      "observed_report_severity": "high",
+      "accepted_max_severity": "high",
+      "owner": "pgorbachev",
+      "decision": "APPROVED",
+      "decision_reference": "fixture-only contract test; not a human approval",
+      "expires_at": "2026-11-11T00:00:00Z",
+      "reason": "Temporary review candidate for Zod can exhaust memory while validating oversized constrained collections. GitHub Actions security run 40722772948 and artifact IDs in source_evidence map this advisory to this package; do not infer applicability from aggregate parent counts.",
+      "applicability": "Published core 5.51.2 uses Zod v4 route schemas, including unbounded arrays, but @strapi/utils validates document input by tree traversal and applies route Zod parsing only to extra query/input parameters registered by plugins. Core’s direct safeParse calls are simple license registry response schemas without arrays. No app-level addQueryParams/addInputParams registration was found. Custom plugins or other packages may still provide paths; live plugin/runtime state is not verified.",
+      "mitigation": "No general mitigation verified. Keep custom plugin Zod schemas bounded where possible and track a compatible fix; these observations do not rule out affected paths in other Strapi packages.",
+      "source_evidence": {
+        "repository": "pgorbachev/ikpk",
+        "revision": "6cc76754537caa5c0f00023b022188d04e279120",
+        "workflow_run_id": 40722772948,
+        "full_report_artifact_id": 12830718312,
+        "runtime_report_artifact_id": 12832280515,
+        "runtime_report_contains_package": true,
+        "full_report_affected_entries": [
+          "zod"
+        ],
+        "reported_ranges": [
+          "<4.6.6"
+        ],
+        "limitation": "GitHub Actions npm audit report is evidence of npm advisory mapping and lock paths, not proof of exploitability or mitigation effectiveness.",
+        "official_sources": [
+          "https://github.com/advisories/GHSA-mrhx-c7xc-m3w5",
+          "https://registry.npmjs.org/@strapi/core/-/core-5.51.2.tgz",
+          "https://registry.npmjs.org/@strapi/utils/-/utils-5.51.2.tgz",
+          "https://raw.githubusercontent.com/koajs/koa-body/v6.0.1/src/index.ts",
+          "https://raw.githubusercontent.com/koajs/session/v7.0.2/src/index.ts"
+        ],
+        "package_lock": "cms/package-lock.json",
+        "locked_versions": [
+          {
+            "path": "node_modules/zod",
+            "version": "3.25.76"
+          }
+        ],
+        "published_packages": [
+          {
+            "name": "@strapi/core",
+            "version": "5.51.2",
+            "resolved": "https://registry.npmjs.org/@strapi/core/-/core-5.51.2.tgz",
+            "integrity": "sha512-yW6ApH/K4ZruibPIJeNcMakZTkQZNfEMsL40s0Nbqye+f7nGjtif5pm2bz4pR9ajPF6aX42LDrM6yPnd/O24DA=="
+          },
+          {
+            "name": "@strapi/utils",
+            "version": "5.51.2",
+            "resolved": "https://registry.npmjs.org/@strapi/utils/-/utils-5.51.2.tgz",
+            "integrity": "sha512-huBmL5QeMCWA3Zgqbjffl/DTDYh20DrhdlxdhjBQf61l8qQQSquaFlOELxyFfNtx1DCtuUB6xN6AAcr+2cUN5g=="
+          }
+        ]
+      }
+    }
+  ]
+}

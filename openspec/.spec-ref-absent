@@ -36,6 +36,8 @@
 # Список сверяется поимённо и в обе стороны (`--write-absent`).
 * :: 2ccee7b131cf5512672686271f8647dea50af683 :: external-revision
 * :: 3d10129265f183e2b746a5823012f42a0c115f73 :: external-revision
+* :: f985b06d7f14b6dddd0223b4a20e14ad009e2f34 :: external-revision
+* :: fdab6c92211a8e607f60971ae0385c9576329328 :: external-revision
 openspec/changes/article-list-pagination/design.md :: statyi/page/[page].astro :: will-create
 openspec/changes/article-list-pagination/tasks.md :: web/public/robots.txt :: forbidden-by-invariant
 openspec/changes/article-list-pagination/tasks.md :: web/src/pages/statyi/page/[page].astro :: will-create

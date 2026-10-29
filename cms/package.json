@@ -15,7 +15,7 @@
     "test:e2e": "node --test \"tests/e2e/*.test.js\"",
     "strapi": "strapi",
     "typecheck": "tsc --noEmit",
-    "audit:prod": "npm audit --omit=dev --audit-level=critical",
+    "audit:prod": "npm audit --omit=dev --audit-level=high",
     "upgrade": "npx @strapi/upgrade latest",
     "upgrade:dry": "npx @strapi/upgrade latest --dry"
   },
@@ -45,6 +45,8 @@
   "overrides": {
     "sharp": "0.35.5",
     "brace-expansion": "5.0.12",
+    "body-parser": "2.4.0",
+    "follow-redirects": "1.16.1",
     "minimatch@3": {
       "brace-expansion": "1.1.21"
     },
@@ -52,7 +54,7 @@
     "handlebars": "4.7.10",
     "js-yaml": "4.3.2",
     "lodash-es": "4.18.1",
-    "markdown-it": "14.3.2",
+    "markdown-it": "14.3.3",
     "nanoid": "3.3.18",
     "postcss": "8.5.23",
     "react-router": "6.30.6",
@@ -76,7 +78,7 @@
     },
     "@strapi/core": {
       "qs": "6.16.0",
-      "undici": "6.28.1"
+      "undici": "6.29.1"
     },
     "@strapi/i18n": {
       "qs": "6.16.0"
@@ -89,7 +91,8 @@
     },
     "@strapi/upload": {
       "qs": "6.16.0"
-    }
+    },
+    "dompurify": "3.4.17"
   },
   "strapi": {
     "uuid": "4fcbf31d-66ea-4201-a839-6bfdcd75bcdc",

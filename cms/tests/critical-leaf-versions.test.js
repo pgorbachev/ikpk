@@ -8,6 +8,7 @@ const requiredVersions = {
   'proxy-addr': '2.0.8',
   'shell-quote': '1.11.0',
   'fast-uri': '3.1.8',
+  dompurify: '3.4.17',
   undici: '6.28.1',
   axios: '1.20.0',
   nodemailer: '10.0.13',
