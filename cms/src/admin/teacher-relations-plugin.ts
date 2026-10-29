@@ -24,11 +24,16 @@ function replaceExactlyOnce(source: string, marker: string, replacement: string)
 
 function transformRelations(source: string): string {
   let output = source;
-  output = replaceExactlyOnce(output, "import { jsxs, jsx } from 'react/jsx-runtime';", `import { jsxs, jsx } from 'react/jsx-runtime';\nimport { setTeacherRelationsStatus } from '${resolve(process.cwd(), 'src/admin/teacher-relations-state.ts')}';`);
+  output = replaceExactlyOnce(output, "import { jsxs, jsx } from 'react/jsx-runtime';", `import { jsxs, jsx } from 'react/jsx-runtime';\nimport { invalidateTeacherRelationsStatus, setTeacherRelationsStatus } from '${resolve(process.cwd(), 'src/admin/teacher-relations-state.ts')}';`);
   output = replaceExactlyOnce(output, ORIGINAL_SCOPE_MARKER, `${ORIGINAL_SCOPE_MARKER}\n    const isTeacherRelationsField = !componentUID && model === 'api::schedule-entry.schedule-entry' && targetModel === 'api::teacher.teacher' && targetField === 'teachers';`);
   output = replaceExactlyOnce(output, ORIGINAL_QUERY_MARKER, 'const { data, isLoading, isFetching, isError } = useGetRelationsQuery({');
   output = replaceExactlyOnce(output, ORIGINAL_STATUS_MARKER, `${ORIGINAL_STATUS_MARKER}
-    React.useEffect(() => {
+    React.useLayoutEffect(() => {
+        if (!isTeacherRelationsField || !documentId) return;
+        setTeacherRelationsStatus(documentId, 'loading');
+        return () => invalidateTeacherRelationsStatus(documentId);
+    }, [isTeacherRelationsField, documentId]);
+    React.useLayoutEffect(() => {
         if (!isTeacherRelationsField || !documentId) return;
         if (isFetchingMoreRelations) {
             setTeacherRelationsStatus(documentId, 'loading');

@@ -1,6 +1,6 @@
 import type { ComponentType } from 'react';
 import type { StrapiApp } from '@strapi/strapi/admin';
-import { guardScheduleEntryPublish } from './teacher-publish-action';
+import { guardScheduleEntryBulkPublish, guardScheduleEntryPublish } from './teacher-publish-action';
 
 declare const __IKPK_DATABASE_CLIENT__: string;
 
@@ -43,6 +43,9 @@ export default {
       app.getPlugin('content-manager').apis.addDocumentAction((actions) =>
         actions.map((action) => action.type === 'publish' ? guardScheduleEntryPublish(action) : action),
       );
+      app.getPlugin('content-manager').apis.addBulkAction((actions) => {
+        return actions.map(guardScheduleEntryBulkPublish);
+      });
     }
     app.addMenuLink({
       to: '/site-refresh',

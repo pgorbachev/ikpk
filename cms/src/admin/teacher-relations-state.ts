@@ -13,6 +13,11 @@ export function setTeacherRelationsStatus(documentId: string, status: TeacherRel
   listenersByDocument.get(documentId)?.forEach((listener) => listener());
 }
 
+export function invalidateTeacherRelationsStatus(documentId: string): void {
+  if (!documentId || !statusByDocument.delete(documentId)) return;
+  listenersByDocument.get(documentId)?.forEach((listener) => listener());
+}
+
 export function subscribeTeacherRelationsStatus(documentId: string, listener: () => void): () => void {
   if (!documentId) return () => {};
   const listeners = listenersByDocument.get(documentId) ?? new Set<() => void>();

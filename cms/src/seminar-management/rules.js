@@ -1,4 +1,5 @@
 import { calendarDateParts, hasExplicitOffset } from './wall-clock.js';
+import { parseType } from '@strapi/utils';
 
 /**
  * Редакторские правила семинара и проведения.
@@ -95,8 +96,10 @@ export function foreignLinkIds(hostSeminarId, entries) {
 
 export function dateOrderError(startAt, endAt) {
   if (!startAt || !endAt) return null;
-  const start = new Date(startAt).getTime();
-  const end = new Date(endAt).getTime();
+  const parsedStart = scheduleDateTime(startAt);
+  const parsedEnd = scheduleDateTime(endAt);
+  const start = parsedStart?.getTime() ?? Number.NaN;
+  const end = parsedEnd?.getTime() ?? Number.NaN;
   if (Number.isNaN(start) || Number.isNaN(end)) {
     return 'Укажите корректные дату начала и дату окончания.';
   }
@@ -148,23 +151,17 @@ export function scheduleEntryIsBeforeStart(entry, now = Date.now()) {
   return Number.isFinite(boundary) && Number.isFinite(current) && current < boundary;
 }
 
-/**
- * Strapi's datetime parser accepts Date instances and parses numbers after
- * String(value): 2030 means ISO year 2030, not 2,030 milliseconds after epoch.
- * Large numeric epoch values are also accepted by Document Service, so retain
- * that representation as a fallback when the ISO string is not parseable.
- */
+/** Use Strapi's datetime parser so validation and future checks interpret the same value. */
 function scheduleDateTime(value) {
   if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value;
-  if (typeof value === 'number' && Number.isFinite(value)) {
-    const isoDate = new Date(String(value));
-    if (!Number.isNaN(isoDate.getTime())) return isoDate;
-    const epochDate = new Date(value);
-    return Number.isNaN(epochDate.getTime()) ? null : epochDate;
+  if (typeof value === 'number' && !Number.isFinite(value)) return null;
+  if (typeof value !== 'number' && (typeof value !== 'string' || !value)) return null;
+  try {
+    const parsed = parseType({ type: 'datetime', value: String(value) });
+    return parsed instanceof Date && !Number.isNaN(parsed.getTime()) ? parsed : null;
+  } catch {
+    return null;
   }
-  if (typeof value !== 'string' || !value) return null;
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? null : date;
 }
 
 export const SEMINAR_SLUG_PATTERN = /^[a-z0-9]+(-[a-z0-9]+)*$/;

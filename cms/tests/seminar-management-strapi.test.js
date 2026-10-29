@@ -781,6 +781,40 @@ describe('семинары в собранном Strapi', { timeout: 360000 }, (
     assert.equal(await entries.findOne({ documentId: draft.documentId, status: 'published' }), null);
   });
 
+  test('числовые формы даты, разбираемые Strapi parseISO, не обходят требование преподавателя', async () => {
+    const seminars = app.documents('api::seminar.seminar');
+    const entries = app.documents('api::schedule-entry.schedule-entry');
+    const cases = [
+      [20300101, 20300102],
+      [2030101, 2030102],
+      [99, 9901],
+    ];
+
+    for (const [startAt, endAt] of cases) {
+      const seminar = await seminars.create({
+        status: 'published',
+        data: { name: `Семинар для datetime number ${startAt}`, ...validSeminarPublicationFields,
+          course_group: publishedProgram.documentId },
+      });
+      const entryData = {
+        seminar: seminar.documentId, city: 'Москва', entry_status: 'active',
+        startAt, endAt, teachers: [],
+      };
+      await assert.rejects(
+        () => entries.create({ status: 'published', data: entryData }),
+        /преподавател/i,
+        `Strapi parseISO(String(${startAt})) трактует дату как будущее`,
+      );
+
+      const draft = await entries.create({ data: entryData });
+      await assert.rejects(
+        () => entries.update({ documentId: draft.documentId, status: 'published', data: {} }),
+        /преподавател/i,
+      );
+      assert.equal(await entries.findOne({ documentId: draft.documentId, status: 'published' }), null);
+    }
+  });
+
   test('назначение преподавателя одному проведению не меняет другое проведение и общий семинар', async () => {
     const seminars = app.documents('api::seminar.seminar');
     const entries = app.documents('api::schedule-entry.schedule-entry');

@@ -598,14 +598,87 @@ describe('семинар из админки доходит до опублик�
       assert.deepEqual([...requestedPages].sort(), ['1', '2', '3']);
       assert.equal(await pageUi.getByRole('button', { name: /Load More|Загрузить ещё/ }).count(), 0,
         'список должен быть полностью загружен без дополнительного клика');
-      await pageUi.getByRole('button', { name: 'Опубликовать' }).waitFor();
-      await publishForm();
+      const spaNavigate = async (pathname) => {
+        await pageUi.evaluate((nextPath) => {
+          globalThis.history.pushState({}, '', nextPath);
+          globalThis.dispatchEvent(new globalThis.PopStateEvent('popstate', { state: globalThis.history.state }));
+        }, pathname);
+        await pageUi.waitForURL(`${base}${pathname}`);
+      };
+      const scheduleEditPath = `/admin/content-manager/collection-types/api::schedule-entry.schedule-entry/${uiDraftEntry.documentId}`;
+      const publishBeforeSpaReopen = pageUi.getByRole('button', { name: 'Опубликовать' });
+      await publishBeforeSpaReopen.waitFor();
+      assert.equal(await publishBeforeSpaReopen.isDisabled(), false,
+        'полный список разблокирует publish до повторного открытия');
+      await spaNavigate(`/admin/content-manager/collection-types/api::seminar.seminar/${uiSeminarRecord.documentId}`);
+      let releaseFirstTeacherPage;
+      let requestFirstTeacherPage;
+      const firstTeacherPageRequested = new Promise((resolve) => { requestFirstTeacherPage = resolve; });
+      const firstTeacherPageGate = new Promise((resolve) => { releaseFirstTeacherPage = resolve; });
+      const firstTeacherPageRoute = (url) => {
+        const parsed = new URL(url);
+        return parsed.pathname === `/content-manager/relations/api::schedule-entry.schedule-entry/${uiDraftEntry.documentId}/teachers` &&
+          parsed.searchParams.get('page') === '1';
+      };
+      await pageUi.route(firstTeacherPageRoute, async (route) => {
+        requestFirstTeacherPage();
+        await firstTeacherPageGate;
+        await route.continue();
+      });
+      await spaNavigate(scheduleEditPath);
+      await firstTeacherPageRequested;
+      const pendingFirstPagePublish = pageUi.getByRole('button', { name: 'Опубликовать' });
+      const disabledOnSpaReopen = await pendingFirstPagePublish.isDisabled();
+      assert.equal(disabledOnSpaReopen, true,
+        'новое SPA-открытие того же documentId блокирует publish до первой страницы списка');
+      const publishAttemptsBeforePendingClick = publishAttempts;
+      await pendingFirstPagePublish.evaluate((button) => button.click());
+      assert.equal(publishAttempts, publishAttemptsBeforePendingClick,
+        'публикация при новой загрузке первого списка преподавателей не достигает publish action');
+      releaseFirstTeacherPage();
+      await pageUi.waitForResponse((response) => firstTeacherPageRoute(response.url()) && response.ok(), { timeout: 10_000 });
+      await pageUi.waitForFunction(() => [...globalThis.document.querySelectorAll('button')]
+        .some((button) => button.textContent?.trim() === 'Опубликовать' && !button.disabled), null, { timeout: 10_000 });
+      await pageUi.unroute(firstTeacherPageRoute);
 
+      await publishForm();
       const publishedEntry = await app.documents('api::schedule-entry.schedule-entry').findOne({
         documentId: uiDraftEntry.documentId, status: 'published', populate: ['teachers'],
       });
       assert.deepEqual(publishedEntry.teachers.map(({ name }) => name), eventTeacherNames,
         'публикация штатной кнопкой должна подтвердить и сохранить весь текущий список по порядку');
+
+      const bulkDraftCity = 'Черновик для проверки массовой публикации';
+      await app.documents('api::schedule-entry.schedule-entry').create({
+        data: {
+          seminar: uiSeminarRecord.documentId,
+          teachers: publishedEntry.teachers.map(({ documentId }) => documentId),
+          startAt: new Date(uiStart.getTime() + 2 * day).toISOString(),
+          endAt: new Date(uiStart.getTime() + 3 * day).toISOString(),
+          city: bulkDraftCity,
+          entry_status: 'active',
+        },
+      });
+      await pageUi.goto(`${base}/admin/content-manager/collection-types/api::schedule-entry.schedule-entry`);
+      const bulkEntryRow = pageUi.getByRole('row').filter({ hasText: bulkDraftCity });
+      await bulkEntryRow.waitFor();
+      await bulkEntryRow.getByRole('checkbox').check();
+      const scheduleBulkPublish = pageUi.getByRole('button', { name: 'Опубликовать' });
+      await scheduleBulkPublish.waitFor();
+      assert.equal(await scheduleBulkPublish.isDisabled(), true,
+        'массовая публикация проведений отключена, потому что штатный action не подтверждает полный список');
+
+      const bulkDraftSeminar = await app.documents('api::seminar.seminar').create({
+        data: { name: 'Черновик семинара для массовой публикации', course_group: uiGroup.documentId },
+      });
+      await pageUi.goto(`${base}/admin/content-manager/collection-types/api::seminar.seminar`);
+      const bulkSeminarRow = pageUi.getByRole('row').filter({ hasText: bulkDraftSeminar.name });
+      await bulkSeminarRow.waitFor();
+      await bulkSeminarRow.getByRole('checkbox').check();
+      const seminarBulkPublish = pageUi.getByRole('button', { name: 'Опубликовать' });
+      await seminarBulkPublish.waitFor();
+      assert.equal(await seminarBulkPublish.isDisabled(), false,
+        'массовая публикация семинаров остаётся штатной');
       if (process.env.E2E_TEACHER_RELATIONS_ONLY === 'true') return;
 
       // Кнопка «Обновить сайт» — на её собственной странице админки.
