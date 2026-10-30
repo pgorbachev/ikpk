@@ -24,4 +24,4 @@ Owner-approved staging194 and production-static modes permit a static-only publi
 
 ## Scope
 
-This prepares the existing staging194 acceptance scenarios, its owner-approved static-only main exception, one single-use initial production operation, and a reusable production-static-only path. These static-only paths do not change the paired dev rehearsal or ordinary production policy. They do not add CMS editor workflows or reusable paired production publication.
+This prepares the existing staging194 acceptance scenarios, its owner-approved static-only main exception, one single-use initial production operation, and a reusable production-static-only path. The staging paired source admission is reconciled from `dev` to released current `main`; static-only paths and ordinary production policy remain separately scoped. This change does not add CMS editor workflows or reusable paired production publication.
