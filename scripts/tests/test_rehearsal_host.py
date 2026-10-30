@@ -1479,6 +1479,25 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
         self.assertEqual(remote.call_count, 1)
         self.assertEqual(remote.call_args.args[0][0], "status")
 
+    def test_production_provenance_preflight_outage_stops_before_cms_update_fence(self):
+        source_sha = "c" * 40
+        status = json.dumps({"phase": "idle", "oldPair": {"cmsPath":
+            f"/opt/ikpk-cms/releases/{source_sha}-old-release/cms-artifact"}}).encode()
+        args = Namespace(profile="production-paired", command="cms-update", host=None,
+                         operation_id="ledger-preflight")
+        real_is_file = Path.is_file
+        def is_file(path):
+            return True if str(path).endswith("web/node_modules/.bin/tsx") else real_is_file(path)
+        with patch.object(operator, "ssh_remote", return_value=status) as remote, \
+             patch.object(operator, "production_paired_schema_source", return_value=(source_sha, "d" * 64)), \
+             patch.object(operator, "production_paired_restore_state",
+                          side_effect=operator.Refusal("canonical ledger unavailable")), \
+             patch.object(Path, "is_file", is_file):
+            with self.assertRaisesRegex(operator.Refusal, "canonical ledger unavailable"):
+                operator.invoke(args)
+        self.assertEqual(remote.call_count, 1)
+        self.assertEqual(remote.call_args.args[0][0], "status")
+
     def test_production_restore_provenance_gate_fails_closed_for_missing_stale_or_different_state(self):
         fingerprint = "a" * 64
         with patch.object(operator, "capture", side_effect=operator.Refusal("state branch unavailable")):
