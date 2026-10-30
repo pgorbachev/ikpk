@@ -23,7 +23,9 @@ function statePath() {
 }
 
 function writeState(record) {
-  writeJsonAtomic(statePath(), record);
+  // Keep the detached worker identity in terminal records too: an operator may
+  // observe the terminal write just before this process exits and releases its lock.
+  writeJsonAtomic(statePath(), { ...record, workerPid: process.pid });
 }
 
 function runStep(command, args, cwd, extraEnv, restrictedEnv = false) {

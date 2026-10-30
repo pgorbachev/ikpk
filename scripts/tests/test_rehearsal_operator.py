@@ -287,6 +287,26 @@ class OperatorAdmissionTests(unittest.TestCase):
         self.assertEqual(browser.call_args.kwargs["chat_loader_src"], staging193.INITIAL_PROD_CHAT_LOADER_SRC)
         self.assertTrue(all(call[0][0] in ("static-main", "export-static-main") for call in calls))
 
+    def test_production_paired_committed_finalize_works_without_github(self):
+        responses = [json.dumps({"phase": "committed", "sourceSha": SHA}).encode(),
+                     json.dumps({"phase": "committed"}).encode()]
+        calls = []
+
+        def ssh(arguments, **kwargs):
+            calls.append((arguments, kwargs))
+            return responses.pop(0)
+
+        args = type("Args", (), {"profile": "production-paired", "host": staging193.INITIAL_PROD_HOST,
+            "command": "static-publish", "operation_id": "paired-finalize", "source_sha": SHA})()
+        with patch.object(staging193, "ssh_remote", side_effect=ssh), \
+             patch.object(staging193, "validate_production_paired_admission",
+                          side_effect=AssertionError("finalization must not need GitHub")):
+            staging193.invoke(args)
+
+        self.assertEqual([call[0][0] for call in calls], ["status", "static-publish"])
+        self.assertTrue(all(call[1].get("profile") == "production-paired" for call in calls))
+        self.assertEqual(responses, [])
+
     def test_production_static_profile_refuses_staging_host_before_ci_or_ssh(self):
         for host in (staging193.TARGET_HOST, "193.124.115.99"):
             with self.subTest(host=host):

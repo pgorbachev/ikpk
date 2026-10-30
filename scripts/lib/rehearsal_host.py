@@ -756,6 +756,21 @@ def _verify_site_refresh_idle(config: dict[str, Any]) -> None:
                 except PermissionError:
                     pass
                 waiting = True
+            else:
+                worker_pid = record.get("workerPid")
+                if record.get("phase") and worker_pid is None:
+                    raise HostFailure("terminal refresh state lacks worker PID; inspect it before stopping CMS")
+                if worker_pid is not None:
+                    if isinstance(worker_pid, bool) or not isinstance(worker_pid, int) or worker_pid < 2:
+                        raise HostFailure("terminal refresh state has an invalid worker PID")
+                    try:
+                        os.kill(worker_pid, 0)
+                    except ProcessLookupError:
+                        pass
+                    except PermissionError:
+                        waiting = True
+                    else:
+                        waiting = True
         try:
             lock_info = lock_path.lstat()
         except FileNotFoundError:
@@ -802,6 +817,8 @@ def _assert_site_refresh_idle(config: dict[str, Any]) -> None:
         if not isinstance(record, dict) or record.get("status") not in (
                 "idle", "succeeded", "failed", "verification-failed"):
             raise HostFailure("site-refresh is active or unknown; resolve it before starting paired maintenance")
+        if record.get("phase") and record.get("workerPid") is None:
+            raise HostFailure("terminal refresh state lacks worker PID; resolve it before starting paired maintenance")
     lock_path = Path(str(path) + ".lock")
     if lock_path.exists() or lock_path.is_symlink():
         raise HostFailure("site-refresh/Restore lock exists; resolve it before starting paired maintenance")

@@ -595,9 +595,18 @@ def invoke(args: argparse.Namespace) -> None:
         elif first.get("phase") != "cms-activated":
             raise Refusal("host did not request backup export or confirm CMS activation")
     elif args.command == "static-publish":
+        common = ["static-publish", "--operation-id", args.operation_id, "--source-sha", args.source_sha]
+        if profile == "production-paired":
+            status = parse_host_json(ssh_remote(["status", "--operation-id", args.operation_id], profile=profile))
+            if status.get("sourceSha") != args.source_sha:
+                raise Refusal("production operation journal source SHA differs from the requested finalization")
+            if status.get("phase") == "committed":
+                finalized = parse_host_json(ssh_remote(common, profile=profile))
+                if finalized.get("phase") != "committed":
+                    raise Refusal("committed production pair could not finish reopening writers")
+                return
         admitted_run = (validate_production_paired_admission(args.source_sha) if profile == "production-paired"
                         else validate_sha_and_ci(args.source_sha, profile))
-        common = ["static-publish", "--operation-id", args.operation_id, "--source-sha", args.source_sha]
         prepared = parse_host_json(ssh_remote(common, profile=profile))
         if prepared.get("phase") == "committed":
             return

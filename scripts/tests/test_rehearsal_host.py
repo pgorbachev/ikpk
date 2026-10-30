@@ -2125,6 +2125,9 @@ class ProductionPairedManualPreflightTests(unittest.TestCase):
                 with self.subTest(status=status), self.assertRaises(rehearsal_host.HostFailure):
                     rehearsal_host._assert_site_refresh_idle(config)
             self.assertTrue(state.exists())
+            state.write_text(json.dumps({"status": "succeeded", "phase": "done"}), encoding="utf-8")
+            with self.assertRaisesRegex(rehearsal_host.HostFailure, "lacks worker PID"):
+                rehearsal_host._assert_site_refresh_idle(config)
 
     def test_post_gate_drain_waits_for_terminal_state_lock_removal(self):
         import os
@@ -2139,6 +2142,17 @@ class ProductionPairedManualPreflightTests(unittest.TestCase):
                 lock.unlink()
 
             with patch.object(rehearsal_host.time, "sleep", side_effect=complete_request):
+                rehearsal_host._verify_site_refresh_idle({"profile": "production-paired",
+                                                          "siteRefreshState": str(state)})
+
+    def test_post_gate_drain_waits_for_terminal_worker_process_exit_after_lock_removal(self):
+        with tempfile.TemporaryDirectory(prefix="ikpk-paired-worker-exit-") as temporary:
+            state = Path(temporary) / "state.json"
+            state.write_text(json.dumps({"status": "succeeded", "phase": "done", "workerPid": 321}),
+                             encoding="utf-8")
+            with patch.object(rehearsal_host.os, "kill",
+                              side_effect=[None, ProcessLookupError]), \
+                 patch.object(rehearsal_host.time, "sleep"):
                 rehearsal_host._verify_site_refresh_idle({"profile": "production-paired",
                                                           "siteRefreshState": str(state)})
 
