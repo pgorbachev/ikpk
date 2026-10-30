@@ -1016,6 +1016,9 @@ def _prepare_paired_site_workspace(config: dict[str, Any], source_root: Path,
     root_info = workspace_root.lstat()
     if not stat.S_ISDIR(root_info.st_mode) or stat.S_ISLNK(root_info.st_mode):
         raise HostFailure("paired site workspace root is not a real directory")
+    user = pwd.getpwnam(config["cmsUser"])
+    os.chown(workspace_root, user.pw_uid, user.pw_gid)
+    os.chmod(workspace_root, 0o750)
     destination = workspace_root / f"{source_sha}-{operation_id}"
     if destination.exists():
         if destination.is_symlink():
@@ -1038,7 +1041,6 @@ def _prepare_paired_site_workspace(config: dict[str, Any], source_root: Path,
         (temporary / "cms/node_modules").symlink_to(cms_dependencies.resolve(strict=True), target_is_directory=True)
         durable_json(temporary / ".ikpk-workspace-identity.json",
                      {"sourceSha": source_sha, "operationId": operation_id})
-        user = pwd.getpwnam(config["cmsUser"])
         for path in [temporary, *temporary.rglob("*")]:
             os.chown(path, user.pw_uid, user.pw_gid, follow_symlinks=False)
         os.replace(temporary, destination)
@@ -2708,6 +2710,29 @@ def _static_publish(config: dict[str, Any], state: RehearsalState, args: argpars
     built = source_root / ("web/dist" if config.get("profile") in ("initial-prod", "production-paired")
                           else "web/dist-demo193")
     if not args.browser_digest:
+        retained = Path(config["staticReleaseRoot"]) / f"{sha}-{op}"
+        if os.path.lexists(retained):
+            if retained.is_symlink() or not retained.is_dir():
+                raise HostFailure("retained static candidate is not a real directory")
+            try:
+                retained_info = json.loads((retained / "release.json").read_text(encoding="utf-8"))
+                snapshot = json.loads((source_root / "web/.snapshot/snapshot.json").read_text(encoding="utf-8"))
+                capture = json.loads((source_root / ".staging193-rehearsal" / op / "capture/manifest.json")
+                                     .read_text(encoding="utf-8"))
+            except (OSError, ValueError) as error:
+                raise HostFailure("retained static candidate lacks its operation-bound snapshot proof") from error
+            digest = _tree_sha256(retained)
+            snapshot_id = snapshot.get("snapshotId")
+            if (retained_info.get("commit") != sha or retained_info.get("operationId") != op
+                    or retained_info.get("staticTreeSha256") != digest
+                    or not isinstance(snapshot_id, str) or not snapshot_id.startswith("snap:")
+                    or retained_info.get("snapshotId") != snapshot_id
+                    or snapshot.get("captureProof", {}).get("captureId") != op
+                    or capture.get("operationId") != op or capture.get("sourceSha") != sha
+                    or capture.get("profile") != "production-static"):
+                raise HostFailure("retained static candidate differs from its sealed operation capture")
+            return {"operationId": op, "sourceSha": sha, "phase": "browser-check-required",
+                    "staticTreeSha256": digest, "snapshotId": snapshot_id}
         if phase["phase"] == "cms-activated" or not built.is_dir():
             capture = source_root / ".staging193-rehearsal" / op / "capture"
             if capture.is_symlink() or not capture.is_dir():
