@@ -18,7 +18,7 @@ function authorizableFields(model, components, prefix = '') {
   const attributes = model.attributes ?? {};
   for (const name of Object.keys(attributes)) {
     const attribute = attributes[name];
-    if (hidden.has(name)) continue;
+    if (hidden.has(name) || name === 'legacy_id') continue;
     const path = prefix ? `${prefix}.${name}` : name;
     if (attribute.type === 'component') {
       const children = authorizableFields(components[attribute.component], components, path);
@@ -53,13 +53,16 @@ export async function ensureContentAdminRole(strapi) {
   const roleService = strapi.service('admin::role');
   let role = await roleService.findOne({ code: ROLE_CODE });
   if (!role) {
-    role = await roleService.create({
-      name: ROLE_NAME,
-      code: ROLE_CODE,
-      description: 'Создаёт и публикует семинары и проведения. Не является супер-администратором.',
+    role = await strapi.db.transaction(async () => {
+      const created = await roleService.create({
+        name: ROLE_NAME,
+        code: ROLE_CODE,
+        description: 'Создаёт и публикует семинары и проведения. Не является супер-администратором.',
+      });
+      await roleService.assignPermissions(created.id, permissions(strapi));
+      return created;
     });
   }
-  await roleService.assignPermissions(role.id, permissions(strapi));
   await ensureContentAdminUser(strapi, role.id);
 }
 

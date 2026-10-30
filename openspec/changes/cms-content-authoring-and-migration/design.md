@@ -43,6 +43,15 @@
 
 ## Decisions
 
+### Existing editor permissions
+
+On bootstrap, leave an existing role's permission graph untouched, including conditional grants and
+field-level restrictions. New roles receive only the declared baseline, created and assigned in one
+database transaction so an assignment failure rolls back both. `legacy_id` remains excluded from
+generated field permissions. The preservation audit continues to reject every unplanned
+permission or data change; its schedule-entry UI allowance covers only the exact `teachers`
+layout and metadata update already produced by `applyEditorForms`.
+
 **О нумерации.** Решения этого файла помечены `D1`…`D12`; ссылки на список заказчика с
 демонстрации пишутся полностью — «пункт D7 списка с демонстрации». Различать обязательно: номера
 совпадают, но означают разное, и «D10» без уточнения читается и как решение о персоне ниже, и как

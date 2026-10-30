@@ -55,6 +55,99 @@ function emptyBoundPlan() {
   return { manifestPath, planSha256: sha256(readFileSync(manifestPath)), steps: [] };
 }
 
+function createScheduleEntryCoreStore(path, value) {
+  const db = new Database(path);
+  db.exec('CREATE TABLE strapi_core_store_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL, environment TEXT, tag TEXT)');
+  db.prepare('INSERT INTO strapi_core_store_settings (key, value, environment, tag) VALUES (?, ?, ?, ?)')
+    .run('plugin_content_manager_configuration_content_types::api::schedule-entry.schedule-entry', JSON.stringify(value), 'default', 'default');
+  db.close();
+}
+
+function addEmptyMigrationLineage(path) {
+  const lineageId = 'a'.repeat(64);
+  const sourceSnapshotSha256 = 'b'.repeat(64);
+  const sourceSchemaSha256 = 'c'.repeat(64);
+  const db = new Database(path);
+  db.exec(`
+    CREATE TABLE ikpk_migration_lineage (singleton, lineage_id, source_snapshot_sha256, source_schema_sha256, created_at);
+    CREATE TABLE ikpk_migration_operations (operation_id, lineage_id, source_snapshot_sha256, source_schema_sha256, created_at);
+    CREATE TABLE ikpk_data_migration_history (lineage_id, operation_id, step_id, payload_sha256, result_json, completed_at);
+  `);
+  db.prepare('INSERT INTO ikpk_migration_lineage VALUES (1, ?, ?, ?, ?)').run(lineageId, sourceSnapshotSha256, sourceSchemaSha256, 1);
+  db.prepare('INSERT INTO ikpk_migration_operations VALUES (?, ?, ?, ?, ?)')
+    .run('teachers-layout-test', lineageId, sourceSnapshotSha256, sourceSchemaSha256, 1);
+  db.close();
+  return { lineageId, sourceSnapshotSha256, sourceSchemaSha256 };
+}
+
+function scheduleEntryEditorConfiguration() {
+  return {
+    settings: {},
+    metadatas: {
+      teachers: {
+        edit: { description: '', editable: false, label: 'Преподаватели проведения', mainField: 'name', placeholder: '', visible: false },
+        list: { label: 'Преподаватели проведения', searchable: false, sortable: false },
+      },
+      image: { edit: { label: 'Изображение', description: '', placeholder: '', visible: true, editable: true }, list: { label: 'Изображение', searchable: false, sortable: false } },
+      isEventCollection: { edit: { label: 'Исходный флаг коллекции', description: '', placeholder: '', visible: false, editable: false }, list: { label: 'Исходный флаг коллекции', searchable: true, sortable: true } },
+      city: { edit: { label: 'Город', visible: true, editable: true }, list: { label: 'Город' } },
+    },
+    layouts: { edit: [[{ name: 'seminar', size: 6 }], [{ name: 'startAt', size: 6 }], [{ name: 'image', size: 6 }], [{ name: 'city', size: 6 }]] },
+  };
+}
+
+test('preservation audit allows only the expected teachers editor layout and metadata change', () => {
+  const sourceDbPath = join(directory, 'teachers-layout-source.db');
+  const candidateDbPath = join(directory, 'teachers-layout-candidate.db');
+  const sourceValue = scheduleEntryEditorConfiguration();
+  const candidateValue = structuredClone(sourceValue);
+  candidateValue.layouts.edit.splice(1, 0, [{ name: 'teachers', size: 6 }]);
+  candidateValue.metadatas.teachers.edit = {
+    ...candidateValue.metadatas.teachers.edit,
+    description: 'Выбор применяется только к этому проведению.',
+    editable: true,
+    visible: true,
+  };
+  createScheduleEntryCoreStore(sourceDbPath, sourceValue);
+  createScheduleEntryCoreStore(candidateDbPath, candidateValue);
+  const plan = emptyBoundPlan();
+  const lineage = addEmptyMigrationLineage(candidateDbPath);
+  const receipt = boundReceipt(sourceDbPath, candidateDbPath, plan);
+  Object.assign(receipt, { operationId: 'teachers-layout-test' });
+  Object.assign(receipt.source, { snapshotSha256: lineage.sourceSnapshotSha256, schemaFingerprint: lineage.sourceSchemaSha256 });
+
+  const report = auditMigration({ sourceDbPath, candidateDbPath, plan, receipt });
+
+  assert.equal(report.passed, true, JSON.stringify(report.differences));
+});
+
+test('preservation audit still blocks any unrelated change beside the teachers layout update', () => {
+  const sourceDbPath = join(directory, 'teachers-layout-negative-source.db');
+  const candidateDbPath = join(directory, 'teachers-layout-negative-candidate.db');
+  const sourceValue = scheduleEntryEditorConfiguration();
+  const candidateValue = structuredClone(sourceValue);
+  candidateValue.layouts.edit.splice(1, 0, [{ name: 'teachers', size: 6 }]);
+  candidateValue.metadatas.teachers.edit = {
+    ...candidateValue.metadatas.teachers.edit,
+    description: 'Выбор применяется только к этому проведению.',
+    editable: true,
+    visible: true,
+  };
+  candidateValue.metadatas.city.edit.label = 'Непредусмотренное изменение';
+  createScheduleEntryCoreStore(sourceDbPath, sourceValue);
+  createScheduleEntryCoreStore(candidateDbPath, candidateValue);
+  const plan = emptyBoundPlan();
+  const lineage = addEmptyMigrationLineage(candidateDbPath);
+  const receipt = boundReceipt(sourceDbPath, candidateDbPath, plan);
+  Object.assign(receipt, { operationId: 'teachers-layout-test' });
+  Object.assign(receipt.source, { snapshotSha256: lineage.sourceSnapshotSha256, schemaFingerprint: lineage.sourceSchemaSha256 });
+
+  const report = auditMigration({ sourceDbPath, candidateDbPath, plan, receipt });
+
+  assert.equal(report.passed, false);
+  assert.ok(report.differences.some(({ table, kind }) => table === 'strapi_core_store_settings' && kind === 'core-store-structure-mismatch'));
+});
+
 test('blocks relation loss or reassignment when table row counts stay equal', () => {
   const sourceDbPath = join(directory, 'source.db');
   const candidateDbPath = join(directory, 'candidate.db');
@@ -416,10 +509,17 @@ function coreStoreValues(candidate) {
     layouts: { edit: ['name', 'description', 'date', 'image', 'link'].map((name) => [{ name, size: 6 }]) },
     metadatas: { name: { edit: { label: 'name' }, list: { label: 'name' } } }, settings: { defaultSortBy: 'name' },
   };
-  const scheduleFields = ['startAt', 'endAt', 'city', 'price', 'oldPrice', 'isFree', 'entry_status', 'registrationFormLink', 'description', 'additionalText', 'duration', 'seminar'];
+  const scheduleFields = ['seminar', 'startAt', 'endAt', 'city', 'price', 'oldPrice', 'isFree', 'entry_status', 'registrationFormLink', 'description', 'additionalText', 'duration'];
   const schedule = {
     layouts: { edit: scheduleFields.map((name) => [{ name, size: 6 }]) },
-    metadatas: { startAt: { edit: { label: 'startAt' }, list: { label: 'startAt' } } }, settings: { defaultSortBy: 'startAt' },
+    metadatas: {
+      startAt: { edit: { label: 'startAt' }, list: { label: 'startAt' } },
+      teachers: {
+        edit: { description: '', editable: false, label: 'Преподаватели проведения', mainField: 'name', placeholder: '', visible: false },
+        list: { label: 'Преподаватели проведения', searchable: false, sortable: false },
+      },
+    },
+    settings: { defaultSortBy: 'startAt' },
   };
   const schema = {
     'api::promotion.promotion': { attributes: { name: { type: 'string' } }, __schema__: { attributes: { name: { type: 'string' } } } },
@@ -428,7 +528,14 @@ function coreStoreValues(candidate) {
   if (candidate) {
     promotion.layouts.edit.push([{ name: 'type', size: 6 }]);
     promotion.metadatas.type = { edit: { label: 'type', description: '', placeholder: '', visible: true, editable: true }, list: { label: 'type', searchable: true, sortable: true } };
-    schedule.layouts.edit.splice(2, 0, [{ name: 'image', size: 6 }]);
+    schedule.layouts.edit.splice(scheduleFields.indexOf('city'), 0, [{ name: 'image', size: 6 }]);
+    schedule.layouts.edit.splice(1, 0, [{ name: 'teachers', size: 6 }]);
+    schedule.metadatas.teachers.edit = {
+      ...schedule.metadatas.teachers.edit,
+      description: 'Выбор применяется только к этому проведению.',
+      editable: true,
+      visible: true,
+    };
     schedule.metadatas.image = { edit: { label: 'Изображение', description: '', placeholder: '', visible: true, editable: true }, list: { label: 'Изображение', searchable: false, sortable: false } };
     schedule.metadatas.isEventCollection = { edit: { label: 'Исходный флаг коллекции', description: '', placeholder: '', visible: false, editable: false }, list: { label: 'Исходный флаг коллекции', searchable: true, sortable: true } };
     for (const uid of Object.keys(schema)) {
