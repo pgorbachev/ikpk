@@ -207,6 +207,13 @@
       GREEN 50/50. Живая ability роли подтвердила allow для article title, schedule startAt и
       `is_article_category`, deny для имени программы, delete статьи, update новости и ролей.
       Негативная мутация: вручную добавленный `news-item.update` — 1 до перезапуска, 0 после
+- [ ] 3.15 Сохранить существующие действующие grants content-admin при повторном bootstrap,
+      не переприсваивая их; baseline выдавать только новой роли, не добавлять `legacy_id`. Проверить
+      отсутствие любых изменений существующих conditions, actionParameters, field restrictions и
+      прав read-only роли; создать новую роль и назначить baseline одной транзакцией.
+      Preservation audit проверить на копии БД. В audit разрешить только точное добавление
+      `teachers` в edit layout проведения и соответствующие метаданные; любые
+      остальные permission- и core-store-изменения продолжить отклонять.
 
 ## 4. Адреса и маршруты
 

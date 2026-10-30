@@ -506,18 +506,41 @@ function expectedCoreStoreValue(key, sourceValue) {
     return expected;
   }
   if (key === 'plugin_content_manager_configuration_content_types::api::schedule-entry.schedule-entry') {
-    if (!Array.isArray(expected.layouts?.edit) || !expected.metadatas || typeof expected.metadatas !== 'object'
-      || Object.hasOwn(expected.metadatas, 'image') || Object.hasOwn(expected.metadatas, 'isEventCollection')) return null;
-    const cityIndex = expected.layouts.edit.findIndex((row) => row?.[0]?.name === 'city');
-    if (cityIndex < 0) return null;
-    expected.layouts.edit = [...expected.layouts.edit.slice(0, cityIndex), [{ name: 'image', size: 6 }], ...expected.layouts.edit.slice(cityIndex)];
-    expected.metadatas.image = {
-      edit: { label: 'Изображение', description: '', placeholder: '', visible: true, editable: true },
-      list: { label: 'Изображение', searchable: false, sortable: false },
-    };
-    expected.metadatas.isEventCollection = {
-      edit: { label: 'Исходный флаг коллекции', description: '', placeholder: '', visible: false, editable: false },
-      list: { label: 'Исходный флаг коллекции', searchable: true, sortable: true },
+    if (!Array.isArray(expected.layouts?.edit) || !expected.metadatas || typeof expected.metadatas !== 'object') return null;
+    const hasImage = Object.hasOwn(expected.metadatas, 'image');
+    const hasEventCollection = Object.hasOwn(expected.metadatas, 'isEventCollection');
+    if (hasImage !== hasEventCollection) return null;
+    if (!hasImage) {
+      const cityIndex = expected.layouts.edit.findIndex((row) => row?.[0]?.name === 'city');
+      if (cityIndex < 0) return null;
+      expected.layouts.edit = [...expected.layouts.edit.slice(0, cityIndex), [{ name: 'image', size: 6 }], ...expected.layouts.edit.slice(cityIndex)];
+      expected.metadatas.image = {
+        edit: { label: 'Изображение', description: '', placeholder: '', visible: true, editable: true },
+        list: { label: 'Изображение', searchable: false, sortable: false },
+      };
+      expected.metadatas.isEventCollection = {
+        edit: { label: 'Исходный флаг коллекции', description: '', placeholder: '', visible: false, editable: false },
+        list: { label: 'Исходный флаг коллекции', searchable: true, sortable: true },
+      };
+    }
+
+    const seminarIndex = expected.layouts.edit.findIndex((row) => row?.length === 1 && row[0]?.name === 'seminar');
+    const teacherIndexes = expected.layouts.edit.flatMap((row, index) => row?.some((cell) => cell?.name === 'teachers') ? [index] : []);
+    const teacherMetadata = expected.metadatas.teachers;
+    if (seminarIndex < 0 || teacherIndexes.length > 1 || !teacherMetadata?.edit || !teacherMetadata?.list) return null;
+    if (teacherIndexes.length === 0) expected.layouts.edit.splice(seminarIndex + 1, 0, [{ name: 'teachers', size: 6 }]);
+    else if (teacherIndexes[0] !== seminarIndex + 1
+      || JSON.stringify(expected.layouts.edit[teacherIndexes[0]]) !== JSON.stringify([{ name: 'teachers', size: 6 }])) return null;
+    expected.metadatas.teachers = {
+      ...teacherMetadata,
+      edit: {
+        ...teacherMetadata.edit,
+        label: 'Преподаватели проведения',
+        description: 'Выбор применяется только к этому проведению.',
+        visible: true,
+        editable: true,
+      },
+      list: { ...teacherMetadata.list, label: 'Преподаватели проведения' },
     };
     return expected;
   }
