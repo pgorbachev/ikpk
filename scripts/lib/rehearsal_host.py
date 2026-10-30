@@ -2891,7 +2891,9 @@ def _restore_media(config: dict[str, Any], backup_dir: Path, manifest: dict[str,
         os.chown(destination, int(item["uid"]), int(item["gid"]))
 
 
-def _recover(config: dict[str, Any], state: RehearsalState, operation_id: str) -> dict[str, Any]:
+def _recover(config: dict[str, Any], state: RehearsalState, operation_id: str,
+             *, stage_only: bool = False, expected_fingerprint: str | None = None,
+             restore_event: dict[str, Any] | None = None) -> dict[str, Any]:
     if any(row.get("operationKind") == "static-main" for row in state._operation_rows(operation_id)):
         raise HostFailure("static-main operation cannot enter CMS/database recovery")
     if state._is_committed(operation_id):
@@ -2923,6 +2925,36 @@ def _recover(config: dict[str, Any], state: RehearsalState, operation_id: str) -
         return all(run(["/usr/bin/systemctl", "is-active", unit], check=False).returncode == 0
                    for unit in [config["cmsUnit"], *config["writerUnits"]])
 
+    prepared = next((row for row in state._operation_rows(operation_id)
+                     if row.get("record") == "restore-prepared"), None)
+    if restore_event is not None:
+        if config.get("profile") != "production-paired" or not prepared:
+            raise HostFailure("restore finalize requires a staged production-paired restore")
+        fingerprint = restore_event.get("fingerprint")
+        entry = restore_event.get("entry")
+        if (not SHA256_RE.fullmatch(str(fingerprint)) or prepared.get("fingerprint") != fingerprint or isinstance(entry, bool) or
+                not isinstance(entry, int) or entry < 1 or prepared.get("databaseSha256") != sha256_file(live) or
+                prepared.get("operationId") != operation_id):
+            raise HostFailure("restore finalize identity or restored database changed")
+        recorded = next((row for row in state._operation_rows(operation_id)
+                         if row.get("record") == "restore-provenance-recorded"), None)
+        if recorded and (recorded.get("fingerprint") != fingerprint or recorded.get("entry") != entry):
+            raise HostFailure("restore provenance retry differs from its journaled CAS event")
+        if not recorded:
+            state._append({"version": 1, "record": "restore-provenance-recorded", "operationId": operation_id,
+                           "sourceSha": start["sourceSha"], "fingerprint": fingerprint, "entry": entry})
+        state.recover(operation_id, lambda: sha256_file(live) == prepared["databaseSha256"]
+                      and _tree_sha256(_current_target(Path(config["currentStatic"]))) == old_pair["staticTreeSha256"],
+                      reopen_old_pair)
+        return {"operationId": operation_id, "phase": "recovered", "restoredPair": old_pair,
+                "restoreFingerprint": fingerprint, "provenanceEntry": entry}
+
+    if stage_only and prepared:
+        if (prepared.get("databaseSha256") != sha256_file(live) or
+                prepared.get("fingerprint") != expected_fingerprint):
+            raise HostFailure("staged restore database bytes changed; refusing retry")
+        return {"operationId": operation_id, "phase": "restore-staged", "restoredPair": old_pair,
+                "databaseSha256": prepared["databaseSha256"]}
     if already_recovered:
         # The durable recovered row is the restore boundary. A retry may only reopen and
         # finalize, even if the prior process died after some writers had already restarted.
@@ -2978,6 +3010,15 @@ def _recover(config: dict[str, Any], state: RehearsalState, operation_id: str) -
         if str(_current_target(Path(config["currentStatic"]))) != old_pair["staticPath"]:
             raise HostFailure("static code changed before backup; restore requires the old release")
         expected_database_sha = sha256_file(live)
+    if stage_only:
+        if (config.get("profile") != "production-paired" or not server_manifest.exists() or
+                not isinstance(expected_fingerprint, str) or not SHA256_RE.fullmatch(expected_fingerprint)):
+            raise HostFailure("staged restore requires the verified production backup")
+        state._append({"version": 1, "record": "restore-prepared", "operationId": operation_id,
+                       "sourceSha": start["sourceSha"], "databaseSha256": expected_database_sha,
+                       "staticTreeSha256": old_pair["staticTreeSha256"], "fingerprint": expected_fingerprint})
+        return {"operationId": operation_id, "phase": "restore-staged", "restoredPair": old_pair,
+                "databaseSha256": expected_database_sha}
     state.recover(operation_id, lambda: sha256_file(live) == expected_database_sha
                   and _tree_sha256(_current_target(Path(config["currentStatic"]))) == old_pair["staticTreeSha256"],
                   reopen_old_pair)
@@ -2997,7 +3038,8 @@ def dispatch(args: argparse.Namespace) -> dict[str, Any]:
             "static-main", "static-main-recover", "export-static-main", "status"):
         raise HostFailure("production-static permits only static-main publication and recovery")
     if profile == "production-paired" and args.action not in (
-            "cms-update", "static-publish", "export-backup", "export-static", "recover", "status"):
+            "cms-update", "static-publish", "export-backup", "export-static", "recover", "restore",
+            "finalize-recover", "status"):
         raise HostFailure("production-paired permits only paired CMS update, static publish, and recovery")
     if profile == "initial-prod" and args.action == "recover":
         raise HostFailure("initial-prod recovery is disabled; keep the production fence closed for owner direction")
@@ -3007,7 +3049,7 @@ def dispatch(args: argparse.Namespace) -> dict[str, Any]:
     with _destination_publication_lock(config), state.lock():
         rows = state._operation_rows(args.operation_id)
         static_main_owned = any(row.get("operationKind") == "static-main" for row in rows)
-        if static_main_owned and args.action in ("cms-update", "static-publish", "recover"):
+        if static_main_owned and args.action in ("cms-update", "static-publish", "recover", "restore", "finalize-recover"):
             raise HostFailure("static-main operations require static-main-recover; CMS recovery is forbidden")
         if args.action == "static-main":
             try:
@@ -3048,19 +3090,32 @@ def dispatch(args: argparse.Namespace) -> dict[str, Any]:
                     "sha256": manifest["archiveSha256"]}
         if args.action == "export-static":
             return {"_bytes": _export_static(config, state, args.operation_id, args.source_sha)}
-        if args.action == "recover":
+        if args.action in ("recover", "restore"):
             backup_sha = getattr(args, "backup_sha256", None)
+            if profile == "production-paired" and args.action == "recover" and backup_sha:
+                raise HostFailure("production-paired backup recovery must use the local provenance operator")
             if backup_sha:
                 payload = sys.stdin.buffer.read()
                 _import_offhost_backup(config, args.operation_id, payload, backup_sha)
                 del payload
+            if profile == "production-paired" and args.action == "restore":
+                return _recover(config, state, args.operation_id, stage_only=True,
+                                expected_fingerprint=args.restore_fingerprint)
             return _recover(config, state, args.operation_id)
+        if args.action == "finalize-recover":
+            return _recover(config, state, args.operation_id, restore_event={
+                "fingerprint": args.restore_fingerprint, "entry": args.provenance_entry})
         if args.action == "cms-update":
             return _cms_update(config, state, args)
         if args.action == "static-publish":
             return _static_publish(config, state, args)
         if args.action == "status":
-            return state.phase(args.operation_id)
+            phase = state.phase(args.operation_id)
+            if profile == "production-paired":
+                start = next((row for row in state._operation_rows(args.operation_id) if row.get("record") == "start"), None)
+                if start and isinstance(start.get("oldPair"), dict):
+                    phase["oldPair"] = start["oldPair"]
+            return phase
     raise HostFailure("unsupported bounded host action")
 
 
@@ -3084,13 +3139,19 @@ def main(argv: Optional[list[str]] = None) -> int:
                 command.add_argument("--reuse-capture-operation-id")
         else:
             command.add_argument("--browser-digest")
-    for name in ("export-backup", "export-static", "export-static-main", "recover", "static-main-recover", "status"):
+    for name in ("export-backup", "export-static", "export-static-main", "recover", "restore",
+                 "finalize-recover", "static-main-recover", "status"):
         command = sub.add_parser(name)
         command.add_argument("--operation-id", required=True)
         if name in ("export-static", "export-static-main"):
             command.add_argument("--source-sha", required=True)
-        if name == "recover":
+        if name in ("recover", "restore"):
             command.add_argument("--backup-sha256")
+        if name == "restore":
+            command.add_argument("--restore-fingerprint", required=True)
+        if name == "finalize-recover":
+            command.add_argument("--restore-fingerprint", required=True)
+            command.add_argument("--provenance-entry", required=True, type=int)
         if name == "static-main-recover":
             command.add_argument("--rollback-committed", action="store_true")
             command.add_argument("--operator")

@@ -46,13 +46,16 @@ def backup_archive(operation_id="operator-test"):
                   "sha256": sha(image_bytes), "size": len(image_bytes), "originalName": "photo.jpg",
                   "mode": 0o640, "uid": 987, "gid": 987}]
         media_bytes = json.dumps({"media": media}, sort_keys=True).encode() + b"\n"
-        manifest_bytes = json.dumps({"version": 1, "operationId": operation_id,
+        manifest = {"version": 1, "operationId": operation_id,
             "databaseSha256": sha(database_bytes), "mediaManifestSha256": sha(media_bytes),
-            "media": media}, sort_keys=True).encode() + b"\n"
+            "media": media}
+        members = [("database.sqlite", database_bytes), ("media-manifest.json", media_bytes),
+                   ("manifest.json", b""), ("media/sha256:photo", image_bytes)]
+        manifest_bytes = json.dumps(manifest, sort_keys=True).encode() + b"\n"
+        members[2] = ("manifest.json", manifest_bytes)
         archive = io.BytesIO()
         with tarfile.open(fileobj=archive, mode="w") as output:
-            for name, payload in (("database.sqlite", database_bytes), ("media-manifest.json", media_bytes),
-                                  ("manifest.json", manifest_bytes), ("media/sha256:photo", image_bytes)):
+            for name, payload in members:
                 info = tarfile.TarInfo(name)
                 info.size = len(payload)
                 info.mode = 0o600
@@ -61,6 +64,79 @@ def backup_archive(operation_id="operator-test"):
 
 
 class RehearsalHostFilesystemTests(unittest.TestCase):
+    def test_production_restore_finalize_requires_matching_staged_database_and_retries_after_cas(self):
+        with tempfile.TemporaryDirectory(prefix="ikpk-paired-restore-finalize-") as temporary:
+            root = Path(temporary)
+            old_cms, old_static = root / "cms-release", root / "static-release"
+            old_cms.mkdir(); old_static.mkdir()
+            (old_static / "index.html").write_text("old site", encoding="utf-8")
+            current_cms, current_static = root / "current-cms", root / "current-static"
+            current_cms.symlink_to(old_cms); current_static.symlink_to(old_static)
+            database = root / "data.sqlite"; database.write_bytes(b"restored database")
+            op, source_sha, fingerprint = "restore-op", "a" * 40, "b" * 64
+
+            class State:
+                rows = [
+                    {"record": "start", "operationId": op, "sourceSha": source_sha,
+                     "oldPair": {"cmsPath": str(old_cms.resolve()), "staticPath": str(old_static.resolve()),
+                                 "staticTreeSha256": rehearsal_host._tree_sha256(old_static),
+                                 "cmsSourceEnvironment": {key: None for key in rehearsal_host.PAIRED_CMS_ENV_KEYS}}},
+                    {"record": "restore-prepared", "operationId": op, "databaseSha256": sha(database.read_bytes()),
+                     "staticTreeSha256": rehearsal_host._tree_sha256(old_static), "fingerprint": fingerprint},
+                ]
+                recovered = False
+                def _is_committed(self, _op): return False
+                def _is_recovered(self, _op): return self.recovered
+                def _operation_rows(self, _op): return self.rows
+                def _append(self, row): self.rows.append(row)
+                def recover(self, _op, verify_restored, verify_reopened):
+                    self.assert_recorded = any(row.get("record") == "restore-provenance-recorded" for row in self.rows)
+                    if not verify_restored() or not verify_reopened(): raise AssertionError("recovery verification failed")
+                    self.recovered = True
+
+            state = State()
+            config = {"profile": "production-paired", "cmsDatabase": str(database), "cmsUnit": "cms.service",
+                      "writerUnits": [], "cmsHealthUrl": "http://cms/health", "siteHealthUrl": "https://ikpk.su/",
+                      "currentCms": str(current_cms), "currentStatic": str(current_static), "releaseRoot": str(root),
+                      "staticReleaseRoot": str(root)}
+            complete = lambda *args, **_kwargs: subprocess.CompletedProcess(args, 0, "", "")
+            with patch.object(rehearsal_host, "_write_paired_cms_source_env"), \
+                 patch.object(rehearsal_host, "_service_pid", return_value=123), \
+                 patch.object(rehearsal_host, "_database_process_proof", return_value={}), \
+                 patch.object(rehearsal_host, "_wait_health"), patch.object(rehearsal_host, "_set_flag"), \
+                 patch.object(rehearsal_host, "_write_gate"), patch.object(rehearsal_host, "run", side_effect=complete):
+                with self.assertRaisesRegex(rehearsal_host.HostFailure, "identity|changed"):
+                    rehearsal_host._recover(config, state, op,
+                        restore_event={"fingerprint": "c" * 64, "entry": 8})
+                self.assertFalse(state.rows[-1].get("record") == "restore-provenance-recorded")
+                result = rehearsal_host._recover(config, state, op,
+                    restore_event={"fingerprint": fingerprint, "entry": 8})
+                self.assertEqual(result["phase"], "recovered")
+                self.assertTrue(state.assert_recorded)
+                self.assertEqual(len([row for row in state.rows if row.get("record") == "restore-provenance-recorded"]), 1)
+                repeated = rehearsal_host._recover(config, state, op,
+                    restore_event={"fingerprint": fingerprint, "entry": 8})
+                self.assertEqual(repeated["phase"], "recovered")
+                self.assertEqual(len([row for row in state.rows if row.get("record") == "restore-provenance-recorded"]), 1)
+
+    def test_production_restore_stage_retry_leaves_cms_closed(self):
+        with tempfile.TemporaryDirectory(prefix="ikpk-paired-restore-stage-retry-") as temporary:
+            root = Path(temporary); cms = root / "cms"; static = root / "static"
+            cms.mkdir(); static.mkdir(); database = root / "data.sqlite"; database.write_bytes(b"restored")
+            op = "restore-stage-retry"
+            class State:
+                rows = [{"record": "start", "operationId": op, "sourceSha": "a" * 40,
+                         "oldPair": {"cmsPath": str(cms), "staticPath": str(static),
+                                     "staticTreeSha256": rehearsal_host._tree_sha256(static)}},
+                        {"record": "restore-prepared", "operationId": op, "databaseSha256": sha(database.read_bytes()),
+                         "fingerprint": "b" * 64}]
+                def _is_committed(self, _op): return False
+                def _is_recovered(self, _op): return False
+                def _operation_rows(self, _op): return self.rows
+            config = {"profile": "production-paired", "cmsDatabase": str(database)}
+            result = rehearsal_host._recover(config, State(), op, stage_only=True, expected_fingerprint="b" * 64)
+            self.assertEqual(result["phase"], "restore-staged")
+
     def test_production_paired_static_retry_builds_prod_dist_with_operation_bound_capture(self):
         with tempfile.TemporaryDirectory(prefix="ikpk-paired-static-retry-") as temporary:
             root = Path(temporary)
@@ -1287,6 +1363,28 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
             self.assertEqual(target.read_bytes(), archive)
         with self.assertRaisesRegex(operator.Refusal, "digest"):
             operator.verify_backup_tar(archive + b"tampered", sha(archive))
+
+    def test_production_restore_schema_is_read_from_exact_journaled_source_commit(self):
+        source_sha = "2fee597b5335f6c61fd61a622fa2a5f3f475a605"
+        with tempfile.TemporaryDirectory(prefix="ikpk-old-cms-schema-") as temporary:
+            schema = Path(temporary) / "schema"
+            digest = operator.production_paired_schema_from_commit(source_sha, schema)
+            self.assertRegex(digest, r"^[a-f0-9]{64}$")
+            self.assertEqual(len(list(schema.rglob("*.json"))), len(operator.CMS_CAPTURE_SCHEMA_PATHS))
+
+    def test_production_backup_sidecar_binds_old_schema_digest_to_backup_and_admission(self):
+        source_sha = "2fee597b5335f6c61fd61a622fa2a5f3f475a605"
+        archive = backup_archive()
+        with tempfile.TemporaryDirectory(prefix="ikpk-paired-backup-sidecar-") as temporary:
+            backup = operator.persist_offhost_backup(Path(temporary), "paired-op", "a" * 40, archive,
+                sha(archive), {"runId": 7, "attempt": 2},
+                f"/opt/ikpk-cms/releases/{source_sha}-paired-op/.staging193-rehearsal/op/migration/cms-artifact")
+            metadata = json.loads(backup.with_suffix(".json").read_text(encoding="utf-8"))
+            self.assertEqual(metadata["oldCmsSourceSha"], source_sha)
+            self.assertRegex(metadata["oldCmsSchemaSha256"], r"^[a-f0-9]{64}$")
+            self.assertEqual(metadata["sha256"], sha(archive))
+            self.assertEqual(metadata["runId"], 7)
+            self.assertEqual(metadata["attempt"], 2)
 
 
 class StaticMainAdmissionTests(unittest.TestCase):

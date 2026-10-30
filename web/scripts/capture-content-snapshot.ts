@@ -5,9 +5,9 @@
  *
  * Имя скрипта входит в признак производителя снимка в проверках pipeline.
  */
-import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
-import { dirname, join } from 'node:path';
+import { dirname, isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { assertCaptureSnapshotContract } from './lib/capture-snapshot-contract.ts';
 import {
@@ -63,11 +63,16 @@ async function serverInput(): Promise<Staging193Capture | undefined> {
     throw new Error('server capture requires its fixed profile, sealed bundle, and no CMS_URL');
   }
   const verifier = await import('../../scripts/lib/staging193-capture-bundle.mjs');
+  const schemaRoot = process.env.CONTENT_CAPTURE_SCHEMA_ROOT && profile === 'production-static'
+    ? resolve(process.env.CONTENT_CAPTURE_SCHEMA_ROOT) : join(repoRoot, 'cms', 'src');
+  if (!isAbsolute(schemaRoot) || !lstatSync(schemaRoot).isDirectory() || lstatSync(schemaRoot).isSymbolicLink()) {
+    throw new Error('server capture schema root must be a real directory');
+  }
   const capture = profile === 'staging194'
-    ? verifier.verifyStaging193Bundle(bundle!, join(repoRoot, 'cms', 'src'))
+    ? verifier.verifyStaging193Bundle(bundle!, schemaRoot)
     : profile === 'initial-prod'
-      ? verifier.verifyInitialProdBundle(bundle!, join(repoRoot, 'cms', 'src'))
-      : verifier.verifyProductionStaticBundle(bundle!, join(repoRoot, 'cms', 'src'));
+      ? verifier.verifyInitialProdBundle(bundle!, schemaRoot)
+      : verifier.verifyProductionStaticBundle(bundle!, schemaRoot);
   return { ...capture, profile } as Staging193Capture;
 }
 const serverCapture = await serverInput();

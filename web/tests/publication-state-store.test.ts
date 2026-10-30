@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
+import { createHash } from 'node:crypto';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -250,6 +251,43 @@ describe('shared Git state store: real bare-remote contract', () => {
     await store(f).acceptState({ expectedObservedEntry: 3, fingerprint: 'A', actor: 'operator' });
     expect(existsSync(marker)).toBe(true); expect(remotePairs(f)).toEqual([record('other-writer')]);
     expect(remoteEntry(f, 4)).toMatchObject({ fingerprint: 'A', marker: 'accept-state', confirmedBy: 'operator' });
+  });
+  it('records a restore by CAS and makes the exact same restore retry idempotent', async () => {
+    const f = await fixture(); const api = store(f);
+    const first = await api.recordRestore({ expectedObservedEntry: 3, fingerprint: 'A', operationId: 'restore-op-1' });
+    expect(first).toMatchObject({ changed: true, entry: { number: 4, fingerprint: 'A', marker: 'restore', operationId: 'restore-op-1' } });
+    const stored = remoteEntry(f, 4);
+    expect(stored).toMatchObject({ number: 4, fingerprint: 'A', previous: 3, marker: 'restore', operationId: 'restore-op-1' });
+    const legacyPayload = { number: stored.number, fingerprint: stored.fingerprint, previous: stored.previous, marker: stored.marker };
+    expect(stored.checksum).toBe(createHash('sha256').update(JSON.stringify(legacyPayload)).digest('hex'));
+    expect(stored.operationChecksum).toMatch(/^[a-f0-9]{64}$/);
+    const retry = await store(f, { workDir: join(f.root, 'retry-clone') })
+      .recordRestore({ expectedObservedEntry: 3, fingerprint: 'A', operationId: 'restore-op-1' });
+    expect(retry).toMatchObject({ changed: false, entry: { number: 4, fingerprint: 'A', marker: 'restore', operationId: 'restore-op-1' } });
+    expect(head(f)).toBe(first.head);
+  });
+  it('does not confuse two restores with the same fingerprint and previous entry', async () => {
+    const f = await fixture();
+    await store(f).recordRestore({ expectedObservedEntry: 3, fingerprint: 'A', operationId: 'restore-op-1' });
+    await expect(store(f, { workDir: join(f.root, 'second-restore-clone') })
+      .recordRestore({ expectedObservedEntry: 3, fingerprint: 'A', operationId: 'restore-op-2' }))
+      .rejects.toThrow(/stale|observed-entry/);
+    expect(remoteEntry(f, 4)).toMatchObject({ operationId: 'restore-op-1', marker: 'restore' });
+  });
+  it('refuses restore when the observed CMS entry became stale before the CAS', async () => {
+    const f = await fixture(); const other = await otherWriter(f, 'cms');
+    git(other, 'push', 'origin', BRANCH);
+    const before = head(f);
+    await expect(store(f).recordRestore({ expectedObservedEntry: 3, fingerprint: 'A', operationId: 'restore-op' })).rejects.toThrow(/stale|observed-entry/);
+    expect(head(f)).toBe(before);
+    expect(remoteEntry(f, 4)).toMatchObject({ fingerprint: 'C', marker: 'edit' });
+  });
+  it('does not replay restore after a concurrent CMS edit wins the push race', async () => {
+    const f = await fixture(); const other = await otherWriter(f, 'cms'); const marker = raceNextPush(f, other);
+    await expect(store(f).recordRestore({ expectedObservedEntry: 3, fingerprint: 'A', operationId: 'restore-op' })).rejects.toThrow(/stale|observed-entry/);
+    expect(existsSync(marker)).toBe(true);
+    expect(remoteEntry(f, 4)).toMatchObject({ fingerprint: 'C', marker: 'edit' });
+    expect(git(f.root, '--git-dir', f.remote, 'ls-tree', '-r', '--name-only', BRANCH)).not.toContain('entry-000005');
   });
   it('an existing operator checkout with executable local hooks is refused as the isolated work directory', async () => {
     const f = await fixture(); const marker = join(f.root, 'untrusted-hook');
