@@ -61,6 +61,38 @@ def backup_archive(operation_id="operator-test"):
 
 
 class RehearsalHostFilesystemTests(unittest.TestCase):
+    def test_production_paired_static_retry_builds_prod_dist_with_operation_bound_capture(self):
+        with tempfile.TemporaryDirectory(prefix="ikpk-paired-static-retry-") as temporary:
+            root = Path(temporary)
+            source_sha, operation_id = "a" * 40, "prod-retry-01"
+            source = root / "releases" / f"{source_sha}-{operation_id}"
+            capture = source / ".staging193-rehearsal" / operation_id / "capture"
+            capture.mkdir(parents=True)
+            (source / "web").mkdir()
+            config = {"profile": "production-paired", "releaseRoot": str(root / "releases"),
+                      "staticReleaseRoot": str(root / "static"), "currentStatic": str(root / "current"),
+                      "cmsHealthUrl": "http://127.0.0.1/health", "siteHealthUrl": "https://ikpk.su/",
+                      "stateDir": str(root / "state")}
+            class State:
+                def phase(self, _operation_id):
+                    return {"phase": "new-pair-accepted", "sourceSha": source_sha}
+                def _operation_rows(self, _operation_id):
+                    return []
+            args = Namespace(operation_id=operation_id, source_sha=source_sha, browser_digest=None)
+            built = source / "web" / "dist"
+            stored_release = root / "static" / "candidate"
+            stored_release.mkdir(parents=True)
+            (stored_release / "release.json").write_text(json.dumps({"snapshotId": "snap:test"}),
+                                                          encoding="utf-8")
+            with patch.object(rehearsal_host, "_candidate_root", return_value=source), \
+                 patch.object(rehearsal_host, "_verify_fence"), \
+                 patch.object(rehearsal_host, "_build_static", return_value=(built, "b" * 64)) as build, \
+                 patch.object(rehearsal_host, "_store_static", return_value=stored_release):
+                result = rehearsal_host._static_publish(config, State(), args)
+            self.assertEqual(result["phase"], "browser-check-required")
+            self.assertEqual(build.call_args.args, (config, source, capture))
+            self.assertEqual(build.call_args.kwargs["operation_id"], operation_id)
+
     def test_initial_prod_config_template_binds_real_profile_and_all_writer_routes(self):
         config = json.loads((ROOT / "scripts/initial-prod-rehearsal.json").read_text(encoding="utf-8"))
         rehearsal_host._validate_target_binding(config)
@@ -1125,6 +1157,26 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
             self.assertRegex("POST:/admin/anything", writer_pattern)
             self.assertNotRegex("POST:/administrator", writer_pattern)
 
+    def test_production_writer_gate_drains_pre_reload_workers_before_returning(self):
+        with tempfile.TemporaryDirectory(prefix="ikpk-nginx-drain-") as temporary:
+            root = Path(temporary)
+            map_file, server_file = root / "map.conf", root / "server.conf"
+            active = f"{map_file}\n{server_file}\nikpk_rehearsal_write_block"
+            config = {"profile": "production-paired", "writerPrefixes": ["/admin"],
+                      "preservePrefixes": ["/uploads/"], "nginxMapFile": str(map_file),
+                      "nginxServerGateFile": str(server_file), "nginxBinary": "nginx",
+                      "nginxService": "nginx.service"}
+            with patch.object(rehearsal_host, "_nginx_worker_pids", return_value={100, 101}) as snapshot, \
+                 patch.object(rehearsal_host, "_wait_nginx_workers_exit") as drained, \
+                 patch.object(rehearsal_host, "run", side_effect=[
+                     subprocess.CompletedProcess(["nginx", "-T"], 0, "", ""),
+                     subprocess.CompletedProcess(["nginx", "-T"], 0, active, ""),
+                     subprocess.CompletedProcess(["nginx", "-t"], 0, "", ""),
+                     subprocess.CompletedProcess(["systemctl", "reload"], 0, "", "")]):
+                rehearsal_host._write_gate(config, True)
+            snapshot.assert_called_once_with(config)
+            drained.assert_called_once_with({100, 101})
+
     def test_writer_fence_keeps_disabled_payment_status_route_at_404(self):
         commands = []
         def probe(argv, **_kwargs):
@@ -1965,6 +2017,48 @@ class ProductionPairedManualPreflightTests(unittest.TestCase):
             self.assertIn("IKPK_BUILD_WORKSPACE=/old\n", restored)
             self.assertNotIn("IKPK_INSTALLED_COMMIT=", restored)
 
+    def test_versioned_cms_workspace_uses_allowed_root_and_environment_rolls_back(self):
+        import os
+        import types
+        with tempfile.TemporaryDirectory(prefix="ikpk-paired-workspace-") as temporary:
+            root = Path(temporary)
+            source = root / "candidate"
+            (source / "cms").mkdir(parents=True)
+            (source / "web").mkdir()
+            (source / ".staging193-rehearsal").mkdir()
+            (source / "cms/package.json").write_text("{}")
+            (source / "web/package.json").write_text("{}")
+            cms_deps = root / "cms-deps"
+            web_deps = source / "web/node_modules"
+            (cms_deps / "@strapi").mkdir(parents=True)
+            (web_deps / "astro").mkdir(parents=True)
+            (web_deps / "tsx").mkdir()
+            (cms_deps / "@strapi/package.json").write_text("{}")
+            (web_deps / "astro/package.json").write_text("{}")
+            (web_deps / "tsx/package.json").write_text("{}")
+            (source / "cms/node_modules").symlink_to(cms_deps, target_is_directory=True)
+            config = {"profile": "production-paired", "cmsUser": "cms",
+                      "siteBuildWorkspaceRoot": str(root / "workspace")}
+            with patch.object(rehearsal_host.pwd, "getpwnam", return_value=types.SimpleNamespace(
+                    pw_uid=os.getuid(), pw_gid=os.getgid())):
+                with patch.object(rehearsal_host, "PRODUCTION_PAIRED_WORKSPACE_ROOT", root / "workspace"):
+                    workspace = rehearsal_host._prepare_paired_site_workspace(config, source, "a" * 40, "op-1")
+            self.assertEqual(workspace, root / "workspace" / ("a" * 40 + "-op-1"))
+            self.assertTrue((workspace / "web/node_modules").is_symlink())
+            self.assertTrue((workspace / "cms/node_modules").is_symlink())
+            self.assertFalse((workspace / ".staging193-rehearsal").exists())
+            self.assertFalse((workspace / "web/node_modules/astro").is_symlink())
+
+            env_file = root / "cms.env"
+            env_file.write_text("IKPK_BUILD_WORKSPACE=/old\n", encoding="utf-8")
+            env_config = {"cmsEnvironmentFile": str(env_file)}
+            previous = rehearsal_host._paired_cms_source_env(env_config)
+            rehearsal_host._write_paired_cms_source_env(env_config, {
+                "IKPK_BUILD_WORKSPACE": str(workspace), "IKPK_INSTALLED_COMMIT": "a" * 40})
+            self.assertIn(f"IKPK_BUILD_WORKSPACE={workspace}\n", env_file.read_text(encoding="utf-8"))
+            rehearsal_host._write_paired_cms_source_env(env_config, previous)
+            self.assertEqual(env_file.read_text(encoding="utf-8"), "IKPK_BUILD_WORKSPACE=/old\n")
+
     def test_site_refresh_preflight_rejects_active_or_unknown_worker(self):
         with tempfile.TemporaryDirectory(prefix="ikpk-paired-drain-") as temporary:
             state = Path(temporary) / "state.json"
@@ -1977,6 +2071,32 @@ class ProductionPairedManualPreflightTests(unittest.TestCase):
             with patch.object(rehearsal_host.time, "sleep"):
                 with self.assertRaisesRegex(rehearsal_host.HostFailure, "unknown state"):
                     rehearsal_host._verify_site_refresh_idle(config)
+
+    def test_read_only_refresh_preflight_refuses_active_or_interrupted_state(self):
+        with tempfile.TemporaryDirectory(prefix="ikpk-paired-preflight-") as temporary:
+            state = Path(temporary) / "state.json"
+            config = {"profile": "production-paired", "siteRefreshState": str(state)}
+            for status in ("running", "interrupted", "unknown"):
+                state.write_text(json.dumps({"status": status}), encoding="utf-8")
+                with self.subTest(status=status), self.assertRaises(rehearsal_host.HostFailure):
+                    rehearsal_host._assert_site_refresh_idle(config)
+            self.assertTrue(state.exists())
+
+    def test_post_gate_drain_waits_for_terminal_state_lock_removal(self):
+        import os
+        with tempfile.TemporaryDirectory(prefix="ikpk-paired-drain-lock-") as temporary:
+            state = Path(temporary) / "state.json"
+            lock = Path(str(state) + ".lock")
+            state.write_text(json.dumps({"status": "running", "pid": os.getpid()}), encoding="utf-8")
+            lock.write_text(f"{os.getpid()}\n", encoding="ascii")
+
+            def complete_request(_seconds):
+                state.write_text(json.dumps({"status": "succeeded", "pid": os.getpid()}), encoding="utf-8")
+                lock.unlink()
+
+            with patch.object(rehearsal_host.time, "sleep", side_effect=complete_request):
+                rehearsal_host._verify_site_refresh_idle({"profile": "production-paired",
+                                                          "siteRefreshState": str(state)})
 
     def test_terminal_restore_state_does_not_treat_live_cms_pid_as_worker(self):
         with tempfile.TemporaryDirectory(prefix="ikpk-paired-drain-") as temporary:

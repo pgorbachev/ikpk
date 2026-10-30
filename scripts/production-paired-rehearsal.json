@@ -3,6 +3,7 @@
   "stateDir": "/var/lib/ikpk-rehearsal/production-paired",
   "maintenanceFlag": "/var/lib/ikpk-rehearsal/production-paired/fenced",
   "releaseRoot": "/opt/ikpk-cms/releases",
+  "siteBuildWorkspaceRoot": "/var/lib/ikpk-site-build/production-paired",
   "currentCms": "/opt/ikpk-cms/current",
   "currentStatic": "/var/www/ikpk/current",
   "staticReleaseRoot": "/var/www/ikpk/releases",

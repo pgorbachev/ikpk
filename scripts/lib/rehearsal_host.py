@@ -46,6 +46,7 @@ INITIAL_PROD_CHAT_LOADER_SRC = "https://cdn-ru.bitrix24.ru/b35315886/crm/site_bu
 STAGING194_CHAT_LOADER_SRC = INITIAL_PROD_CHAT_LOADER_SRC
 INITIAL_PROD_CMS_ENV_FILE = Path("/etc/ikpk-cms/trial.env")
 PRODUCTION_PUBLICATION_LOCK = Path("/var/www/ikpk/.publication.lock")
+PRODUCTION_PAIRED_WORKSPACE_ROOT = Path("/var/lib/ikpk-site-build/production-paired")
 INITIAL_PROD_OPERATION_ID = "initial-prod-20261019-A-01"
 REQUIRED_CONFIG = {
     "stateDir", "maintenanceFlag", "releaseRoot", "currentCms", "currentStatic",
@@ -209,6 +210,7 @@ def _validate_target_binding(data: dict[str, Any]) -> None:
                 or data.get("releaseRoot") != "/opt/ikpk-cms/releases"
                 or data.get("maintenanceFlag") != "/var/lib/ikpk-rehearsal/production-paired/fenced"
                 or data.get("publicationLock") != str(PRODUCTION_PUBLICATION_LOCK)
+                or data.get("siteBuildWorkspaceRoot") != str(PRODUCTION_PAIRED_WORKSPACE_ROOT)
                 or data.get("cmsEnvironmentFile") != "/etc/ikpk-cms/trial.env"
                 or data.get("siteRefreshState") != "/var/www/ikpk/shared/site-refresh/state.json"
                 or data.get("cmsUnit") != "ikpk-cms.service"
@@ -287,7 +289,49 @@ def _save_bytes(path: Path, payload: bytes, mode: int = 0o600) -> None:
             pass
 
 
+def _nginx_worker_pids(config: dict[str, Any]) -> set[int]:
+    master = run(["/usr/bin/systemctl", "show", config["nginxService"], "-p", "MainPID", "--value"],
+                 timeout=15).stdout.strip()
+    if not master.isdecimal() or int(master) < 2:
+        raise HostFailure("nginx master PID is unavailable; refusing production request drain")
+    result: set[int] = set()
+    try:
+        for entry in Path("/proc").iterdir():
+            if not entry.name.isdecimal():
+                continue
+            try:
+                stat_fields = (entry / "stat").read_text(encoding="ascii").rsplit(")", 1)[1].split()
+                command = (entry / "cmdline").read_bytes().replace(b"\0", b" ").decode(errors="replace")
+            except (OSError, IndexError):
+                continue
+            if len(stat_fields) > 1 and stat_fields[1] == master and command.startswith("nginx: worker process"):
+                result.add(int(entry.name))
+    except OSError as error:
+        raise HostFailure("cannot inspect nginx workers before production request drain") from error
+    if not result:
+        raise HostFailure("nginx has no inspectable workers; refusing production request drain")
+    return result
+
+
+def _wait_nginx_workers_exit(pids: set[int], timeout: int = 3600) -> None:
+    deadline = time.monotonic() + timeout
+    while any(Path("/proc", str(pid)).exists() for pid in pids):
+        if time.monotonic() >= deadline:
+            raise HostFailure("old nginx workers did not drain; CMS remains running and gated")
+        time.sleep(1)
+
+
 def _write_gate(config: dict[str, Any], enabled: bool) -> None:
+    production_drain = enabled and config.get("profile") == "production-paired"
+    old_workers: set[int] = set()
+    if production_drain:
+        old_workers = _nginx_worker_pids(config)
+        current = run([config["nginxBinary"], "-T"], timeout=30)
+        active_config = current.stdout + current.stderr
+        for line in active_config.splitlines():
+            match = re.match(r"^\s*worker_shutdown_timeout\s+(\S+)\s*;", line)
+            if match and not re.fullmatch(r"0(?:s|m|h)?", match.group(1)):
+                raise HostFailure("nginx worker_shutdown_timeout can terminate accepted requests; refusing production drain")
     expressions = [re.escape(prefix.rstrip("/")) for prefix in config["writerPrefixes"]]
     exceptions = [re.escape(prefix.rstrip("/")) for prefix in config["preservePrefixes"]]
     lines = ["# managed by ikpk-rehearsal; included from nginx http context",
@@ -316,6 +360,8 @@ def _write_gate(config: dict[str, Any], enabled: bool) -> None:
                 raise HostFailure(f"nginx effective config does not include expected gate: {required}")
         run([config["nginxBinary"], "-t"], timeout=30)
         run(["/usr/bin/systemctl", "reload", config["nginxService"]], timeout=30)
+        if production_drain:
+            _wait_nginx_workers_exit(old_workers)
     except Exception:
         if old_map is None:
             map_path.unlink(missing_ok=True)
@@ -681,38 +727,86 @@ def _verify_site_refresh_idle(config: dict[str, Any]) -> None:
     if config.get("profile") != "production-paired":
         return
     path = Path(config["siteRefreshState"])
-    # The maintenance gate is already closed. Let a request accepted just before it
-    # finish persisting its state, then drain an existing refresh/Restore normally.
-    time.sleep(2)
+    lock_path = Path(str(path) + ".lock")
     deadline = time.monotonic() + 3600
     while True:
+        waiting = False
         try:
             info = path.lstat()
         except FileNotFoundError:
+            record = None
+        else:
+            if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
+                raise HostFailure("site-refresh state is not a regular unlinked file")
+            try:
+                record = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, ValueError) as error:
+                raise HostFailure("site-refresh state is unreadable; refusing to stop CMS") from error
+            if not isinstance(record, dict) or record.get("status") not in (
+                    "idle", "running", "succeeded", "failed", "verification-failed"):
+                raise HostFailure("site-refresh or Restore has unknown state; refusing to stop CMS")
+            if record.get("status") == "running":
+                pid = record.get("pid")
+                if isinstance(pid, bool) or not isinstance(pid, int) or pid < 2:
+                    raise HostFailure("active site-refresh/Restore has no trustworthy PID; refusing to stop CMS")
+                try:
+                    os.kill(pid, 0)
+                except ProcessLookupError:
+                    raise HostFailure("site-refresh/Restore state is stale; inspect it instead of stopping CMS")
+                except PermissionError:
+                    pass
+                waiting = True
+        try:
+            lock_info = lock_path.lstat()
+        except FileNotFoundError:
+            lock_info = None
+        if lock_info is not None:
+            if not stat.S_ISREG(lock_info.st_mode) or lock_info.st_nlink != 1:
+                raise HostFailure("site-refresh lock is unsafe; refusing to stop CMS")
+            try:
+                lock_pid_text = lock_path.read_text(encoding="ascii").strip()
+            except OSError as error:
+                raise HostFailure("site-refresh lock is unreadable; refusing to stop CMS") from error
+            if not lock_pid_text.isdecimal() or int(lock_pid_text) < 2:
+                raise HostFailure("site-refresh lock PID is unknown; refusing to stop CMS")
+            try:
+                os.kill(int(lock_pid_text), 0)
+            except ProcessLookupError:
+                raise HostFailure("site-refresh lock is stale; inspect it instead of stopping CMS")
+            except PermissionError:
+                pass
+            waiting = True
+        if not waiting:
             return
+        if time.monotonic() >= deadline:
+            raise HostFailure("site-refresh/Restore did not drain within 60 minutes; CMS remains running")
+        time.sleep(1)
+
+
+def _assert_site_refresh_idle(config: dict[str, Any]) -> None:
+    """Read-only preflight: active, malformed, or interrupted operations refuse before fencing."""
+    if config.get("profile") != "production-paired":
+        return
+    path = Path(config["siteRefreshState"])
+    try:
+        info = path.lstat()
+    except FileNotFoundError:
+        record = None
+    else:
         if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
             raise HostFailure("site-refresh state is not a regular unlinked file")
         try:
             record = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, ValueError) as error:
-            raise HostFailure("site-refresh state is unreadable; refusing to stop CMS") from error
+            raise HostFailure("site-refresh state is unreadable; refusing before fencing") from error
         if not isinstance(record, dict) or record.get("status") not in (
-                "idle", "running", "succeeded", "failed", "verification-failed"):
-            raise HostFailure("site-refresh or Restore has unknown state; refusing to stop CMS")
-        if record.get("status") != "running":
-            return
-        pid = record.get("pid")
-        if isinstance(pid, bool) or not isinstance(pid, int) or pid < 2:
-            raise HostFailure("active site-refresh/Restore has no trustworthy PID; refusing to stop CMS")
-        try:
-            os.kill(pid, 0)
-        except ProcessLookupError:
-            raise HostFailure("site-refresh/Restore state is stale; inspect it instead of stopping CMS")
-        except PermissionError:
-            pass
-        if time.monotonic() >= deadline:
-            raise HostFailure("site-refresh/Restore did not finish within 60 minutes; CMS remains running")
-        time.sleep(1)
+                "idle", "succeeded", "failed", "verification-failed"):
+            raise HostFailure("site-refresh is active or unknown; resolve it before starting paired maintenance")
+    lock_path = Path(str(path) + ".lock")
+    if lock_path.exists() or lock_path.is_symlink():
+        raise HostFailure("site-refresh/Restore lock exists; resolve it before starting paired maintenance")
+    if record is not None and record.get("status") == "running":
+        raise HostFailure("site-refresh is active; resolve it before starting paired maintenance")
 
 
 def _old_pair(config: dict[str, Any]) -> dict[str, Any]:
@@ -896,6 +990,59 @@ def _extract_source_archive(config: dict[str, Any], source_sha: str, operation_i
             os.chown(path, user.pw_uid, user.pw_gid, follow_symlinks=False)
         os.replace(temporary, destination)
         fd = os.open(root, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+        try:
+            os.fsync(fd)
+        finally:
+            os.close(fd)
+        return destination
+    except Exception:
+        shutil.rmtree(temporary, ignore_errors=True)
+        raise
+
+
+def _prepare_paired_site_workspace(config: dict[str, Any], source_root: Path,
+                                  source_sha: str, operation_id: str) -> Path:
+    """Copy the admitted build tree beneath the existing CMS-writable workspace root."""
+    workspace_root = Path(config.get("siteBuildWorkspaceRoot", ""))
+    if workspace_root != PRODUCTION_PAIRED_WORKSPACE_ROOT:
+        raise HostFailure("production paired site workspace root is not fixed")
+    source_root = source_root.resolve(strict=True)
+    web_dependencies = source_root / "web/node_modules"
+    cms_dependencies = source_root / "cms/node_modules"
+    if (not web_dependencies.is_dir() or web_dependencies.is_symlink()
+            or not cms_dependencies.is_symlink() or not cms_dependencies.resolve(strict=True).is_dir()):
+        raise HostFailure("paired source dependencies are not prepared for the CMS site-refresh workspace")
+    workspace_root.mkdir(mode=0o750, parents=True, exist_ok=True)
+    root_info = workspace_root.lstat()
+    if not stat.S_ISDIR(root_info.st_mode) or stat.S_ISLNK(root_info.st_mode):
+        raise HostFailure("paired site workspace root is not a real directory")
+    destination = workspace_root / f"{source_sha}-{operation_id}"
+    if destination.exists():
+        if destination.is_symlink():
+            raise HostFailure("paired site workspace destination is a symlink")
+        marker = destination / ".ikpk-workspace-identity.json"
+        try:
+            identity = json.loads(marker.read_text(encoding="utf-8"))
+        except (OSError, ValueError) as error:
+            raise HostFailure("existing paired site workspace has no valid operation identity") from error
+        if identity != {"sourceSha": source_sha, "operationId": operation_id}:
+            raise HostFailure("existing paired site workspace identity differs from this operation")
+        return destination
+    temporary = workspace_root / f".{source_sha}-{operation_id}.new-{os.getpid()}"
+    if os.path.lexists(temporary):
+        raise HostFailure("paired site workspace staging path is occupied")
+    ignored = shutil.ignore_patterns("node_modules", ".staging193-rehearsal")
+    try:
+        shutil.copytree(source_root, temporary, ignore=ignored, symlinks=False)
+        (temporary / "web/node_modules").symlink_to(web_dependencies, target_is_directory=True)
+        (temporary / "cms/node_modules").symlink_to(cms_dependencies.resolve(strict=True), target_is_directory=True)
+        durable_json(temporary / ".ikpk-workspace-identity.json",
+                     {"sourceSha": source_sha, "operationId": operation_id})
+        user = pwd.getpwnam(config["cmsUser"])
+        for path in [temporary, *temporary.rglob("*")]:
+            os.chown(path, user.pw_uid, user.pw_gid, follow_symlinks=False)
+        os.replace(temporary, destination)
+        fd = os.open(workspace_root, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
         try:
             os.fsync(fd)
         finally:
@@ -1171,6 +1318,7 @@ def _prepare_cms_candidate(config: dict[str, Any], source_root: Path, operation_
 
 def _start_acquisition(config: dict[str, Any], state: RehearsalState, operation_id: str,
                        source_sha: str) -> dict[str, Any]:
+    _assert_site_refresh_idle(config)
     prior = next((row for row in state._operation_rows(operation_id) if row.get("record") == "start"), None)
     old_pair = prior.get("oldPair") if prior else _old_pair(config)
     state.begin(operation_id, source_sha, old_pair)
@@ -1345,7 +1493,8 @@ def _install_migrated_database(config: dict[str, Any], source_root: Path, operat
 
 def _activate_cms(config: dict[str, Any], cms_release: Path, candidate_db: Path,
                   capture: Path, source_root: Optional[Path] = None,
-                  source_sha: Optional[str] = None) -> dict[str, Any]:
+                  source_sha: Optional[str] = None,
+                  site_workspace: Optional[Path] = None) -> dict[str, Any]:
     live = Path(config["cmsDatabase"]).resolve(strict=True)
     _assert_no_database_handles(live)
     _copy_atomic(candidate_db, live)
@@ -1353,7 +1502,9 @@ def _activate_cms(config: dict[str, Any], cms_release: Path, candidate_db: Path,
     if config.get("profile") == "production-paired":
         if source_root is None or source_sha is None or not SHA_RE.fullmatch(source_sha):
             raise HostFailure("paired CMS activation lacks its admitted source workspace")
-        workspace = source_root.resolve(strict=True)
+        workspace = site_workspace.resolve(strict=True) if site_workspace else None
+        if workspace is None or not workspace.is_relative_to(PRODUCTION_PAIRED_WORKSPACE_ROOT):
+            raise HostFailure("paired CMS activation lacks its service-writable site workspace")
         if any(not (workspace / part).is_file() for part in ("cms/package.json", "web/package.json")):
             raise HostFailure("paired CMS source workspace is incomplete")
         _write_paired_cms_source_env(config, {
@@ -1731,6 +1882,8 @@ def _cms_update(config: dict[str, Any], state: RehearsalState, args: argparse.Na
         _prepare_cms_candidate(config, source_root, op, provenance)
     else:
         _validate_prepared_cms_candidate(config, source_root, op, provenance)
+    site_workspace = (_prepare_paired_site_workspace(config, source_root, sha, op)
+                      if config.get("profile") == "production-paired" else None)
     phase = _start_acquisition(config, state, op, sha)
     backup_manifest_path = Path(config["backupRoot"]) / op / "manifest.json"
     if not backup_manifest_path.exists():
@@ -1749,7 +1902,7 @@ def _cms_update(config: dict[str, Any], state: RehearsalState, args: argparse.Na
     old_cms_root = Path(start["oldPair"]["cmsPath"])
     candidate_db, cms_release, cms_payload_sha = _install_migrated_database(config, source_root, op, old_cms_root)
     capture = _create_capture_bundle(config, op, sha, source_root, candidate_db)
-    proof = _activate_cms(config, cms_release, candidate_db, capture, source_root, sha)
+    proof = _activate_cms(config, cms_release, candidate_db, capture, source_root, sha, site_workspace)
     _wait_health(config["cmsHealthUrl"], 1200)
     _verify_fence(config)
     state.mark_cms_activated(op)
@@ -2552,13 +2705,14 @@ def _static_publish(config: dict[str, Any], state: RehearsalState, args: argpars
     if source_root.is_symlink() or not source_root.is_dir():
         raise HostFailure("admitted source candidate is missing")
     _verify_fence(config)
-    built = source_root / ("web/dist" if config.get("profile") == "initial-prod" else "web/dist-demo193")
+    built = source_root / ("web/dist" if config.get("profile") in ("initial-prod", "production-paired")
+                          else "web/dist-demo193")
     if not args.browser_digest:
         if phase["phase"] == "cms-activated" or not built.is_dir():
             capture = source_root / ".staging193-rehearsal" / op / "capture"
             if capture.is_symlink() or not capture.is_dir():
                 raise HostFailure("sealed CMS capture is missing before static build")
-            built, built_digest = _build_static(config, source_root, capture)
+            built, built_digest = _build_static(config, source_root, capture, operation_id=op)
         else:
             built_digest = _tree_sha256(built)
         digest = built_digest
