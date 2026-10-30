@@ -12,6 +12,7 @@ import base64
 import io
 import hashlib
 import json
+import fcntl
 import os
 import pwd
 import re
@@ -23,6 +24,7 @@ import sys
 import tarfile
 import tempfile
 import time
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Optional
 from urllib.parse import quote, urlsplit
@@ -36,12 +38,14 @@ except ImportError:  # Installed wrapper places both files in one private module
 CONFIG_PATH = Path("/etc/ikpk/rehearsal.json")
 INITIAL_PROD_CONFIG_PATH = Path("/etc/ikpk/rehearsal-initial-prod.json")
 PRODUCTION_STATIC_CONFIG_PATH = Path("/etc/ikpk/rehearsal-production-static.json")
+PRODUCTION_PAIRED_CONFIG_PATH = Path("/etc/ikpk/rehearsal-production-paired.json")
 TARGET_HOST = "194.226.99.10"
 INITIAL_PROD_HOST = "89.111.184.196"
 INITIAL_PROD_PAYMENT_ENDPOINT = "https://ikpk.su/api"
 INITIAL_PROD_CHAT_LOADER_SRC = "https://cdn-ru.bitrix24.ru/b35315886/crm/site_button/loader_2_siutnh.js"
 STAGING194_CHAT_LOADER_SRC = INITIAL_PROD_CHAT_LOADER_SRC
 INITIAL_PROD_CMS_ENV_FILE = Path("/etc/ikpk-cms/trial.env")
+PRODUCTION_PUBLICATION_LOCK = Path("/var/www/ikpk/.publication.lock")
 INITIAL_PROD_OPERATION_ID = "initial-prod-20261019-A-01"
 REQUIRED_CONFIG = {
     "stateDir", "maintenanceFlag", "releaseRoot", "currentCms", "currentStatic",
@@ -132,15 +136,20 @@ def _root_config(path: Path, expected_profile: str = "staging194") -> dict[str, 
     for key in ("cmsHealthUrl", "siteHealthUrl", "siteBaseUrl", "siteReleaseUrl", "preserveProbeUrl", "paymentStatusProbeUrl"):
         if not isinstance(data[key], str) or not data[key].startswith(("http://", "https://")):
             raise HostFailure(f"{key} must be an absolute HTTP URL")
-    for key in ("stateDir", "releaseRoot", "staticReleaseRoot", "backupRoot", "maintenanceFlag", "currentCms", "currentStatic",
-                "cmsDatabase", "nginxMapFile", "nginxServerGateFile"):
+    profile = data.get("profile", "staging194")
+    path_keys = ["stateDir", "releaseRoot", "staticReleaseRoot", "backupRoot", "maintenanceFlag", "currentCms", "currentStatic",
+                 "cmsDatabase", "nginxMapFile", "nginxServerGateFile"]
+    if profile == "production-paired":
+        path_keys.append("publicationLock")
+    if profile == "production-paired":
+        path_keys.extend(("cmsEnvironmentFile", "siteRefreshState"))
+    for key in path_keys:
         value = Path(data[key])
         if not value.is_absolute() or value == Path("/"):
             raise HostFailure(f"{key} must be an absolute non-root path")
-    profile = data.get("profile", "staging194")
     if profile != expected_profile:
         raise HostFailure("host config does not match the selected fixed profile")
-    if profile in ("initial-prod", "production-static"):
+    if profile in ("initial-prod", "production-static", "production-paired"):
         endpoint = data.get("paymentEndpointProd")
         try:
             parsed_endpoint = urlsplit(endpoint)
@@ -157,8 +166,8 @@ def _root_config(path: Path, expected_profile: str = "staging194") -> dict[str, 
 def _validate_target_binding(data: dict[str, Any]) -> None:
     profile = data.get("profile", "staging194")
     if profile == "staging194":
-        if data["allowedSourceRef"] != "refs/heads/dev" or data["targetHost"] != TARGET_HOST:
-            raise HostFailure("host config is bound to the staging194 dev source policy")
+        if data["allowedSourceRef"] not in ("refs/heads/main", "refs/heads/dev") or data["targetHost"] != TARGET_HOST:
+            raise HostFailure("host config is not bound to the staging194 target/source policy")
         if data["cmsHealthUrl"] != "http://127.0.0.1:1338/_health":
             raise HostFailure("CMS health check must remain bound to the local staging194 service")
         expected_origin = f"https://{TARGET_HOST}"
@@ -187,6 +196,28 @@ def _validate_target_binding(data: dict[str, Any]) -> None:
                 or data.get("cmsUnit") != "ikpk-cms.service"):
             raise HostFailure("production-static config is not bound to current production CMS data")
         expected_origin = "https://ikpk.su"
+    elif profile == "production-paired":
+        if (data.get("allowedSourceRef") != "refs/heads/main" or data.get("targetHost") != INITIAL_PROD_HOST
+                or data.get("siteBaseUrl") != "https://ikpk.su"
+                or data.get("cmsHealthUrl") != "http://127.0.0.1:1337/_health"
+                or data.get("currentCms") != "/opt/ikpk-cms/current"
+                or data.get("cmsDatabase") != "/var/lib/ikpk-cms/trial/data/data.db"
+                or data.get("currentStatic") != "/var/www/ikpk/current"
+                or data.get("staticReleaseRoot") != "/var/www/ikpk/releases"
+                or data.get("stateDir") != "/var/lib/ikpk-rehearsal/production-paired"
+                or data.get("backupRoot") != "/var/lib/ikpk-rehearsal/production-paired/backups"
+                or data.get("releaseRoot") != "/opt/ikpk-cms/releases"
+                or data.get("maintenanceFlag") != "/var/lib/ikpk-rehearsal/production-paired/fenced"
+                or data.get("publicationLock") != str(PRODUCTION_PUBLICATION_LOCK)
+                or data.get("cmsEnvironmentFile") != "/etc/ikpk-cms/trial.env"
+                or data.get("siteRefreshState") != "/var/www/ikpk/shared/site-refresh/state.json"
+                or data.get("cmsUnit") != "ikpk-cms.service"
+                or data.get("mediaRoots") != [
+                    {"path": "/opt/ikpk-cms/shared/uploads", "prefix": "/uploads/"},
+                    {"path": "/var/www/ikpk/current/media", "prefix": "/media/"}]
+                or data.get("paymentEndpointProd") != INITIAL_PROD_PAYMENT_ENDPOINT):
+            raise HostFailure("production-paired config is not bound to current production CMS data and publication lock")
+        expected_origin = "https://ikpk.su"
     else:
         raise HostFailure("unknown rehearsal profile")
     urls = [data[key] for key in ("siteHealthUrl", "siteBaseUrl", "siteReleaseUrl",
@@ -204,6 +235,32 @@ def _validate_target_binding(data: dict[str, Any]) -> None:
             valid = False
         if not valid:
             raise HostFailure("host config probe URLs must use the fixed staging194 HTTPS origin")
+
+
+@contextmanager
+def _destination_publication_lock(config: dict[str, Any]):
+    """Refuse to overlap an active production SSH publication during this operator step."""
+    if config.get("profile") not in ("production-static", "production-paired"):
+        yield
+        return
+    path = Path(config.get("publicationLock", PRODUCTION_PUBLICATION_LOCK))
+    if path != PRODUCTION_PUBLICATION_LOCK:
+        raise HostFailure("production publication lock path is not fixed")
+    try:
+        fd = os.open(path, os.O_RDWR | os.O_CREAT | getattr(os, "O_NOFOLLOW", 0), 0o600)
+    except OSError as error:
+        raise HostFailure("production publication lock is unavailable") from error
+    try:
+        info = os.fstat(fd)
+        if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1 or info.st_uid != 0:
+            raise HostFailure("production publication lock must be a root-owned regular file")
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError as error:
+            raise HostFailure("another production publisher holds the destination lock") from error
+        yield
+    finally:
+        os.close(fd)
 
 
 def _save_bytes(path: Path, payload: bytes, mode: int = 0o600) -> None:
@@ -550,6 +607,114 @@ def _tree_sha256(root: Path) -> str:
     return digest.hexdigest()
 
 
+PAIRED_CMS_ENV_KEYS = ("IKPK_BUILD_WORKSPACE", "IKPK_INSTALLED_COMMIT")
+
+
+def _paired_cms_source_env(config: dict[str, Any]) -> dict[str, Optional[str]]:
+    path = Path(config["cmsEnvironmentFile"])
+    info = path.lstat()
+    if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
+        raise HostFailure("paired CMS environment file is not a regular unlinked file")
+    text = path.read_text(encoding="utf-8")
+    values: dict[str, Optional[str]] = {key: None for key in PAIRED_CMS_ENV_KEYS}
+    for key in PAIRED_CMS_ENV_KEYS:
+        matches = re.findall(rf"^(?:export\s+)?{re.escape(key)}=(.*)$", text, re.MULTILINE)
+        if len(matches) > 1:
+            raise HostFailure(f"paired CMS environment repeats {key}")
+        if matches:
+            values[key] = matches[0].strip().strip('"').strip("'")
+    return values
+
+
+def _write_paired_cms_source_env(config: dict[str, Any], values: dict[str, Optional[str]]) -> None:
+    if set(values) != set(PAIRED_CMS_ENV_KEYS):
+        raise HostFailure("paired CMS environment update may change only the two source-version keys")
+    path = Path(config["cmsEnvironmentFile"])
+    info = path.lstat()
+    if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
+        raise HostFailure("paired CMS environment file is not a regular unlinked file")
+    text = path.read_text(encoding="utf-8")
+    for key, value in values.items():
+        if value is not None and ("\n" in value or "\r" in value or not value):
+            raise HostFailure(f"invalid paired CMS environment value for {key}")
+    output = []
+    seen = set()
+    for line in text.splitlines(keepends=True):
+        matched = next((key for key in PAIRED_CMS_ENV_KEYS
+                        if re.match(rf"^(?:export\s+)?{re.escape(key)}=", line)), None)
+        if matched is None:
+            output.append(line)
+            continue
+        if matched in seen:
+            raise HostFailure(f"paired CMS environment repeats {matched}")
+        seen.add(matched)
+        if values[matched] is not None:
+            ending = "\n" if line.endswith("\n") else ""
+            output.append(f"{matched}={values[matched]}{ending}")
+    for key, value in values.items():
+        if value is not None and key not in seen:
+            if output and not output[-1].endswith("\n"):
+                output[-1] += "\n"
+            output.append(f"{key}={value}\n")
+    fd, temporary = tempfile.mkstemp(prefix=f".{path.name}.", dir=str(path.parent))
+    try:
+        os.fchmod(fd, stat.S_IMODE(info.st_mode))
+        os.fchown(fd, info.st_uid, info.st_gid)
+        with os.fdopen(fd, "w", encoding="utf-8", newline="") as target:
+            target.write("".join(output))
+            target.flush()
+            os.fsync(target.fileno())
+        os.replace(temporary, path)
+        directory_fd = os.open(path.parent, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+        try:
+            os.fsync(directory_fd)
+        finally:
+            os.close(directory_fd)
+    finally:
+        try:
+            os.unlink(temporary)
+        except FileNotFoundError:
+            pass
+
+
+def _verify_site_refresh_idle(config: dict[str, Any]) -> None:
+    if config.get("profile") != "production-paired":
+        return
+    path = Path(config["siteRefreshState"])
+    # The maintenance gate is already closed. Let a request accepted just before it
+    # finish persisting its state, then drain an existing refresh/Restore normally.
+    time.sleep(2)
+    deadline = time.monotonic() + 3600
+    while True:
+        try:
+            info = path.lstat()
+        except FileNotFoundError:
+            return
+        if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
+            raise HostFailure("site-refresh state is not a regular unlinked file")
+        try:
+            record = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError) as error:
+            raise HostFailure("site-refresh state is unreadable; refusing to stop CMS") from error
+        if not isinstance(record, dict) or record.get("status") not in (
+                "idle", "running", "succeeded", "failed", "verification-failed"):
+            raise HostFailure("site-refresh or Restore has unknown state; refusing to stop CMS")
+        if record.get("status") != "running":
+            return
+        pid = record.get("pid")
+        if isinstance(pid, bool) or not isinstance(pid, int) or pid < 2:
+            raise HostFailure("active site-refresh/Restore has no trustworthy PID; refusing to stop CMS")
+        try:
+            os.kill(pid, 0)
+        except ProcessLookupError:
+            raise HostFailure("site-refresh/Restore state is stale; inspect it instead of stopping CMS")
+        except PermissionError:
+            pass
+        if time.monotonic() >= deadline:
+            raise HostFailure("site-refresh/Restore did not finish within 60 minutes; CMS remains running")
+        time.sleep(1)
+
+
 def _old_pair(config: dict[str, Any]) -> dict[str, Any]:
     cms = _current_target(Path(config["currentCms"]))
     static = _current_target(Path(config["currentStatic"]))
@@ -559,11 +724,51 @@ def _old_pair(config: dict[str, Any]) -> dict[str, Any]:
     db_proof = (_initial_prod_baseline_db_reference(config, database)
                 if config.get("profile") == "initial-prod"
                 else _database_process_proof(_service_pid(config["cmsUnit"]), database))
-    return {"cmsPath": str(cms), "staticPath": str(static), "databasePath": str(database),
+    result = {"cmsPath": str(cms), "staticPath": str(static), "databasePath": str(database),
             "cmsPayloadSha256": _cms_payload_sha256(cms, media_uploads),
             "databaseSha256": sha256_file(database), "staticTreeSha256": _tree_sha256(static),
             "configSha256": _config_sha256(config),
             "cmsDatabaseProof": db_proof}
+    if config.get("profile") == "production-paired":
+        result["cmsSourceEnvironment"] = _paired_cms_source_env(config)
+    return result
+
+
+def _effective_old_pair(state: RehearsalState, operation_id: str) -> dict[str, Any]:
+    rows = state._operation_rows(operation_id)
+    baseline = next((row["oldPair"] for row in reversed(rows)
+                     if row.get("record") == "fenced-baseline" and isinstance(row.get("oldPair"), dict)), None)
+    start = next((row for row in rows if row.get("record") == "start"), None)
+    if baseline:
+        return baseline
+    if start and isinstance(start.get("oldPair"), dict):
+        return start["oldPair"]
+    raise HostFailure("operation has no journaled old CMS/site pair")
+
+
+def _record_fenced_baseline(config: dict[str, Any], state: RehearsalState,
+                            operation_id: str, source_sha: str, observed: dict[str, Any]) -> None:
+    if config.get("profile") != "production-paired":
+        return
+    rows = state._operation_rows(operation_id)
+    if any(row.get("record") == "fenced-baseline" for row in rows):
+        return
+    backup = Path(config["backupRoot"]) / operation_id / "manifest.json"
+    if backup.exists():
+        return
+    cms = _current_target(Path(config["currentCms"]))
+    static = _current_target(Path(config["currentStatic"]))
+    if str(cms) != observed.get("cmsPath"):
+        raise HostFailure("CMS code changed before backup; refusing to replace the journaled old pair")
+    database = Path(config["cmsDatabase"]).resolve(strict=True)
+    uploads = next(Path(item["path"]).resolve(strict=True) for item in config["mediaRoots"]
+                   if item["prefix"] == "/uploads/")
+    baseline = dict(observed)
+    baseline.update({"cmsPath": str(cms), "staticPath": str(static), "databasePath": str(database),
+                     "cmsPayloadSha256": _cms_payload_sha256(cms, uploads),
+                     "databaseSha256": sha256_file(database), "staticTreeSha256": _tree_sha256(static)})
+    state._append({"version": 1, "record": "fenced-baseline", "operationId": operation_id,
+                   "sourceSha": source_sha, "oldPair": baseline})
 
 
 def _switch_pointer(pointer: Path, target: Path, allowed_root: Path) -> None:
@@ -849,6 +1054,25 @@ def _validate_prepared_web_dependencies(source_root: Path) -> Path:
     return resolved
 
 
+def _has_main_release_admission(provenance: dict[str, Any], source_sha: str) -> bool:
+    release = provenance.get("release")
+    preflight = provenance.get("releasePreflight")
+    return bool(
+        provenance.get("ref") == "refs/heads/main" and provenance.get("sourceSha") == source_sha
+        and provenance.get("event") == "push" and provenance.get("headBranch") == "main"
+        and provenance.get("workflow") == "Tests" and provenance.get("workflowName") == "Tests"
+        and provenance.get("repository") == "pgorbachev/ikpk"
+        and type(provenance.get("runId")) is int and provenance["runId"] > 0
+        and type(provenance.get("attempt")) is int and provenance["attempt"] > 0
+        and isinstance(release, dict) and isinstance(release.get("tag"), str)
+        and re.fullmatch(r"v[0-9][A-Za-z0-9._-]{0,127}", release["tag"])
+        and isinstance(release.get("publishedAt"), str) and bool(release["publishedAt"])
+        and isinstance(preflight, dict)
+        and preflight.get("status", preflight.get("result")) in ("admitted", "passed")
+        and preflight.get("commit") == source_sha
+    )
+
+
 def _validate_prepared_cms_candidate(config: dict[str, Any], source_root: Path, operation_id: str,
                                      provenance: Optional[dict[str, Any]] = None) -> tuple[Path, Path, Path]:
     marker = source_root / ".ikpk-rehearsal-ci.json"
@@ -856,7 +1080,9 @@ def _validate_prepared_cms_candidate(config: dict[str, Any], source_root: Path, 
         admitted = json.loads(marker.read_text(encoding="utf-8"))
     except (OSError, ValueError) as error:
         raise HostFailure("prepared source candidate lacks admitted CI provenance") from error
-    if (admitted.get("sourceSha") is None or admitted.get("ref") != config["allowedSourceRef"]
+    admitted_ref = ("refs/heads/main" if _has_main_release_admission(
+        admitted, str(admitted.get("sourceSha"))) else config["allowedSourceRef"])
+    if (admitted.get("sourceSha") is None or admitted.get("ref") != admitted_ref
             or (provenance is not None and admitted != provenance)):
         raise HostFailure("prepared candidate provenance differs from the admitted source")
     if (not re.fullmatch(r"[a-f0-9]{40}", str(admitted.get("sourceSha")))
@@ -950,11 +1176,13 @@ def _start_acquisition(config: dict[str, Any], state: RehearsalState, operation_
     state.begin(operation_id, source_sha, old_pair)
     _set_flag(config, True)
     _write_gate(config, True)
+    _verify_site_refresh_idle(config)
     _stop_writers(config)
     _verify_fence(config)
     state.confirm_fence(operation_id, lambda: all(
         run(["/usr/bin/systemctl", "is-active", unit], check=False).returncode != 0
         for unit in config["writerUnits"]))
+    _record_fenced_baseline(config, state, operation_id, source_sha, old_pair)
     return state.phase(operation_id)
 
 
@@ -993,9 +1221,10 @@ def _create_capture_bundle(config: dict[str, Any], operation_id: str, source_sha
     for path in [capture, *capture.rglob("*")]:
         os.chown(path, user.pw_uid, user.pw_gid, follow_symlinks=False)
     node = config.get("nodeBinary", "/usr/bin/node")
+    capture_profile = "production-static" if config.get("profile") == "production-paired" else config.get("profile", "staging194")
     seal_args = [node, str(source_root / "scripts/lib/seal-staging193-capture.mjs"),
-        str(capture), operation_id, source_sha, str(source_root / "cms/src"), config.get("profile", "staging194")]
-    if config.get("profile") in ("initial-prod", "production-static"):
+        str(capture), operation_id, source_sha, str(source_root / "cms/src"), capture_profile]
+    if config.get("profile") in ("initial-prod", "production-static", "production-paired"):
         provenance = json.loads((source_root / ".ikpk-rehearsal-ci.json").read_text(encoding="utf-8"))
         seal_args.append(str(provenance["runId"]))
         seal_args.append(str(provenance["attempt"]))
@@ -1115,11 +1344,20 @@ def _install_migrated_database(config: dict[str, Any], source_root: Path, operat
 
 
 def _activate_cms(config: dict[str, Any], cms_release: Path, candidate_db: Path,
-                  capture: Path) -> dict[str, Any]:
+                  capture: Path, source_root: Optional[Path] = None,
+                  source_sha: Optional[str] = None) -> dict[str, Any]:
     live = Path(config["cmsDatabase"]).resolve(strict=True)
     _assert_no_database_handles(live)
     _copy_atomic(candidate_db, live)
     _switch_pointer(Path(config["currentCms"]), cms_release, Path(config["releaseRoot"]))
+    if config.get("profile") == "production-paired":
+        if source_root is None or source_sha is None or not SHA_RE.fullmatch(source_sha):
+            raise HostFailure("paired CMS activation lacks its admitted source workspace")
+        workspace = source_root.resolve(strict=True)
+        if any(not (workspace / part).is_file() for part in ("cms/package.json", "web/package.json")):
+            raise HostFailure("paired CMS source workspace is incomplete")
+        _write_paired_cms_source_env(config, {
+            "IKPK_BUILD_WORKSPACE": str(workspace), "IKPK_INSTALLED_COMMIT": source_sha})
     run(["/usr/bin/systemctl", "start", config["cmsUnit"]], timeout=120)
     _wait_health(config["cmsHealthUrl"])
     proof = _database_process_proof(_service_pid(config["cmsUnit"]), live)
@@ -1164,7 +1402,7 @@ def _build_static(config: dict[str, Any], source_root: Path, capture: Path,
     web = source_root / "web"
     _validate_prepared_web_dependencies(source_root)
     initial_prod = config.get("profile") == "initial-prod"
-    production_static = config.get("profile") == "production-static"
+    production_static = config.get("profile") in ("production-static", "production-paired")
     capture_environment = {"CONTENT_SNAPSHOT_DIR": str(web / ".snapshot")}
     if initial_prod:
         capture_environment.update({"INITIAL_PROD_PROFILE": "1", "DEPLOY_MODE": "prod", "PAYMENT_ROLE": "prod",
@@ -1452,6 +1690,9 @@ def _cms_update(config: dict[str, Any], state: RehearsalState, args: argparse.Na
                 or not isinstance(provenance.get("runId"), int) or provenance["runId"] <= 0
                 or not isinstance(provenance.get("attempt"), int) or provenance["attempt"] <= 0):
             raise HostFailure("initial-prod source admission must bind exact canonical main push run")
+    main_release_admission = _has_main_release_admission(provenance, sha)
+    if config.get("profile", "staging194") in ("staging194", "production-paired") and not main_release_admission:
+        raise HostFailure("paired source archive lacks stable Release and exact-main admission evidence")
     try:
         phase = state.phase(op)
     except RehearsalRefusal:
@@ -1480,7 +1721,12 @@ def _cms_update(config: dict[str, Any], state: RehearsalState, args: argparse.Na
         archive_bytes = sys.stdin.buffer.read()
         if not archive_bytes:
             raise HostFailure("admitted source archive is required before acquisition")
-        source_root = _extract_source_archive(config, sha, op, archive_bytes, args.archive_sha256, provenance)
+        if main_release_admission:
+            source_root = _extract_source_archive(config, sha, op, archive_bytes, args.archive_sha256,
+                                                 provenance, expected_ref="refs/heads/main")
+        else:
+            source_root = _extract_source_archive(config, sha, op, archive_bytes,
+                                                 args.archive_sha256, provenance)
         del archive_bytes
         _prepare_cms_candidate(config, source_root, op, provenance)
     else:
@@ -1503,7 +1749,7 @@ def _cms_update(config: dict[str, Any], state: RehearsalState, args: argparse.Na
     old_cms_root = Path(start["oldPair"]["cmsPath"])
     candidate_db, cms_release, cms_payload_sha = _install_migrated_database(config, source_root, op, old_cms_root)
     capture = _create_capture_bundle(config, op, sha, source_root, candidate_db)
-    proof = _activate_cms(config, cms_release, candidate_db, capture)
+    proof = _activate_cms(config, cms_release, candidate_db, capture, source_root, sha)
     _wait_health(config["cmsHealthUrl"], 1200)
     _verify_fence(config)
     state.mark_cms_activated(op)
@@ -2459,11 +2705,16 @@ def _recover(config: dict[str, Any], state: RehearsalState, operation_id: str) -
     start = next((row for row in state._operation_rows(operation_id) if row.get("record") == "start"), None)
     if not start:
         raise HostFailure("operation has no journaled old pair")
-    old_pair = start["oldPair"]
+    old_pair = _effective_old_pair(state, operation_id)
     live = Path(config["cmsDatabase"]).resolve(strict=True)
     already_recovered = state._is_recovered(operation_id)
 
     def reopen_old_pair() -> bool:
+        if config.get("profile") == "production-paired":
+            previous_environment = old_pair.get("cmsSourceEnvironment")
+            if not isinstance(previous_environment, dict) or set(previous_environment) != set(PAIRED_CMS_ENV_KEYS):
+                raise HostFailure("operation journal lacks the prior CMS source environment")
+            _write_paired_cms_source_env(config, previous_environment)
         run(["/usr/bin/systemctl", "start", config["cmsUnit"]], timeout=120)
         _wait_health(config["cmsHealthUrl"], 1200)
         _database_process_proof(_service_pid(config["cmsUnit"]), live)
@@ -2545,17 +2796,21 @@ def dispatch(args: argparse.Namespace) -> dict[str, Any]:
     RehearsalState._validate_identity(args.operation_id, getattr(args, "source_sha", None))
     profile = getattr(args, "profile", "staging194")
     config_path = (INITIAL_PROD_CONFIG_PATH if profile == "initial-prod" else
-                   PRODUCTION_STATIC_CONFIG_PATH if profile == "production-static" else CONFIG_PATH)
+                   PRODUCTION_STATIC_CONFIG_PATH if profile == "production-static" else
+                   PRODUCTION_PAIRED_CONFIG_PATH if profile == "production-paired" else CONFIG_PATH)
     config = _root_config(config_path, expected_profile=profile)
     if profile == "production-static" and args.action not in (
             "static-main", "static-main-recover", "export-static-main", "status"):
         raise HostFailure("production-static permits only static-main publication and recovery")
+    if profile == "production-paired" and args.action not in (
+            "cms-update", "static-publish", "export-backup", "export-static", "recover", "status"):
+        raise HostFailure("production-paired permits only paired CMS update, static publish, and recovery")
     if profile == "initial-prod" and args.action == "recover":
         raise HostFailure("initial-prod recovery is disabled; keep the production fence closed for owner direction")
     if profile == "initial-prod" and args.action not in ("validate-config",) and args.operation_id != INITIAL_PROD_OPERATION_ID:
         raise HostFailure("initial-prod accepts only its fixed single-use operation ID")
     state = RehearsalState(Path(config["stateDir"]))
-    with state.lock():
+    with _destination_publication_lock(config), state.lock():
         rows = state._operation_rows(args.operation_id)
         static_main_owned = any(row.get("operationKind") == "static-main" for row in rows)
         if static_main_owned and args.action in ("cms-update", "static-publish", "recover"):
@@ -2617,7 +2872,7 @@ def dispatch(args: argparse.Namespace) -> dict[str, Any]:
 
 def main(argv: Optional[list[str]] = None) -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--profile", choices=("staging194", "initial-prod", "production-static"), default="staging194")
+    parser.add_argument("--profile", choices=("staging194", "initial-prod", "production-static", "production-paired"), default="staging194")
     sub = parser.add_subparsers(dest="action", required=True)
     sub.add_parser("validate-config")
     for name in ("cms-update", "static-publish", "static-main"):
@@ -2652,7 +2907,8 @@ def main(argv: Optional[list[str]] = None) -> int:
             if os.geteuid() != 0:
                 raise HostFailure("host config validation must run through the installed root-owned entrypoint")
             config_path = (INITIAL_PROD_CONFIG_PATH if args.profile == "initial-prod" else
-                           PRODUCTION_STATIC_CONFIG_PATH if args.profile == "production-static" else CONFIG_PATH)
+                           PRODUCTION_STATIC_CONFIG_PATH if args.profile == "production-static" else
+                           PRODUCTION_PAIRED_CONFIG_PATH if args.profile == "production-paired" else CONFIG_PATH)
             config = _root_config(config_path, expected_profile=args.profile)
             for key in ("stateDir", "releaseRoot", "staticReleaseRoot", "backupRoot"):
                 path = Path(config[key])
@@ -2669,7 +2925,7 @@ def main(argv: Optional[list[str]] = None) -> int:
                     raise HostFailure("configured external media directory is unavailable")
             _current_target(Path(config["currentCms"]))
             _current_target(Path(config["currentStatic"]))
-            if args.profile in ("staging194", "production-static"):
+            if args.profile in ("staging194", "production-static", "production-paired"):
                 _database_process_proof(_service_pid(config["cmsUnit"]), database)
             print(json.dumps({"configuration": str(config_path), "profile": args.profile, "valid": True}, sort_keys=True))
             return 0

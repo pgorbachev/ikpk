@@ -46,7 +46,7 @@
   ],
   "preserveProbeUrl": "https://194.226.99.10/",
   "paymentStatusProbeUrl": "https://194.226.99.10/api/payments/rehearsal/status",
-  "allowedSourceRef": "refs/heads/dev",
+  "allowedSourceRef": "refs/heads/main",
   "staticMainReleasePolicy": "ci-only-approved",
   "targetHost": "194.226.99.10",
   "nodeBinary": "/usr/bin/node"

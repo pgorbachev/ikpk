@@ -70,16 +70,19 @@ def capture_bytes(argv: list[str]) -> bytes:
 
 
 def validate_sha_and_ci(sha: str, profile: str = "staging194") -> dict:
-    if profile not in ("staging194", "staging194-main", "initial-prod"):
+    if profile not in ("staging194", "staging194-dev", "staging194-main", "initial-prod"):
         raise Refusal("unknown fixed rehearsal profile")
     if not SHA.fullmatch(sha):
         raise Refusal("source SHA must be a full lowercase commit ID")
     capture(["git", "cat-file", "-e", f"{sha}^{{commit}}"])
+    if profile == "staging194":
+        main_provenance = validate_sha_and_ci(sha, "staging194-main")
+        return validate_stable_release(main_provenance, sha)
     repo = capture(["gh", "repo", "view", CANONICAL_REPOSITORY,
                     "--json", "nameWithOwner", "--jq", ".nameWithOwner"])
     if repo != CANONICAL_REPOSITORY:
         raise Refusal("GitHub CLI resolved a repository other than the pinned IKPK repository")
-    branch = "main" if profile in ("staging194-main", "initial-prod") else "dev"
+    branch = "main" if profile in ("staging194", "staging194-main", "initial-prod") else "dev"
     canonical_ref = f"refs/heads/{branch}"
     canonical_head = capture(["gh", "api", f"repos/{repo}/git/ref/heads/{branch}", "--jq", ".object.sha"])
     if canonical_head != sha:
@@ -174,6 +177,48 @@ def validate_static_main_ci(sha: str) -> dict:
     return provenance
 
 
+def validate_stable_release(provenance: dict, sha: str) -> dict:
+    """Bind an exact-main CI proof to its stable Release tag and release preflight."""
+    raw = capture(["gh", "release", "view", "--repo", CANONICAL_REPOSITORY,
+                   "--json", "tagName,isDraft,isPrerelease,publishedAt"])
+    try:
+        release = json.loads(raw)
+    except ValueError as error:
+        raise Refusal("gh returned malformed stable Release metadata") from error
+    tag = release.get("tagName", release.get("tag_name"))
+    draft = release.get("isDraft", release.get("is_draft"))
+    prerelease = release.get("isPrerelease", release.get("is_prerelease"))
+    published_at = release.get("publishedAt", release.get("published_at"))
+    if (not isinstance(tag, str) or not re.fullmatch(r"v[0-9][A-Za-z0-9._-]{0,127}", tag)
+            or draft is not False or prerelease is not False
+            or not isinstance(published_at, str) or not published_at):
+        raise Refusal("production paired admission requires a published stable GitHub Release")
+    tag_object = capture(["gh", "api", f"repos/{CANONICAL_REPOSITORY}/git/ref/tags/{tag}",
+                          "--jq", ".object.sha"])
+    if tag_object != sha:
+        peeled = capture(["gh", "api", f"repos/{CANONICAL_REPOSITORY}/git/tags/{tag_object}",
+                          "--jq", ".object.sha"])
+        if peeled != sha:
+            raise Refusal("stable Release tag does not resolve to the exact current main SHA")
+    preflight = capture(["node", "web/scripts/release-preflight.ts", "--release-tag", tag,
+                         "--commit", sha])
+    try:
+        preflight_result = json.loads(preflight)
+    except ValueError as error:
+        raise Refusal("release-preflight returned malformed admission evidence") from error
+    if (preflight_result.get("status", preflight_result.get("result")) not in ("admitted", "passed")
+            or preflight_result.get("commit") != sha):
+        raise Refusal("release-preflight did not admit the exact current main SHA")
+    provenance["release"] = {"tag": tag, "publishedAt": published_at}
+    provenance["releasePreflight"] = preflight_result
+    return provenance
+
+
+def validate_production_paired_admission(sha: str) -> dict:
+    """Require the current main release admission before every new paired phase."""
+    return validate_stable_release(validate_static_main_ci(sha), sha)
+
+
 def make_archive(sha: str, provenance: dict) -> tuple[bytes, str]:
     source = capture_bytes(["git", "archive", "--format=tar", sha])
     tar_buffer = io.BytesIO(source)
@@ -203,7 +248,7 @@ def make_archive(sha: str, provenance: dict) -> tuple[bytes, str]:
 
 
 def ssh_remote(arguments: list[str], *, profile: str = "staging194", input_bytes: Optional[bytes] = None, binary: bool = False) -> bytes:
-    if profile in ("initial-prod", "production-static"):
+    if profile in ("initial-prod", "production-static", "production-paired"):
         host, user, identity, known_hosts = INITIAL_PROD_HOST, INITIAL_PROD_USER, INITIAL_PROD_IDENTITY, INITIAL_PROD_KNOWN_HOSTS
         arguments = ["--profile", profile, *arguments]
     else:
@@ -234,8 +279,15 @@ def parse_host_json(payload: bytes) -> dict:
 
 
 def backup_root(requested: Optional[str], profile: str = "staging194") -> Path:
-    default = (Path.home() / ".local/share/ikpk-initial-prod/backups" if profile == "initial-prod"
-               else Path.home() / ".local/share/ikpk-rehearsal/staging194/backups")
+    defaults = {
+        "initial-prod": Path.home() / ".local/share/ikpk-initial-prod/backups",
+        "production-static": Path.home() / ".local/share/ikpk-production-static/backups",
+        "production-paired": Path.home() / ".local/share/ikpk-production-paired/backups",
+        "staging194": Path.home() / ".local/share/ikpk-rehearsal/staging194/backups",
+    }
+    default = defaults.get(profile)
+    if default is None:
+        raise Refusal("unknown fixed rehearsal profile")
     root = Path(requested).expanduser() if requested else default
     if not root.is_absolute() or root == Path("/"):
         raise Refusal("off-host backup directory must be an absolute non-root path")
@@ -411,7 +463,7 @@ def browser_check(source_sha: str, operation_id: str, static_digest: str, archiv
         reused_capture = release.get("reusedCapture")
         same_capture_operation = (capture.get("operationId") == operation_id
                                   and capture.get("sourceSha") == source_sha)
-        if profile in ("initial-prod", "production-static"):
+        if profile in ("initial-prod", "production-static", "production-paired"):
             capture_reference_matches = same_capture_operation and "reusedCapture" not in release
         elif same_capture_operation:
             capture_reference_matches = "reusedCapture" not in release
@@ -421,7 +473,7 @@ def browser_check(source_sha: str, operation_id: str, static_digest: str, archiv
                 and reused_capture.get("operationId") == capture.get("operationId")
                 and reused_capture.get("sourceSha") == capture.get("sourceSha")
                 and reused_capture.get("bundleDigest") == bundle_digest)
-        if profile in ("initial-prod", "production-static"):
+        if profile in ("initial-prod", "production-static", "production-paired"):
             proof_matches = (isinstance(proof, dict)
                 and snapshot.get("sourcePolicy") == ("initial-production" if profile == "initial-prod" else "production-static")
                 and snapshot.get("sourceAge") == "source-bound"
@@ -430,7 +482,8 @@ def browser_check(source_sha: str, operation_id: str, static_digest: str, archiv
                 and proof.get("sourceSha") == source_sha and isinstance(proof.get("runId"), int)
                 and isinstance(proof.get("attempt"), int)
                 and proof.get("captureId") == (INITIAL_PROD_OPERATION_ID if profile == "initial-prod" else operation_id)
-                and capture.get("profile") == profile and capture.get("host") == INITIAL_PROD_HOST
+                and capture.get("profile") == ("production-static" if profile == "production-paired" else profile)
+                and capture.get("host") == INITIAL_PROD_HOST
                 and capture.get("siteUrl") == "https://ikpk.su" and capture.get("sourceSha") == source_sha
                 and capture.get("runId") == proof.get("runId") and capture.get("attempt") == proof.get("attempt"))
             if admitted_run is not None:
@@ -465,10 +518,10 @@ def browser_check(source_sha: str, operation_id: str, static_digest: str, archiv
             if profile == "initial-prod":
                 production_environment.update({"INITIAL_PROD_PROFILE": "1",
                                                "PUBLICATION_INITIAL_PRODUCTION_CAPTURE": "1"})
-            elif profile == "production-static":
+            elif profile in ("production-static", "production-paired"):
                 production_environment.update({"PUBLICATION_PRODUCTION_STATIC_CAPTURE": "1"})
             environment = {**os.environ, **(production_environment
-                                              if profile in ("initial-prod", "production-static") else {"PUBLICATION_STAGING_CAPTURE": "1",
+                                              if profile in ("initial-prod", "production-static", "production-paired") else {"PUBLICATION_STAGING_CAPTURE": "1",
                                                "DEPLOY_MODE": "stand", "PAYMENT_ROLE": "ci", "DEMO_FORMS": "stub",
                                                "CHAT_LOADER_SRC": chat_loader_src or "none",
                                                "CHAT_OFFLINE_MESSAGE": "absent"}),
@@ -477,7 +530,7 @@ def browser_check(source_sha: str, operation_id: str, static_digest: str, archiv
                            "PUBLICATION_COMMIT": source_sha, "PUBLICATION_SNAPSHOT_ID": release["snapshotId"],
                            "PUBLICATION_STATIC_TREE_SHA256": static_digest,
                            "CI": "1"}
-            if profile in ("initial-prod", "production-static"):
+            if profile in ("initial-prod", "production-static", "production-paired"):
                 environment.pop("CHAT_OFFLINE_MESSAGE", None)
                 if (not admitted_run or type(admitted_run.get("runId")) is not int or admitted_run["runId"] <= 0
                         or type(admitted_run.get("attempt")) is not int or admitted_run["attempt"] <= 0):
@@ -502,9 +555,11 @@ def browser_check(source_sha: str, operation_id: str, static_digest: str, archiv
 
 def invoke(args: argparse.Namespace) -> None:
     profile = getattr(args, "profile", "staging194")
-    target_host = INITIAL_PROD_HOST if profile in ("initial-prod", "production-static") else TARGET_HOST
+    target_host = INITIAL_PROD_HOST if profile in ("initial-prod", "production-static", "production-paired") else TARGET_HOST
     if profile == "production-static" and args.command not in ("static-main", "static-main-recover"):
         raise Refusal("production-static permits only static-main publication and recovery")
+    if profile == "production-paired" and args.command not in ("cms-update", "static-publish", "recover"):
+        raise Refusal("production-paired permits only paired CMS update, static publish, and recovery")
     if args.command in ("static-main", "static-main-recover") and profile not in ("staging194", "production-static"):
         raise Refusal("static-main commands are bound to the staging194 profile or authorized production-static profile")
     if args.host is not None and args.host != target_host:
@@ -514,7 +569,8 @@ def invoke(args: argparse.Namespace) -> None:
     if not OP.fullmatch(args.operation_id):
         raise Refusal("operation ID has invalid characters")
     if args.command == "cms-update":
-        provenance = validate_sha_and_ci(args.source_sha, profile)
+        provenance = (validate_production_paired_admission(args.source_sha) if profile == "production-paired"
+                      else validate_sha_and_ci(args.source_sha, profile))
         archive, digest = make_archive(args.source_sha, provenance)
         provenance_b64 = base64.b64encode(json.dumps(provenance, sort_keys=True, separators=(",", ":")).encode()).decode("ascii")
         common = ["cms-update", "--operation-id", args.operation_id, "--source-sha", args.source_sha,
@@ -529,13 +585,18 @@ def invoke(args: argparse.Namespace) -> None:
             digest = hashlib.sha256(backup_path.read_bytes()).hexdigest()
             if first.get("phase") == "cms-activated":
                 return
+            if profile == "production-paired":
+                current_admission = validate_production_paired_admission(args.source_sha)
+                if current_admission != provenance:
+                    raise Refusal("production Release/main/CI admission changed before CMS activation; operation remains fenced for same-ID recovery")
             completed = parse_host_json(ssh_remote(common + ["--offhost-sha256", digest], profile=profile))
             if completed.get("phase") != "cms-activated":
                 raise Refusal(f"CMS command ended in an unexpected state: {completed.get('phase')}")
         elif first.get("phase") != "cms-activated":
             raise Refusal("host did not request backup export or confirm CMS activation")
     elif args.command == "static-publish":
-        admitted_run = validate_sha_and_ci(args.source_sha, profile)
+        admitted_run = (validate_production_paired_admission(args.source_sha) if profile == "production-paired"
+                        else validate_sha_and_ci(args.source_sha, profile))
         common = ["static-publish", "--operation-id", args.operation_id, "--source-sha", args.source_sha]
         prepared = parse_host_json(ssh_remote(common, profile=profile))
         if prepared.get("phase") == "committed":
@@ -548,7 +609,8 @@ def invoke(args: argparse.Namespace) -> None:
         candidate_bytes = ssh_remote(["export-static", "--operation-id", args.operation_id,
                                       "--source-sha", args.source_sha], profile=profile)
         browser_check(args.source_sha, args.operation_id, digest, candidate_bytes, profile, admitted_run)
-        current_run = validate_sha_and_ci(args.source_sha, profile)
+        current_run = (validate_production_paired_admission(args.source_sha) if profile == "production-paired"
+                       else validate_sha_and_ci(args.source_sha, profile))
         if (current_run.get("runId"), current_run.get("attempt")) != (admitted_run.get("runId"), admitted_run.get("attempt")):
             raise Refusal("canonical exact-SHA run/attempt changed during the acceptance window")
         committed = parse_host_json(ssh_remote(common + ["--browser-digest", digest], profile=profile))
@@ -574,9 +636,9 @@ def invoke(args: argparse.Namespace) -> None:
             raise Refusal("host returned an invalid static-main candidate digest")
         candidate = ssh_remote(["export-static-main", "--operation-id", args.operation_id,
                                 "--source-sha", args.source_sha], **remote_options)
-        browser_profile = "production-static" if profile == "production-static" else "staging194"
+        browser_profile = "production-static" if profile in ("production-static", "production-paired") else "staging194"
         browser_check(args.source_sha, args.operation_id, digest, candidate, browser_profile, admitted_run,
-                      chat_loader_src=INITIAL_PROD_CHAT_LOADER_SRC if profile == "production-static" else STAGING194_CHAT_LOADER_SRC)
+                      chat_loader_src=INITIAL_PROD_CHAT_LOADER_SRC if profile in ("production-static", "production-paired") else STAGING194_CHAT_LOADER_SRC)
         current_run = validate_static_main_ci(args.source_sha)
         if current_run != admitted_run:
             raise Refusal("canonical main source, Tests run, or Release proof changed during acceptance")
@@ -623,7 +685,7 @@ def invoke(args: argparse.Namespace) -> None:
 
 def main(argv: Optional[list[str]] = None) -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--profile", choices=("staging194", "initial-prod", "production-static"), default="staging194")
+    parser.add_argument("--profile", choices=("staging194", "initial-prod", "production-static", "production-paired"), default="staging194")
     sub = parser.add_subparsers(dest="command", required=True)
     for action in ("cms-update", "static-publish", "static-main", "static-main-recover", "recover"):
         command = sub.add_parser(action)

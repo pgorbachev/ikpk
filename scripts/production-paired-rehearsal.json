@@ -1,0 +1,79 @@
+{
+  "profile": "production-paired",
+  "stateDir": "/var/lib/ikpk-rehearsal/production-paired",
+  "maintenanceFlag": "/var/lib/ikpk-rehearsal/production-paired/fenced",
+  "releaseRoot": "/opt/ikpk-cms/releases",
+  "currentCms": "/opt/ikpk-cms/current",
+  "currentStatic": "/var/www/ikpk/current",
+  "staticReleaseRoot": "/var/www/ikpk/releases",
+  "cmsUnit": "ikpk-cms.service",
+  "writerUnits": [
+    "ikpk-cms.service"
+  ],
+  "cmsUser": "ikpk-cms",
+  "cmsDatabase": "/var/lib/ikpk-cms/trial/data/data.db",
+  "cmsEnvironmentFile": "/etc/ikpk-cms/trial.env",
+  "siteRefreshState": "/var/www/ikpk/shared/site-refresh/state.json",
+  "mediaRoots": [
+    {
+      "path": "/opt/ikpk-cms/shared/uploads",
+      "prefix": "/uploads/"
+    },
+    {
+      "path": "/var/www/ikpk/current/media",
+      "prefix": "/media/"
+    }
+  ],
+  "backupRoot": "/var/lib/ikpk-rehearsal/production-paired/backups",
+  "nginxBinary": "/usr/sbin/nginx",
+  "nginxService": "nginx.service",
+  "nginxMapFile": "/etc/nginx/conf.d/ikpk-initial-prod-writer-map.conf",
+  "nginxServerGateFile": "/etc/nginx/snippets/ikpk-initial-prod-writer-gate.conf",
+  "writerPrefixes": [
+    "/admin",
+    "/content-manager",
+    "/content-type-builder",
+    "/content-releases",
+    "/upload",
+    "/i18n",
+    "/users-permissions",
+    "/review-workflows",
+    "/strapi",
+    "/api"
+  ],
+  "preservePrefixes": [
+    "/uploads/",
+    "/api/payments/"
+  ],
+  "cmsHealthUrl": "http://127.0.0.1:1337/_health",
+  "siteHealthUrl": "https://ikpk.su/",
+  "siteBaseUrl": "https://ikpk.su",
+  "siteReleaseUrl": "https://ikpk.su/release.json",
+  "siteProbeUrls": [
+    "https://ikpk.su/",
+    "https://ikpk.su/raspisanie-i-tseny",
+    "https://ikpk.su/statyi",
+    "https://ikpk.su/kontakty",
+    "https://ikpk.su/oplata"
+  ],
+  "writerProbeUrls": [
+    "https://ikpk.su/admin",
+    "https://ikpk.su/content-manager",
+    "https://ikpk.su/content-type-builder",
+    "https://ikpk.su/content-releases",
+    "https://ikpk.su/upload",
+    "https://ikpk.su/i18n",
+    "https://ikpk.su/users-permissions",
+    "https://ikpk.su/review-workflows",
+    "https://ikpk.su/strapi",
+    "https://ikpk.su/api"
+  ],
+  "preserveProbeUrl": "https://ikpk.su/",
+  "paymentStatusProbeUrl": "https://ikpk.su/api/payments/rehearsal/status",
+  "allowedSourceRef": "refs/heads/main",
+  "targetHost": "89.111.184.196",
+  "paymentEndpointProd": "https://ikpk.su/api",
+  "nodeBinary": "/usr/bin/node",
+  "publicationLock": "/var/www/ikpk/.publication.lock",
+  "chatLoaderSrc": "https://cdn-ru.bitrix24.ru/b35315886/crm/site_button/loader_2_siutnh.js"
+}

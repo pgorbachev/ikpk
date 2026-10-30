@@ -1,5 +1,6 @@
 """Safety contract for pre-commit recovery of the repeatable production profile."""
 
+import contextlib
 import sqlite3
 import subprocess
 import tempfile
@@ -74,6 +75,7 @@ class PairedProductionRecoveryTests(unittest.TestCase):
                 "currentStatic": str(current_static),
                 "staticReleaseRoot": str(static_releases),
                 "mediaRoots": [],
+                "siteRefreshState": str(root / "site-refresh-state.json"),
             }
             flag_changes = []
             commands = []
@@ -88,6 +90,8 @@ class PairedProductionRecoveryTests(unittest.TestCase):
                              backup_sha256=None)
             with patch.object(rehearsal_host.os, "geteuid", return_value=0), \
                  patch.object(rehearsal_host, "_root_config", return_value=config), \
+                 patch.object(rehearsal_host, "_destination_publication_lock",
+                              side_effect=lambda _config: contextlib.nullcontext()), \
                  patch.object(rehearsal_host, "_set_flag",
                               side_effect=lambda _config, enabled: flag_changes.append(enabled)), \
                  patch.object(rehearsal_host, "_write_gate"), \

@@ -10,7 +10,8 @@ while (($#)); do
     --staging193-config) INSTALL_CONFIG_PROFILE=staging193; shift ;;
     --initial-prod-config) INSTALL_CONFIG_PROFILE=initial-prod; shift ;;
     --production-static-config) INSTALL_CONFIG_PROFILE=production-static; shift ;;
-    *) echo "usage: $0 [--prefix ABSOLUTE-PREFIX] [--staging193-config|--initial-prod-config|--production-static-config]" >&2; exit 2 ;;
+    --production-paired-config) INSTALL_CONFIG_PROFILE=production-paired; shift ;;
+    *) echo "usage: $0 [--prefix ABSOLUTE-PREFIX] [--staging193-config|--initial-prod-config|--production-static-config|--production-paired-config]" >&2; exit 2 ;;
   esac
 done
 [[ "$PREFIX" = /* && "$PREFIX" != / ]] || { echo 'prefix must be an absolute non-root path' >&2; exit 2; }
@@ -38,6 +39,9 @@ if [[ -n "$INSTALL_CONFIG_PROFILE" ]]; then
   elif [[ "$INSTALL_CONFIG_PROFILE" == production-static ]]; then
     CONFIG="$CONFIG_DIR/rehearsal-production-static.json"
     TEMPLATE="$ROOT/scripts/production-static-rehearsal.json"
+  elif [[ "$INSTALL_CONFIG_PROFILE" == production-paired ]]; then
+    CONFIG="$CONFIG_DIR/rehearsal-production-paired.json"
+    TEMPLATE="$ROOT/scripts/production-paired-rehearsal.json"
   else
     CONFIG="$CONFIG_DIR/rehearsal.json"
     TEMPLATE="$ROOT/scripts/staging193-rehearsal.json"
@@ -88,6 +92,25 @@ if config["profile"] == "production-static":
     os.makedirs(config["releaseRoot"], mode=0o700, exist_ok=True)
     os.chown(config["releaseRoot"], 0, account.pw_gid)
     os.chmod(config["releaseRoot"], 0o750)
+if config["profile"] == "production-paired":
+    if os.path.lexists(config["releaseRoot"]):
+        info = os.lstat(config["releaseRoot"])
+        if not stat.S_ISDIR(info.st_mode) or stat.S_ISLNK(info.st_mode):
+            raise SystemExit("production-paired CMS release root must be a real directory")
+    os.makedirs(config["releaseRoot"], mode=0o750, exist_ok=True)
+    os.chown(config["releaseRoot"], 0, account.pw_gid)
+    os.chmod(config["releaseRoot"], 0o750)
+    lock = config["publicationLock"]
+    os.makedirs(os.path.dirname(lock), mode=0o755, exist_ok=True)
+    fd = os.open(lock, os.O_RDWR | os.O_CREAT | getattr(os, "O_NOFOLLOW", 0), 0o600)
+    try:
+        info = os.fstat(fd)
+        if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1 or info.st_uid != 0:
+            raise SystemExit("production publication lock must be a root-owned regular file")
+        os.fchown(fd, 0, 0)
+        os.fchmod(fd, 0o600)
+    finally:
+        os.close(fd)
 PY
   if ! PYTHONDONTWRITEBYTECODE=1 "$SBIN/ikpk-rehearsal" --profile "$INSTALL_CONFIG_PROFILE" validate-config; then
     if (( installed_config )); then rm -f -- "$CONFIG"; fi

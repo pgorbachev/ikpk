@@ -352,7 +352,7 @@ class OperatorAdmissionTests(unittest.TestCase):
 
     def test_admits_only_exact_canonical_tests_push_with_every_mandatory_job(self):
         with patch.object(staging193, "capture", side_effect=self._capture):
-            result = staging193.validate_sha_and_ci(SHA)
+            result = staging193.validate_sha_and_ci(SHA, "staging194-dev")
         self.assertEqual(result["sourceSha"], SHA)
         self.assertEqual(result["runId"], 123)
         self.assertEqual(result["attempt"], 1)
@@ -365,7 +365,7 @@ class OperatorAdmissionTests(unittest.TestCase):
 
         with patch.object(staging193, "capture", side_effect=moved):
             with self.assertRaisesRegex(staging193.Refusal, "canonical pgorbachev/ikpk"):
-                staging193.validate_sha_and_ci(SHA)
+                staging193.validate_sha_and_ci(SHA, "staging194-dev")
 
     def test_canonical_head_lookup_does_not_use_a_local_fork_origin(self):
         calls = []
@@ -383,14 +383,14 @@ class OperatorAdmissionTests(unittest.TestCase):
                 return json.dumps({"jobs": self.jobs})
             return ""
         with patch.object(staging193, "capture", side_effect=canonical):
-            staging193.validate_sha_and_ci(SHA)
+            staging193.validate_sha_and_ci(SHA, "staging194-dev")
         self.assertFalse(any(argv[:3] == ["git", "ls-remote", "origin"] for argv in calls))
 
     def test_rejects_skipped_or_cancelled_mandatory_job(self):
         self.jobs[0] = {"name": self.jobs[0]["name"], "status": "completed", "conclusion": "skipped"}
         with patch.object(staging193, "capture", side_effect=self._capture):
             with self.assertRaisesRegex(staging193.Refusal, "not successful"):
-                staging193.validate_sha_and_ci(SHA)
+                staging193.validate_sha_and_ci(SHA, "staging194-dev")
 
     def test_main_admission_uses_exact_main_push_and_returns_all_required_jobs(self):
         with patch.object(staging193, "capture", side_effect=self._main_capture):

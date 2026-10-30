@@ -516,6 +516,10 @@ export async function runRestore(deps) {
   const releaseId = previous.slice('releases/'.length);
   const expected = deps.identityOf(releaseId);
   if (!expected) return finish(deps, { status: 'failed', message: MESSAGES.restoreUnreadable, switched: false });
+  if (deps.installedCommit !== undefined && expected.commit !== deps.installedCommit) {
+    return finish(deps, { status: 'failed', message: MESSAGES.restoreUnreadable,
+      detail: 'предыдущий релиз собран другим исходным кодом CMS', switched: false });
+  }
   let switched = false;
   try {
     deps.switchRelease(releaseId);
@@ -555,7 +559,8 @@ export async function runRestore(deps) {
  * Lock и запись running живут в одном try/finally. Отказ записи снимает lock.
  * Исключение проверки после смены ссылки — ошибка проверки, не «сайт не менялся».
  */
-export async function runLockedRestore({ lock, pid, current, write, switchRelease, identityOf, verify }) {
+export async function runLockedRestore({ lock, pid, current, write, switchRelease, identityOf, verify,
+  installedCommit }) {
   if (!tryLock(lock, pid)) return { status: 'running', message: MESSAGES.busy };
   let switched = false;
   try {
@@ -577,6 +582,7 @@ export async function runLockedRestore({ lock, pid, current, write, switchReleas
         return result;
       },
       identityOf,
+      installedCommit,
       verify,
     });
   } catch (error) {
