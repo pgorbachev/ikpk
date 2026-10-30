@@ -506,3 +506,28 @@ test('отказ записи running снимает lock возврата', asy
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+test('Restore refuses a previous release from another CMS source before switching current', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'ikpk-restore-source-mismatch-'));
+  try {
+    const lock = join(root, 'state.json.lock');
+    const switches = [];
+    const result = await runLockedRestore({
+      lock,
+      pid: 78,
+      current: { status: 'succeeded', previousReleaseId: 'releases/pre-paired' },
+      installedCommit: 'a'.repeat(40),
+      write: () => {},
+      identityOf: () => ({ commit: 'b'.repeat(40), snapshotId: 'snap:pre-paired' }),
+      switchRelease: (releaseId) => switches.push(releaseId),
+      verify: async () => ({ ok: true }),
+    });
+
+    assert.equal(result.status, 'failed');
+    assert.equal(result.switched, false);
+    assert.deepEqual(switches, []);
+    assert.equal(existsSync(lock), false);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
