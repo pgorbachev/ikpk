@@ -411,7 +411,37 @@ def persist_offhost_backup(directory: Path, operation_id: str, source_sha: str, 
                            expected_sha256: str, admission: Optional[dict] = None,
                            old_cms_path: Optional[str] = None) -> Path:
     verify_backup_tar(payload, expected_sha256)
+    target = directory / f"{operation_id}.tar"
+    metadata = target.with_suffix(".json")
     schema_metadata = {}
+    # Persist verified bytes and a minimal binding before schema projection/tsx work.
+    # A later local tooling failure must not strand the fenced operation without a copy.
+    verify_backup_tar(payload, expected_sha256)
+    if target.exists() or metadata.exists():
+        if target.is_symlink() or metadata.is_symlink() or not target.is_file() or not metadata.is_file():
+            raise Refusal("existing off-host backup path is not a regular file")
+        try:
+            old = json.loads(metadata.read_text(encoding="utf-8"))
+        except (OSError, ValueError) as error:
+            raise Refusal("existing off-host backup metadata is unreadable") from error
+        if hashlib.sha256(target.read_bytes()).hexdigest() != expected_sha256 or any(
+                old.get(k) != v for k, v in {"operationId": operation_id, "sourceSha": source_sha,
+                                            "sha256": expected_sha256}.items()):
+            raise Refusal("existing off-host backup belongs to different bytes or operation")
+    else:
+        base = {"operationId": operation_id, "sourceSha": source_sha, "sha256": expected_sha256}
+        flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
+        fd = os.open(target, flags, 0o600)
+        with os.fdopen(fd, "wb") as output:
+            output.write(payload); output.flush(); os.fsync(output.fileno())
+        fd = os.open(metadata, flags, 0o600)
+        with os.fdopen(fd, "w", encoding="utf-8") as output:
+            json.dump(base, output, sort_keys=True); output.write("\n"); output.flush(); os.fsync(output.fileno())
+        dir_fd = os.open(directory, os.O_RDONLY)
+        try:
+            os.fsync(dir_fd)
+        finally:
+            os.close(dir_fd)
     if admission is not None:
         schema_sha, schema_digest = production_paired_schema_source(old_cms_path or "")
         if (type(admission.get("runId")) is not int or admission["runId"] <= 0 or
@@ -421,38 +451,16 @@ def persist_offhost_backup(directory: Path, operation_id: str, source_sha: str, 
             admission["runId"], admission["attempt"], schema_sha, schema_digest)
         schema_metadata = {"oldCmsSourceSha": schema_sha, "oldCmsSchemaSha256": schema_digest,
                            "snapshotFingerprint": fingerprint}
-    target = directory / f"{operation_id}.tar"
-    metadata = target.with_suffix(".json")
-    if target.exists() or metadata.exists():
-        if target.is_symlink() or metadata.is_symlink() or not target.is_file() or not metadata.is_file():
-            raise Refusal("existing off-host backup path is not a regular file")
-        try:
-            old = json.loads(metadata.read_text(encoding="utf-8"))
-        except (OSError, ValueError) as error:
-            raise Refusal("existing off-host backup metadata is unreadable") from error
-        expected = {"operationId": operation_id, "sourceSha": source_sha, "sha256": expected_sha256}
-        if admission is not None:
-            expected.update({"runId": admission.get("runId"), "attempt": admission.get("attempt")})
-            expected.update(schema_metadata)
-        if hashlib.sha256(target.read_bytes()).hexdigest() != expected_sha256 or old != expected:
-            raise Refusal("existing off-host backup belongs to different bytes or operation")
-        return target
-    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
-    fd = os.open(target, flags, 0o600)
-    with os.fdopen(fd, "wb") as output:
-        output.write(payload)
-        output.flush()
-        os.fsync(output.fileno())
     metadata_record = {"operationId": operation_id, "sourceSha": source_sha, "sha256": expected_sha256}
     if admission is not None:
         metadata_record.update({"runId": admission["runId"], "attempt": admission["attempt"]})
         metadata_record.update(schema_metadata)
     metadata_payload = json.dumps(metadata_record, sort_keys=True).encode() + b"\n"
-    fd = os.open(metadata, flags, 0o600)
+    temporary = metadata.with_suffix(".json.new")
+    fd = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
     with os.fdopen(fd, "wb") as output:
-        output.write(metadata_payload)
-        output.flush()
-        os.fsync(output.fileno())
+        output.write(metadata_payload); output.flush(); os.fsync(output.fileno())
+    os.replace(temporary, metadata)
     dir_fd = os.open(directory, os.O_RDONLY)
     try:
         os.fsync(dir_fd)
@@ -509,16 +517,20 @@ def production_paired_backup_fingerprint(payload: bytes, source_sha: str, operat
         except (OSError, ValueError) as error:
             raise Refusal("verified backup content snapshot was not produced") from error
         fingerprint = snapshot.get("fingerprint") if isinstance(snapshot, dict) else None
-        if not isinstance(fingerprint, str) or not re.fullmatch(r"[a-f0-9]{64}", fingerprint):
+        if not isinstance(fingerprint, str) or not re.fullmatch(r"sha256:[a-f0-9]{64}", fingerprint):
             raise Refusal("verified backup content snapshot has an invalid fingerprint")
         return fingerprint
 
 
 def production_paired_restore_state(action: str, fingerprint: str, operation_id: str,
                                     observed_entry: Optional[int] = None) -> dict:
-    if action not in ("read", "record"):
+    if action not in ("preflight", "read", "record"):
         raise Refusal("invalid local restore provenance action")
-    command = ["web/node_modules/.bin/tsx", "web/scripts/paired-restore-provenance.ts", action, fingerprint]
+    command = ["web/node_modules/.bin/tsx", "web/scripts/paired-restore-provenance.ts", action]
+    if action != "preflight":
+        command.append(fingerprint)
+    else:
+        command.append("")
     command.append(operation_id if action == "read" else str(observed_entry or ""))
     if action == "record":
         command.append(operation_id)
@@ -527,6 +539,10 @@ def production_paired_restore_state(action: str, fingerprint: str, operation_id:
         parsed = json.loads(result)
     except ValueError as error:
         raise Refusal("local canonical restore provenance returned malformed JSON") from error
+    if action == "preflight":
+        if parsed.get("preflight") is not True or not isinstance(parsed.get("head"), str):
+            raise Refusal("canonical CMS provenance preflight returned malformed state")
+        return parsed
     if not isinstance(parsed, dict) or parsed.get("fingerprint") != fingerprint:
         raise Refusal("local canonical restore provenance did not bind the verified backup fingerprint")
     if action == "read" and not parsed.get("retry"):
@@ -613,7 +629,7 @@ def browser_check(source_sha: str, operation_id: str, static_digest: str, archiv
         proof = snapshot.get("captureProof") if isinstance(snapshot, dict) else None
         snapshot_fingerprint = snapshot.get("fingerprint") if isinstance(snapshot, dict) else None
         if profile == "production-paired" and (not isinstance(snapshot_fingerprint, str) or
-                                                 not re.fullmatch(r"[a-f0-9]{64}", snapshot_fingerprint)):
+                                                 not re.fullmatch(r"sha256:[a-f0-9]{64}", snapshot_fingerprint)):
             raise Refusal("off-host candidate snapshot fingerprint is malformed")
         bundle_digest = hashlib.sha256(capture_bytes).hexdigest()
         reused_capture = release.get("reusedCapture")
@@ -732,6 +748,9 @@ def invoke(args: argparse.Namespace) -> None:
         if not isinstance(old_pair, dict) or not isinstance(old_pair.get("cmsPath"), str):
             raise Refusal("read-only production preflight did not identify the old CMS release")
         paired_old_cms = (old_pair["cmsPath"], *production_paired_schema_source(old_pair["cmsPath"]))
+        if not (ROOT / "web/node_modules/.bin/tsx").is_file():
+            raise Refusal("local content snapshot tooling is unavailable before production fence")
+        production_paired_restore_state("preflight", "", args.operation_id)
     if args.command == "cms-update":
         provenance = (validate_production_paired_admission(args.source_sha) if profile == "production-paired"
                       else validate_sha_and_ci(args.source_sha, profile))

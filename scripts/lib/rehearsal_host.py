@@ -58,6 +58,7 @@ REQUIRED_CONFIG = {
 }
 SHA_RE = re.compile(r"[a-f0-9]{40}\Z")
 SHA256_RE = re.compile(r"[a-f0-9]{64}\Z")
+CONTENT_FINGERPRINT_RE = re.compile(r"sha256:[a-f0-9]{64}\Z")
 PREFIX_RE = re.compile(r"/[A-Za-z0-9_./*?=-]+\Z")
 UNIT_RE = re.compile(r"[A-Za-z0-9_.@:-]+\.service\Z")
 
@@ -2963,7 +2964,7 @@ def _recover(config: dict[str, Any], state: RehearsalState, operation_id: str,
             raise HostFailure("restore finalize requires a staged production-paired restore")
         fingerprint = restore_event.get("fingerprint")
         entry = restore_event.get("entry")
-        if (not SHA256_RE.fullmatch(str(fingerprint)) or prepared.get("fingerprint") != fingerprint or isinstance(entry, bool) or
+        if (not CONTENT_FINGERPRINT_RE.fullmatch(str(fingerprint)) or prepared.get("fingerprint") != fingerprint or isinstance(entry, bool) or
                 not isinstance(entry, int) or entry < 1 or prepared.get("databaseSha256") != sha256_file(live) or
                 prepared.get("operationId") != operation_id):
             raise HostFailure("restore finalize identity or restored database changed")
@@ -3004,6 +3005,26 @@ def _recover(config: dict[str, Any], state: RehearsalState, operation_id: str,
     server_manifest = backup_dir / "manifest.json"
     offhost_dir = backup_dir / "offhost-backup"
     live = Path(config["cmsDatabase"]).resolve(strict=True)
+    if config.get("profile") == "production-paired" and server_manifest.exists():
+        phase = state.phase(operation_id).get("phase")
+        if phase in ("fenced", "acquiring"):
+            # Provenance admission can fail after backup but before CMS activation. If
+            # exact old bytes and pointers are still live, reopen without a false restore
+            # event or rewriting a database that was never changed.
+            baseline = next((row.get("oldPair") for row in state._operation_rows(operation_id)
+                             if row.get("record") == "fenced-baseline"), None)
+            if (not isinstance(baseline, dict) or
+                    sha256_file(live) != baseline.get("databaseSha256") or
+                    str(_current_target(Path(config["currentCms"]))) != baseline.get("cmsPath") or
+                    str(_current_target(Path(config["currentStatic"]))) != baseline.get("staticPath") or
+                    _tree_sha256(_current_target(Path(config["currentStatic"]))) != baseline.get("staticTreeSha256") or
+                    _cms_payload_sha256(_current_target(Path(config["currentCms"])),
+                        next(Path(item["path"]).resolve(strict=True) for item in config["mediaRoots"]
+                             if item["prefix"] == "/uploads/")) != baseline.get("cmsPayloadSha256")):
+                raise HostFailure("pre-activation live pair differs from fenced baseline; explicit restore required")
+            state.recover(operation_id, lambda: True, reopen_old_pair)
+            return {"operationId": operation_id, "phase": "recovered", "restoredPair": old_pair,
+                    "dataRestored": False}
     if server_manifest.exists():
         if not offhost_dir.is_dir() or offhost_dir.is_symlink():
             raise HostFailure("explicit recovery requires the actual verified off-host backup bytes")
@@ -3043,7 +3064,7 @@ def _recover(config: dict[str, Any], state: RehearsalState, operation_id: str,
         expected_database_sha = sha256_file(live)
     if stage_only:
         if (config.get("profile") != "production-paired" or not server_manifest.exists() or
-                not isinstance(expected_fingerprint, str) or not SHA256_RE.fullmatch(expected_fingerprint)):
+                not isinstance(expected_fingerprint, str) or not CONTENT_FINGERPRINT_RE.fullmatch(expected_fingerprint)):
             raise HostFailure("staged restore requires the verified production backup")
         state._append({"version": 1, "record": "restore-prepared", "operationId": operation_id,
                        "sourceSha": start["sourceSha"], "databaseSha256": expected_database_sha,

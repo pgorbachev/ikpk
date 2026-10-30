@@ -6,7 +6,8 @@ import { join } from 'node:path';
 import { createPublicationStateStore } from './lib/publication-state-store.ts';
 
 const [action, fingerprint, expectedRaw, operationId] = process.argv.slice(2);
-if (!['read', 'record'].includes(action ?? '') || !/^[a-f0-9]{64}$/.test(fingerprint ?? '') ||
+if (!['preflight', 'read', 'record'].includes(action ?? '') ||
+    (action !== 'preflight' && !/^sha256:[a-f0-9]{64}$/.test(fingerprint ?? '')) ||
     (action === 'read' && !/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(expectedRaw ?? '')) ||
     (action === 'record' && (!/^[1-9][0-9]*$/.test(expectedRaw ?? '') || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(operationId ?? '')))) {
   throw new Error('invalid paired restore provenance arguments');
@@ -21,7 +22,10 @@ try {
     GIT_CONFIG_COUNT: '1', GIT_CONFIG_KEY_0: `http.${remote}.extraheader`,
     GIT_CONFIG_VALUE_0: `Authorization: Basic ${Buffer.from(`x-access-token:${token}`).toString('base64')}` };
   const store = createPublicationStateStore({ remote, workDir: join(scratch, 'state'), gitEnv });
-  if (action === 'read') {
+  if (action === 'preflight') {
+    const state = await store.readHistory();
+    process.stdout.write(`${JSON.stringify({ preflight: true, head: state.head })}\n`);
+  } else if (action === 'read') {
     const state = await store.read(fingerprint);
     const latest = state.entries.at(-1)!;
     const retry = latest.marker === 'restore' && latest.operationId === expectedRaw;
