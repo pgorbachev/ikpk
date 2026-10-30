@@ -398,18 +398,29 @@ def production_paired_schema_from_commit(source_sha: str, schema_root: Path) -> 
     return digest.hexdigest()
 
 
+def production_paired_schema_source(cms_path: str) -> tuple[str, str]:
+    match = re.search(r"/releases/([a-f0-9]{40})-[^/]+(?:/|$)", cms_path)
+    if not match:
+        raise Refusal("journaled old CMS path does not bind a full source commit")
+    with tempfile.TemporaryDirectory(prefix="ikpk-old-cms-schema-preflight-") as temporary:
+        digest = production_paired_schema_from_commit(match.group(1), Path(temporary) / "schema")
+    return match.group(1), digest
+
+
 def persist_offhost_backup(directory: Path, operation_id: str, source_sha: str, payload: bytes,
                            expected_sha256: str, admission: Optional[dict] = None,
                            old_cms_path: Optional[str] = None) -> Path:
     verify_backup_tar(payload, expected_sha256)
     schema_metadata = {}
     if admission is not None:
-        match = re.search(r"/releases/([a-f0-9]{40})-[^/]+(?:/|$)", old_cms_path or "")
-        if not match:
-            raise Refusal("journaled old CMS path does not bind a full source commit")
-        with tempfile.TemporaryDirectory(prefix="ikpk-old-cms-schema-") as temporary:
-            schema_digest = production_paired_schema_from_commit(match.group(1), Path(temporary) / "schema")
-        schema_metadata = {"oldCmsSourceSha": match.group(1), "oldCmsSchemaSha256": schema_digest}
+        schema_sha, schema_digest = production_paired_schema_source(old_cms_path or "")
+        if (type(admission.get("runId")) is not int or admission["runId"] <= 0 or
+                type(admission.get("attempt")) is not int or admission["attempt"] <= 0):
+            raise Refusal("production backup admission is missing its exact run and attempt")
+        fingerprint = production_paired_backup_fingerprint(payload, source_sha, operation_id,
+            admission["runId"], admission["attempt"], schema_sha, schema_digest)
+        schema_metadata = {"oldCmsSourceSha": schema_sha, "oldCmsSchemaSha256": schema_digest,
+                           "snapshotFingerprint": fingerprint}
     target = directory / f"{operation_id}.tar"
     metadata = target.with_suffix(".json")
     if target.exists() or metadata.exists():
@@ -434,9 +445,6 @@ def persist_offhost_backup(directory: Path, operation_id: str, source_sha: str, 
         os.fsync(output.fileno())
     metadata_record = {"operationId": operation_id, "sourceSha": source_sha, "sha256": expected_sha256}
     if admission is not None:
-        if (type(admission.get("runId")) is not int or admission["runId"] <= 0 or
-                type(admission.get("attempt")) is not int or admission["attempt"] <= 0):
-            raise Refusal("production backup admission is missing its exact run and attempt")
         metadata_record.update({"runId": admission["runId"], "attempt": admission["attempt"]})
         metadata_record.update(schema_metadata)
     metadata_payload = json.dumps(metadata_record, sort_keys=True).encode() + b"\n"
@@ -521,6 +529,14 @@ def production_paired_restore_state(action: str, fingerprint: str, operation_id:
         raise Refusal("local canonical restore provenance returned malformed JSON") from error
     if not isinstance(parsed, dict) or parsed.get("fingerprint") != fingerprint:
         raise Refusal("local canonical restore provenance did not bind the verified backup fingerprint")
+    if action == "read" and not parsed.get("retry"):
+        for field in ("observedEntry", "revision", "highWaterMark"):
+            if type(parsed.get(field)) is not int or parsed[field] < 1:
+                raise Refusal("canonical CMS provenance observation is missing or invalid")
+        if parsed["revision"] != parsed["highWaterMark"] or parsed["observedEntry"] != parsed["highWaterMark"]:
+            raise Refusal("canonical CMS provenance is stale or requires acceptance")
+    if action == "record" and (type(parsed.get("entry")) is not int or parsed["entry"] < 1):
+        raise Refusal("canonical restore event entry is missing or invalid")
     return parsed
 
 
@@ -545,7 +561,7 @@ def _static_tree_sha256(root: Path) -> str:
 
 def browser_check(source_sha: str, operation_id: str, static_digest: str, archive: bytes,
                   profile: str = "staging194", admitted_run: Optional[dict] = None,
-                  chat_loader_src: Optional[str] = None) -> None:
+                  chat_loader_src: Optional[str] = None) -> Optional[str]:
     executable = ROOT / "web/node_modules/.bin/playwright"
     if not executable.is_file():
         raise Refusal("local Playwright dependencies are missing; browser acceptance was not run")
@@ -595,6 +611,10 @@ def browser_check(source_sha: str, operation_id: str, static_digest: str, archiv
                 release.get("staticTreeSha256") != static_digest):
             raise Refusal("off-host static candidate release declaration does not match the admitted bytes")
         proof = snapshot.get("captureProof") if isinstance(snapshot, dict) else None
+        snapshot_fingerprint = snapshot.get("fingerprint") if isinstance(snapshot, dict) else None
+        if profile == "production-paired" and (not isinstance(snapshot_fingerprint, str) or
+                                                 not re.fullmatch(r"[a-f0-9]{64}", snapshot_fingerprint)):
+            raise Refusal("off-host candidate snapshot fingerprint is malformed")
         bundle_digest = hashlib.sha256(capture_bytes).hexdigest()
         reused_capture = release.get("reusedCapture")
         same_capture_operation = (capture.get("operationId") == operation_id
@@ -683,6 +703,7 @@ def browser_check(source_sha: str, operation_id: str, static_digest: str, archiv
                                     cwd=ROOT / "web", env=environment, check=False)
             if result.returncode:
                 raise Refusal(f"candidate publication browser checks failed with exit {result.returncode}")
+            return snapshot_fingerprint if isinstance(snapshot_fingerprint, str) else None
         finally:
             server.shutdown()
             server.server_close()
@@ -704,6 +725,13 @@ def invoke(args: argparse.Namespace) -> None:
         raise Refusal("initial-prod permits only its fixed operation ID and has no DB restore command")
     if not OP.fullmatch(args.operation_id):
         raise Refusal("operation ID has invalid characters")
+    paired_old_cms = None
+    if profile == "production-paired" and args.command == "cms-update":
+        preflight = parse_host_json(ssh_remote(["status", "--operation-id", args.operation_id], profile=profile))
+        old_pair = preflight.get("oldPair")
+        if not isinstance(old_pair, dict) or not isinstance(old_pair.get("cmsPath"), str):
+            raise Refusal("read-only production preflight did not identify the old CMS release")
+        paired_old_cms = (old_pair["cmsPath"], *production_paired_schema_source(old_pair["cmsPath"]))
     if args.command == "cms-update":
         provenance = (validate_production_paired_admission(args.source_sha) if profile == "production-paired"
                       else validate_sha_and_ci(args.source_sha, profile))
@@ -720,6 +748,8 @@ def invoke(args: argparse.Namespace) -> None:
             if profile == "production-paired":
                 status = parse_host_json(ssh_remote(["status", "--operation-id", args.operation_id], profile=profile))
                 old_cms_path = (status.get("oldPair") or {}).get("cmsPath")
+                if not paired_old_cms or old_cms_path != paired_old_cms[0]:
+                    raise Refusal("journaled old CMS release changed after read-only preflight")
             if profile == "production-paired":
                 backup_path = persist_offhost_backup(backup_dir, args.operation_id, args.source_sha,
                     remote_backup, first.get("backupSha256", ""), provenance, old_cms_path)
@@ -727,6 +757,13 @@ def invoke(args: argparse.Namespace) -> None:
                 backup_path = persist_offhost_backup(backup_dir, args.operation_id, args.source_sha,
                     remote_backup, first.get("backupSha256", ""))
             digest = hashlib.sha256(backup_path.read_bytes()).hexdigest()
+            if profile == "production-paired":
+                metadata_record = json.loads(backup_path.with_suffix(".json").read_text(encoding="utf-8"))
+                if (metadata_record.get("oldCmsSourceSha") != paired_old_cms[1] or
+                        metadata_record.get("oldCmsSchemaSha256") != paired_old_cms[2] or
+                        not isinstance(metadata_record.get("snapshotFingerprint"), str)):
+                    raise Refusal("verified production backup does not bind the preflight old CMS schema and fingerprint")
+                production_paired_restore_state("read", metadata_record["snapshotFingerprint"], args.operation_id)
             if first.get("phase") == "cms-activated":
                 return
             if profile == "production-paired":
@@ -761,7 +798,18 @@ def invoke(args: argparse.Namespace) -> None:
             raise Refusal("host returned an invalid static candidate digest")
         candidate_bytes = ssh_remote(["export-static", "--operation-id", args.operation_id,
                                       "--source-sha", args.source_sha], profile=profile)
-        browser_check(args.source_sha, args.operation_id, digest, candidate_bytes, profile, admitted_run)
+        snapshot_fingerprint = browser_check(args.source_sha, args.operation_id, digest, candidate_bytes, profile, admitted_run)
+        if profile == "production-paired":
+            backup_dir = backup_root(args.backup_dir, profile)
+            metadata_path = backup_dir / f"{args.operation_id}.json"
+            try:
+                backup_metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+            except (OSError, ValueError) as error:
+                raise Refusal("production backup provenance sidecar is unavailable before static acceptance") from error
+            if (backup_metadata.get("sourceSha") != args.source_sha or
+                    backup_metadata.get("snapshotFingerprint") != snapshot_fingerprint):
+                raise Refusal("built production snapshot differs from the fingerprint captured in the verified backup")
+            production_paired_restore_state("read", snapshot_fingerprint, args.operation_id)
         current_run = (validate_production_paired_admission(args.source_sha) if profile == "production-paired"
                        else validate_sha_and_ci(args.source_sha, profile))
         if (current_run.get("runId"), current_run.get("attempt")) != (admitted_run.get("runId"), admitted_run.get("attempt")):
@@ -841,12 +889,12 @@ def invoke(args: argparse.Namespace) -> None:
                     raise Refusal("backup old CMS schema source does not match the journaled old CMS release")
                 fingerprint = production_paired_backup_fingerprint(payload, record["sourceSha"], args.operation_id,
                     record["runId"], record["attempt"], record["oldCmsSourceSha"], record["oldCmsSchemaSha256"])
-                admission = production_paired_restore_state("read", fingerprint, args.operation_id)
                 restored = parse_host_json(ssh_remote(["restore", "--operation-id", args.operation_id,
                     "--backup-sha256", record["sha256"], "--restore-fingerprint", fingerprint],
                     profile=profile, input_bytes=payload))
                 if restored.get("phase") != "restore-staged":
                     raise Refusal("production backup restore did not remain fenced for provenance")
+                admission = production_paired_restore_state("read", fingerprint, args.operation_id)
                 if admission.get("retry"):
                     entry = admission.get("latestEntry")
                 else:

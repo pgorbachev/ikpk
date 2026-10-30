@@ -1376,15 +1376,44 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
         source_sha = "2fee597b5335f6c61fd61a622fa2a5f3f475a605"
         archive = backup_archive()
         with tempfile.TemporaryDirectory(prefix="ikpk-paired-backup-sidecar-") as temporary:
-            backup = operator.persist_offhost_backup(Path(temporary), "paired-op", "a" * 40, archive,
-                sha(archive), {"runId": 7, "attempt": 2},
-                f"/opt/ikpk-cms/releases/{source_sha}-paired-op/.staging193-rehearsal/op/migration/cms-artifact")
+            with patch.object(operator, "production_paired_backup_fingerprint", return_value="b" * 64):
+                backup = operator.persist_offhost_backup(Path(temporary), "paired-op", "a" * 40, archive,
+                    sha(archive), {"runId": 7, "attempt": 2},
+                    f"/opt/ikpk-cms/releases/{source_sha}-paired-op/.staging193-rehearsal/op/migration/cms-artifact")
             metadata = json.loads(backup.with_suffix(".json").read_text(encoding="utf-8"))
             self.assertEqual(metadata["oldCmsSourceSha"], source_sha)
             self.assertRegex(metadata["oldCmsSchemaSha256"], r"^[a-f0-9]{64}$")
             self.assertEqual(metadata["sha256"], sha(archive))
             self.assertEqual(metadata["runId"], 7)
             self.assertEqual(metadata["attempt"], 2)
+
+    def test_production_preflight_stops_before_cms_update_when_old_schema_commit_is_missing(self):
+        source_sha = "c" * 40
+        status = json.dumps({"phase": "idle", "oldPair": {"cmsPath":
+            f"/opt/ikpk-cms/releases/{source_sha}-old-release/cms-artifact"}}).encode()
+        args = Namespace(profile="production-paired", command="cms-update", host=None,
+                         operation_id="shallow-preflight")
+        with patch.object(operator, "ssh_remote", return_value=status) as remote, \
+             patch.object(operator, "capture", side_effect=operator.Refusal("exact old CMS commit missing")):
+            with self.assertRaisesRegex(operator.Refusal, "exact old CMS commit missing"):
+                operator.invoke(args)
+        self.assertEqual(remote.call_count, 1)
+        self.assertEqual(remote.call_args.args[0][0], "status")
+
+    def test_production_restore_provenance_gate_fails_closed_for_missing_stale_or_different_state(self):
+        fingerprint = "a" * 64
+        with patch.object(operator, "capture", side_effect=operator.Refusal("state branch unavailable")):
+            with self.assertRaisesRegex(operator.Refusal, "state branch unavailable"):
+                operator.production_paired_restore_state("read", fingerprint, "paired-op")
+        stale = {"fingerprint": fingerprint, "observedEntry": 4, "revision": 3, "highWaterMark": 4,
+                 "latestEntry": 4, "latestMarker": "edit", "retry": False}
+        with patch.object(operator, "capture", return_value=json.dumps(stale)):
+            with self.assertRaisesRegex(operator.Refusal, "stale or requires acceptance"):
+                operator.production_paired_restore_state("read", fingerprint, "paired-op")
+        different = {**stale, "fingerprint": "b" * 64, "revision": 4}
+        with patch.object(operator, "capture", return_value=json.dumps(different)):
+            with self.assertRaisesRegex(operator.Refusal, "did not bind"):
+                operator.production_paired_restore_state("read", fingerprint, "paired-op")
 
 
 class StaticMainAdmissionTests(unittest.TestCase):
@@ -2224,8 +2253,22 @@ class ProductionPairedManualPreflightTests(unittest.TestCase):
                     rehearsal_host._assert_site_refresh_idle(config)
             self.assertTrue(state.exists())
             state.write_text(json.dumps({"status": "succeeded", "phase": "done"}), encoding="utf-8")
-            with self.assertRaisesRegex(rehearsal_host.HostFailure, "lacks worker PID"):
+            with patch.object(rehearsal_host, "_site_refresh_worker_pids", return_value=set()):
                 rehearsal_host._assert_site_refresh_idle(config)
+            with patch.object(rehearsal_host, "_site_refresh_worker_pids", return_value={4242}):
+                with self.assertRaisesRegex(rehearsal_host.HostFailure, "legacy terminal site-refresh worker"):
+                    rehearsal_host._assert_site_refresh_idle(config)
+
+    def test_legacy_terminal_refresh_drain_waits_for_matching_detached_worker_exit(self):
+        with tempfile.TemporaryDirectory(prefix="ikpk-legacy-refresh-worker-") as temporary:
+            root = Path(temporary); state = root / "state.json"
+            state.write_text(json.dumps({"status": "succeeded", "phase": "done"}), encoding="utf-8")
+            config = {"profile": "production-paired", "siteRefreshState": str(state)}
+            observed = [{123}, set()]
+            with patch.object(rehearsal_host, "_site_refresh_worker_pids", side_effect=observed), \
+                 patch.object(rehearsal_host.time, "sleep") as sleep:
+                rehearsal_host._verify_site_refresh_idle(config)
+            sleep.assert_called_once_with(1)
 
     def test_post_gate_drain_waits_for_terminal_state_lock_removal(self):
         import os

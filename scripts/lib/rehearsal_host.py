@@ -723,6 +723,25 @@ def _write_paired_cms_source_env(config: dict[str, Any], values: dict[str, Optio
             pass
 
 
+def _site_refresh_worker_pids(proc_root: Path = Path("/proc")) -> set[int]:
+    """Find legacy refresh workers whose terminal state predates workerPid records."""
+    try:
+        entries = list(proc_root.iterdir())
+    except OSError as error:
+        raise HostFailure("cannot inspect processes for legacy site-refresh workers") from error
+    result = set()
+    for entry in entries:
+        if not entry.name.isdecimal():
+            continue
+        try:
+            command = (entry / "cmdline").read_bytes()
+        except OSError:
+            continue
+        if b"site-refresh-worker.js" in command or (b"executeRefresh()" in command and b"site-refresh" in command):
+            result.add(int(entry.name))
+    return result
+
+
 def _verify_site_refresh_idle(config: dict[str, Any]) -> None:
     if config.get("profile") != "production-paired":
         return
@@ -759,7 +778,7 @@ def _verify_site_refresh_idle(config: dict[str, Any]) -> None:
             else:
                 worker_pid = record.get("workerPid")
                 if record.get("phase") and worker_pid is None:
-                    raise HostFailure("terminal refresh state lacks worker PID; inspect it before stopping CMS")
+                    waiting = bool(_site_refresh_worker_pids())
                 if worker_pid is not None:
                     if isinstance(worker_pid, bool) or not isinstance(worker_pid, int) or worker_pid < 2:
                         raise HostFailure("terminal refresh state has an invalid worker PID")
@@ -817,11 +836,23 @@ def _assert_site_refresh_idle(config: dict[str, Any]) -> None:
         if not isinstance(record, dict) or record.get("status") not in (
                 "idle", "succeeded", "failed", "verification-failed"):
             raise HostFailure("site-refresh is active or unknown; resolve it before starting paired maintenance")
-        if record.get("phase") and record.get("workerPid") is None:
-            raise HostFailure("terminal refresh state lacks worker PID; resolve it before starting paired maintenance")
     lock_path = Path(str(path) + ".lock")
     if lock_path.exists() or lock_path.is_symlink():
         raise HostFailure("site-refresh/Restore lock exists; resolve it before starting paired maintenance")
+    if record and record.get("phase") and record.get("workerPid") is None and _site_refresh_worker_pids():
+        raise HostFailure("legacy terminal site-refresh worker is still active; resolve it before maintenance")
+    if record and record.get("workerPid") is not None:
+        worker_pid = record["workerPid"]
+        if isinstance(worker_pid, bool) or not isinstance(worker_pid, int) or worker_pid < 2:
+            raise HostFailure("terminal refresh state has an invalid worker PID")
+        try:
+            os.kill(worker_pid, 0)
+        except ProcessLookupError:
+            pass
+        except PermissionError:
+            raise HostFailure("terminal refresh worker is still active; resolve it before maintenance")
+        else:
+            raise HostFailure("terminal refresh worker is still active; resolve it before maintenance")
 
 
 def _old_pair(config: dict[str, Any]) -> dict[str, Any]:
@@ -3110,11 +3141,18 @@ def dispatch(args: argparse.Namespace) -> dict[str, Any]:
         if args.action == "static-publish":
             return _static_publish(config, state, args)
         if args.action == "status":
-            phase = state.phase(args.operation_id)
             if profile == "production-paired":
+                try:
+                    phase = state.phase(args.operation_id)
+                except RehearsalRefusal:
+                    if state._read_marker() is not None or state._operation_rows(args.operation_id):
+                        raise
+                    return {"operationId": args.operation_id, "phase": "idle", "oldPair": _old_pair(config)}
                 start = next((row for row in state._operation_rows(args.operation_id) if row.get("record") == "start"), None)
                 if start and isinstance(start.get("oldPair"), dict):
                     phase["oldPair"] = start["oldPair"]
+            else:
+                phase = state.phase(args.operation_id)
             return phase
     raise HostFailure("unsupported bounded host action")
 
