@@ -822,8 +822,6 @@ def _assert_site_refresh_idle(config: dict[str, Any]) -> None:
     lock_path = Path(str(path) + ".lock")
     if lock_path.exists() or lock_path.is_symlink():
         raise HostFailure("site-refresh/Restore lock exists; resolve it before starting paired maintenance")
-    if record is not None and record.get("status") == "running":
-        raise HostFailure("site-refresh is active; resolve it before starting paired maintenance")
 
 
 def _old_pair(config: dict[str, Any]) -> dict[str, Any]:

@@ -645,9 +645,9 @@ def invoke(args: argparse.Namespace) -> None:
             raise Refusal("host returned an invalid static-main candidate digest")
         candidate = ssh_remote(["export-static-main", "--operation-id", args.operation_id,
                                 "--source-sha", args.source_sha], **remote_options)
-        browser_profile = "production-static" if profile in ("production-static", "production-paired") else "staging194"
+        browser_profile = "production-static" if profile == "production-static" else "staging194"
         browser_check(args.source_sha, args.operation_id, digest, candidate, browser_profile, admitted_run,
-                      chat_loader_src=INITIAL_PROD_CHAT_LOADER_SRC if profile in ("production-static", "production-paired") else STAGING194_CHAT_LOADER_SRC)
+                      chat_loader_src=INITIAL_PROD_CHAT_LOADER_SRC if profile == "production-static" else STAGING194_CHAT_LOADER_SRC)
         current_run = validate_static_main_ci(args.source_sha)
         if current_run != admitted_run:
             raise Refusal("canonical main source, Tests run, or Release proof changed during acceptance")
