@@ -72,6 +72,30 @@ test('чужая роль и пароль не попадают в окруже�
   assert.equal(publicView({ detail: 'Bearer secret-token', status: 'failed' }).detail, 'Bearer [скрыто]');
 });
 
+test('обычный CMS refresh передаёт worker workspace и installed commit, убирая только profile flags', () => {
+  const root = mkdtempSync(join(tmpdir(), 'ikpk-ordinary-refresh-env-'));
+  try {
+    mkdirSync(join(root, 'web/node_modules/astro'), { recursive: true });
+    mkdirSync(join(root, 'web/node_modules/tsx'), { recursive: true });
+    writeFileSync(join(root, 'web/node_modules/astro/package.json'), '{}');
+    writeFileSync(join(root, 'web/node_modules/tsx/package.json'), '{}');
+    const commit = 'a'.repeat(40);
+    const env = childEnvironment({
+      IKPK_BUILD_WORKSPACE: root, IKPK_VERIFY_URL: 'https://ikpk.su/release.json',
+      IKPK_INSTALLED_COMMIT: commit, PAYMENT_ROLE: 'ci',
+      DEPLOY_MODE: 'stand', CHAT_OFFLINE_MESSAGE: 'trial-only',
+    });
+    assert.equal(env.IKPK_BUILD_WORKSPACE, root);
+    assert.equal(env.IKPK_INSTALLED_COMMIT, commit);
+    assert.equal(env.PAYMENT_ROLE, 'ci');
+    assert.equal(env.DEPLOY_MODE, undefined);
+    assert.equal(env.CHAT_OFFLINE_MESSAGE, undefined);
+    assert.equal(refreshReady(env), true, 'ordinary worker must remain launchable with its configured workspace');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('сборка сайта не пишет телеметрию Astro в домашний каталог службы', () => {
   const env = siteBuildEnv('/var/lib/ikpk-site-build');
   assert.equal(env.ASTRO_TELEMETRY_DISABLED, '1');

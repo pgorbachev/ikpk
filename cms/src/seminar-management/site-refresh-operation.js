@@ -246,10 +246,7 @@ const CHILD_KEYS = [
 export function childEnvironment(source, { includeCmsCredentials = true } = {}) {
   const env = { NODE_OPTIONS: '--max-old-space-size=480' };
   const profileBuild = source.IKPK_CAPTURE_PROFILE === 'staging194' || source.INITIAL_PROD_PROFILE === '1';
-  const profileBuildKeys = new Set([
-    'IKPK_BUILD_WORKSPACE', 'IKPK_INSTALLED_COMMIT', 'INITIAL_PROD_PROFILE', 'DEPLOY_MODE',
-    'PAYMENT_ROLE', 'PAYMENT_ENDPOINT_PROD', 'CHAT_OFFLINE_MESSAGE',
-  ]);
+  const profileBuildKeys = new Set(['DEPLOY_MODE', 'CHAT_OFFLINE_MESSAGE']);
   for (const key of CHILD_KEYS) {
     if (!profileBuild && profileBuildKeys.has(key)) continue;
     if (source.IKPK_CAPTURE_PROFILE !== 'staging194' &&
