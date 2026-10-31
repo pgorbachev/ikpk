@@ -102,7 +102,7 @@ if [[ -n "$INSTALL_CONFIG_PROFILE" ]]; then
     [[ -f "$CONFIG" && ! -L "$CONFIG" ]] || { echo 'existing rehearsal config is not a regular file' >&2; exit 2; }
     if ! cmp -s "$CONFIG" "$TEMPLATE"; then
       PYTHONPATH="$ROOT/scripts/lib" python3 "$ROOT/scripts/lib/rehearsal_config.py" migrate "$CONFIG" "$TEMPLATE" || {
-        echo 'existing rehearsal config migration failed' >&2; exit 2;
+        echo 'existing rehearsal config migration failed; CMS/site data was not changed; inspect config/backup and rerun the installer after correcting the filesystem error' >&2; exit 2;
       }
     fi
   else
