@@ -1,6 +1,5 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdtempSync, readFileSync, rmSync, statSync } from 'node:fs';
-import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { isSitePageHtml, walkFiles } from './walk';
 
@@ -42,11 +41,9 @@ import { isSitePageHtml, walkFiles } from './walk';
  * `dispose()`.
  *
  * ── ПОЧЕМУ КАТАЛОГ ВНЕ РЕПОЗИТОРИЯ ──────────────────────────────────────────
- * Корень сборочного вывода внутри репозитория пришлось бы вписать и в `.gitignore`, и в
- * закрытый перечень корней у `./bin/check-spec-refs` (он сверяет их с `.gitignore` и
- * отказывается при расхождении), и в реестр вхождений исполняемого вывода, который требует
- * ДВА собранных дерева. Пробная сборка ничего из этого не касается, потому что живёт в
- * каталоге операционной системы и не является артефактом проекта.
+ * Вывод должен быть на той же файловой системе, что `web/.astro/.prerender`: Astro
+ * перемещает подготовленные assets через rename, который завершается EXDEV между mounts.
+ * `web/.astro/` уже игнорируется Git, а каталог пробной сборки удаляется после проверки.
  */
 
 const WEB = join(import.meta.dirname, '..', '..');
@@ -91,7 +88,7 @@ export function buildProbe(
   env: Record<string, string | undefined>,
   options: ProbeOptions = {},
 ): ProbeBuild {
-  const root = mkdtempSync(join(tmpdir(), 'ikpk-widget-probe-'));
+  const root = mkdtempSync(join(WEB, '.astro', 'widget-probe-'));
   const childEnv: Record<string, string> = {};
   for (const [key, value] of Object.entries(process.env))
     if (value !== undefined) childEnv[key] = value;

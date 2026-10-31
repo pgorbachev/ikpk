@@ -23,7 +23,9 @@ function statePath() {
 }
 
 function writeState(record) {
-  writeJsonAtomic(statePath(), record);
+  // Keep the detached worker identity in terminal records too: an operator may
+  // observe the terminal write just before this process exits and releases its lock.
+  writeJsonAtomic(statePath(), { ...record, workerPid: process.pid });
 }
 
 function runStep(command, args, cwd, extraEnv, restrictedEnv = false) {
@@ -118,8 +120,9 @@ export async function executeRefresh() {
       reuseDerivatives: () => reuseDerivatives(workspace, process.env.IKPK_MEDIA_CACHE),
       build: () => {
         const staging194 = process.env.IKPK_CAPTURE_PROFILE === 'staging194';
+        const production = process.env.INITIAL_PROD_PROFILE === '1';
         const built = runStep('npm', [ 'run', ...(staging194 ? ['build:demo193'] : ['build']) ],
-          join(workspace, 'web'), siteBuildEnv(workspace, staging194), staging194);
+          join(workspace, 'web'), siteBuildEnv(workspace, staging194, production), staging194 || production);
         if (!built.ok) return built;
         const commit = installedCommit(webRoot, process.env.IKPK_INSTALLED_COMMIT);
         let snapshotId;

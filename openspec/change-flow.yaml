@@ -353,3 +353,20 @@ transitions:
       Владелец утвердил reuse существующего sealed capture для static-only staging194.
       RED tests из commit 08c05f55 перенесены в отдельную implementation ветку,
       синхронизированную на main a3f24ea8; начинается реализация.
+
+  - change: repeatable-production-cms-deploy
+    to: queued
+    at: 2026-10-30T19:25:39Z
+    reason: >-
+      Подготовлено отдельное предложение повторяемой production paired CMS/site
+      поставки от origin/main@65b276930b8e0f6a251c42fe3d690a854e3a6a21. Реализация
+      не начата; требуется review и утверждение владельца.
+
+  - change: repeatable-production-cms-deploy
+    to: active
+    at: 2026-10-30T22:02:15Z
+    reason: >-
+      Владелец утвердил реализацию после двух независимых проходов по актуальной
+      спецификации. База повторно сверена с origin/main@65b276930b8e0f6a251c42fe3d690a854e3a6a21;
+      RED-тесты назначены отдельной чистой сессии. Временный active-limit experiment
+      завершился 24.09.2026 и в основном правиле не продлён.

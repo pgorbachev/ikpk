@@ -230,18 +230,25 @@ const CHILD_KEYS = [
   'IKPK_VERIFY_HOST',
   'IKPK_REFRESH_STATE',
   'IKPK_INSTALLED_COMMIT',
+  'INITIAL_PROD_PROFILE',
+  'DEPLOY_MODE',
   'IKPK_CAPTURE_PROFILE',
   'IKPK_CAPTURE_DATABASE',
   'IKPK_CAPTURE_MEDIA',
   'IKPK_CAPTURE_ROOT',
   'PAYMENT_ROLE',
+  'PAYMENT_ENDPOINT_PROD',
   'DEMO_FORMS',
   'CHAT_LOADER_SRC',
+  'CHAT_OFFLINE_MESSAGE',
 ];
 
 export function childEnvironment(source, { includeCmsCredentials = true } = {}) {
   const env = { NODE_OPTIONS: '--max-old-space-size=480' };
+  const profileBuild = source.IKPK_CAPTURE_PROFILE === 'staging194' || source.INITIAL_PROD_PROFILE === '1';
+  const profileBuildKeys = new Set(['DEPLOY_MODE', 'CHAT_OFFLINE_MESSAGE']);
   for (const key of CHILD_KEYS) {
+    if (!profileBuild && profileBuildKeys.has(key)) continue;
     if (source.IKPK_CAPTURE_PROFILE !== 'staging194' &&
         ['IKPK_CAPTURE_DATABASE', 'IKPK_CAPTURE_MEDIA', 'IKPK_CAPTURE_ROOT'].includes(key)) continue;
     if (!includeCmsCredentials && ['CMS_URL', 'CMS_TOKEN', 'STRAPI_URL', 'STRAPI_API_TOKEN'].includes(key)) continue;
@@ -251,7 +258,7 @@ export function childEnvironment(source, { includeCmsCredentials = true } = {}) 
 }
 
 /** Окружение `npm run build`. Телеметрия Astro пишет в домашний каталог до проверки отключения. */
-export function siteBuildEnv(workspace, staging194 = false) {
+export function siteBuildEnv(workspace, staging194 = false, production = false, source = process.env) {
   const env = {
     CONTENT_SNAPSHOT_DIR: join(workspace, 'web', '.snapshot'),
     NODE_OPTIONS: '--max-old-space-size=480',
@@ -266,6 +273,23 @@ export function siteBuildEnv(workspace, staging194 = false) {
     CHAT_LOADER_SRC: 'none',
     CHAT_OFFLINE_MESSAGE: 'absent',
   });
+  if (production) {
+    if (staging194 || source.INITIAL_PROD_PROFILE !== '1' || source.DEPLOY_MODE !== 'prod' ||
+        source.PAYMENT_ROLE !== 'prod' || !source.PAYMENT_ENDPOINT_PROD ||
+        (source.DEMO_FORMS && source.DEMO_FORMS !== 'stub') ||
+        (source.CHAT_OFFLINE_MESSAGE && source.CHAT_OFFLINE_MESSAGE !== 'absent') || !source.CHAT_LOADER_SRC) {
+      throw new Error('production site refresh requires the validated production build environment');
+    }
+    Object.assign(env, {
+      INITIAL_PROD_PROFILE: '1',
+      DEPLOY_MODE: source.DEPLOY_MODE,
+      PAYMENT_ROLE: source.PAYMENT_ROLE,
+      PAYMENT_ENDPOINT_PROD: source.PAYMENT_ENDPOINT_PROD,
+      DEMO_FORMS: '',
+      CHAT_LOADER_SRC: source.CHAT_LOADER_SRC,
+      CHAT_OFFLINE_MESSAGE: '',
+    });
+  }
   return env;
 }
 
@@ -516,6 +540,10 @@ export async function runRestore(deps) {
   const releaseId = previous.slice('releases/'.length);
   const expected = deps.identityOf(releaseId);
   if (!expected) return finish(deps, { status: 'failed', message: MESSAGES.restoreUnreadable, switched: false });
+  if (deps.installedCommit !== undefined && expected.commit !== deps.installedCommit) {
+    return finish(deps, { status: 'failed', message: MESSAGES.restoreUnreadable,
+      detail: 'предыдущий релиз собран другим исходным кодом CMS', switched: false });
+  }
   let switched = false;
   try {
     deps.switchRelease(releaseId);
@@ -555,7 +583,8 @@ export async function runRestore(deps) {
  * Lock и запись running живут в одном try/finally. Отказ записи снимает lock.
  * Исключение проверки после смены ссылки — ошибка проверки, не «сайт не менялся».
  */
-export async function runLockedRestore({ lock, pid, current, write, switchRelease, identityOf, verify }) {
+export async function runLockedRestore({ lock, pid, current, write, switchRelease, identityOf, verify,
+  installedCommit }) {
   if (!tryLock(lock, pid)) return { status: 'running', message: MESSAGES.busy };
   let switched = false;
   try {
@@ -577,6 +606,7 @@ export async function runLockedRestore({ lock, pid, current, write, switchReleas
         return result;
       },
       identityOf,
+      installedCommit,
       verify,
     });
   } catch (error) {

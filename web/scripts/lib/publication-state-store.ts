@@ -20,11 +20,14 @@ export interface PublicationStateSnapshot {
   publications: VerifiedPair[];
 }
 export interface PublicationStateStore {
-  readHistory(): Promise<{ head: string; publications: VerifiedPair[] }>;
+  readHistory(validateLedger?: boolean): Promise<{ head: string; publications: VerifiedPair[]; lineage?: {
+    observedEntry: number; fingerprint: string; revision: number | null; highWaterMark: number } }>;
   read(fingerprint: string): Promise<PublicationStateSnapshot>;
   appendPublication(record: PublicationRecord): Promise<{ head: string; changed: boolean }>;
   acceptState(input: { expectedObservedEntry: number; fingerprint: string; actor: string }):
     Promise<{ head: string; entry: LedgerEntry & { confirmedBy: string } }>;
+  recordRestore(input: { expectedObservedEntry: number; fingerprint: string; operationId: string }):
+    Promise<{ head: string; entry: LedgerEntry; changed: boolean }>;
 }
 export class PublicationProvenanceMismatchError extends Error {
   readonly latestEntry: number;
@@ -82,8 +85,25 @@ export function createPublicationStateStore(options: PublicationStateStoreOption
     if (mergeVerifiedPairs([], publications).length !== publications.length) throw new Error('duplicate persisted publication index key');
     return { head, publications };
   }
+  async function preflightHistory() {
+    const state = history(); const dir = join(workDir, 'ledger');
+    for (const path of [dir, join(dir, 'high-water-mark')]) {
+      if (!existsSync(path) || lstatSync(path).isSymbolicLink()) throw new Error('provenance ledger unavailable or unsafe');
+    }
+    const entries = await createLedger({ dir, hasPublicationHistory: true, initialize: false }).entries();
+    const hwm = readFileSync(join(dir, 'high-water-mark'), 'utf8').trim();
+    if (!entries.length || !/^\d+$/.test(hwm) || !Number.isSafeInteger(Number(hwm)) || Number(hwm) !== entries.at(-1)!.number ||
+        entries.some((entry, i) => entry.number !== i + 1 || entry.previous !== (i === 0 ? null : i) || !entry.fingerprint)) {
+      throw new Error('provenance ledger corrupt sequence or high-water-mark');
+    }
+    const latest = entries.at(-1)!;
+    const observation = await createLedger({ dir, hasPublicationHistory: true, initialize: false })
+      .observe({ fingerprint: latest.fingerprint });
+    return { ...state, lineage: { observedEntry: observation.observedEntry, fingerprint: latest.fingerprint,
+      revision: observation.revision, highWaterMark: observation.highWaterMark } };
+  }
   async function snapshot(fingerprint: string): Promise<PublicationStateSnapshot> {
-    const { head, publications } = history(); const dir = join(workDir, 'ledger');
+    const { head, publications } = await history(); const dir = join(workDir, 'ledger');
     for (const path of [dir, join(dir, 'high-water-mark')]) {
       if (!existsSync(path) || lstatSync(path).isSymbolicLink()) throw new Error('provenance ledger unavailable or unsafe');
     }
@@ -110,7 +130,7 @@ export function createPublicationStateStore(options: PublicationStateStoreOption
     try { git(['push', 'origin', `HEAD:refs/heads/${PROVENANCE_BRANCH}`]); return true; } catch { return false; }
   }
   return {
-    readHistory: () => serial(async () => history()),
+    readHistory: (validateLedger = false) => serial(async () => validateLedger ? preflightHistory() : history()),
     read: (fingerprint) => serial(async () => {
       const state = await snapshot(fingerprint);
       if (!fingerprint || state.entries.at(-1)!.fingerprint !== fingerprint) {
@@ -124,7 +144,7 @@ export function createPublicationStateStore(options: PublicationStateStoreOption
         ciEvidenceProblem(record.ciEvidence, record.commit) || localChecksProblem(record.localChecks, record) ||
         rollbackEvidenceProblem(record)) throw new Error('invalid publication evidence');
       for (let attempt = 0; attempt < attempts; attempt++) {
-        const state = history();
+        const state = await history();
         const next = upsertVerifiedPair(state.publications, record);
         if (next.length === state.publications.length) return { head: state.head, changed: false };
         writeVerifiedPairs(workDir, next);
@@ -146,6 +166,29 @@ export function createPublicationStateStore(options: PublicationStateStoreOption
         if (push()) return { head: git(['rev-parse', 'HEAD']), entry: entry as LedgerEntry & { confirmedBy: string } };
       }
       throw new Error('accept-state push conflict: retry attempts exhausted');
+    }),
+    recordRestore: (input) => serial(async () => {
+      if (!Number.isSafeInteger(input.expectedObservedEntry) || input.expectedObservedEntry < 1 ||
+          typeof input.fingerprint !== 'string' || !input.fingerprint ||
+          !/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(input.operationId)) throw new Error('invalid restore provenance input');
+      for (let attempt = 0; attempt < attempts; attempt++) {
+        const state = await snapshot(input.fingerprint);
+        const last = state.entries.at(-1)!;
+        // A retry after a successful CAS push is idempotent only for the immediately
+        // following restore entry with the same observed fingerprint.
+        if (last.number === input.expectedObservedEntry + 1 && last.fingerprint === input.fingerprint &&
+            last.marker === 'restore' && last.operationId === input.operationId) {
+          return { head: state.head, entry: last, changed: false };
+        }
+        if (last.number !== input.expectedObservedEntry || last.fingerprint !== input.fingerprint) {
+          throw new Error('stale observed-entry restore');
+        }
+        const ledger = createLedger({ dir: join(workDir, 'ledger'), hasPublicationHistory: true, initialize: false });
+        const entry = await ledger.recordEvent({ fingerprint: input.fingerprint, marker: 'restore', operationId: input.operationId });
+        commit([`ledger/entry-${String(entry.number).padStart(6, '0')}.json`, 'ledger/high-water-mark'], 'Record restored CMS state');
+        if (push()) return { head: git(['rev-parse', 'HEAD']), entry, changed: true };
+      }
+      throw new Error('restore provenance push conflict: retry attempts exhausted');
     }),
   };
 }

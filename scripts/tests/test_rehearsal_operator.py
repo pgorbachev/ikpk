@@ -17,6 +17,17 @@ JOBS = sorted(staging193.REQUIRED_TEST_JOBS)
 
 
 class OperatorAdmissionTests(unittest.TestCase):
+    def test_production_restore_refuses_new_ledger_entry_after_activation_even_same_fingerprint(self):
+        fingerprint = "sha256:" + "c" * 64
+        preflight = {"lineage": {"observedEntry": 2, "fingerprint": fingerprint,
+                                  "revision": 2, "highWaterMark": 2}}
+        current = {"latestEntry": 3, "latestFingerprint": fingerprint,
+                   "revision": 2, "highWaterMark": 3}
+        with self.assertRaisesRegex(staging193.Refusal, "lineage changed after preflight"):
+            staging193.require_unchanged_provenance_lineage(preflight, current)
+        staging193.require_unchanged_provenance_lineage(preflight,
+            {"latestEntry": 2, "latestFingerprint": fingerprint, "revision": 2, "highWaterMark": 2})
+
     def setUp(self):
         self.runs = [{
             "headSha": SHA,
@@ -287,6 +298,26 @@ class OperatorAdmissionTests(unittest.TestCase):
         self.assertEqual(browser.call_args.kwargs["chat_loader_src"], staging193.INITIAL_PROD_CHAT_LOADER_SRC)
         self.assertTrue(all(call[0][0] in ("static-main", "export-static-main") for call in calls))
 
+    def test_production_paired_committed_finalize_works_without_github(self):
+        responses = [json.dumps({"phase": "committed", "sourceSha": SHA}).encode(),
+                     json.dumps({"phase": "committed"}).encode()]
+        calls = []
+
+        def ssh(arguments, **kwargs):
+            calls.append((arguments, kwargs))
+            return responses.pop(0)
+
+        args = type("Args", (), {"profile": "production-paired", "host": staging193.INITIAL_PROD_HOST,
+            "command": "static-publish", "operation_id": "paired-finalize", "source_sha": SHA})()
+        with patch.object(staging193, "ssh_remote", side_effect=ssh), \
+             patch.object(staging193, "validate_production_paired_admission",
+                          side_effect=AssertionError("finalization must not need GitHub")):
+            staging193.invoke(args)
+
+        self.assertEqual([call[0][0] for call in calls], ["status", "static-publish"])
+        self.assertTrue(all(call[1].get("profile") == "production-paired" for call in calls))
+        self.assertEqual(responses, [])
+
     def test_production_static_profile_refuses_staging_host_before_ci_or_ssh(self):
         for host in (staging193.TARGET_HOST, "193.124.115.99"):
             with self.subTest(host=host):
@@ -352,7 +383,7 @@ class OperatorAdmissionTests(unittest.TestCase):
 
     def test_admits_only_exact_canonical_tests_push_with_every_mandatory_job(self):
         with patch.object(staging193, "capture", side_effect=self._capture):
-            result = staging193.validate_sha_and_ci(SHA)
+            result = staging193.validate_sha_and_ci(SHA, "staging194-dev")
         self.assertEqual(result["sourceSha"], SHA)
         self.assertEqual(result["runId"], 123)
         self.assertEqual(result["attempt"], 1)
@@ -365,7 +396,7 @@ class OperatorAdmissionTests(unittest.TestCase):
 
         with patch.object(staging193, "capture", side_effect=moved):
             with self.assertRaisesRegex(staging193.Refusal, "canonical pgorbachev/ikpk"):
-                staging193.validate_sha_and_ci(SHA)
+                staging193.validate_sha_and_ci(SHA, "staging194-dev")
 
     def test_canonical_head_lookup_does_not_use_a_local_fork_origin(self):
         calls = []
@@ -383,14 +414,14 @@ class OperatorAdmissionTests(unittest.TestCase):
                 return json.dumps({"jobs": self.jobs})
             return ""
         with patch.object(staging193, "capture", side_effect=canonical):
-            staging193.validate_sha_and_ci(SHA)
+            staging193.validate_sha_and_ci(SHA, "staging194-dev")
         self.assertFalse(any(argv[:3] == ["git", "ls-remote", "origin"] for argv in calls))
 
     def test_rejects_skipped_or_cancelled_mandatory_job(self):
         self.jobs[0] = {"name": self.jobs[0]["name"], "status": "completed", "conclusion": "skipped"}
         with patch.object(staging193, "capture", side_effect=self._capture):
             with self.assertRaisesRegex(staging193.Refusal, "not successful"):
-                staging193.validate_sha_and_ci(SHA)
+                staging193.validate_sha_and_ci(SHA, "staging194-dev")
 
     def test_main_admission_uses_exact_main_push_and_returns_all_required_jobs(self):
         with patch.object(staging193, "capture", side_effect=self._main_capture):

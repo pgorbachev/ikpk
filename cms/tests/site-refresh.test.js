@@ -72,11 +72,54 @@ test('чужая роль и пароль не попадают в окруже�
   assert.equal(publicView({ detail: 'Bearer secret-token', status: 'failed' }).detail, 'Bearer [скрыто]');
 });
 
+test('обычный CMS refresh передаёт worker workspace и installed commit, убирая только profile flags', () => {
+  const root = mkdtempSync(join(tmpdir(), 'ikpk-ordinary-refresh-env-'));
+  try {
+    mkdirSync(join(root, 'web/node_modules/astro'), { recursive: true });
+    mkdirSync(join(root, 'web/node_modules/tsx'), { recursive: true });
+    writeFileSync(join(root, 'web/node_modules/astro/package.json'), '{}');
+    writeFileSync(join(root, 'web/node_modules/tsx/package.json'), '{}');
+    const commit = 'a'.repeat(40);
+    const env = childEnvironment({
+      IKPK_BUILD_WORKSPACE: root, IKPK_VERIFY_URL: 'https://ikpk.su/release.json',
+      IKPK_INSTALLED_COMMIT: commit, PAYMENT_ROLE: 'ci',
+      DEPLOY_MODE: 'stand', CHAT_OFFLINE_MESSAGE: 'trial-only',
+    });
+    assert.equal(env.IKPK_BUILD_WORKSPACE, root);
+    assert.equal(env.IKPK_INSTALLED_COMMIT, commit);
+    assert.equal(env.PAYMENT_ROLE, 'ci');
+    assert.equal(env.DEPLOY_MODE, undefined);
+    assert.equal(env.CHAT_OFFLINE_MESSAGE, undefined);
+    assert.equal(refreshReady(env), true, 'ordinary worker must remain launchable with its configured workspace');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('сборка сайта не пишет телеметрию Astro в домашний каталог службы', () => {
   const env = siteBuildEnv('/var/lib/ikpk-site-build');
   assert.equal(env.ASTRO_TELEMETRY_DISABLED, '1');
   assert.equal(env.CONTENT_SNAPSHOT_DIR, '/var/lib/ikpk-site-build/web/.snapshot');
   assert.equal(env.NODE_OPTIONS, '--max-old-space-size=480');
+});
+
+test('production refresh сборка задаёт production flags вместо унаследованных trial flags', () => {
+  const source = {
+    INITIAL_PROD_PROFILE: '1', DEPLOY_MODE: 'prod', PAYMENT_ROLE: 'prod',
+    PAYMENT_ENDPOINT_PROD: 'https://ikpk.su/api', DEMO_FORMS: 'stub',
+    CHAT_LOADER_SRC: 'https://cdn-ru.bitrix24.ru/b35315886/crm/site_button/loader_2_siutnh.js',
+    CHAT_OFFLINE_MESSAGE: 'absent',
+  };
+  const env = siteBuildEnv('/var/lib/ikpk-site-build', false, true, source);
+  assert.equal(env.INITIAL_PROD_PROFILE, '1');
+  assert.equal(env.DEPLOY_MODE, 'prod');
+  assert.equal(env.PAYMENT_ROLE, 'prod');
+  assert.equal(env.PAYMENT_ENDPOINT_PROD, 'https://ikpk.su/api');
+  assert.equal(env.DEMO_FORMS, '');
+  assert.equal(env.CHAT_LOADER_SRC, source.CHAT_LOADER_SRC);
+  assert.equal(env.CHAT_OFFLINE_MESSAGE, '');
+  assert.throws(() => siteBuildEnv('/var/lib/ikpk-site-build', false, true,
+    { ...source, PAYMENT_ROLE: 'ci' }), /validated production build environment/);
 });
 
 test('команда сборки ограничивает память и не ставит зависимости', () => {
@@ -501,6 +544,31 @@ test('отказ записи running снимает lock возврата', asy
     assert.equal(writes >= 1, true);
     assert.equal(result.switched, false);
     assert.equal(result.status, 'failed');
+    assert.equal(existsSync(lock), false);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('Restore refuses a previous release from another CMS source before switching current', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'ikpk-restore-source-mismatch-'));
+  try {
+    const lock = join(root, 'state.json.lock');
+    const switches = [];
+    const result = await runLockedRestore({
+      lock,
+      pid: 78,
+      current: { status: 'succeeded', previousReleaseId: 'releases/pre-paired' },
+      installedCommit: 'a'.repeat(40),
+      write: () => {},
+      identityOf: () => ({ commit: 'b'.repeat(40), snapshotId: 'snap:pre-paired' }),
+      switchRelease: (releaseId) => switches.push(releaseId),
+      verify: async () => ({ ok: true }),
+    });
+
+    assert.equal(result.status, 'failed');
+    assert.equal(result.switched, false);
+    assert.deepEqual(switches, []);
     assert.equal(existsSync(lock), false);
   } finally {
     rmSync(root, { recursive: true, force: true });

@@ -171,6 +171,7 @@ async function restorePrevious() {
     write: (record) => writeRecord(state, record),
     switchRelease: (releaseId) => switchCurrent(webRoot, releaseId),
     identityOf: (releaseId) => identityFromReleaseDir(join(webRoot, 'releases', releaseId)),
+    installedCommit: process.env.IKPK_INSTALLED_COMMIT,
     verify: (expected) =>
       verifyRelease({
         url: process.env.IKPK_VERIFY_URL,
