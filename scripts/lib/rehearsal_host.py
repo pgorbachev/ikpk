@@ -542,11 +542,8 @@ def _wait_health(url: str, seconds: int = 1200) -> None:
     raise HostFailure(f"health did not recover within {seconds}s: {last}")
 
 
-def _capture_media(config: dict[str, Any], destination: Path) -> list[dict[str, Any]]:
+def _media_inventory(config: dict[str, Any]) -> list[dict[str, Any]]:
     inventory: list[dict[str, Any]] = []
-    media_dir = destination / "media"
-    media_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
-    seen = set()
     for entry in config["mediaRoots"]:
         declared_root = Path(entry["path"])
         if declared_root.is_symlink():
@@ -561,19 +558,37 @@ def _capture_media(config: dict[str, Any], destination: Path) -> list[dict[str, 
                 relative = item.relative_to(root).as_posix()
                 if not relative or any(part in (".", "..") for part in Path(relative).parts):
                     raise HostFailure(f"media path is unsupported: {relative}")
-                digest = sha256_file(item)
-                target_name = f"sha256:{digest}"
-                copied = media_dir / target_name
-                if target_name not in seen:
-                    shutil.copy2(item, copied)
-                    seen.add(target_name)
-                inventory.append({"url": entry["prefix"] + relative, "file": f"media/{target_name}",
-                                  "sha256": digest, "size": item.stat().st_size,
+                info = item.stat()
+                inventory.append({"url": entry["prefix"] + relative, "sha256": sha256_file(item),
+                                  "size": info.st_size,
                                   "originalName": relative, "mode": stat.S_IMODE(item.stat().st_mode),
-                                  "uid": item.stat().st_uid, "gid": item.stat().st_gid})
+                                  "uid": info.st_uid, "gid": info.st_gid})
             elif not item.is_dir():
                 raise HostFailure(f"media tree contains a non-regular object: {item}")
     inventory.sort(key=lambda item: item["url"])
+    return inventory
+
+
+def _media_state_sha256(inventory: list[dict[str, Any]]) -> str:
+    state = [{key: item[key] for key in ("url", "sha256", "size", "mode", "uid", "gid")}
+             for item in sorted(inventory, key=lambda value: value.get("url", ""))]
+    return hashlib.sha256(json.dumps(state, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+
+
+def _capture_media(config: dict[str, Any], destination: Path) -> list[dict[str, Any]]:
+    inventory = _media_inventory(config)
+    media_dir = destination / "media"
+    media_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
+    copied: set[str] = set()
+    for item in inventory:
+        source = next(Path(root["path"]).resolve(strict=True) for root in config["mediaRoots"]
+                      if item["url"].startswith(root["prefix"])) / item["originalName"]
+        target_name = f"sha256:{item['sha256']}"
+        target = media_dir / target_name
+        if target_name not in copied:
+            shutil.copy2(source, target)
+            copied.add(target_name)
+        item["file"] = f"media/{target_name}"
     return inventory
 
 
@@ -909,6 +924,7 @@ def _old_pair(config: dict[str, Any]) -> dict[str, Any]:
             "cmsDatabaseProof": db_proof}
     if config.get("profile") == "production-paired":
         result["cmsSourceEnvironment"] = _paired_cms_source_env(config)
+        result["mediaStateSha256"] = _media_state_sha256(_media_inventory(config))
     return result
 
 
@@ -945,6 +961,7 @@ def _record_fenced_baseline(config: dict[str, Any], state: RehearsalState,
     baseline.update({"cmsPath": str(cms), "staticPath": str(static), "databasePath": str(database),
                      "cmsPayloadSha256": _cms_payload_sha256(cms, uploads),
                      "databaseSha256": sha256_file(database), "staticTreeSha256": _tree_sha256(static)})
+    baseline["mediaStateSha256"] = _media_state_sha256(_media_inventory(config))
     state._append({"version": 1, "record": "fenced-baseline", "operationId": operation_id,
                    "sourceSha": source_sha, "oldPair": baseline})
 
@@ -2984,7 +3001,7 @@ def _restore_media(config: dict[str, Any], backup_dir: Path, manifest: dict[str,
 
 def _recover(config: dict[str, Any], state: RehearsalState, operation_id: str,
              *, stage_only: bool = False, expected_fingerprint: str | None = None,
-             restore_event: dict[str, Any] | None = None) -> dict[str, Any]:
+             finalize_restore_fingerprint: str | None = None) -> dict[str, Any]:
     if any(row.get("operationKind") == "static-main" for row in state._operation_rows(operation_id)):
         raise HostFailure("static-main operation cannot enter CMS/database recovery")
     if state._is_committed(operation_id):
@@ -2995,6 +3012,19 @@ def _recover(config: dict[str, Any], state: RehearsalState, operation_id: str,
     old_pair = _effective_old_pair(state, operation_id)
     live = Path(config["cmsDatabase"]).resolve(strict=True)
     already_recovered = state._is_recovered(operation_id)
+    paired_uploads = None
+    if config.get("profile") == "production-paired":
+        paired_uploads = next((Path(item["path"]).resolve(strict=True) for item in config.get("mediaRoots", [])
+                               if item.get("prefix") == "/uploads/"), None)
+
+    def old_pair_content_matches() -> bool:
+        if config.get("profile") != "production-paired":
+            return True
+        expected_payload = old_pair.get("cmsPayloadSha256")
+        expected_media = old_pair.get("mediaStateSha256")
+        return (paired_uploads is not None and isinstance(expected_payload, str) and isinstance(expected_media, str)
+                and _cms_payload_sha256(_current_target(Path(config["currentCms"])), paired_uploads) == expected_payload
+                and _media_state_sha256(_media_inventory(config)) == expected_media)
 
     def reopen_old_pair() -> bool:
         if config.get("profile") == "production-paired":
@@ -3007,6 +3037,8 @@ def _recover(config: dict[str, Any], state: RehearsalState, operation_id: str,
         _database_process_proof(_service_pid(config["cmsUnit"]), live)
         if str(_current_target(Path(config["currentCms"]))) != old_pair["cmsPath"]:
             raise HostFailure("old CMS release is not selected during recovery reopen")
+        if not old_pair_content_matches():
+            raise HostFailure("restored CMS and media payload differs from the journaled old pair")
         if _tree_sha256(_current_target(Path(config["currentStatic"]))) != old_pair["staticTreeSha256"]:
             raise HostFailure("restored static pointer does not identify the recorded old bytes")
         _wait_health(config["siteHealthUrl"], 1200)
@@ -3018,27 +3050,27 @@ def _recover(config: dict[str, Any], state: RehearsalState, operation_id: str,
 
     prepared = next((row for row in state._operation_rows(operation_id)
                      if row.get("record") == "restore-prepared"), None)
-    if restore_event is not None:
+    if finalize_restore_fingerprint is not None:
         if config.get("profile") != "production-paired" or not prepared:
             raise HostFailure("restore finalize requires a staged production-paired restore")
-        fingerprint = restore_event.get("fingerprint")
-        entry = restore_event.get("entry")
-        if (not CONTENT_FINGERPRINT_RE.fullmatch(str(fingerprint)) or prepared.get("fingerprint") != fingerprint or isinstance(entry, bool) or
-                not isinstance(entry, int) or entry < 1 or prepared.get("databaseSha256") != sha256_file(live) or
+        fingerprint = finalize_restore_fingerprint
+        if (not CONTENT_FINGERPRINT_RE.fullmatch(str(fingerprint)) or prepared.get("fingerprint") != fingerprint or
+                prepared.get("databaseSha256") != sha256_file(live) or
                 prepared.get("operationId") != operation_id):
             raise HostFailure("restore finalize identity or restored database changed")
-        recorded = next((row for row in state._operation_rows(operation_id)
-                         if row.get("record") == "restore-provenance-recorded"), None)
-        if recorded and (recorded.get("fingerprint") != fingerprint or recorded.get("entry") != entry):
-            raise HostFailure("restore provenance retry differs from its journaled CAS event")
-        if not recorded:
-            state._append({"version": 1, "record": "restore-provenance-recorded", "operationId": operation_id,
-                           "sourceSha": start["sourceSha"], "fingerprint": fingerprint, "entry": entry})
+        offhost_dir = Path(config["backupRoot"]) / operation_id / "offhost-backup"
+        manifest = _backup_manifest(config, operation_id, offhost_dir)
+        expected_media_sha = _media_state_sha256(manifest.get("media", []))
+        if (manifest.get("mediaManifestSha256") != prepared.get("mediaManifestSha256") or
+                expected_media_sha != prepared.get("mediaStateSha256") or
+                _media_state_sha256(_media_inventory(config)) != expected_media_sha):
+            raise HostFailure("restored CMS media bytes or permissions differ from the staged operation backup")
         state.recover(operation_id, lambda: sha256_file(live) == prepared["databaseSha256"]
-                      and _tree_sha256(_current_target(Path(config["currentStatic"]))) == old_pair["staticTreeSha256"],
+                      and _tree_sha256(_current_target(Path(config["currentStatic"]))) == old_pair["staticTreeSha256"]
+                      and old_pair_content_matches(),
                       reopen_old_pair)
         return {"operationId": operation_id, "phase": "recovered", "restoredPair": old_pair,
-                "restoreFingerprint": fingerprint, "provenanceEntry": entry}
+                "restoreFingerprint": fingerprint}
 
     if stage_only and prepared:
         if (prepared.get("databaseSha256") != sha256_file(live) or
@@ -3096,6 +3128,7 @@ def _recover(config: dict[str, Any], state: RehearsalState, operation_id: str,
                     str(_current_target(Path(config["currentCms"]))) == baseline.get("cmsPath") and
                     str(_current_target(Path(config["currentStatic"]))) == baseline.get("staticPath") and
                     _tree_sha256(_current_target(Path(config["currentStatic"]))) == baseline.get("staticTreeSha256") and
+                    _media_state_sha256(_media_inventory(config)) == baseline.get("mediaStateSha256") and
                     _cms_payload_sha256(_current_target(Path(config["currentCms"])),
                         next(Path(item["path"]).resolve(strict=True) for item in config["mediaRoots"]
                              if item["prefix"] == "/uploads/")) == baseline.get("cmsPayloadSha256"))
@@ -3148,7 +3181,9 @@ def _recover(config: dict[str, Any], state: RehearsalState, operation_id: str,
             raise HostFailure("staged restore requires the verified production backup")
         state._append({"version": 1, "record": "restore-prepared", "operationId": operation_id,
                        "sourceSha": start["sourceSha"], "databaseSha256": expected_database_sha,
-                       "staticTreeSha256": old_pair["staticTreeSha256"], "fingerprint": expected_fingerprint})
+                       "staticTreeSha256": old_pair["staticTreeSha256"], "fingerprint": expected_fingerprint,
+                       "mediaManifestSha256": manifest["mediaManifestSha256"],
+                       "mediaStateSha256": _media_state_sha256(manifest.get("media", []))})
         return {"operationId": operation_id, "phase": "restore-staged", "restoredPair": old_pair,
                 "databaseSha256": expected_database_sha}
     state.recover(operation_id, lambda: sha256_file(live) == expected_database_sha
@@ -3235,8 +3270,8 @@ def dispatch(args: argparse.Namespace) -> dict[str, Any]:
                                 expected_fingerprint=args.restore_fingerprint)
             return _recover(config, state, args.operation_id)
         if args.action == "finalize-recover":
-            return _recover(config, state, args.operation_id, restore_event={
-                "fingerprint": args.restore_fingerprint, "entry": args.provenance_entry})
+            return _recover(config, state, args.operation_id,
+                            finalize_restore_fingerprint=args.restore_fingerprint)
         if args.action == "cms-update":
             return _cms_update(config, state, args)
         if args.action == "static-publish":
@@ -3290,7 +3325,6 @@ def main(argv: Optional[list[str]] = None) -> int:
             command.add_argument("--restore-fingerprint", required=True)
         if name == "finalize-recover":
             command.add_argument("--restore-fingerprint", required=True)
-            command.add_argument("--provenance-entry", required=True, type=int)
         if name == "static-main-recover":
             command.add_argument("--rollback-committed", action="store_true")
             command.add_argument("--operator")

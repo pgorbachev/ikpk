@@ -1,21 +1,37 @@
 ## ADDED Requirements
 
-### Requirement: Paired recovery restore events bind to their operation
+### Requirement: Production paired recovery is bound to its operation backup
 
-A restore event appended by a paired deployment recovery SHALL be durably bound to the paired operation ID, restored content fingerprint, and expected previous entry. Existing append-only entries SHALL NOT be rewritten. The added binding SHALL remain readable by the previous CMS reader, and the current reader SHALL verify both the existing entry integrity and paired-operation binding. A retry SHALL accept only the exact event for its operation; a same-fingerprint event for a different operation or any other journal advance SHALL fail closed. The HWM remains monotonic. Concrete fields and checksum construction are described in the paired-deployment design.
+A production-paired operation SHALL bind its source, old CMS/schema identity, verified off-host backup digest, and captured content snapshot fingerprint in that operation's existing host journal and backup sidecar. Before static publication, the browser-checked production snapshot fingerprint SHALL equal the fingerprint projected from those verified backup bytes. Production paired operations SHALL NOT read, write, initialize, or reset the shared stand CMS provenance ledger. Existing stand publication history and ledger behavior SHALL remain unchanged.
 
-#### Scenario: Retry observes the operation's own restore event
-- **WHEN** the canonical branch contains the exact next restore entry for this operation, fingerprint, and prior entry
-- **THEN** retry verifies both integrity bindings and proceeds without appending a duplicate
+#### Scenario: Production content differs from the stand ledger
+- **WHEN** the live production content fingerprint differs from the latest fingerprint in the shared stand ledger
+- **THEN** production-paired admission uses the verified production backup and operation journal without reading or changing the stand ledger
 
-#### Scenario: The prior CMS reader verifies a new restore entry
-- **WHEN** the previous production CMS reader loads a newly appended paired-recovery restore entry
-- **THEN** it validates the entry using its existing integrity rule and remains compatible with the added binding
+#### Scenario: Candidate differs from this operation's backup
+- **WHEN** the browser-checked production snapshot fingerprint differs from the fingerprint projected from this operation's verified off-host backup
+- **THEN** the operator refuses the static switch and keeps the production operation fenced for same-ID recovery
 
-#### Scenario: Another operation restored the same content
-- **WHEN** the canonical branch contains the same restored fingerprint but a different operation ID
-- **THEN** retry does not accept that entry as its own and keeps writers fenced
+#### Scenario: Stand history remains untouched
+- **WHEN** a production-paired backup, publication, or recovery is processed
+- **THEN** no entry or high-water mark in the shared stand CMS provenance ledger is created, changed, or reset
 
-#### Scenario: A different event advanced the journal
-- **WHEN** the expected restore event is not the next canonical entry
-- **THEN** retry refuses to append or reopen writers until the journal discrepancy is reconciled
+#### Scenario: A new operation follows a prior production operation
+- **WHEN** a new production-paired operation starts after an earlier operation is terminal
+- **THEN** its old-pair and verified backup capture the then-current production CMS and media state, and recovery remains bound to that new operation's ID and backup
+
+### Requirement: Production paired recovery cannot restore a stale operation
+
+A staged production restore SHALL reopen writers only when the exact operation journal records the restore fingerprint and restored database digest, the current database still has that digest, the CMS/media payload matches the journaled old pair, and the old CMS and static targets are selected. A terminal or committed operation SHALL NOT restore a prior pair. If any required evidence is missing or differs, the host SHALL remain fenced.
+
+#### Scenario: Retry finalizes the exact staged restore
+- **WHEN** the same operation retries finalization and the staged fingerprint, database digest, CMS/media payload, and old pointers still match
+- **THEN** the host completes the existing recovery idempotently without another database/media restore
+
+#### Scenario: Restore evidence differs from the operation
+- **WHEN** the staged fingerprint or restored database/media bytes do not match the operation journal and verified backup
+- **THEN** finalization refuses to reopen writers
+
+#### Scenario: A prior terminal operation is reused
+- **WHEN** recovery is requested for an already committed or recovered operation
+- **THEN** the host refuses a database restore and does not switch CMS or static pointers to the old pair
