@@ -120,6 +120,19 @@ describe('3.3b серверный домен GET', () => {
     expect(res.body).toMatchObject({ status: 'not_found' });
   });
 
+  it('некорректный requestId → 400 до чтения/вызова платёжного провайдера', async () => {
+    svc = await startPaymentService({ env: prodEnv() });
+    const res = await jsonOf(await getStatus(svc.url, 'rehearsal'));
+    expect(res.status).toBe(400);
+    expect(res.body).toMatchObject({
+      status: 'rejected',
+      errors: [{ field: 'requestId', message: 'must be UUID v4' }],
+    });
+    expect(svc.readRecords()).toEqual([]);
+    expect(svc.yookassa.gets).toHaveLength(0);
+    expect(svc.yookassa.creates).toHaveLength(0);
+  });
+
   it('запись без определённого статуса → unknown', async () => {
     svc = await startPaymentService({ env: prodEnv() });
     const body = validPayload();
