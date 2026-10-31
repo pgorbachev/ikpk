@@ -842,6 +842,19 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
             with self.assertRaisesRegex(rehearsal_host.HostFailure, "not a real directory"):
                 rehearsal_host._ensure_cms_runtime_directory({"cmsUser": getpass.getuser()}, artifact)
 
+    def test_cms_runtime_directory_repairs_empty_partial_creation(self):
+        with tempfile.TemporaryDirectory(prefix="ikpk-cms-runtime-dir-partial-") as temporary:
+            artifact = Path(temporary) / "artifact"
+            runtime = artifact / ".strapi"
+            runtime.mkdir(parents=True)
+            user = type("User", (), {"pw_uid": 1234, "pw_gid": 2345})()
+            with patch.object(rehearsal_host.pwd, "getpwnam", return_value=user), \
+                 patch.object(rehearsal_host.os, "chown") as chown, \
+                 patch.object(rehearsal_host.os, "chmod") as chmod:
+                rehearsal_host._ensure_cms_runtime_directory({"cmsUser": "ikpk-cms"}, artifact)
+            chown.assert_called_once_with(runtime, 1234, 2345)
+            chmod.assert_called_once_with(runtime, 0o750)
+
     def test_complete_cms_build_dependency_generation_is_reused_without_mutation(self):
         with tempfile.TemporaryDirectory(prefix="ikpk-cms-build-deps-") as temporary:
             root = Path(temporary)

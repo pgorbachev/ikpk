@@ -1426,12 +1426,19 @@ def _ensure_cms_runtime_directory(config: dict[str, Any], artifact: Path) -> Non
     """Create Strapi's systemd-writable directory before the artifact is activated."""
     if artifact.is_symlink() or not artifact.is_dir():
         raise HostFailure("CMS artifact is missing or unsafe while preparing its runtime directory")
+    user = pwd.getpwnam(config["cmsUser"])
     runtime = artifact / ".strapi"
     if os.path.lexists(runtime):
         if runtime.is_symlink() or not runtime.is_dir():
             raise HostFailure("CMS artifact Strapi runtime path is not a real directory")
+        info = runtime.lstat()
+        if (info.st_uid, info.st_gid) != (user.pw_uid, user.pw_gid):
+            if next(runtime.iterdir(), None) is not None:
+                raise HostFailure("CMS artifact Strapi runtime directory has unexpected ownership and is not empty")
+            os.chown(runtime, user.pw_uid, user.pw_gid)
+        if stat.S_IMODE(info.st_mode) != 0o750:
+            os.chmod(runtime, 0o750)
     else:
-        user = pwd.getpwnam(config["cmsUser"])
         runtime.mkdir(mode=0o750)
         os.chown(runtime, user.pw_uid, user.pw_gid)
         os.chmod(runtime, 0o750)
