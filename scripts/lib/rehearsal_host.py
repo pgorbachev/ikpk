@@ -218,7 +218,8 @@ def _validate_target_binding(data: dict[str, Any]) -> None:
                 or data.get("mediaRoots") != [
                     {"path": "/opt/ikpk-cms/shared/uploads", "prefix": "/uploads/"},
                     {"path": "/var/www/ikpk/current/media", "prefix": "/media/"}]
-                or data.get("paymentEndpointProd") != INITIAL_PROD_PAYMENT_ENDPOINT):
+                or data.get("paymentEndpointProd") != INITIAL_PROD_PAYMENT_ENDPOINT
+                or data.get("chatLoaderSrc") != INITIAL_PROD_CHAT_LOADER_SRC):
             raise HostFailure("production-paired config is not bound to current production CMS data and publication lock")
         expected_origin = "https://ikpk.su"
     else:
@@ -661,7 +662,9 @@ def _tree_sha256(root: Path) -> str:
     return digest.hexdigest()
 
 
-PAIRED_CMS_ENV_KEYS = ("IKPK_BUILD_WORKSPACE", "IKPK_INSTALLED_COMMIT")
+PAIRED_CMS_ENV_KEYS = ("IKPK_BUILD_WORKSPACE", "IKPK_INSTALLED_COMMIT", "INITIAL_PROD_PROFILE",
+                       "DEPLOY_MODE", "PAYMENT_ROLE", "PAYMENT_ENDPOINT_PROD", "DEMO_FORMS",
+                       "CHAT_LOADER_SRC", "CHAT_OFFLINE_MESSAGE")
 
 
 def _paired_cms_source_env(config: dict[str, Any]) -> dict[str, Optional[str]]:
@@ -1373,8 +1376,9 @@ def _prepare_cms_candidate(config: dict[str, Any], source_root: Path, operation_
 
 
 def _start_acquisition(config: dict[str, Any], state: RehearsalState, operation_id: str,
-                       source_sha: str) -> dict[str, Any]:
-    _assert_site_refresh_idle(config)
+                       source_sha: str, *, recovery: bool = False) -> dict[str, Any]:
+    if not recovery:
+        _assert_site_refresh_idle(config)
     prior = next((row for row in state._operation_rows(operation_id) if row.get("record") == "start"), None)
     old_pair = prior.get("oldPair") if prior else _old_pair(config)
     state.begin(operation_id, source_sha, old_pair)
@@ -1563,8 +1567,15 @@ def _activate_cms(config: dict[str, Any], cms_release: Path, candidate_db: Path,
             raise HostFailure("paired CMS activation lacks its service-writable site workspace")
         if any(not (workspace / part).is_file() for part in ("cms/package.json", "web/package.json")):
             raise HostFailure("paired CMS source workspace is incomplete")
+        payment_endpoint = config.get("paymentEndpointProd")
+        chat_loader = config.get("chatLoaderSrc")
+        if payment_endpoint != INITIAL_PROD_PAYMENT_ENDPOINT or not isinstance(chat_loader, str) or not chat_loader.startswith("https://"):
+            raise HostFailure("paired CMS activation lacks the validated production site build settings")
         _write_paired_cms_source_env(config, {
-            "IKPK_BUILD_WORKSPACE": str(workspace), "IKPK_INSTALLED_COMMIT": source_sha})
+            "IKPK_BUILD_WORKSPACE": str(workspace), "IKPK_INSTALLED_COMMIT": source_sha,
+            "INITIAL_PROD_PROFILE": "1", "DEPLOY_MODE": "prod", "PAYMENT_ROLE": "prod",
+            "PAYMENT_ENDPOINT_PROD": payment_endpoint, "DEMO_FORMS": None,
+            "CHAT_LOADER_SRC": chat_loader, "CHAT_OFFLINE_MESSAGE": None})
     run(["/usr/bin/systemctl", "start", config["cmsUnit"]], timeout=120)
     _wait_health(config["cmsHealthUrl"])
     proof = _database_process_proof(_service_pid(config["cmsUnit"]), live)
@@ -3005,7 +3016,7 @@ def _recover(config: dict[str, Any], state: RehearsalState, operation_id: str,
         if prepared or imported_backup.exists():
             raise HostFailure("production backup is imported or restore is prepared; resume staged restore and provenance finalize")
 
-    _start_acquisition(config, state, operation_id, start["sourceSha"])
+    _start_acquisition(config, state, operation_id, start["sourceSha"], recovery=True)
     _write_gate(config, True)
     _verify_fence(config)
     _stop_writers(config)
@@ -3017,7 +3028,7 @@ def _recover(config: dict[str, Any], state: RehearsalState, operation_id: str,
     server_manifest = backup_dir / "manifest.json"
     offhost_dir = backup_dir / "offhost-backup"
     live = Path(config["cmsDatabase"]).resolve(strict=True)
-    if config.get("profile") == "production-paired" and server_manifest.exists():
+    if config.get("profile") == "production-paired" and server_manifest.exists() and not stage_only:
         phase = state.phase(operation_id).get("phase")
         if phase in ("fenced", "acquiring"):
             # Provenance admission can fail after backup but before CMS activation. If

@@ -230,13 +230,17 @@ const CHILD_KEYS = [
   'IKPK_VERIFY_HOST',
   'IKPK_REFRESH_STATE',
   'IKPK_INSTALLED_COMMIT',
+  'INITIAL_PROD_PROFILE',
+  'DEPLOY_MODE',
   'IKPK_CAPTURE_PROFILE',
   'IKPK_CAPTURE_DATABASE',
   'IKPK_CAPTURE_MEDIA',
   'IKPK_CAPTURE_ROOT',
   'PAYMENT_ROLE',
+  'PAYMENT_ENDPOINT_PROD',
   'DEMO_FORMS',
   'CHAT_LOADER_SRC',
+  'CHAT_OFFLINE_MESSAGE',
 ];
 
 export function childEnvironment(source, { includeCmsCredentials = true } = {}) {
@@ -251,7 +255,7 @@ export function childEnvironment(source, { includeCmsCredentials = true } = {}) 
 }
 
 /** Окружение `npm run build`. Телеметрия Astro пишет в домашний каталог до проверки отключения. */
-export function siteBuildEnv(workspace, staging194 = false) {
+export function siteBuildEnv(workspace, staging194 = false, production = false, source = process.env) {
   const env = {
     CONTENT_SNAPSHOT_DIR: join(workspace, 'web', '.snapshot'),
     NODE_OPTIONS: '--max-old-space-size=480',
@@ -266,6 +270,23 @@ export function siteBuildEnv(workspace, staging194 = false) {
     CHAT_LOADER_SRC: 'none',
     CHAT_OFFLINE_MESSAGE: 'absent',
   });
+  if (production) {
+    if (staging194 || source.INITIAL_PROD_PROFILE !== '1' || source.DEPLOY_MODE !== 'prod' ||
+        source.PAYMENT_ROLE !== 'prod' || !source.PAYMENT_ENDPOINT_PROD ||
+        (source.DEMO_FORMS && source.DEMO_FORMS !== 'stub') ||
+        (source.CHAT_OFFLINE_MESSAGE && source.CHAT_OFFLINE_MESSAGE !== 'absent') || !source.CHAT_LOADER_SRC) {
+      throw new Error('production site refresh requires the validated production build environment');
+    }
+    Object.assign(env, {
+      INITIAL_PROD_PROFILE: '1',
+      DEPLOY_MODE: source.DEPLOY_MODE,
+      PAYMENT_ROLE: source.PAYMENT_ROLE,
+      PAYMENT_ENDPOINT_PROD: source.PAYMENT_ENDPOINT_PROD,
+      DEMO_FORMS: '',
+      CHAT_LOADER_SRC: source.CHAT_LOADER_SRC,
+      CHAT_OFFLINE_MESSAGE: '',
+    });
+  }
   return env;
 }
 

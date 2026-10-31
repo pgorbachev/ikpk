@@ -65,6 +65,33 @@ def backup_archive(operation_id="operator-test"):
 
 
 class RehearsalHostFilesystemTests(unittest.TestCase):
+    def test_recovery_closes_gate_and_drains_refresh_that_started_after_preflight(self):
+        with tempfile.TemporaryDirectory(prefix="ikpk-refresh-raced-preflight-") as temporary:
+            state_path = Path(temporary) / "state.json"
+            state_path.write_text(json.dumps({"status": "running", "pid": 4321}), encoding="utf-8")
+            class State:
+                rows = [{"record": "start", "oldPair": {"cmsPath": "/old", "staticPath": "/old"}}]
+                def begin(self, *_): pass
+                def _operation_rows(self, _): return self.rows
+                def confirm_fence(self, *_): pass
+                def phase(self, _): return {"phase": "fenced"}
+            drained = []
+            def verify_idle(config):
+                self.assertEqual(json.loads(state_path.read_text())["status"], "running")
+                drained.append(True)
+                state_path.write_text(json.dumps({"status": "succeeded"}), encoding="utf-8")
+            config = {"profile": "production-paired", "siteRefreshState": str(state_path), "writerUnits": []}
+            with patch.object(rehearsal_host, "_assert_site_refresh_idle") as preflight, \
+                 patch.object(rehearsal_host, "_verify_site_refresh_idle", side_effect=verify_idle), \
+                 patch.object(rehearsal_host, "_set_flag"), patch.object(rehearsal_host, "_write_gate"), \
+                 patch.object(rehearsal_host, "_verify_fence"), patch.object(rehearsal_host, "_stop_writers"), \
+                 patch.object(rehearsal_host, "_record_fenced_baseline"):
+                result = rehearsal_host._start_acquisition(config, State(), "retry-op", "a" * 40,
+                                                           recovery=True)
+            preflight.assert_not_called()
+            self.assertEqual(drained, [True])
+            self.assertEqual(result["phase"], "fenced")
+
     def test_production_lock_reuses_existing_publisher_inode_without_chmod(self):
         if os.geteuid() == 0:
             self.skipTest("requires an unprivileged publisher-owned lock fixture")
@@ -156,6 +183,50 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
             self.assertEqual(result["dataRestored"], False)
             self.assertEqual(sha(database.read_bytes()), post_checkpoint_sha)
             copy_db.assert_not_called(); restore_media.assert_not_called()
+
+    def test_staged_restore_after_partial_media_never_uses_no_mutation_reopen(self):
+        with tempfile.TemporaryDirectory(prefix="ikpk-partial-media-restore-") as temporary:
+            root = Path(temporary); op = "partial-media"
+            archive_bytes = backup_archive(op)
+            server_backup = root / "backups" / op; offhost = server_backup / "offhost-backup"
+            offhost.mkdir(parents=True); (offhost / "backup.tar").write_bytes(archive_bytes)
+            with tarfile.open(fileobj=io.BytesIO(archive_bytes), mode="r:") as archive:
+                archive.extractall(offhost)
+            offhost_manifest = json.loads((offhost / "manifest.json").read_text())
+            (server_backup / "manifest.json").write_text(json.dumps({**offhost_manifest,
+                "archiveSha256": sha(archive_bytes)}), encoding="utf-8")
+            database = root / "live.sqlite"; shutil.copy2(offhost / "database.sqlite", database)
+            uploads = root / "uploads"; uploads.mkdir(); (uploads / "photo.jpg").write_bytes(b"partially restored")
+            cms = root / "cms"; cms.mkdir(); static = root / "static"; static.mkdir()
+            (static / "index.html").write_text("old", encoding="utf-8")
+            current_cms, current_static = root / "current-cms", root / "current-static"
+            current_cms.symlink_to(cms); current_static.symlink_to(static)
+            old_pair = {"cmsPath": str(cms.resolve()), "staticPath": str(static.resolve()),
+                        "staticTreeSha256": rehearsal_host._tree_sha256(static), "cmsPayloadSha256": "payload",
+                        "cmsSourceEnvironment": {key: None for key in rehearsal_host.PAIRED_CMS_ENV_KEYS}}
+            class State:
+                rows = [{"record": "start", "operationId": op, "sourceSha": "a" * 40, "oldPair": old_pair}]
+                def _is_committed(self, _): return False
+                def _is_recovered(self, _): return False
+                def _operation_rows(self, _): return self.rows
+                def confirm_fence(self, *_): pass
+                def require_restore_allowed(self, *_): pass
+                def _append(self, row): self.rows.append(row)
+            config = {"profile": "production-paired", "cmsDatabase": str(database), "backupRoot": str(root / "backups"),
+                      "currentCms": str(current_cms), "currentStatic": str(current_static),
+                      "releaseRoot": str(root), "staticReleaseRoot": str(root),
+                      "mediaRoots": [{"prefix": "/uploads/", "path": str(uploads)}]}
+            with patch.object(rehearsal_host, "_start_acquisition"), patch.object(rehearsal_host, "_write_gate"), \
+                 patch.object(rehearsal_host, "_verify_fence"), patch.object(rehearsal_host, "_stop_writers"), \
+                 patch.object(rehearsal_host, "_assert_no_database_handles"), \
+                 patch.object(rehearsal_host, "_cms_payload_sha256", return_value="payload"), \
+                 patch.object(rehearsal_host, "_set_flag"), patch.object(rehearsal_host.os, "chown"), \
+                 patch.object(rehearsal_host, "_copy_atomic", wraps=rehearsal_host._copy_atomic) as copy_db:
+                result = rehearsal_host._recover(config, State(), op, stage_only=True,
+                                                 expected_fingerprint="sha256:" + "c" * 64)
+            self.assertEqual(result["phase"], "restore-staged")
+            self.assertEqual((uploads / "photo.jpg").read_bytes(), b"image bytes")
+            copy_db.assert_called_once()
 
     def test_production_restore_finalize_requires_matching_staged_database_and_retries_after_cas(self):
         with tempfile.TemporaryDirectory(prefix="ikpk-paired-restore-finalize-") as temporary:
@@ -2378,15 +2449,23 @@ class ProductionPairedManualPreflightTests(unittest.TestCase):
             env_file.write_text(original, encoding="utf-8")
             config = {"cmsEnvironmentFile": str(env_file)}
             previous = rehearsal_host._paired_cms_source_env(config)
-            self.assertEqual(previous, {"IKPK_BUILD_WORKSPACE": "/old", "IKPK_INSTALLED_COMMIT": None})
+            self.assertEqual(previous, {key: ("/old" if key == "IKPK_BUILD_WORKSPACE" else
+                                              "keep-chat" if key == "CHAT_LOADER_SRC" else None)
+                                        for key in rehearsal_host.PAIRED_CMS_ENV_KEYS})
 
             rehearsal_host._write_paired_cms_source_env(config, {
-                "IKPK_BUILD_WORKSPACE": "/candidate", "IKPK_INSTALLED_COMMIT": "a" * 40})
+                **{key: None for key in rehearsal_host.PAIRED_CMS_ENV_KEYS},
+                "IKPK_BUILD_WORKSPACE": "/candidate", "IKPK_INSTALLED_COMMIT": "a" * 40,
+                "INITIAL_PROD_PROFILE": "1", "DEPLOY_MODE": "prod", "PAYMENT_ROLE": "prod",
+                "PAYMENT_ENDPOINT_PROD": rehearsal_host.INITIAL_PROD_PAYMENT_ENDPOINT,
+                "CHAT_LOADER_SRC": rehearsal_host.INITIAL_PROD_CHAT_LOADER_SRC})
             updated = env_file.read_text(encoding="utf-8")
             self.assertIn("CONTENT_ADMIN_PASSWORD=keep-me\n", updated)
-            self.assertIn("CHAT_LOADER_SRC=keep-chat\n", updated)
+            self.assertIn(f"CHAT_LOADER_SRC={rehearsal_host.INITIAL_PROD_CHAT_LOADER_SRC}\n", updated)
             self.assertIn("IKPK_BUILD_WORKSPACE=/candidate\n", updated)
             self.assertIn(f"IKPK_INSTALLED_COMMIT={'a' * 40}\n", updated)
+            self.assertIn("INITIAL_PROD_PROFILE=1\n", updated)
+            self.assertIn("PAYMENT_ROLE=prod\n", updated)
 
             rehearsal_host._write_paired_cms_source_env(config, previous)
             restored = env_file.read_text(encoding="utf-8")
@@ -2416,7 +2495,10 @@ class ProductionPairedManualPreflightTests(unittest.TestCase):
             (web_deps / "tsx/package.json").write_text("{}")
             (source / "cms/node_modules").symlink_to(cms_deps, target_is_directory=True)
             config = {"profile": "production-paired", "cmsUser": "cms",
-                      "siteBuildWorkspaceRoot": str(root / "workspace")}
+                      "siteBuildWorkspaceRoot": str(root / "workspace"),
+                      "cmsEnvironmentFile": str(root / "cms.env"),
+                      "paymentEndpointProd": rehearsal_host.INITIAL_PROD_PAYMENT_ENDPOINT,
+                      "chatLoaderSrc": rehearsal_host.INITIAL_PROD_CHAT_LOADER_SRC}
             with patch.object(rehearsal_host.pwd, "getpwnam", return_value=types.SimpleNamespace(
                     pw_uid=os.getuid(), pw_gid=os.getgid())):
                 with patch.object(rehearsal_host, "PRODUCTION_PAIRED_WORKSPACE_ROOT", root / "workspace"):
@@ -2432,14 +2514,21 @@ class ProductionPairedManualPreflightTests(unittest.TestCase):
             self.assertFalse((workspace / "web/node_modules/astro").is_symlink())
 
             env_file = root / "cms.env"
-            env_file.write_text("IKPK_BUILD_WORKSPACE=/old\n", encoding="utf-8")
+            env_file.write_text("IKPK_BUILD_WORKSPACE=/old\nPAYMENT_ROLE=ci\nDEMO_FORMS=stub\nCHAT_LOADER_SRC=none\n", encoding="utf-8")
             env_config = {"cmsEnvironmentFile": str(env_file)}
             previous = rehearsal_host._paired_cms_source_env(env_config)
             rehearsal_host._write_paired_cms_source_env(env_config, {
-                "IKPK_BUILD_WORKSPACE": str(workspace), "IKPK_INSTALLED_COMMIT": "a" * 40})
+                **{key: None for key in rehearsal_host.PAIRED_CMS_ENV_KEYS},
+                "IKPK_BUILD_WORKSPACE": str(workspace), "IKPK_INSTALLED_COMMIT": "a" * 40,
+                "INITIAL_PROD_PROFILE": "1", "DEPLOY_MODE": "prod", "PAYMENT_ROLE": "prod",
+                "PAYMENT_ENDPOINT_PROD": rehearsal_host.INITIAL_PROD_PAYMENT_ENDPOINT,
+                "CHAT_LOADER_SRC": rehearsal_host.INITIAL_PROD_CHAT_LOADER_SRC})
             self.assertIn(f"IKPK_BUILD_WORKSPACE={workspace}\n", env_file.read_text(encoding="utf-8"))
+            self.assertIn("PAYMENT_ROLE=prod\n", env_file.read_text(encoding="utf-8"))
+            self.assertNotIn("DEMO_FORMS=stub", env_file.read_text(encoding="utf-8"))
             rehearsal_host._write_paired_cms_source_env(env_config, previous)
-            self.assertEqual(env_file.read_text(encoding="utf-8"), "IKPK_BUILD_WORKSPACE=/old\n")
+            self.assertEqual(set(env_file.read_text(encoding="utf-8").splitlines()), {
+                "IKPK_BUILD_WORKSPACE=/old", "PAYMENT_ROLE=ci", "DEMO_FORMS=stub", "CHAT_LOADER_SRC=none"})
 
     def test_site_refresh_preflight_rejects_active_or_unknown_worker(self):
         with tempfile.TemporaryDirectory(prefix="ikpk-paired-drain-") as temporary:

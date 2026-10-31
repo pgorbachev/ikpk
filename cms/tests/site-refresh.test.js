@@ -79,6 +79,25 @@ test('сборка сайта не пишет телеметрию Astro в до
   assert.equal(env.NODE_OPTIONS, '--max-old-space-size=480');
 });
 
+test('production refresh сборка задаёт production flags вместо унаследованных trial flags', () => {
+  const source = {
+    INITIAL_PROD_PROFILE: '1', DEPLOY_MODE: 'prod', PAYMENT_ROLE: 'prod',
+    PAYMENT_ENDPOINT_PROD: 'https://ikpk.su/api', DEMO_FORMS: 'stub',
+    CHAT_LOADER_SRC: 'https://cdn-ru.bitrix24.ru/b35315886/crm/site_button/loader_2_siutnh.js',
+    CHAT_OFFLINE_MESSAGE: 'absent',
+  };
+  const env = siteBuildEnv('/var/lib/ikpk-site-build', false, true, source);
+  assert.equal(env.INITIAL_PROD_PROFILE, '1');
+  assert.equal(env.DEPLOY_MODE, 'prod');
+  assert.equal(env.PAYMENT_ROLE, 'prod');
+  assert.equal(env.PAYMENT_ENDPOINT_PROD, 'https://ikpk.su/api');
+  assert.equal(env.DEMO_FORMS, '');
+  assert.equal(env.CHAT_LOADER_SRC, source.CHAT_LOADER_SRC);
+  assert.equal(env.CHAT_OFFLINE_MESSAGE, '');
+  assert.throws(() => siteBuildEnv('/var/lib/ikpk-site-build', false, true,
+    { ...source, PAYMENT_ROLE: 'ci' }), /validated production build environment/);
+});
+
 test('команда сборки ограничивает память и не ставит зависимости', () => {
   const contained = launchPlan({
     env: { XDG_RUNTIME_DIR: '/run/user/1', DBUS_SESSION_BUS_ADDRESS: 'unix:path=/run/user/1/bus' },
