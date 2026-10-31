@@ -12,6 +12,7 @@ import json
 import os
 import re
 import shlex
+import shutil
 import socketserver
 import subprocess
 import sys
@@ -881,6 +882,19 @@ def invoke(args: argparse.Namespace) -> None:
         if result.get("phase") not in allowed_phases:
             raise Refusal(f"static-main recovery did not reach {expected_phase}: {result.get('phase')}")
     else:
+        if profile == "production-paired":
+            status = parse_host_json(ssh_remote(["status", "--operation-id", args.operation_id], profile=profile))
+            if status.get("phase") in ("fenced", "acquiring"):
+                try:
+                    no_mutation = parse_host_json(ssh_remote(["recover", "--operation-id", args.operation_id],
+                                                              profile=profile))
+                except Refusal as error:
+                    if "explicit recovery requires the actual verified off-host backup bytes" not in str(error):
+                        raise
+                else:
+                    if no_mutation.get("phase") == "recovered":
+                        return
+                    raise Refusal("production pre-activation recovery returned an unexpected phase")
         backup_dir = backup_root(args.backup_dir, profile)
         target = backup_dir / f"{args.operation_id}.tar"
         metadata = target.with_suffix(".json")
@@ -911,6 +925,8 @@ def invoke(args: argparse.Namespace) -> None:
                 restored = parse_host_json(ssh_remote(["restore", "--operation-id", args.operation_id,
                     "--backup-sha256", record["sha256"], "--restore-fingerprint", fingerprint],
                     profile=profile, input_bytes=payload))
+                if restored.get("phase") == "recovered" and restored.get("dataRestored") is False:
+                    return
                 if restored.get("phase") != "restore-staged":
                     raise Refusal("production backup restore did not remain fenced for provenance")
                 admission = production_paired_restore_state("read", fingerprint, args.operation_id)

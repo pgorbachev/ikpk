@@ -584,6 +584,7 @@ def _backup(config: dict[str, Any], operation_id: str) -> dict[str, Any]:
         checkpoint = source.execute("PRAGMA wal_checkpoint(TRUNCATE)").fetchone()
         if checkpoint is None or checkpoint[0] != 0 or (checkpoint[1] >= 0 and checkpoint[1] != checkpoint[2]):
             raise HostFailure("WAL checkpoint is busy or incomplete")
+        post_checkpoint_live_sha = sha256_file(live)
         target = sqlite3.connect(database_copy)
         try:
             source.backup(target)
@@ -601,6 +602,7 @@ def _backup(config: dict[str, Any], operation_id: str) -> dict[str, Any]:
     media = _capture_media(config, backup_dir)
     durable_json(backup_dir / "media-manifest.json", {"media": media})
     manifest = {"version": 1, "operationId": operation_id, "database": str(live),
+                "postCheckpointLiveSha256": post_checkpoint_live_sha,
                 "databaseSha256": sha256_file(database_copy), "mediaManifestSha256": sha256_file(backup_dir / "media-manifest.json"),
                 "media": media}
     durable_json(backup_dir / "manifest.json", manifest)
@@ -3013,18 +3015,34 @@ def _recover(config: dict[str, Any], state: RehearsalState, operation_id: str,
             # event or rewriting a database that was never changed.
             baseline = next((row.get("oldPair") for row in state._operation_rows(operation_id)
                              if row.get("record") == "fenced-baseline"), None)
-            if (not isinstance(baseline, dict) or
-                    sha256_file(live) != baseline.get("databaseSha256") or
-                    str(_current_target(Path(config["currentCms"]))) != baseline.get("cmsPath") or
-                    str(_current_target(Path(config["currentStatic"]))) != baseline.get("staticPath") or
-                    _tree_sha256(_current_target(Path(config["currentStatic"]))) != baseline.get("staticTreeSha256") or
+            unchanged = False
+            try:
+                checkpoint_manifest = json.loads(server_manifest.read_text(encoding="utf-8"))
+                checkpoint_database = backup_dir / "database.sqlite"
+                import sqlite3
+                _assert_no_database_handles(live)
+                checked = sqlite3.connect(str(checkpoint_database))
+                try:
+                    backup_integrity = checked.execute("PRAGMA integrity_check").fetchone()[0]
+                finally:
+                    checked.close()
+                unchanged = (isinstance(baseline, dict) and
+                    isinstance(checkpoint_manifest.get("databaseSha256"), str) and
+                    sha256_file(checkpoint_database) == checkpoint_manifest.get("databaseSha256") and
+                    backup_integrity == "ok" and
+                    sha256_file(live) == checkpoint_manifest.get("postCheckpointLiveSha256") and
+                    str(_current_target(Path(config["currentCms"]))) == baseline.get("cmsPath") and
+                    str(_current_target(Path(config["currentStatic"]))) == baseline.get("staticPath") and
+                    _tree_sha256(_current_target(Path(config["currentStatic"]))) == baseline.get("staticTreeSha256") and
                     _cms_payload_sha256(_current_target(Path(config["currentCms"])),
                         next(Path(item["path"]).resolve(strict=True) for item in config["mediaRoots"]
-                             if item["prefix"] == "/uploads/")) != baseline.get("cmsPayloadSha256")):
-                raise HostFailure("pre-activation live pair differs from fenced baseline; explicit restore required")
-            state.recover(operation_id, lambda: True, reopen_old_pair)
-            return {"operationId": operation_id, "phase": "recovered", "restoredPair": old_pair,
-                    "dataRestored": False}
+                             if item["prefix"] == "/uploads/")) == baseline.get("cmsPayloadSha256"))
+            except (OSError, ValueError, sqlite3.Error, StopIteration):
+                unchanged = False
+            if unchanged:
+                state.recover(operation_id, lambda: True, reopen_old_pair)
+                return {"operationId": operation_id, "phase": "recovered", "restoredPair": old_pair,
+                        "dataRestored": False}
     if server_manifest.exists():
         if not offhost_dir.is_dir() or offhost_dir.is_symlink():
             raise HostFailure("explicit recovery requires the actual verified off-host backup bytes")

@@ -23,7 +23,7 @@ try {
     GIT_CONFIG_VALUE_0: `Authorization: Basic ${Buffer.from(`x-access-token:${token}`).toString('base64')}` };
   const store = createPublicationStateStore({ remote, workDir: join(scratch, 'state'), gitEnv });
   if (action === 'preflight') {
-    const state = await store.readHistory();
+    const state = await store.readHistory(true);
     process.stdout.write(`${JSON.stringify({ preflight: true, head: state.head })}\n`);
   } else if (action === 'read') {
     const state = await store.read(fingerprint);

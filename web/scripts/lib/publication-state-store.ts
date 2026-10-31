@@ -20,7 +20,7 @@ export interface PublicationStateSnapshot {
   publications: VerifiedPair[];
 }
 export interface PublicationStateStore {
-  readHistory(): Promise<{ head: string; publications: VerifiedPair[] }>;
+  readHistory(validateLedger?: boolean): Promise<{ head: string; publications: VerifiedPair[] }>;
   read(fingerprint: string): Promise<PublicationStateSnapshot>;
   appendPublication(record: PublicationRecord): Promise<{ head: string; changed: boolean }>;
   acceptState(input: { expectedObservedEntry: number; fingerprint: string; actor: string }):
@@ -76,13 +76,16 @@ export function createPublicationStateStore(options: PublicationStateStoreOption
     if (git(['symbolic-ref', '--short', 'HEAD']) !== PROVENANCE_BRANCH) throw new Error('unsafe state branch');
     return git(['rev-parse', 'HEAD']);
   }
-  async function history() {
+  function history() {
     const head = refresh();
     const path = join(workDir, VERIFIED_PAIRS_FILE);
     if (!existsSync(path) || !lstatSync(path).isFile() || lstatSync(path).isSymbolicLink()) throw new Error('publication index unavailable or unsafe');
     const publications = readVerifiedPairs(workDir);
     if (mergeVerifiedPairs([], publications).length !== publications.length) throw new Error('duplicate persisted publication index key');
-    const dir = join(workDir, 'ledger');
+    return { head, publications };
+  }
+  async function preflightHistory() {
+    const state = history(); const dir = join(workDir, 'ledger');
     for (const path of [dir, join(dir, 'high-water-mark')]) {
       if (!existsSync(path) || lstatSync(path).isSymbolicLink()) throw new Error('provenance ledger unavailable or unsafe');
     }
@@ -92,7 +95,7 @@ export function createPublicationStateStore(options: PublicationStateStoreOption
         entries.some((entry, i) => entry.number !== i + 1 || entry.previous !== (i === 0 ? null : i) || !entry.fingerprint)) {
       throw new Error('provenance ledger corrupt sequence or high-water-mark');
     }
-    return { head, publications };
+    return state;
   }
   async function snapshot(fingerprint: string): Promise<PublicationStateSnapshot> {
     const { head, publications } = await history(); const dir = join(workDir, 'ledger');
@@ -122,7 +125,7 @@ export function createPublicationStateStore(options: PublicationStateStoreOption
     try { git(['push', 'origin', `HEAD:refs/heads/${PROVENANCE_BRANCH}`]); return true; } catch { return false; }
   }
   return {
-    readHistory: () => serial(async () => history()),
+    readHistory: (validateLedger = false) => serial(async () => validateLedger ? preflightHistory() : history()),
     read: (fingerprint) => serial(async () => {
       const state = await snapshot(fingerprint);
       if (!fingerprint || state.entries.at(-1)!.fingerprint !== fingerprint) {

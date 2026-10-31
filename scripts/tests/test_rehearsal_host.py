@@ -70,13 +70,26 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
             cms.mkdir(); static.mkdir(); (static / "index.html").write_text("old", encoding="utf-8")
             current_cms, current_static = root / "current-cms", root / "current-static"
             current_cms.symlink_to(cms); current_static.symlink_to(static)
-            database = root / "data.sqlite"; database.write_bytes(b"still-old-db")
+            database = root / "data.sqlite"
+            db = sqlite3.connect(database); db.execute("PRAGMA journal_mode=WAL")
+            db.execute("PRAGMA wal_autocheckpoint=0"); db.execute("CREATE TABLE content (body TEXT)")
+            db.execute("INSERT INTO content VALUES ('unchanged')"); db.commit()
+            pre_checkpoint_sha = sha(database.read_bytes())
+            db.execute("PRAGMA wal_checkpoint(TRUNCATE)"); post_checkpoint_sha = sha(database.read_bytes())
+            db.close()
+            self.assertNotEqual(pre_checkpoint_sha, post_checkpoint_sha)
             op, source = "pre-activation", "a" * 40
             pair = {"cmsPath": str(cms.resolve()), "staticPath": str(static.resolve()),
-                    "databaseSha256": sha(database.read_bytes()),
+                    "databaseSha256": pre_checkpoint_sha,
                     "staticTreeSha256": rehearsal_host._tree_sha256(static), "cmsPayloadSha256": "payload",
                     "cmsSourceEnvironment": {key: None for key in rehearsal_host.PAIRED_CMS_ENV_KEYS}}
-            backup = root / "backup" / op; backup.mkdir(parents=True); (backup / "manifest.json").write_text("{}")
+            backup = root / "backup" / op; backup.mkdir(parents=True)
+            backup_database = backup / "database.sqlite"
+            source = sqlite3.connect(database); target = sqlite3.connect(backup_database)
+            source.backup(target); target.close(); source.close()
+            manifest = {"databaseSha256": sha(backup_database.read_bytes()),
+                        "postCheckpointLiveSha256": post_checkpoint_sha}
+            (backup / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
 
             class State:
                 rows = [{"record": "start", "operationId": op, "sourceSha": source, "oldPair": pair},
@@ -95,9 +108,17 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
                       "currentStatic": str(current_static), "cmsUnit": "cms.service", "writerUnits": [],
                       "cmsHealthUrl": "http://cms/health", "siteHealthUrl": "https://ikpk.su/",
                       "cmsSourceEnvironment": {}, "mediaRoots": [{"prefix": "/uploads/", "path": str(root)}]}
+            self.assertEqual(sha(database.read_bytes()), manifest["postCheckpointLiveSha256"])
+            self.assertEqual(sha(backup_database.read_bytes()), manifest["databaseSha256"])
+            self.assertEqual(str(current_cms.resolve()), pair["cmsPath"])
+            self.assertEqual(str(current_static.resolve()), pair["staticPath"])
+            check = sqlite3.connect(str(backup_database))
+            self.assertEqual(check.execute("PRAGMA integrity_check").fetchone()[0], "ok")
+            check.close()
             complete = lambda *args, **_kwargs: subprocess.CompletedProcess(args, 0, "", "")
             with patch.object(rehearsal_host, "_start_acquisition"), patch.object(rehearsal_host, "_write_gate"), \
                  patch.object(rehearsal_host, "_verify_fence"), patch.object(rehearsal_host, "_stop_writers"), \
+                 patch.object(rehearsal_host, "_assert_no_database_handles"), \
                  patch.object(rehearsal_host, "_set_flag"), patch.object(rehearsal_host, "_write_paired_cms_source_env"), \
                  patch.object(rehearsal_host, "_wait_health"), patch.object(rehearsal_host, "_service_pid", return_value=1), \
                  patch.object(rehearsal_host, "_database_process_proof", return_value={}), \
@@ -106,7 +127,7 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
                  patch.object(rehearsal_host, "run", side_effect=complete):
                 result = rehearsal_host._recover(config, State(), op)
             self.assertEqual(result["dataRestored"], False)
-            self.assertEqual(database.read_bytes(), b"still-old-db")
+            self.assertEqual(sha(database.read_bytes()), post_checkpoint_sha)
             copy_db.assert_not_called(); restore_media.assert_not_called()
 
     def test_production_restore_finalize_requires_matching_staged_database_and_retries_after_cas(self):
@@ -1478,6 +1499,49 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
                 operator.invoke(args)
         self.assertEqual(remote.call_count, 1)
         self.assertEqual(remote.call_args.args[0][0], "status")
+
+    def test_production_recover_reopens_unchanged_pair_before_reading_partial_local_backup(self):
+        with tempfile.TemporaryDirectory(prefix="ikpk-no-mutation-cli-recovery-") as temporary:
+            backup_dir = Path(temporary) / "production-paired"; backup_dir.mkdir()
+            (backup_dir / "partial.tar").write_bytes(b"incomplete")
+            calls = []
+            def ssh(arguments, **_kwargs):
+                calls.append(arguments)
+                if arguments[0] == "status":
+                    return json.dumps({"phase": "fenced"}).encode()
+                if arguments[0] == "recover":
+                    return json.dumps({"phase": "recovered", "dataRestored": False}).encode()
+                raise AssertionError(arguments)
+            args = Namespace(profile="production-paired", command="recover", operation_id="partial-recovery",
+                             host=None, backup_dir=temporary, rollback_committed=False, operator=None, reason=None)
+            with patch.object(operator, "ssh_remote", side_effect=ssh):
+                operator.invoke(args)
+            self.assertEqual([call[0] for call in calls], ["status", "recover"])
+
+    def test_production_stage_restore_accepts_host_proven_no_mutation_recovery(self):
+        # The host may safely reopen without staging a restore when the pre-activation
+        # pair still matches its checkpoint-bound evidence; do not demand a false CAS event.
+        with tempfile.TemporaryDirectory(prefix="ikpk-no-mutation-stage-recovery-") as temporary:
+            payload = backup_archive("op"); digest = sha(payload); source = "a" * 40
+            target = Path(temporary) / "op.tar"; target.write_bytes(payload)
+            target.with_suffix(".json").write_text(json.dumps({"operationId": "op", "sourceSha": source,
+                "sha256": digest, "runId": 1, "attempt": 1, "oldCmsSourceSha": source,
+                "oldCmsSchemaSha256": "b" * 64}), encoding="utf-8")
+            calls = []
+            def ssh(arguments, **_kwargs):
+                calls.append(arguments)
+                if arguments[0] == "status":
+                    return json.dumps({"phase": "cms-activated", "oldPair": {"cmsPath":
+                        f"/opt/ikpk-cms/releases/{source}-old/cms-artifact"}}).encode()
+                if arguments[0] == "restore":
+                    return json.dumps({"phase": "recovered", "dataRestored": False}).encode()
+                raise AssertionError(arguments)
+            args = Namespace(profile="production-paired", command="recover", operation_id="op",
+                             host=None, backup_dir=temporary, rollback_committed=False, operator=None, reason=None)
+            with patch.object(operator, "production_paired_backup_fingerprint", return_value="sha256:" + "c" * 64), \
+                 patch.object(operator, "ssh_remote", side_effect=ssh):
+                operator.invoke(args)
+            self.assertEqual([call[0] for call in calls], ["status", "status", "restore"])
 
     def test_production_provenance_preflight_outage_stops_before_cms_update_fence(self):
         source_sha = "c" * 40
