@@ -119,6 +119,7 @@ with open(sys.argv[1], encoding="utf-8") as source:
     config = json.load(source)
 import os, pwd, stat
 account = pwd.getpwnam(config["cmsUser"])
+profile = config.get("profile")
 home = account.pw_dir
 if not os.path.isabs(home) or home == "/":
     raise SystemExit("CMS service account has no safe absolute HOME")
@@ -140,7 +141,7 @@ for name in ("stateDir", "backupRoot"):
     os.makedirs(config[name], mode=0o700, exist_ok=True)
     os.chown(config[name], 0, 0)
     os.chmod(config[name], 0o700)
-if config["profile"] == "production-static":
+if profile == "production-static":
     if os.path.lexists(config["releaseRoot"]):
         info = os.lstat(config["releaseRoot"])
         if not stat.S_ISDIR(info.st_mode) or stat.S_ISLNK(info.st_mode):
@@ -148,7 +149,7 @@ if config["profile"] == "production-static":
     os.makedirs(config["releaseRoot"], mode=0o700, exist_ok=True)
     os.chown(config["releaseRoot"], 0, account.pw_gid)
     os.chmod(config["releaseRoot"], 0o750)
-if config["profile"] == "production-paired":
+if profile == "production-paired":
     if os.path.lexists(config["releaseRoot"]):
         info = os.lstat(config["releaseRoot"])
         if not stat.S_ISDIR(info.st_mode) or stat.S_ISLNK(info.st_mode):
