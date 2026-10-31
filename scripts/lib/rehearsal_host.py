@@ -254,6 +254,14 @@ def _destination_publication_lock(config: dict[str, Any]):
         raise HostFailure("production publication lock path is not fixed")
     try:
         before = path.lstat()
+    except FileNotFoundError:
+        # A manually coordinated maintenance window may run where the canonical
+        # publisher has never created its per-command lock. Do not invent a new
+        # inode/owner here: absence is only a point-in-time observation, not
+        # cross-command serialization against another operator.
+        yield
+        return
+    try:
         if (not stat.S_ISREG(before.st_mode) or before.st_nlink != 1 or before.st_uid == 0
                 or not before.st_mode & stat.S_IWUSR):
             raise HostFailure("production publication lock must be an existing publisher-owned writable regular file")

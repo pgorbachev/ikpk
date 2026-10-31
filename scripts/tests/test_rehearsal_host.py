@@ -181,15 +181,40 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
             self.assertEqual((after.st_dev, after.st_ino, stat.S_IMODE(after.st_mode), after.st_uid),
                              (before.st_dev, before.st_ino, stat.S_IMODE(before.st_mode), before.st_uid))
 
-    def test_production_lock_fails_closed_without_creating_a_new_file(self):
+    def test_production_lock_allows_manual_window_without_creating_missing_lock(self):
         with tempfile.TemporaryDirectory(prefix="ikpk-missing-publisher-lock-") as temporary:
             lock = Path(temporary) / ".publication.lock"
             config = {"profile": "production-paired", "publicationLock": str(lock)}
             with patch.object(rehearsal_host, "PRODUCTION_PUBLICATION_LOCK", lock):
-                with self.assertRaisesRegex(rehearsal_host.HostFailure, "unavailable"):
-                    with rehearsal_host._destination_publication_lock(config):
-                        self.fail("missing lock must refuse")
+                with rehearsal_host._destination_publication_lock(config):
+                    self.assertFalse(lock.exists())
             self.assertFalse(lock.exists())
+
+    def test_production_lock_fails_closed_for_existing_unwritable_lock(self):
+        with tempfile.TemporaryDirectory(prefix="ikpk-unwritable-publisher-lock-") as temporary:
+            lock = Path(temporary) / ".publication.lock"; lock.write_bytes(b""); lock.chmod(0o400)
+            config = {"profile": "production-paired", "publicationLock": str(lock)}
+            with patch.object(rehearsal_host, "PRODUCTION_PUBLICATION_LOCK", lock):
+                with self.assertRaisesRegex(rehearsal_host.HostFailure, "publisher-owned writable"):
+                    with rehearsal_host._destination_publication_lock(config):
+                        self.fail("unwritable existing lock must refuse")
+
+    def test_production_lock_fails_closed_when_existing_lock_is_busy(self):
+        if os.geteuid() == 0:
+            self.skipTest("requires an unprivileged publisher-owned lock fixture")
+        with tempfile.TemporaryDirectory(prefix="ikpk-busy-publisher-lock-") as temporary:
+            lock = Path(temporary) / ".publication.lock"; lock.write_bytes(b""); lock.chmod(0o600)
+            config = {"profile": "production-paired", "publicationLock": str(lock)}
+            publisher_fd = os.open(lock, os.O_RDWR)
+            try:
+                import fcntl
+                fcntl.flock(publisher_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                with patch.object(rehearsal_host, "PRODUCTION_PUBLICATION_LOCK", lock):
+                    with self.assertRaisesRegex(rehearsal_host.HostFailure, "another production publisher"):
+                        with rehearsal_host._destination_publication_lock(config):
+                            self.fail("busy publisher lock must refuse")
+            finally:
+                os.close(publisher_fd)
 
     def test_legacy_production_static_does_not_require_paired_publication_lock(self):
         with tempfile.TemporaryDirectory(prefix="ikpk-static-no-paired-lock-") as temporary:

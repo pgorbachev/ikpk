@@ -16,15 +16,17 @@ while (($#)); do
 done
 [[ "$PREFIX" = /* && "$PREFIX" != / ]] || { echo 'prefix must be an absolute non-root path' >&2; exit 2; }
 if [[ "$INSTALL_CONFIG_PROFILE" == production-paired ]]; then
-  # The site publisher and this root entrypoint must keep sharing the already-used inode.
-  # There is no publisher identity in the rehearsal template, so installation is refused
-  # unless a non-root-owned, owner-writable lock already exists; never invent its owner/mode.
+  # Reuse and validate a publisher-created lock when present. Do not create or
+  # change its inode/owner/mode; absence remains a manually coordinated window.
   python3 - "$ROOT/scripts/production-paired-rehearsal.json" <<'PY'
 import json, os, stat, sys
 with open(sys.argv[1], encoding="utf-8") as source:
     lock = json.load(source)["publicationLock"]
 try:
     before = os.lstat(lock)
+except FileNotFoundError:
+    raise SystemExit(0)
+try:
     if (not stat.S_ISREG(before.st_mode) or stat.S_ISLNK(before.st_mode) or before.st_nlink != 1
             or before.st_uid == 0 or not before.st_mode & stat.S_IWUSR):
         raise SystemExit("production publication lock must be an existing publisher-owned writable regular file")
@@ -155,13 +157,14 @@ if config["profile"] == "production-paired":
     os.chown(config["releaseRoot"], 0, account.pw_gid)
     os.chmod(config["releaseRoot"], 0o750)
     lock = config["publicationLock"]
-    fd = os.open(lock, os.O_RDWR | getattr(os, "O_NOFOLLOW", 0))
-    try:
-        info = os.fstat(fd)
-        if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1 or info.st_uid == 0 or not info.st_mode & stat.S_IWUSR:
-            raise SystemExit("production publication lock must remain publisher-owned and writable")
-    finally:
-        os.close(fd)
+    if os.path.lexists(lock):
+        fd = os.open(lock, os.O_RDWR | getattr(os, "O_NOFOLLOW", 0))
+        try:
+            info = os.fstat(fd)
+            if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1 or info.st_uid == 0 or not info.st_mode & stat.S_IWUSR:
+                raise SystemExit("production publication lock must remain publisher-owned and writable")
+        finally:
+            os.close(fd)
 PY
   if ! PYTHONDONTWRITEBYTECODE=1 "$SBIN/ikpk-rehearsal" --profile "$INSTALL_CONFIG_PROFILE" validate-config; then
     if (( installed_config )); then rm -f -- "$CONFIG"; fi
