@@ -753,7 +753,7 @@ def _site_refresh_worker_pids(proc_root: Path = Path("/proc")) -> set[int]:
     return result
 
 
-def _verify_site_refresh_idle(config: dict[str, Any]) -> None:
+def _verify_site_refresh_idle(config: dict[str, Any], *, recovery: bool = False) -> None:
     if config.get("profile") != "production-paired":
         return
     path = Path(config["siteRefreshState"])
@@ -772,8 +772,10 @@ def _verify_site_refresh_idle(config: dict[str, Any]) -> None:
                 record = json.loads(path.read_text(encoding="utf-8"))
             except (OSError, ValueError) as error:
                 raise HostFailure("site-refresh state is unreadable; refusing to stop CMS") from error
-            if not isinstance(record, dict) or record.get("status") not in (
-                    "idle", "running", "succeeded", "failed", "verification-failed"):
+            allowed_statuses = {"idle", "running", "succeeded", "failed", "verification-failed"}
+            if recovery:
+                allowed_statuses.add("interrupted")
+            if not isinstance(record, dict) or record.get("status") not in allowed_statuses:
                 raise HostFailure("site-refresh or Restore has unknown state; refusing to stop CMS")
             if record.get("status") == "running":
                 pid = record.get("pid")
@@ -786,6 +788,21 @@ def _verify_site_refresh_idle(config: dict[str, Any]) -> None:
                 except PermissionError:
                     pass
                 waiting = True
+            elif record.get("status") == "interrupted":
+                recorded_pids = [record.get(key) for key in ("pid", "workerPid") if record.get(key) is not None]
+                for pid in recorded_pids:
+                    if isinstance(pid, bool) or not isinstance(pid, int) or pid < 2:
+                        raise HostFailure("interrupted site-refresh state has an invalid worker PID")
+                    try:
+                        os.kill(pid, 0)
+                    except ProcessLookupError:
+                        pass
+                    except PermissionError:
+                        waiting = True
+                    else:
+                        waiting = True
+                if not recorded_pids or record.get("phase"):
+                    waiting = waiting or bool(_site_refresh_worker_pids())
             else:
                 worker_pid = record.get("workerPid")
                 if record.get("phase") and worker_pid is None:
@@ -1384,7 +1401,7 @@ def _start_acquisition(config: dict[str, Any], state: RehearsalState, operation_
     state.begin(operation_id, source_sha, old_pair)
     _set_flag(config, True)
     _write_gate(config, True)
-    _verify_site_refresh_idle(config)
+    _verify_site_refresh_idle(config, recovery=recovery)
     _stop_writers(config)
     _verify_fence(config)
     state.confirm_fence(operation_id, lambda: all(

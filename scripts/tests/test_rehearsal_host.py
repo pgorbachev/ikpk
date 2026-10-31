@@ -76,7 +76,8 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
                 def confirm_fence(self, *_): pass
                 def phase(self, _): return {"phase": "fenced"}
             drained = []
-            def verify_idle(config):
+            def verify_idle(config, *, recovery=False):
+                self.assertTrue(recovery)
                 self.assertEqual(json.loads(state_path.read_text())["status"], "running")
                 drained.append(True)
                 state_path.write_text(json.dumps({"status": "succeeded"}), encoding="utf-8")
@@ -91,6 +92,78 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
             preflight.assert_not_called()
             self.assertEqual(drained, [True])
             self.assertEqual(result["phase"], "fenced")
+
+    def test_recover_drains_known_interrupted_refresh_through_real_idle_verification(self):
+        from types import SimpleNamespace
+        with tempfile.TemporaryDirectory(prefix="ikpk-interrupted-recovery-") as temporary:
+            root = Path(temporary)
+            database = root / "database.sqlite"
+            connection = sqlite3.connect(database)
+            connection.execute("CREATE TABLE content (body TEXT NOT NULL)")
+            connection.execute("INSERT INTO content VALUES ('old live data')")
+            connection.commit(); connection.close()
+            cms, static = root / "cms", root / "static"
+            cms.mkdir(); static.mkdir(); (static / "index.html").write_text("old", encoding="utf-8")
+            current_cms, current_static = root / "current-cms", root / "current-static"
+            current_cms.symlink_to(cms); current_static.symlink_to(static)
+            refresh_state = root / "site-refresh.json"
+            dead_pid = 2_000_000_000
+            refresh_state.write_text(json.dumps({
+                "status": "interrupted", "phase": "capture", "pid": dead_pid,
+            }), encoding="utf-8")
+            old_pair = {
+                "cmsPath": str(cms.resolve()), "staticPath": str(static.resolve()),
+                "databasePath": str(database.resolve()), "staticTreeSha256": rehearsal_host._tree_sha256(static),
+                "cmsSourceEnvironment": {key: None for key in rehearsal_host.PAIRED_CMS_ENV_KEYS},
+            }
+            class State:
+                rows = [{"record": "start", "operationId": "recover-interrupted", "sourceSha": "a" * 40,
+                         "oldPair": old_pair}]
+                def _operation_rows(self, _): return self.rows
+                def _is_committed(self, _): return False
+                def _is_recovered(self, _): return False
+                def begin(self, *_): pass
+                def confirm_fence(self, *_): pass
+                def phase(self, _): return {"phase": "fenced"}
+                def require_restore_allowed(self, *_): pass
+                def _append(self, row): self.rows.append(row)
+                def recover(self, _, verify_restored, verify_reopened):
+                    if not verify_restored() or not verify_reopened():
+                        raise AssertionError("recovery verification failed")
+            config = {
+                "profile": "production-paired", "siteRefreshState": str(refresh_state),
+                "cmsDatabase": str(database), "currentCms": str(current_cms),
+                "currentStatic": str(current_static), "releaseRoot": str(root),
+                "staticReleaseRoot": str(root), "backupRoot": str(root / "backups"),
+                "writerUnits": [], "cmsUnit": "ikpk-cms.service",
+                "cmsHealthUrl": "http://127.0.0.1:1337/_health", "siteHealthUrl": "https://ikpk.su/",
+            }
+            def fake_kill(pid, signal):
+                if pid == dead_pid and signal == 0:
+                    raise ProcessLookupError
+                raise AssertionError(f"unexpected process probe {pid}")
+            with patch.object(rehearsal_host.os, "kill", side_effect=fake_kill), \
+                 patch.object(rehearsal_host, "_site_refresh_worker_pids", return_value=set()), \
+                 patch.object(rehearsal_host, "_set_flag"), patch.object(rehearsal_host, "_write_gate"), \
+                 patch.object(rehearsal_host, "_verify_fence"), patch.object(rehearsal_host, "_stop_writers"), \
+                 patch.object(rehearsal_host, "_record_fenced_baseline"), \
+                 patch.object(rehearsal_host, "_assert_no_database_handles"), \
+                 patch.object(rehearsal_host, "_write_paired_cms_source_env"), \
+                 patch.object(rehearsal_host, "_wait_health"), \
+                 patch.object(rehearsal_host, "_service_pid", return_value=123), \
+                 patch.object(rehearsal_host, "_database_process_proof"), \
+                 patch.object(rehearsal_host, "run", return_value=SimpleNamespace(returncode=0, stdout="")):
+                result = rehearsal_host._recover(config, State(), "recover-interrupted")
+            self.assertEqual(result["phase"], "recovered")
+
+    def test_recovery_idle_verification_rejects_interrupted_worker_with_unknown_pid(self):
+        with tempfile.TemporaryDirectory(prefix="ikpk-interrupted-unknown-") as temporary:
+            path = Path(temporary) / "state.json"
+            path.write_text(json.dumps({"status": "interrupted", "phase": "capture", "pid": "unknown"}),
+                            encoding="utf-8")
+            with self.assertRaisesRegex(rehearsal_host.HostFailure, "invalid worker PID"):
+                rehearsal_host._verify_site_refresh_idle(
+                    {"profile": "production-paired", "siteRefreshState": str(path)}, recovery=True)
 
     def test_production_lock_reuses_existing_publisher_inode_without_chmod(self):
         if os.geteuid() == 0:
