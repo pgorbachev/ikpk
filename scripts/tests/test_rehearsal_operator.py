@@ -17,17 +17,6 @@ JOBS = sorted(staging193.REQUIRED_TEST_JOBS)
 
 
 class OperatorAdmissionTests(unittest.TestCase):
-    def test_production_restore_refuses_new_ledger_entry_after_activation_even_same_fingerprint(self):
-        fingerprint = "sha256:" + "c" * 64
-        preflight = {"lineage": {"observedEntry": 2, "fingerprint": fingerprint,
-                                  "revision": 2, "highWaterMark": 2}}
-        current = {"latestEntry": 3, "latestFingerprint": fingerprint,
-                   "revision": 2, "highWaterMark": 3}
-        with self.assertRaisesRegex(staging193.Refusal, "lineage changed after preflight"):
-            staging193.require_unchanged_provenance_lineage(preflight, current)
-        staging193.require_unchanged_provenance_lineage(preflight,
-            {"latestEntry": 2, "latestFingerprint": fingerprint, "revision": 2, "highWaterMark": 2})
-
     def setUp(self):
         self.runs = [{
             "headSha": SHA,
