@@ -1383,7 +1383,9 @@ def _prepare_cms_candidate(config: dict[str, Any], source_root: Path, operation_
                            provenance: dict[str, Any]) -> tuple[Path, Path, Path]:
     artifact = _cms_artifact_path(source_root, operation_id)
     if os.path.lexists(artifact):
-        return _validate_prepared_cms_candidate(config, source_root, operation_id, provenance)
+        prepared = _validate_prepared_cms_candidate(config, source_root, operation_id, provenance)
+        _ensure_cms_runtime_directory(config, artifact)
+        return prepared
     dependencies = _prepare_cms_build_dependencies(config, source_root)
     source_cms = source_root / "cms"
     source_dependencies = source_cms / "node_modules"
@@ -1413,10 +1415,26 @@ def _prepare_cms_candidate(config: dict[str, Any], source_root: Path, operation_
     _run_as_cms(config, source_cms, ["/usr/bin/bash", str(source_root / "scripts/build-cms-artifact.sh"),
         str(artifact)], timeout=3600, environment={"NODE_OPTIONS": "--max-old-space-size=1536"},
         read_only_path=dependencies)
+    _ensure_cms_runtime_directory(config, artifact)
     if os.path.lexists(artifact / "node_modules"):
         raise HostFailure("CMS artifact unexpectedly contains node_modules before dependency linking")
     (artifact / "node_modules").symlink_to(dependencies, target_is_directory=True)
     return _validate_prepared_cms_candidate(config, source_root, operation_id, provenance)
+
+
+def _ensure_cms_runtime_directory(config: dict[str, Any], artifact: Path) -> None:
+    """Create Strapi's systemd-writable directory before the artifact is activated."""
+    if artifact.is_symlink() or not artifact.is_dir():
+        raise HostFailure("CMS artifact is missing or unsafe while preparing its runtime directory")
+    runtime = artifact / ".strapi"
+    if os.path.lexists(runtime):
+        if runtime.is_symlink() or not runtime.is_dir():
+            raise HostFailure("CMS artifact Strapi runtime path is not a real directory")
+    else:
+        user = pwd.getpwnam(config["cmsUser"])
+        runtime.mkdir(mode=0o750)
+        os.chown(runtime, user.pw_uid, user.pw_gid)
+        os.chmod(runtime, 0o750)
 
 
 def _start_acquisition(config: dict[str, Any], state: RehearsalState, operation_id: str,
