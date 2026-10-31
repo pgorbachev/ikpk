@@ -2995,6 +2995,11 @@ def _recover(config: dict[str, Any], state: RehearsalState, operation_id: str,
         state.recover(operation_id, lambda: False, reopen_old_pair)
         return {"operationId": operation_id, "phase": "recovered", "restoredPair": old_pair}
 
+    if config.get("profile") == "production-paired" and not stage_only:
+        imported_backup = Path(config["backupRoot"]) / operation_id / "offhost-backup"
+        if prepared or imported_backup.exists():
+            raise HostFailure("production backup is imported or restore is prepared; resume staged restore and provenance finalize")
+
     _start_acquisition(config, state, operation_id, start["sourceSha"])
     _write_gate(config, True)
     _verify_fence(config)

@@ -889,7 +889,10 @@ def invoke(args: argparse.Namespace) -> None:
                     no_mutation = parse_host_json(ssh_remote(["recover", "--operation-id", args.operation_id],
                                                               profile=profile))
                 except Refusal as error:
-                    if "explicit recovery requires the actual verified off-host backup bytes" not in str(error):
+                    message = str(error)
+                    if not any(expected in message for expected in (
+                            "explicit recovery requires the actual verified off-host backup bytes",
+                            "production backup is imported or restore is prepared")):
                         raise
                 else:
                     if no_mutation.get("phase") == "recovered":

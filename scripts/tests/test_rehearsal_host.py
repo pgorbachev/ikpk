@@ -1518,6 +1518,28 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
                 operator.invoke(args)
             self.assertEqual([call[0] for call in calls], ["status", "recover"])
 
+    def test_production_ordinary_recover_never_bypasses_imported_or_prepared_restore_provenance(self):
+        for stage in ("after-import", "after-restore-prepared"):
+            with self.subTest(stage=stage), tempfile.TemporaryDirectory(prefix="ikpk-prepared-recovery-") as temporary:
+                root = Path(temporary); op = "restore-resume"
+                rows = [{"record": "start", "operationId": op, "sourceSha": "a" * 40,
+                         "oldPair": {"cmsPath": "/old/cms", "staticPath": "/old/site"}}]
+                if stage == "after-restore-prepared":
+                    rows.append({"record": "restore-prepared", "operationId": op,
+                                 "databaseSha256": "b" * 64, "fingerprint": "sha256:" + "c" * 64})
+                class State:
+                    def _is_committed(self, _): return False
+                    def _is_recovered(self, _): return False
+                    def _operation_rows(self, _): return rows
+                if stage == "after-import":
+                    (root / op / "offhost-backup").mkdir(parents=True)
+                database = root / "live.sqlite"; database.write_bytes(b"untouched")
+                config = {"profile": "production-paired", "backupRoot": str(root), "cmsDatabase": str(database)}
+                with patch.object(rehearsal_host, "_start_acquisition") as start:
+                    with self.assertRaisesRegex(rehearsal_host.HostFailure, "resume staged restore"):
+                        rehearsal_host._recover(config, State(), op)
+                start.assert_not_called()
+
     def test_production_stage_restore_accepts_host_proven_no_mutation_recovery(self):
         # The host may safely reopen without staging a restore when the pre-activation
         # pair still matches its checkpoint-bound evidence; do not demand a false CAS event.
