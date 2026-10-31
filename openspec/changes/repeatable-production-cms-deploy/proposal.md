@@ -7,7 +7,7 @@ The production CMS currently has a one-time initial-install path and a separate 
 - Add a repeatable production profile to the existing paired CMS/site operator, with production-bound configuration, journal, and backup location.
 - Admit only an explicitly requested exact current `main` revision represented by a stable published GitHub Release, with successful required CI and `release-preflight`; build the CMS and site from that same revision.
 - Preserve production SQLite, uploads, users, roles, and grants; capture and verify a production-only off-host backup before database mutation.
-- Apply the existing canonical content provenance journal and HWM checks to the captured production snapshot; missing/stale provenance or unconfirmed restore regression blocks publication.
+- Bind the production snapshot and restore checks to the existing production-paired operation journal and verified off-host backup; do not compare production content with the shared stand-only provenance ledger.
 - Keep writers fenced until CMS and production-mode static candidate checks pass; support safe pre-backup recovery when no mutation began and verified-backup recovery after mutation.
 - Keep the target and CMS/data effects of the one-time `initial-prod` and reusable `production-static` profiles unchanged. Run paired phases in one manual single-operator maintenance window; do not add or claim global lock/handoff serialization with CMS refresh or UI Restore. Do not copy CMS data or media from staging194.
 
@@ -19,7 +19,7 @@ The production CMS currently has a one-time initial-install path and a separate 
 
 ### Modified Capabilities
 
-- `cms-content-source`: Bind a paired recovery restore event to its durable operation so retry cannot mistake another same-fingerprint restore for its own.
+- `cms-content-source`: Bind production content and recovery evidence to the existing paired operation and its verified backup without changing stand provenance history.
 
 The intersecting staging source-admission change is coordinated in `manual-publication-only`.
 
