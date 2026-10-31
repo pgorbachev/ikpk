@@ -9,7 +9,7 @@ The production CMS currently has a one-time initial-install path and a separate 
 - Preserve production SQLite, uploads, users, roles, and grants; capture and verify a production-only off-host backup before database mutation.
 - Apply the existing canonical content provenance journal and HWM checks to the captured production snapshot; missing/stale provenance or unconfirmed restore regression blocks publication.
 - Keep writers fenced until CMS and production-mode static candidate checks pass; support safe pre-backup recovery when no mutation began and verified-backup recovery after mutation.
-- Keep the target and CMS/data effects of the one-time `initial-prod` and reusable `production-static` profiles unchanged; the static-only path joins shared-lock serialization and fails closed until installed CMS compatibility is verified. Do not copy CMS data or media from staging194.
+- Keep the target and CMS/data effects of the one-time `initial-prod` and reusable `production-static` profiles unchanged. Run paired phases in one manual single-operator maintenance window; do not add or claim global lock/handoff serialization with CMS refresh or UI Restore. Do not copy CMS data or media from staging194.
 
 ## Capabilities
 

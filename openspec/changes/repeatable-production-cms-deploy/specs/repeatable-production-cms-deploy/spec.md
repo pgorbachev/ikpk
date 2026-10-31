@@ -70,7 +70,7 @@ The paired operation SHALL capture the live production SQLite database and uploa
 
 ### Requirement: CMS and static site commit as one fenced operation
 
-Before the first live side effect, the paired operator SHALL durably record the operation and its destination-visible marker while holding the common destination lock; it SHALL fail closed on a malformed marker. It SHALL keep production CMS writers fenced after candidate activation until CMS health and runtime database proof, static candidate checks, browser checks against the exact candidate bytes, served release identity, routes, and referenced media have passed. The static candidate SHALL use the existing production build policy, including production form/payment settings and the configured production chat loader; it SHALL NOT use staging demo form stubs or the staging `CHAT_LOADER_SRC=none` setting. Browser checks SHALL NOT submit payment, CRM, or other external write actions. Activation SHALL update only `IKPK_BUILD_WORKSPACE` and `IKPK_INSTALLED_COMMIT` in the existing CMS service environment to the ready workspace and exact installed source SHA. The operation SHALL record their previous values without exposing or rewriting other environment values, and SHALL verify the next CMS site-refresh uses the new workspace and commit. It SHALL record one durable operation journal tying the old and new CMS, database, media, environment, and static identities to the source and backup. The operation SHALL commit once both CMS and static candidates are accepted; only then may it reopen writers. Static-only publication SHALL NOT be treated as completion of a paired CMS release.
+Before the first live side effect, the paired operator SHALL durably record the operation and its host journal/maintenance state and fail closed on malformed or mismatched operation state. The existing destination publication lock is held for each host command only; it is not a cross-publisher lock or destination-visible marker. The operator SHALL keep production CMS writers fenced after candidate activation until CMS health and runtime database proof, static candidate checks, browser checks against the exact candidate bytes, served release identity, routes, and referenced media have passed. The static candidate SHALL use the validated production form/payment settings and configured production chat loader; it SHALL NOT use staging demo form stubs or `CHAT_LOADER_SRC=none`. Browser checks SHALL NOT submit payment, CRM, or other external write actions. Activation SHALL update `IKPK_BUILD_WORKSPACE`, `IKPK_INSTALLED_COMMIT`, `INITIAL_PROD_PROFILE=1`, `DEPLOY_MODE=prod`, `PAYMENT_ROLE=prod`, `PAYMENT_ENDPOINT_PROD`, and `CHAT_LOADER_SRC` from the validated production profile, and clear `DEMO_FORMS` and `CHAT_OFFLINE_MESSAGE` for the production site build. The operation SHALL record prior values for these nine keys and restore them during recovery, preserving unrelated environment values without exposing secrets. It SHALL verify that the next CMS site-refresh uses the ready workspace, exact installed source SHA, and production build settings. It SHALL record one durable operation journal tying old and new CMS, database, media, environment, and static identities to the source and backup. The operation SHALL commit once both CMS and static candidates are accepted; only then may it reopen writers. Static-only publication SHALL NOT be treated as completion of a paired CMS release.
 
 #### Scenario: Both candidates pass acceptance
 - **WHEN** CMS health and database proof pass and the same-source static candidate passes its checks
@@ -93,87 +93,52 @@ Before the first live side effect, the paired operator SHALL durably record the 
 
 #### Scenario: CMS site refresh uses the installed workspace
 - **WHEN** the paired release commits and the CMS site-refresh button is used next
-- **THEN** the service environment points `IKPK_BUILD_WORKSPACE` to the ready admitted workspace and `IKPK_INSTALLED_COMMIT` to its exact source SHA
+- **THEN** the service environment points `IKPK_BUILD_WORKSPACE` to the ready admitted workspace and `IKPK_INSTALLED_COMMIT` to its exact source SHA, and the refresh child build uses the validated production flags and integration settings
 - **AND** all unrelated environment values remain unchanged
 
-#### Scenario: Activation or recovery updates versioned environment values
+#### Scenario: Activation or recovery updates paired site-build settings
 - **WHEN** a paired operation updates or restores the CMS workspace and installed commit
-- **THEN** it atomically changes only those two versioned keys and verifies their values before CMS restart
-- **AND** recovery restores the previous values before reopening the old CMS release
+- **THEN** it sets `IKPK_BUILD_WORKSPACE`, `IKPK_INSTALLED_COMMIT`, `INITIAL_PROD_PROFILE=1`, `DEPLOY_MODE=prod`, `PAYMENT_ROLE=prod`, `PAYMENT_ENDPOINT_PROD`, and `CHAT_LOADER_SRC` from the validated production profile
+- **AND** it clears `DEMO_FORMS` and `CHAT_OFFLINE_MESSAGE` for the production site build and verifies the build environment before CMS restart
+- **AND** recovery restores the previous values of all nine paired keys before reopening the old CMS release, preserving every unrelated environment value
 
 #### Scenario: Crash at an operation boundary
 - **WHEN** the process stops after operation-marker creation, fence activation, backup, CMS activation, static switch, commit, or writer reopen
 - **THEN** the same journal-owned operation can safely recover or finalize its next phase without starting a different operation
-- **AND** a damaged or mismatched marker blocks every publisher until explicit repair through that operation
+- **AND** a damaged or mismatched operation journal blocks paired continuation until explicit repair through that operation; other publishers remain excluded by the manual maintenance window, not a technical global marker
 
-### Requirement: Production site publishers are mutually exclusive
+### Requirement: Paired publication uses a manual single-operator maintenance window
 
-The production paired operator, production static-only operator, CMS site-refresh API/worker, and CMS UI Restore SHALL serialize every static-pointer switch against the same destination `.publication.lock`. Each pointer-changing path SHALL acquire and verify that lock before mutation. The paired and static-only operators SHALL inspect the CMS-local refresh state while holding the destination lock and refuse if a live or unreconciled refresh owns it. Before a production static-only publication relies on the shared-lock protocol, it SHALL verify that the installed CMS site-refresh and Restore code honors the same lock and marker; if the installed CMS is legacy or compatibility cannot be proven, static-only SHALL refuse before switching until a paired update installs the compatible CMS. UI Restore SHALL acquire the destination lock before its CMS-local state lock and switch only while it owns both. In addition, Restore SHALL refuse before switching when the target release's source commit differs from the currently installed `IKPK_INSTALLED_COMMIT`; a content-only Restore built by the same installed CMS remains available. A paired operation SHALL establish a durable destination-visible production-operation marker before releasing the lock between CMS activation and static publication; site-refresh, static-only, and UI Restore SHALL refuse while that marker identifies an unfinished paired operation. The marker SHALL be removed only after paired commit or verified recovery. New operations SHALL fail closed on malformed/foreign markers or unresolved pending/preparation state. A journal-owned recovery/finalization under the common lock MAY proceed through its matching valid marker and state, but SHALL refuse on damaged or mismatched ownership; a new operation or Restore SHALL NOT take over that state. The shared lock SHALL be accessible only to the fixed publication and CMS service principals; unrelated users SHALL have no access. The API/worker handoff SHALL preserve exclusive ownership across reservation and spawn, and an interrupted handoff SHALL not permit an unowned worker to mutate the site.
+The paired workflow SHALL be run inside one manually coordinated maintenance window by one operator. The operator SHALL prevent other CMS or static publications, including CMS site-refresh and UI Restore, from starting until the paired operation commits or verified recovery completes. This is an operational condition, not a host-enforced cross-publisher lock: the existing destination publication lock is held for each individual host command, not across the complete `cms-update`/`static-publish` sequence, and CMS site-refresh/Restore do not acquire it. The host SHALL retain its operation journal and SHALL fail closed for active, malformed, or unknown paired-operation state. The manual window SHALL NOT be described as technical serialization against another operator or publisher.
 
-#### Scenario: Site refresh is already running
-- **WHEN** the site-refresh worker holds the destination lock while the paired operation is requested
-- **THEN** the paired operation refuses before creating a fence or changing CMS, database, or site state
+#### Scenario: Another publication is active or state is unknown
+- **WHEN** the operator observes an active or unknown site-refresh/Restore worker, lock, or paired journal state
+- **THEN** the operation does not proceed to backup, migration, or activation
+- **AND** the operator waits for a known worker to finish normally or stops the operation when its state cannot be established
 
-#### Scenario: CMS API handoff is interrupted
-- **WHEN** the CMS refresh API or detached worker stops during reservation and worker handoff
-- **THEN** the handoff is reconciled as interrupted/failed and no unowned worker captures, builds, or switches the site
+#### Scenario: Single-operator maintenance window spans both phases
+- **WHEN** `cms-update` has completed but `static-publish` or verified recovery has not
+- **THEN** the operator keeps the same maintenance window and prevents other publishers and CMS UI Restore from starting
+- **AND** no technical guarantee against a separate concurrent operator or publisher is implied
 
-#### Scenario: Paired CMS activation is waiting for static acceptance
-- **WHEN** the paired operation has activated its CMS candidate but has not committed or recovered
-- **THEN** a site-refresh worker and production static-only operation acquire the common lock only to observe the unfinished marker and refuse without switching the site
-
-#### Scenario: Static-only publication is active
-- **WHEN** a production static-only publication holds the destination lock while a paired CMS operation is requested
-- **THEN** the paired operation refuses before fencing writers or changing the CMS/database
-
-#### Scenario: A site publication is pending recovery
-- **WHEN** the destination has an unfinished site publication or preparation record
-- **THEN** the paired and static-only operators refuse before capturing, fencing writers, or switching a pointer
-
-#### Scenario: Matching paired recovery owns the unfinished marker
-- **WHEN** recovery or finalization is requested for the journal owner of the valid paired-operation marker
-- **THEN** it may proceed under the common lock using the same operation ID and required recovery evidence
-- **AND** unrelated new operations, static-only publication, site refresh, and UI Restore continue to refuse
-
-#### Scenario: Legacy CMS is still installed for static-only publication
-- **WHEN** production static-only is requested while the installed CMS does not honor the shared lock and marker, or its compatibility cannot be proven
-- **THEN** the static-only operation refuses before capture or pointer switch, including when a legacy same-cgroup refresh worker is active
-- **AND** a later request may proceed after a paired update installs and verifies the lock-aware CMS
-
-#### Scenario: CMS UI Restore races a paired or static-only switch
-- **WHEN** Restore attempts to switch `current` while a paired operation, production static-only operation, or site-refresh worker holds the destination lock or has an unfinished paired marker
-- **THEN** Restore refuses before switching the pointer
-- **AND** a Restore holding the lock causes a new paired/static-only operation to refuse before its first side effect
-
-#### Scenario: CMS UI Restore uses the shared lock first
-- **WHEN** the CMS Restore action is requested
-- **THEN** it acquires the destination lock before the CMS-local lock and switches `current` only while both locks are owned
-- **AND** it refuses if a paired marker, pending publication, or preparation record exists
-
-#### Scenario: CMS UI Restore targets a previous CMS source after a paired commit
+#### Scenario: CMS UI Restore targets a previous source after paired commit
 - **WHEN** `previousReleaseId` points to a release whose source commit differs from the installed `IKPK_INSTALLED_COMMIT`
 - **THEN** Restore refuses before switching the static pointer
 - **AND** a content-only previous release built by the installed CMS source remains restorable
 
+### Requirement: The first paired update gates known legacy publishers
 
-#### Scenario: Paired operation reaches a terminal state
-- **WHEN** the paired operation commits successfully or completes verified recovery
-- **THEN** it removes its marker under the common lock and subsequent site publication may proceed
+Before the first paired update stops the legacy CMS, the operator SHALL use the existing Nginx write gate to reject new routed CMS write and Restore requests, inspect the existing site-refresh state and lock, and wait for every recorded refresh/Restore PID and recognizable legacy worker to exit normally. Active workers SHALL NOT be killed. The operator SHALL stop and refuse capture or activation when recorded state is malformed, a recorded worker remains active, a lock is stale or unreadable, or process inspection fails. This procedure checks the process and state evidence available to the host; it does not prove that every accepted Node handler has exited. In particular, an in-flight handler may continue after its client disconnects even after the Nginx worker exits, leaving a residual race with CMS stop/acquisition. The manual single-operator window reduces competing publication attempts but does not technically eliminate this race. Passing a staging194 rehearsal SHALL NOT be represented as proof that this application-level race is absent in production.
 
-### Requirement: The first paired update quiesces legacy CMS publishers
+#### Scenario: Recorded legacy refresh or Restore worker is active
+- **WHEN** the old CMS state, PID, lock, or process scan shows an active worker
+- **THEN** the operator waits for its normal completion before stopping CMS, or refuses if it does not drain
+- **AND** no worker is killed and no capture or activation proceeds while state is active or unknown
 
-For the first paired update, while holding the destination lock and after durably recording its operation marker, the operator SHALL close the old CMS site-refresh and Restore endpoints using the existing write gate. While the CMS service is still running, it SHALL wait for accepted requests and every existing refresh/Restore worker, descendant, and `systemd-run --user --scope` unit to exit normally. Only then may it stop the old CMS service; after stop it SHALL verify again that no request or worker remains and no new worker was launched. Before capture, CMS activation, or static switch, it SHALL verify old CMS/static pointers and refresh state are terminal and record any completed refresh as the pre-operation state. It SHALL NOT kill a worker or proceed while liveness or pointer state is ambiguous.
-
-#### Scenario: A legacy refresh or Restore is in flight
-- **WHEN** the old CMS has an active refresh/Restore request, recorded running state, detached child, or user systemd scope
-- **THEN** the gate prevents new requests while the old service remains running, and the operator waits for each accepted request and child scope to finish before stopping that service
-- **AND** after stop it verifies there are still no requests or workers before capture or candidate activation
-- **AND** no worker is killed
-
-#### Scenario: Legacy publisher does not quiesce or its state is unreadable
-- **WHEN** the worker/scope remains active, the refresh record is corrupt, or current pointers do not match a verifiable terminal state
-- **THEN** the paired update does not capture or activate a candidate
-- **AND** the existing acquisition recovery reopens the old service only when live SQLite and pointers are proven unchanged; otherwise it remains fenced for operator direction
+#### Scenario: Client disconnects while a CMS handler continues
+- **WHEN** an accepted CMS handler outlives its disconnected client after the Nginx worker exits
+- **THEN** the operator acknowledges that the existing process checks cannot prove the handler has exited
+- **AND** this residual race remains an explicit limitation of the manual maintenance procedure
 
 ### Requirement: Recovery restores or finalizes the journal-owned production pair
 
