@@ -16,7 +16,6 @@ export interface LedgerEntry {
   previous: number | null;
   marker: EventMarker | null;
   confirmedBy?: string;
-  operationId?: string;
 }
 
 export interface Observation {
@@ -28,7 +27,7 @@ export interface Observation {
 }
 
 export interface ProvenanceLedger {
-  recordEvent(event: { fingerprint: string; marker: EventMarker | null; confirmedBy?: string; operationId?: string }): Promise<LedgerEntry>;
+  recordEvent(event: { fingerprint: string; marker: EventMarker | null; confirmedBy?: string }): Promise<LedgerEntry>;
   entries(): Promise<readonly LedgerEntry[]>;
   highWaterMark(): Promise<number>;
   observe(state: { fingerprint: string }): Promise<Observation>;
@@ -37,7 +36,6 @@ export interface ProvenanceLedger {
 
 interface StoredEntry extends LedgerEntry {
   checksum: string;
-  operationChecksum?: string;
 }
 
 const HWM_FILE = 'high-water-mark';
@@ -49,11 +47,6 @@ function checksumOf(entry: LedgerEntry): string {
       ...(entry.confirmedBy === undefined ? {} : { confirmedBy: entry.confirmedBy }) }))
     .digest('hex');
 }
-function operationChecksumOf(entry: LedgerEntry): string {
-  return createHash('sha256').update(JSON.stringify({ number: entry.number, fingerprint: entry.fingerprint,
-    previous: entry.previous, marker: entry.marker, operationId: entry.operationId })).digest('hex');
-}
-
 function entryPath(dir: string, number: number): string {
   return join(dir, `entry-${String(number).padStart(6, '0')}.json`);
 }
@@ -81,9 +74,6 @@ function parseStored(raw: string): StoredEntry {
   if (parsed.checksum !== expected) {
     throw new Error('журнал происхождения повреждён: контрольная сумма записи не совпадает');
   }
-  if (parsed.operationId !== undefined && parsed.operationChecksum !== operationChecksumOf(parsed)) {
-    throw new Error('журнал происхождения повреждён: контрольная сумма операции не совпадает');
-  }
   return parsed;
 }
 
@@ -92,8 +82,8 @@ function loadEntries(dir: string): LedgerEntry[] {
   const files = readdirSync(dir).filter((name) => /^entry-\d+\.json$/.test(name));
   const entries = files.map((name) => parseStored(readFileSync(join(dir, name), 'utf-8')));
   entries.sort((a, b) => a.number - b.number);
-  return entries.map(({ number, fingerprint, previous, marker, confirmedBy, operationId }) => ({ number, fingerprint, previous, marker,
-    ...(confirmedBy === undefined ? {} : { confirmedBy }), ...(operationId === undefined ? {} : { operationId }) }));
+  return entries.map(({ number, fingerprint, previous, marker, confirmedBy }) => ({ number, fingerprint, previous, marker,
+    ...(confirmedBy === undefined ? {} : { confirmedBy }) }));
 }
 
 function firstOccurrence(entries: LedgerEntry[], fingerprint: string): LedgerEntry | undefined {
@@ -133,7 +123,7 @@ class FileProvenanceLedger implements ProvenanceLedger {
     if (!existsSync(join(dir, HWM_FILE))) writeHwm(dir, 0);
   }
 
-  async recordEvent(event: { fingerprint: string; marker: EventMarker | null; confirmedBy?: string; operationId?: string }): Promise<LedgerEntry> {
+  async recordEvent(event: { fingerprint: string; marker: EventMarker | null; confirmedBy?: string }): Promise<LedgerEntry> {
     mkdirSync(this.dir, { recursive: true });
     for (;;) {
       const current = loadEntries(this.dir);
@@ -145,10 +135,8 @@ class FileProvenanceLedger implements ProvenanceLedger {
         previous: last?.number ?? null,
         marker: event.marker,
         ...(event.confirmedBy === undefined ? {} : { confirmedBy: event.confirmedBy }),
-        ...(event.operationId === undefined ? {} : { operationId: event.operationId }),
       };
-      const stored: StoredEntry = { ...entry, checksum: checksumOf(entry),
-        ...(entry.operationId === undefined ? {} : { operationChecksum: operationChecksumOf(entry) }) };
+      const stored: StoredEntry = { ...entry, checksum: checksumOf(entry) };
       try {
         writeFileSync(entryPath(this.dir, number), `${JSON.stringify(stored)}\n`, { encoding: 'utf-8', flag: 'wx' });
       } catch (err) {

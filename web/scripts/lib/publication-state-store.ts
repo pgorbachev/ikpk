@@ -26,8 +26,6 @@ export interface PublicationStateStore {
   appendPublication(record: PublicationRecord): Promise<{ head: string; changed: boolean }>;
   acceptState(input: { expectedObservedEntry: number; fingerprint: string; actor: string }):
     Promise<{ head: string; entry: LedgerEntry & { confirmedBy: string } }>;
-  recordRestore(input: { expectedObservedEntry: number; fingerprint: string; operationId: string }):
-    Promise<{ head: string; entry: LedgerEntry; changed: boolean }>;
 }
 export class PublicationProvenanceMismatchError extends Error {
   readonly latestEntry: number;
@@ -166,29 +164,6 @@ export function createPublicationStateStore(options: PublicationStateStoreOption
         if (push()) return { head: git(['rev-parse', 'HEAD']), entry: entry as LedgerEntry & { confirmedBy: string } };
       }
       throw new Error('accept-state push conflict: retry attempts exhausted');
-    }),
-    recordRestore: (input) => serial(async () => {
-      if (!Number.isSafeInteger(input.expectedObservedEntry) || input.expectedObservedEntry < 1 ||
-          typeof input.fingerprint !== 'string' || !input.fingerprint ||
-          !/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(input.operationId)) throw new Error('invalid restore provenance input');
-      for (let attempt = 0; attempt < attempts; attempt++) {
-        const state = await snapshot(input.fingerprint);
-        const last = state.entries.at(-1)!;
-        // A retry after a successful CAS push is idempotent only for the immediately
-        // following restore entry with the same observed fingerprint.
-        if (last.number === input.expectedObservedEntry + 1 && last.fingerprint === input.fingerprint &&
-            last.marker === 'restore' && last.operationId === input.operationId) {
-          return { head: state.head, entry: last, changed: false };
-        }
-        if (last.number !== input.expectedObservedEntry || last.fingerprint !== input.fingerprint) {
-          throw new Error('stale observed-entry restore');
-        }
-        const ledger = createLedger({ dir: join(workDir, 'ledger'), hasPublicationHistory: true, initialize: false });
-        const entry = await ledger.recordEvent({ fingerprint: input.fingerprint, marker: 'restore', operationId: input.operationId });
-        commit([`ledger/entry-${String(entry.number).padStart(6, '0')}.json`, 'ledger/high-water-mark'], 'Record restored CMS state');
-        if (push()) return { head: git(['rev-parse', 'HEAD']), entry, changed: true };
-      }
-      throw new Error('restore provenance push conflict: retry attempts exhausted');
     }),
   };
 }

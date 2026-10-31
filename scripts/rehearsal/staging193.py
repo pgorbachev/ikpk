@@ -715,6 +715,8 @@ def invoke(args: argparse.Namespace) -> None:
         if not isinstance(old_pair, dict) or not isinstance(old_pair.get("cmsPath"), str):
             raise Refusal("read-only production preflight did not identify the old CMS release")
         paired_old_cms = (old_pair["cmsPath"], *production_paired_schema_source(old_pair["cmsPath"]))
+        if not (ROOT / "web/node_modules/.bin/tsx").is_file():
+            raise Refusal("local content snapshot tooling is unavailable before production fence")
     if args.command == "cms-update":
         provenance = (validate_production_paired_admission(args.source_sha) if profile == "production-paired"
                       else validate_sha_and_ci(args.source_sha, profile))

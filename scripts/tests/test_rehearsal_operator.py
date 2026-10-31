@@ -318,6 +318,20 @@ class OperatorAdmissionTests(unittest.TestCase):
         self.assertTrue(all(call[1].get("profile") == "production-paired" for call in calls))
         self.assertEqual(responses, [])
 
+    def test_production_paired_requires_local_tsx_before_mutating_host_command(self):
+        with tempfile.TemporaryDirectory(prefix="ikpk-paired-no-tsx-") as temporary:
+            root = Path(temporary)
+            args = type("Args", (), {"profile": "production-paired", "host": staging193.INITIAL_PROD_HOST,
+                "command": "cms-update", "operation_id": "paired-no-tsx", "source_sha": SHA,
+                "backup_dir": None})()
+            status = json.dumps({"phase": "idle", "oldPair": {"cmsPath": "/opt/old/cms"}}).encode()
+            with patch.object(staging193, "ROOT", root), \
+                 patch.object(staging193, "ssh_remote", return_value=status) as remote, \
+                 patch.object(staging193, "production_paired_schema_source", return_value=(SHA, "f" * 64)), \
+                 self.assertRaisesRegex(staging193.Refusal, "before production fence"):
+                staging193.invoke(args)
+            self.assertEqual([call.args[0][0] for call in remote.call_args_list], ["status"])
+
     def test_production_static_profile_refuses_staging_host_before_ci_or_ssh(self):
         for host in (staging193.TARGET_HOST, "193.124.115.99"):
             with self.subTest(host=host):

@@ -1831,9 +1831,12 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
             raise AssertionError(arguments)
         with tempfile.TemporaryDirectory(prefix="ikpk-production-op-lineage-") as temporary:
             backup_dir = Path(temporary); backup_dir.mkdir(exist_ok=True)
+            tsx = backup_dir / "web/node_modules/.bin/tsx"
+            tsx.parent.mkdir(parents=True); tsx.touch()
             args = Namespace(profile="production-paired", command="cms-update", host=None,
                              operation_id="production-op", source_sha=source_sha, backup_dir=temporary)
             with patch.object(operator, "ssh_remote", side_effect=ssh), \
+                 patch.object(operator, "ROOT", backup_dir), \
                  patch.object(operator, "validate_production_paired_admission", return_value={"runId": 7, "attempt": 2}), \
                  patch.object(operator, "make_archive", return_value=(b"source archive", "e" * 64)), \
                  patch.object(operator, "production_paired_schema_source", return_value=(old_source, "f" * 64)), \
