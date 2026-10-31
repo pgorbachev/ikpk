@@ -1571,7 +1571,7 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
         def probe(argv, **_kwargs):
             commands.append(argv)
             if argv[-1] == "https://194.226.99.10/api/payments/rehearsal/status":
-                return subprocess.CompletedProcess(argv, 0, "404", "")
+                return subprocess.CompletedProcess(argv, 0, "\n404", "")
             if argv[-1] == "https://194.226.99.10/":
                 return subprocess.CompletedProcess(argv, 0, "200", "")
             return subprocess.CompletedProcess(argv, 0, "503", "")
@@ -1582,6 +1582,42 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
             rehearsal_host._verify_fence(config)
         self.assertTrue(any("--request" in argv for argv in commands))
         self.assertIn(config["paymentStatusProbeUrl"], [argv[-1] for argv in commands])
+
+    def test_production_paired_fence_requires_invalid_request_id_rejection_without_payment_payload(self):
+        commands = []
+        def probe(argv, **_kwargs):
+            commands.append(argv)
+            if argv[-1] == "https://ikpk.su/api/payments/rehearsal/status":
+                return subprocess.CompletedProcess(
+                    argv, 0,
+                    '{"status":"rejected","errors":[{"field":"requestId","message":"must be UUID v4"}]}\n400',
+                    "")
+            if argv[-1] == "https://ikpk.su/":
+                return subprocess.CompletedProcess(argv, 0, "200", "")
+            return subprocess.CompletedProcess(argv, 0, "503", "")
+        config = {"profile": "production-paired", "writerProbeUrls": ["https://ikpk.su/api"],
+                  "preserveProbeUrl": "https://ikpk.su/",
+                  "paymentStatusProbeUrl": "https://ikpk.su/api/payments/rehearsal/status"}
+        with patch.object(rehearsal_host, "run", side_effect=probe):
+            rehearsal_host._verify_fence(config)
+        payment_probe = next(argv for argv in commands if argv[-1] == config["paymentStatusProbeUrl"])
+        self.assertNotIn("--request", payment_probe)
+        self.assertNotIn("--data", payment_probe)
+        self.assertNotIn("--data-raw", payment_probe)
+
+    def test_production_paired_fence_rejects_unexpected_payment_status_contract(self):
+        def probe(argv, **_kwargs):
+            if argv[-1] == "https://ikpk.su/api/payments/rehearsal/status":
+                return subprocess.CompletedProcess(argv, 0, '{"status":"not_found"}\n404', "")
+            if argv[-1] == "https://ikpk.su/":
+                return subprocess.CompletedProcess(argv, 0, "200", "")
+            return subprocess.CompletedProcess(argv, 0, "503", "")
+        config = {"profile": "production-paired", "writerProbeUrls": ["https://ikpk.su/api"],
+                  "preserveProbeUrl": "https://ikpk.su/",
+                  "paymentStatusProbeUrl": "https://ikpk.su/api/payments/rehearsal/status"}
+        with patch.object(rehearsal_host, "run", side_effect=probe):
+            with self.assertRaisesRegex(rehearsal_host.HostFailure, "invalid probe requestId"):
+                rehearsal_host._verify_fence(config)
 
     def test_database_replacement_removes_stale_wal_and_shm_and_keeps_mode(self):
         with tempfile.TemporaryDirectory(prefix="ikpk-db-replace-") as temporary:

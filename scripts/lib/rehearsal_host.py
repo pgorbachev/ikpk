@@ -1432,9 +1432,21 @@ def _verify_fence(config: dict[str, Any]) -> None:
                       "--max-time", "10", config["preserveProbeUrl"]], timeout=12)
         if result.stdout.strip() not in ("200", "204", "206", "304"):
             raise HostFailure("public media/status preservation probe failed")
-    payment_status = run(["/usr/bin/curl", "--silent", "--output", "/dev/null", "--write-out", "%{http_code}",
+    payment_status = run(["/usr/bin/curl", "--silent", "--show-error", "--write-out", "\n%{http_code}",
                           "--max-time", "10", config["paymentStatusProbeUrl"]], timeout=12)
-    if payment_status.stdout.strip() != "404":
+    response, separator, status = payment_status.stdout.rpartition("\n")
+    if not separator:
+        raise HostFailure("payment status probe did not return an HTTP status")
+    if config.get("profile") == "production-paired":
+        try:
+            body = json.loads(response)
+        except json.JSONDecodeError as error:
+            raise HostFailure("production payment status probe returned an invalid request response") from error
+        errors = body.get("errors") if isinstance(body, dict) else None
+        if (status.strip() != "400" or not isinstance(errors, list) or body.get("status") != "rejected"
+                or {"field": "requestId", "message": "must be UUID v4"} not in errors):
+            raise HostFailure("production payment status route did not reject the invalid probe requestId")
+    elif status.strip() != "404":
         raise HostFailure("disabled payment status route did not retain its expected 404")
 
 

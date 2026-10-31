@@ -15,6 +15,25 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 class InstalledEntrypointTests(unittest.TestCase):
+    def test_real_staging194_config_without_profile_migrates_and_installer_accepts_it(self):
+        template_path = ROOT / "scripts/staging193-rehearsal.json"
+        template = json.loads(template_path.read_text(encoding="utf-8"))
+        self.assertNotIn("profile", template)
+        with tempfile.TemporaryDirectory(prefix="ikpk-rehearsal-real-staging-config-") as temporary:
+            root = Path(temporary)
+            config_path = root / "rehearsal.json"
+            current = {**template, "allowedSourceRef": "refs/heads/dev"}
+            original = json.dumps(current, indent=2).encode()
+            config_path.write_bytes(original)
+            rehearsal_config.check(str(config_path), str(template_path))
+            rehearsal_config.migrate(str(config_path), str(template_path))
+            self.assertEqual(json.loads(config_path.read_text(encoding="utf-8")), template)
+            self.assertEqual(len(list(root.glob("rehearsal.json.pre-main-*.bak"))), 1)
+
+        installer = (ROOT / "scripts/install-rehearsal-host.sh").read_text(encoding="utf-8")
+        self.assertIn('profile = config.get("profile")', installer)
+        self.assertNotIn('config["profile"]', installer)
+
     def test_staging194_dev_to_main_migration_is_atomic_backed_up_and_preserves_other_keys(self):
         with tempfile.TemporaryDirectory(prefix="ikpk-rehearsal-config-migration-") as temporary:
             root = Path(temporary)
