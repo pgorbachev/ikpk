@@ -7,7 +7,7 @@ INSTALL_CONFIG_PROFILE=
 while (($#)); do
   case "$1" in
     --prefix) PREFIX=${2:?missing prefix}; shift 2 ;;
-    --staging193-config) INSTALL_CONFIG_PROFILE=staging193; shift ;;
+    --staging193-config) INSTALL_CONFIG_PROFILE=staging194; shift ;;
     --initial-prod-config) INSTALL_CONFIG_PROFILE=initial-prod; shift ;;
     --production-static-config) INSTALL_CONFIG_PROFILE=production-static; shift ;;
     --production-paired-config) INSTALL_CONFIG_PROFILE=production-paired; shift ;;
