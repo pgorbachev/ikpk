@@ -2805,13 +2805,15 @@ def _static_publish(config: dict[str, Any], state: RehearsalState, args: argpars
                 raise HostFailure("retained static candidate lacks its operation-bound snapshot proof") from error
             digest = _tree_sha256(retained)
             snapshot_id = snapshot.get("snapshotId")
+            expected_capture_profile = ("production-static" if config.get("profile") == "production-paired"
+                                         else config.get("profile", "staging194"))
             if (retained_info.get("commit") != sha or retained_info.get("operationId") != op
                     or retained_info.get("staticTreeSha256") != digest
                     or not isinstance(snapshot_id, str) or not snapshot_id.startswith("snap:")
                     or retained_info.get("snapshotId") != snapshot_id
                     or snapshot.get("captureProof", {}).get("captureId") != op
                     or capture.get("operationId") != op or capture.get("sourceSha") != sha
-                    or capture.get("profile") != "production-static"):
+                    or capture.get("profile") != expected_capture_profile):
                 raise HostFailure("retained static candidate differs from its sealed operation capture")
             return {"operationId": op, "sourceSha": sha, "phase": "browser-check-required",
                     "staticTreeSha256": digest, "snapshotId": snapshot_id}

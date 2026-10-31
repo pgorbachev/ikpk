@@ -407,44 +407,47 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
             self.assertEqual(build.call_args.kwargs["operation_id"], operation_id)
 
     def test_browser_retry_reuses_retained_static_candidate_and_sealed_capture(self):
-        with tempfile.TemporaryDirectory(prefix="ikpk-paired-browser-retry-") as temporary:
-            root = Path(temporary)
-            source_sha, operation_id = "a" * 40, "prod-browser-retry"
-            source = root / "releases" / f"{source_sha}-{operation_id}"
-            snapshot = source / "web/.snapshot/snapshot.json"
-            snapshot.parent.mkdir(parents=True)
-            snapshot.write_text(json.dumps({"snapshotId": "snap:retry", "captureProof": {
-                "captureId": operation_id}}), encoding="utf-8")
-            capture = source / ".staging193-rehearsal" / operation_id / "capture"
-            capture.mkdir(parents=True)
-            (capture / "manifest.json").write_text(json.dumps({"operationId": operation_id,
-                "sourceSha": source_sha, "profile": "production-static"}), encoding="utf-8")
-            static_root = root / "static"
-            release = static_root / f"{source_sha}-{operation_id}"
-            release.mkdir(parents=True)
-            (release / "index.html").write_text("candidate", encoding="utf-8")
-            digest = rehearsal_host._tree_sha256(release)
-            (release / "release.json").write_text(json.dumps({"commit": source_sha,
-                "operationId": operation_id, "snapshotId": "snap:retry", "staticTreeSha256": digest}),
-                encoding="utf-8")
-            config = {"profile": "production-paired", "staticReleaseRoot": str(static_root)}
+        for host_profile, capture_profile in (("production-paired", "production-static"),
+                                              ("staging194", "staging194")):
+            with self.subTest(host_profile=host_profile), tempfile.TemporaryDirectory(
+                    prefix="ikpk-browser-retry-") as temporary:
+                root = Path(temporary)
+                source_sha, operation_id = "a" * 40, "browser-retry"
+                source = root / "releases" / f"{source_sha}-{operation_id}"
+                snapshot = source / "web/.snapshot/snapshot.json"
+                snapshot.parent.mkdir(parents=True)
+                snapshot.write_text(json.dumps({"snapshotId": "snap:retry", "captureProof": {
+                    "captureId": operation_id}}), encoding="utf-8")
+                capture = source / ".staging193-rehearsal" / operation_id / "capture"
+                capture.mkdir(parents=True)
+                (capture / "manifest.json").write_text(json.dumps({"operationId": operation_id,
+                    "sourceSha": source_sha, "profile": capture_profile}), encoding="utf-8")
+                static_root = root / "static"
+                release = static_root / f"{source_sha}-{operation_id}"
+                release.mkdir(parents=True)
+                (release / "index.html").write_text("candidate", encoding="utf-8")
+                digest = rehearsal_host._tree_sha256(release)
+                (release / "release.json").write_text(json.dumps({"commit": source_sha,
+                    "operationId": operation_id, "snapshotId": "snap:retry", "staticTreeSha256": digest}),
+                    encoding="utf-8")
+                config = {"profile": host_profile, "staticReleaseRoot": str(static_root)}
 
-            class State:
-                def phase(self, _operation_id):
-                    return {"phase": "cms-activated", "sourceSha": source_sha}
+                class State:
+                    def phase(self, _operation_id):
+                        return {"phase": "cms-activated", "sourceSha": source_sha}
 
-            with patch.object(rehearsal_host, "_candidate_root", return_value=source), \
-                 patch.object(rehearsal_host, "_verify_fence"), \
-                 patch.object(rehearsal_host, "_build_static") as build:
-                with self.assertRaisesRegex(rehearsal_host.HostFailure, "browser acceptance digest"):
-                    rehearsal_host._static_publish(config, State(), Namespace(
-                        operation_id=operation_id, source_sha=source_sha, browser_digest="0" * 64))
-                retry = rehearsal_host._static_publish(config, State(), Namespace(
-                    operation_id=operation_id, source_sha=source_sha, browser_digest=None))
-            self.assertEqual(retry["phase"], "browser-check-required")
-            self.assertEqual(retry["staticTreeSha256"], digest)
-            self.assertEqual(retry["snapshotId"], "snap:retry")
-            build.assert_not_called()
+                with patch.object(rehearsal_host, "_candidate_root", return_value=source), \
+                     patch.object(rehearsal_host, "_verify_fence"), \
+                     patch.object(rehearsal_host, "_build_static") as build:
+                    with self.assertRaisesRegex(rehearsal_host.HostFailure, "browser acceptance digest"):
+                        rehearsal_host._static_publish(config, State(), Namespace(
+                            operation_id=operation_id, source_sha=source_sha, browser_digest="0" * 64))
+                    retry = rehearsal_host._static_publish(config, State(), Namespace(
+                        operation_id=operation_id, source_sha=source_sha, browser_digest=None))
+                self.assertEqual(retry["phase"], "browser-check-required")
+                self.assertEqual(retry["staticTreeSha256"], digest)
+                self.assertEqual(retry["snapshotId"], "snap:retry")
+                build.assert_not_called()
 
     def test_initial_prod_config_template_binds_real_profile_and_all_writer_routes(self):
         config = json.loads((ROOT / "scripts/initial-prod-rehearsal.json").read_text(encoding="utf-8"))
