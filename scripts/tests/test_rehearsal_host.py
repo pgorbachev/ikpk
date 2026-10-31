@@ -191,6 +191,14 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
                         self.fail("missing lock must refuse")
             self.assertFalse(lock.exists())
 
+    def test_legacy_production_static_does_not_require_paired_publication_lock(self):
+        with tempfile.TemporaryDirectory(prefix="ikpk-static-no-paired-lock-") as temporary:
+            lock = Path(temporary) / ".publication.lock"
+            config = {"profile": "production-static", "publicationLock": str(lock)}
+            with patch.object(rehearsal_host, "PRODUCTION_PUBLICATION_LOCK", lock):
+                with rehearsal_host._destination_publication_lock(config):
+                    self.assertFalse(lock.exists())
+
     def test_production_pre_activation_failure_reopens_without_rewriting_verified_old_database(self):
         with tempfile.TemporaryDirectory(prefix="ikpk-paired-no-mutation-recover-") as temporary:
             root = Path(temporary); cms = root / "cms"; static = root / "static"
@@ -1654,7 +1662,7 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
 
     def test_canonical_content_fingerprint_format_is_preserved_through_restore_gate(self):
         fingerprint = "sha256:" + "a" * 64
-        payload = {"fingerprint": fingerprint, "observedEntry": 5, "revision": 5,
+        payload = {"fingerprint": fingerprint, "head": "c" * 40, "observedEntry": 5, "revision": 5,
                    "highWaterMark": 5, "latestEntry": 5, "retry": False}
         with patch.object(operator, "capture", return_value=json.dumps(payload)) as call:
             operator.production_paired_restore_state("read", fingerprint, "paired-op")
@@ -1763,7 +1771,7 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
         with patch.object(operator, "capture", side_effect=operator.Refusal("state branch unavailable")):
             with self.assertRaisesRegex(operator.Refusal, "state branch unavailable"):
                 operator.production_paired_restore_state("read", fingerprint, "paired-op")
-        stale = {"fingerprint": fingerprint, "observedEntry": 4, "revision": 3, "highWaterMark": 4,
+        stale = {"fingerprint": fingerprint, "head": "c" * 40, "observedEntry": 4, "revision": 3, "highWaterMark": 4,
                  "latestEntry": 4, "latestMarker": "edit", "retry": False}
         with patch.object(operator, "capture", return_value=json.dumps(stale)):
             with self.assertRaisesRegex(operator.Refusal, "stale or requires acceptance"):

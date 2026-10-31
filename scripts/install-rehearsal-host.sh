@@ -40,6 +40,32 @@ finally:
 PY
 fi
 
+# Refuse an unexpected existing profile config before replacing the installed
+# helper. In particular, an existing 194 config can require an operator-owned
+# migration; a failed check must leave the working entrypoint untouched.
+if [[ -n "$INSTALL_CONFIG_PROFILE" ]]; then
+  (( EUID == 0 )) || { echo 'rehearsal config installation requires root' >&2; exit 2; }
+  CONFIG_DIR=/etc/ikpk
+  if [[ "$INSTALL_CONFIG_PROFILE" == initial-prod ]]; then
+    CONFIG="$CONFIG_DIR/rehearsal-initial-prod.json"
+    TEMPLATE="$ROOT/scripts/initial-prod-rehearsal.json"
+  elif [[ "$INSTALL_CONFIG_PROFILE" == production-static ]]; then
+    CONFIG="$CONFIG_DIR/rehearsal-production-static.json"
+    TEMPLATE="$ROOT/scripts/production-static-rehearsal.json"
+  elif [[ "$INSTALL_CONFIG_PROFILE" == production-paired ]]; then
+    CONFIG="$CONFIG_DIR/rehearsal-production-paired.json"
+    TEMPLATE="$ROOT/scripts/production-paired-rehearsal.json"
+  else
+    CONFIG="$CONFIG_DIR/rehearsal.json"
+    TEMPLATE="$ROOT/scripts/staging193-rehearsal.json"
+  fi
+  if [[ -e "$CONFIG" || -L "$CONFIG" ]]; then
+    PYTHONPATH="$ROOT/scripts/lib" python3 "$ROOT/scripts/lib/rehearsal_config.py" check "$CONFIG" "$TEMPLATE" || {
+      echo 'existing rehearsal config is incompatible; refusing installation before helper writes' >&2; exit 2;
+    }
+  fi
+fi
+
 LIB="$PREFIX/lib/ikpk-rehearsal"
 SBIN="$PREFIX/sbin"
 install -d -m 0755 "$LIB" "$SBIN"
@@ -74,7 +100,11 @@ if [[ -n "$INSTALL_CONFIG_PROFILE" ]]; then
   install -d -o root -g root -m 0755 "$CONFIG_DIR"
   if [[ -e "$CONFIG" || -L "$CONFIG" ]]; then
     [[ -f "$CONFIG" && ! -L "$CONFIG" ]] || { echo 'existing rehearsal config is not a regular file' >&2; exit 2; }
-    cmp -s "$CONFIG" "$TEMPLATE" || { echo 'existing rehearsal config differs from the reviewed versioned template' >&2; exit 2; }
+    if ! cmp -s "$CONFIG" "$TEMPLATE"; then
+      PYTHONPATH="$ROOT/scripts/lib" python3 "$ROOT/scripts/lib/rehearsal_config.py" migrate "$CONFIG" "$TEMPLATE" || {
+        echo 'existing rehearsal config migration failed' >&2; exit 2;
+      }
+    fi
   else
     temporary="$CONFIG.new.$$"
     install -o root -g root -m 0600 "$TEMPLATE" "$temporary"

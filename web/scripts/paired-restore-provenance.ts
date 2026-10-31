@@ -34,7 +34,7 @@ try {
         state.observation.observedEntry !== state.observation.highWaterMark)) {
       throw new Error('restored backup does not match accepted current provenance');
     }
-    process.stdout.write(`${JSON.stringify({ fingerprint, observedEntry: state.observation.observedEntry,
+    process.stdout.write(`${JSON.stringify({ fingerprint, head: state.head, observedEntry: state.observation.observedEntry,
       revision: state.observation.revision, highWaterMark: state.observation.highWaterMark,
       latestEntry: latest.number, latestMarker: latest.marker, latestOperationId: latest.operationId, retry })}\n`);
   } else {

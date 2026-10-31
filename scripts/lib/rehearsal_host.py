@@ -244,7 +244,9 @@ def _validate_target_binding(data: dict[str, Any]) -> None:
 @contextmanager
 def _destination_publication_lock(config: dict[str, Any]):
     """Refuse to overlap an active production SSH publication during this operator step."""
-    if config.get("profile") not in ("production-static", "production-paired"):
+    # The legacy static-only workflow does not participate in the paired CMS
+    # maintenance window and must remain usable without a publisher lock file.
+    if config.get("profile") != "production-paired":
         yield
         return
     path = Path(config.get("publicationLock", PRODUCTION_PUBLICATION_LOCK))
