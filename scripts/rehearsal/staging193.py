@@ -410,10 +410,13 @@ def production_paired_schema_source(cms_path: str) -> tuple[str, str]:
 
 def persist_offhost_backup(directory: Path, operation_id: str, source_sha: str, payload: bytes,
                            expected_sha256: str, admission: Optional[dict] = None,
-                           old_cms_path: Optional[str] = None) -> Path:
+                           old_cms_path: Optional[str] = None,
+                           provenance_lineage: Optional[dict] = None) -> Path:
     verify_backup_tar(payload, expected_sha256)
     target = directory / f"{operation_id}.tar"
     metadata = target.with_suffix(".json")
+    if admission is not None and not isinstance(provenance_lineage, dict):
+        raise Refusal("production backup is missing its preflight provenance lineage")
     schema_metadata = {}
     # Persist verified bytes and a minimal binding before schema projection/tsx work.
     # A later local tooling failure must not strand the fenced operation without a copy.
@@ -429,8 +432,12 @@ def persist_offhost_backup(directory: Path, operation_id: str, source_sha: str, 
                 old.get(k) != v for k, v in {"operationId": operation_id, "sourceSha": source_sha,
                                             "sha256": expected_sha256}.items()):
             raise Refusal("existing off-host backup belongs to different bytes or operation")
+        if admission is not None and old.get("provenanceLineage") != provenance_lineage:
+            raise Refusal("existing production backup is bound to a different canonical provenance lineage")
     else:
         base = {"operationId": operation_id, "sourceSha": source_sha, "sha256": expected_sha256}
+        if admission is not None:
+            base["provenanceLineage"] = provenance_lineage
         flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
         fd = os.open(target, flags, 0o600)
         with os.fdopen(fd, "wb") as output:
@@ -456,6 +463,7 @@ def persist_offhost_backup(directory: Path, operation_id: str, source_sha: str, 
     if admission is not None:
         metadata_record.update({"runId": admission["runId"], "attempt": admission["attempt"]})
         metadata_record.update(schema_metadata)
+        metadata_record["provenanceLineage"] = provenance_lineage
     metadata_payload = json.dumps(metadata_record, sort_keys=True).encode() + b"\n"
     temporary = metadata.with_suffix(".json.new")
     fd = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
@@ -541,13 +549,20 @@ def production_paired_restore_state(action: str, fingerprint: str, operation_id:
     except ValueError as error:
         raise Refusal("local canonical restore provenance returned malformed JSON") from error
     if action == "preflight":
-        if (parsed.get("preflight") is not True or not isinstance(parsed.get("head"), str)
-                or not SHA.fullmatch(parsed["head"])):
+        lineage = parsed.get("lineage")
+        if (parsed.get("preflight") is not True or not isinstance(lineage, dict)
+                or type(lineage.get("observedEntry")) is not int or lineage["observedEntry"] < 1
+                or not isinstance(lineage.get("fingerprint"), str)
+                or not re.fullmatch(r"sha256:[a-f0-9]{64}", lineage["fingerprint"])
+                or type(lineage.get("highWaterMark")) is not int or lineage["highWaterMark"] < 1
+                or lineage["highWaterMark"] != lineage["observedEntry"]
+                or (lineage.get("revision") is not None and type(lineage.get("revision")) is not int)):
             raise Refusal("canonical CMS provenance preflight returned malformed state")
         return parsed
     if not isinstance(parsed, dict) or parsed.get("fingerprint") != fingerprint:
         raise Refusal("local canonical restore provenance did not bind the verified backup fingerprint")
-    if action == "read" and (not isinstance(parsed.get("head"), str) or not SHA.fullmatch(parsed["head"])):
+    if action == "read" and (type(parsed.get("latestEntry")) is not int
+                              or not isinstance(parsed.get("latestFingerprint"), str)):
         raise Refusal("canonical CMS provenance read omitted its exact ledger revision")
     if action == "read" and not parsed.get("retry"):
         for field in ("observedEntry", "revision", "highWaterMark"):
@@ -560,8 +575,11 @@ def production_paired_restore_state(action: str, fingerprint: str, operation_id:
     return parsed
 
 
-def require_unchanged_provenance_head(preflight: dict, current: dict) -> None:
-    if not isinstance(preflight, dict) or not isinstance(current, dict) or current.get("head") != preflight.get("head"):
+def require_unchanged_provenance_lineage(preflight: dict, current: dict) -> None:
+    baseline = preflight.get("lineage") if isinstance(preflight, dict) else None
+    observed = {"observedEntry": current.get("latestEntry"), "fingerprint": current.get("latestFingerprint"),
+                "revision": current.get("revision"), "highWaterMark": current.get("highWaterMark")}
+    if not isinstance(baseline, dict) or observed != baseline:
         raise Refusal("canonical CMS provenance lineage changed after preflight; production remains fenced")
 
 
@@ -781,7 +799,8 @@ def invoke(args: argparse.Namespace) -> None:
                     raise Refusal("journaled old CMS release changed after read-only preflight")
             if profile == "production-paired":
                 backup_path = persist_offhost_backup(backup_dir, args.operation_id, args.source_sha,
-                    remote_backup, first.get("backupSha256", ""), provenance, old_cms_path)
+                    remote_backup, first.get("backupSha256", ""), provenance, old_cms_path,
+                    (paired_provenance_preflight or {}).get("lineage"))
             else:
                 backup_path = persist_offhost_backup(backup_dir, args.operation_id, args.source_sha,
                     remote_backup, first.get("backupSha256", ""))
@@ -794,8 +813,8 @@ def invoke(args: argparse.Namespace) -> None:
                     raise Refusal("verified production backup does not bind the preflight old CMS schema and fingerprint")
                 current_lineage = production_paired_restore_state(
                     "read", metadata_record["snapshotFingerprint"], args.operation_id)
-                if paired_provenance_preflight is not None:
-                    require_unchanged_provenance_head(paired_provenance_preflight, current_lineage)
+                require_unchanged_provenance_lineage(
+                    {"lineage": metadata_record.get("provenanceLineage")}, current_lineage)
             if first.get("phase") == "cms-activated":
                 return
             if profile == "production-paired":
@@ -841,7 +860,9 @@ def invoke(args: argparse.Namespace) -> None:
             if (backup_metadata.get("sourceSha") != args.source_sha or
                     backup_metadata.get("snapshotFingerprint") != snapshot_fingerprint):
                 raise Refusal("built production snapshot differs from the fingerprint captured in the verified backup")
-            production_paired_restore_state("read", snapshot_fingerprint, args.operation_id)
+            current_lineage = production_paired_restore_state("read", snapshot_fingerprint, args.operation_id)
+            require_unchanged_provenance_lineage(
+                {"lineage": backup_metadata.get("provenanceLineage")}, current_lineage)
         current_run = (validate_production_paired_admission(args.source_sha) if profile == "production-paired"
                        else validate_sha_and_ci(args.source_sha, profile))
         if (current_run.get("runId"), current_run.get("attempt")) != (admitted_run.get("runId"), admitted_run.get("attempt")):

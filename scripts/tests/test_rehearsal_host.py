@@ -1627,13 +1627,23 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
             with patch.object(operator, "production_paired_backup_fingerprint", return_value="b" * 64):
                 backup = operator.persist_offhost_backup(Path(temporary), "paired-op", "a" * 40, archive,
                     sha(archive), {"runId": 7, "attempt": 2},
-                    f"/opt/ikpk-cms/releases/{source_sha}-paired-op/.staging193-rehearsal/op/migration/cms-artifact")
+                    f"/opt/ikpk-cms/releases/{source_sha}-paired-op/.staging193-rehearsal/op/migration/cms-artifact",
+                    {"observedEntry": 5, "fingerprint": "sha256:" + "c" * 64,
+                     "revision": 5, "highWaterMark": 5})
             metadata = json.loads(backup.with_suffix(".json").read_text(encoding="utf-8"))
             self.assertEqual(metadata["oldCmsSourceSha"], source_sha)
             self.assertRegex(metadata["oldCmsSchemaSha256"], r"^[a-f0-9]{64}$")
             self.assertEqual(metadata["sha256"], sha(archive))
             self.assertEqual(metadata["runId"], 7)
             self.assertEqual(metadata["attempt"], 2)
+            self.assertEqual(metadata["provenanceLineage"]["observedEntry"], 5)
+            with patch.object(operator, "production_paired_backup_fingerprint", return_value="b" * 64):
+                with self.assertRaisesRegex(operator.Refusal, "different canonical provenance lineage"):
+                    operator.persist_offhost_backup(Path(temporary), "paired-op", "a" * 40, archive,
+                        sha(archive), {"runId": 7, "attempt": 2},
+                        f"/opt/ikpk-cms/releases/{source_sha}-paired-op/.staging193-rehearsal/op/migration/cms-artifact",
+                        {"observedEntry": 6, "fingerprint": "sha256:" + "c" * 64,
+                         "revision": 6, "highWaterMark": 6})
 
     def test_production_backup_is_durable_before_content_projection_can_fail(self):
         source_sha = "2fee597b5335f6c61fd61a622fa2a5f3f475a605"
@@ -1644,15 +1654,22 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
                 with self.assertRaisesRegex(operator.Refusal, "tsx failed"):
                     operator.persist_offhost_backup(Path(temporary), "durable-op", "a" * 40, archive,
                         sha(archive), {"runId": 7, "attempt": 2},
-                        f"/opt/ikpk-cms/releases/{source_sha}-old/cms-artifact")
+                        f"/opt/ikpk-cms/releases/{source_sha}-old/cms-artifact",
+                        {"observedEntry": 5, "fingerprint": "sha256:" + "c" * 64,
+                         "revision": 5, "highWaterMark": 5})
             backup = Path(temporary) / "durable-op.tar"
             metadata = json.loads(backup.with_suffix(".json").read_text(encoding="utf-8"))
             self.assertEqual(backup.read_bytes(), archive)
             self.assertEqual(metadata, {"operationId": "durable-op", "sourceSha": "a" * 40,
-                                        "sha256": sha(archive)})
+                                        "sha256": sha(archive), "provenanceLineage": {
+                                            "observedEntry": 5, "fingerprint": "sha256:" + "c" * 64,
+                                            "revision": 5, "highWaterMark": 5}})
 
     def test_production_restore_preflight_accepts_only_structural_canonical_state_result(self):
-        with patch.object(operator, "capture", return_value=json.dumps({"preflight": True, "head": "c" * 40})) as call:
+        lineage = {"observedEntry": 5, "fingerprint": "sha256:" + "c" * 64,
+                   "revision": 5, "highWaterMark": 5}
+        with patch.object(operator, "capture", return_value=json.dumps(
+                {"preflight": True, "head": "c" * 40, "lineage": lineage})) as call:
             result = operator.production_paired_restore_state("preflight", "", "paired-op")
         self.assertTrue(result["preflight"])
         self.assertIn("preflight", call.call_args.args[0])
@@ -1663,7 +1680,7 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
     def test_canonical_content_fingerprint_format_is_preserved_through_restore_gate(self):
         fingerprint = "sha256:" + "a" * 64
         payload = {"fingerprint": fingerprint, "head": "c" * 40, "observedEntry": 5, "revision": 5,
-                   "highWaterMark": 5, "latestEntry": 5, "retry": False}
+                   "highWaterMark": 5, "latestEntry": 5, "latestFingerprint": fingerprint, "retry": False}
         with patch.object(operator, "capture", return_value=json.dumps(payload)) as call:
             operator.production_paired_restore_state("read", fingerprint, "paired-op")
         command = call.call_args.args[0]
@@ -1772,7 +1789,7 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
             with self.assertRaisesRegex(operator.Refusal, "state branch unavailable"):
                 operator.production_paired_restore_state("read", fingerprint, "paired-op")
         stale = {"fingerprint": fingerprint, "head": "c" * 40, "observedEntry": 4, "revision": 3, "highWaterMark": 4,
-                 "latestEntry": 4, "latestMarker": "edit", "retry": False}
+                 "latestEntry": 4, "latestFingerprint": fingerprint, "latestMarker": "edit", "retry": False}
         with patch.object(operator, "capture", return_value=json.dumps(stale)):
             with self.assertRaisesRegex(operator.Refusal, "stale or requires acceptance"):
                 operator.production_paired_restore_state("read", fingerprint, "paired-op")

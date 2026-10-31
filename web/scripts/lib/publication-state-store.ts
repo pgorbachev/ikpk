@@ -20,7 +20,8 @@ export interface PublicationStateSnapshot {
   publications: VerifiedPair[];
 }
 export interface PublicationStateStore {
-  readHistory(validateLedger?: boolean): Promise<{ head: string; publications: VerifiedPair[] }>;
+  readHistory(validateLedger?: boolean): Promise<{ head: string; publications: VerifiedPair[]; lineage?: {
+    observedEntry: number; fingerprint: string; revision: number | null; highWaterMark: number } }>;
   read(fingerprint: string): Promise<PublicationStateSnapshot>;
   appendPublication(record: PublicationRecord): Promise<{ head: string; changed: boolean }>;
   acceptState(input: { expectedObservedEntry: number; fingerprint: string; actor: string }):
@@ -95,7 +96,11 @@ export function createPublicationStateStore(options: PublicationStateStoreOption
         entries.some((entry, i) => entry.number !== i + 1 || entry.previous !== (i === 0 ? null : i) || !entry.fingerprint)) {
       throw new Error('provenance ledger corrupt sequence or high-water-mark');
     }
-    return state;
+    const latest = entries.at(-1)!;
+    const observation = await createLedger({ dir, hasPublicationHistory: true, initialize: false })
+      .observe({ fingerprint: latest.fingerprint });
+    return { ...state, lineage: { observedEntry: observation.observedEntry, fingerprint: latest.fingerprint,
+      revision: observation.revision, highWaterMark: observation.highWaterMark } };
   }
   async function snapshot(fingerprint: string): Promise<PublicationStateSnapshot> {
     const { head, publications } = await history(); const dir = join(workDir, 'ledger');

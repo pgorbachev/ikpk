@@ -3,6 +3,7 @@ import json
 import subprocess
 import tempfile
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 import sys
 
@@ -43,6 +44,23 @@ class InstalledEntrypointTests(unittest.TestCase):
                 rehearsal_config.check(str(config_path), str(template_path))
             self.assertEqual(json.loads(config_path.read_text()), current)
             self.assertFalse(list(root.glob("*.bak")))
+
+    def test_staging194_migration_replace_failure_preserves_compatible_dev_config(self):
+        with tempfile.TemporaryDirectory(prefix="ikpk-rehearsal-config-atomic-failure-") as temporary:
+            root = Path(temporary)
+            template = {"profile": "staging194", "allowedSourceRef": "refs/heads/main", "cmsUser": "cms"}
+            current = {**template, "allowedSourceRef": "refs/heads/dev"}
+            template_path, config_path = root / "template.json", root / "rehearsal.json"
+            template_path.write_text(json.dumps(template), encoding="utf-8")
+            original = json.dumps(current, indent=2)
+            config_path.write_text(original, encoding="utf-8")
+            with patch.object(rehearsal_config.os, "replace", side_effect=OSError("injected replace failure")):
+                with self.assertRaisesRegex(OSError, "injected replace failure"):
+                    rehearsal_config.migrate(str(config_path), str(template_path))
+            self.assertEqual(json.loads(config_path.read_text()), current)
+            backups = list(root.glob("rehearsal.json.pre-main-*.bak"))
+            self.assertEqual(len(backups), 1)
+            self.assertEqual(backups[0].read_text(), original)
 
     def test_installed_package_contains_all_imports_and_has_working_entrypoint(self):
         with tempfile.TemporaryDirectory(prefix="ikpk-rehearsal-install-") as temporary:

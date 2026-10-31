@@ -24,7 +24,7 @@ try {
   const store = createPublicationStateStore({ remote, workDir: join(scratch, 'state'), gitEnv });
   if (action === 'preflight') {
     const state = await store.readHistory(true);
-    process.stdout.write(`${JSON.stringify({ preflight: true, head: state.head })}\n`);
+    process.stdout.write(`${JSON.stringify({ preflight: true, lineage: state.lineage })}\n`);
   } else if (action === 'read') {
     const state = await store.read(fingerprint);
     const latest = state.entries.at(-1)!;
@@ -34,9 +34,10 @@ try {
         state.observation.observedEntry !== state.observation.highWaterMark)) {
       throw new Error('restored backup does not match accepted current provenance');
     }
-    process.stdout.write(`${JSON.stringify({ fingerprint, head: state.head, observedEntry: state.observation.observedEntry,
+    process.stdout.write(`${JSON.stringify({ fingerprint, observedEntry: state.observation.observedEntry,
       revision: state.observation.revision, highWaterMark: state.observation.highWaterMark,
-      latestEntry: latest.number, latestMarker: latest.marker, latestOperationId: latest.operationId, retry })}\n`);
+      latestEntry: latest.number, latestFingerprint: latest.fingerprint,
+      latestMarker: latest.marker, latestOperationId: latest.operationId, retry })}\n`);
   } else {
     const result = await store.recordRestore({ expectedObservedEntry: Number(expectedRaw), fingerprint, operationId });
     process.stdout.write(`${JSON.stringify({ fingerprint, operationId, entry: result.entry.number, changed: result.changed })}\n`);
