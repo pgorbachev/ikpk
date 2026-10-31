@@ -250,13 +250,18 @@ def _destination_publication_lock(config: dict[str, Any]):
     if path != PRODUCTION_PUBLICATION_LOCK:
         raise HostFailure("production publication lock path is not fixed")
     try:
-        fd = os.open(path, os.O_RDWR | os.O_CREAT | getattr(os, "O_NOFOLLOW", 0), 0o600)
+        before = path.lstat()
+        if (not stat.S_ISREG(before.st_mode) or before.st_nlink != 1 or before.st_uid == 0
+                or not before.st_mode & stat.S_IWUSR):
+            raise HostFailure("production publication lock must be an existing publisher-owned writable regular file")
+        fd = os.open(path, os.O_RDWR | getattr(os, "O_NOFOLLOW", 0))
     except OSError as error:
         raise HostFailure("production publication lock is unavailable") from error
     try:
         info = os.fstat(fd)
-        if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1 or info.st_uid != 0:
-            raise HostFailure("production publication lock must be a root-owned regular file")
+        if ((info.st_dev, info.st_ino) != (before.st_dev, before.st_ino) or not stat.S_ISREG(info.st_mode)
+                or info.st_nlink != 1 or info.st_uid == 0 or not info.st_mode & stat.S_IWUSR):
+            raise HostFailure("production publication lock changed or is not writable by its non-root owner")
         try:
             fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError as error:

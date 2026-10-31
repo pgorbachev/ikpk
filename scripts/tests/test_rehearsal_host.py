@@ -4,6 +4,7 @@ import getpass
 import importlib.util
 import io
 import json
+import os
 import re
 import sqlite3
 import subprocess
@@ -64,6 +65,32 @@ def backup_archive(operation_id="operator-test"):
 
 
 class RehearsalHostFilesystemTests(unittest.TestCase):
+    def test_production_lock_reuses_existing_publisher_inode_without_chmod(self):
+        if os.geteuid() == 0:
+            self.skipTest("requires an unprivileged publisher-owned lock fixture")
+        with tempfile.TemporaryDirectory(prefix="ikpk-existing-publisher-lock-") as temporary:
+            lock = Path(temporary) / ".publication.lock"; lock.write_bytes(b""); lock.chmod(0o600)
+            before = lock.stat()
+            config = {"profile": "production-paired", "publicationLock": str(lock)}
+            with patch.object(rehearsal_host, "PRODUCTION_PUBLICATION_LOCK", lock):
+                with rehearsal_host._destination_publication_lock(config):
+                    during = lock.stat()
+                    self.assertEqual((during.st_dev, during.st_ino, stat.S_IMODE(during.st_mode), during.st_uid),
+                                     (before.st_dev, before.st_ino, stat.S_IMODE(before.st_mode), before.st_uid))
+            after = lock.stat()
+            self.assertEqual((after.st_dev, after.st_ino, stat.S_IMODE(after.st_mode), after.st_uid),
+                             (before.st_dev, before.st_ino, stat.S_IMODE(before.st_mode), before.st_uid))
+
+    def test_production_lock_fails_closed_without_creating_a_new_file(self):
+        with tempfile.TemporaryDirectory(prefix="ikpk-missing-publisher-lock-") as temporary:
+            lock = Path(temporary) / ".publication.lock"
+            config = {"profile": "production-paired", "publicationLock": str(lock)}
+            with patch.object(rehearsal_host, "PRODUCTION_PUBLICATION_LOCK", lock):
+                with self.assertRaisesRegex(rehearsal_host.HostFailure, "unavailable"):
+                    with rehearsal_host._destination_publication_lock(config):
+                        self.fail("missing lock must refuse")
+            self.assertFalse(lock.exists())
+
     def test_production_pre_activation_failure_reopens_without_rewriting_verified_old_database(self):
         with tempfile.TemporaryDirectory(prefix="ikpk-paired-no-mutation-recover-") as temporary:
             root = Path(temporary); cms = root / "cms"; static = root / "static"

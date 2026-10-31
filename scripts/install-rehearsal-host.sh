@@ -15,6 +15,30 @@ while (($#)); do
   esac
 done
 [[ "$PREFIX" = /* && "$PREFIX" != / ]] || { echo 'prefix must be an absolute non-root path' >&2; exit 2; }
+if [[ "$INSTALL_CONFIG_PROFILE" == production-paired ]]; then
+  # The site publisher and this root entrypoint must keep sharing the already-used inode.
+  # There is no publisher identity in the rehearsal template, so installation is refused
+  # unless a non-root-owned, owner-writable lock already exists; never invent its owner/mode.
+  python3 - "$ROOT/scripts/production-paired-rehearsal.json" <<'PY'
+import json, os, stat, sys
+with open(sys.argv[1], encoding="utf-8") as source:
+    lock = json.load(source)["publicationLock"]
+try:
+    before = os.lstat(lock)
+    if (not stat.S_ISREG(before.st_mode) or stat.S_ISLNK(before.st_mode) or before.st_nlink != 1
+            or before.st_uid == 0 or not before.st_mode & stat.S_IWUSR):
+        raise SystemExit("production publication lock must be an existing publisher-owned writable regular file")
+    fd = os.open(lock, os.O_RDWR | getattr(os, "O_NOFOLLOW", 0))
+except OSError as error:
+    raise SystemExit(f"production publication lock is unavailable; refusing host installation: {error}")
+try:
+    after = os.fstat(fd)
+    if (after.st_dev, after.st_ino) != (before.st_dev, before.st_ino):
+        raise SystemExit("production publication lock changed during installer preflight")
+finally:
+    os.close(fd)
+PY
+fi
 
 LIB="$PREFIX/lib/ikpk-rehearsal"
 SBIN="$PREFIX/sbin"
@@ -101,14 +125,11 @@ if config["profile"] == "production-paired":
     os.chown(config["releaseRoot"], 0, account.pw_gid)
     os.chmod(config["releaseRoot"], 0o750)
     lock = config["publicationLock"]
-    os.makedirs(os.path.dirname(lock), mode=0o755, exist_ok=True)
-    fd = os.open(lock, os.O_RDWR | os.O_CREAT | getattr(os, "O_NOFOLLOW", 0), 0o600)
+    fd = os.open(lock, os.O_RDWR | getattr(os, "O_NOFOLLOW", 0))
     try:
         info = os.fstat(fd)
-        if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1 or info.st_uid != 0:
-            raise SystemExit("production publication lock must be a root-owned regular file")
-        os.fchown(fd, 0, 0)
-        os.fchmod(fd, 0o600)
+        if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1 or info.st_uid == 0 or not info.st_mode & stat.S_IWUSR:
+            raise SystemExit("production publication lock must remain publisher-owned and writable")
     finally:
         os.close(fd)
 PY
