@@ -245,7 +245,13 @@ const CHILD_KEYS = [
 
 export function childEnvironment(source, { includeCmsCredentials = true } = {}) {
   const env = { NODE_OPTIONS: '--max-old-space-size=480' };
+  const profileBuild = source.IKPK_CAPTURE_PROFILE === 'staging194' || source.INITIAL_PROD_PROFILE === '1';
+  const profileBuildKeys = new Set([
+    'IKPK_BUILD_WORKSPACE', 'IKPK_INSTALLED_COMMIT', 'INITIAL_PROD_PROFILE', 'DEPLOY_MODE',
+    'PAYMENT_ROLE', 'PAYMENT_ENDPOINT_PROD', 'CHAT_OFFLINE_MESSAGE',
+  ]);
   for (const key of CHILD_KEYS) {
+    if (!profileBuild && profileBuildKeys.has(key)) continue;
     if (source.IKPK_CAPTURE_PROFILE !== 'staging194' &&
         ['IKPK_CAPTURE_DATABASE', 'IKPK_CAPTURE_MEDIA', 'IKPK_CAPTURE_ROOT'].includes(key)) continue;
     if (!includeCmsCredentials && ['CMS_URL', 'CMS_TOKEN', 'STRAPI_URL', 'STRAPI_API_TOKEN'].includes(key)) continue;
