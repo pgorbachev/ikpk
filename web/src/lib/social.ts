@@ -27,12 +27,12 @@ export interface SocialLink {
 }
 
 export const SOCIAL_LINKS: SocialLink[] = [
-  // сообщество на 200; ранее стояло vk.com/ikpksu → 404
+  // ранее стояло vk.com/ikpksu → 404
   { label: 'ВКонтакте', href: 'https://vk.com/clubikpk' },
   // канал «Институт Клинической Прикладной Кинезиологии», как на старом сайте;
   // ранее стояло youtube.com/@ikpk_su → 404
   { label: 'Youtube', href: 'https://www.youtube.com/user/TheKinesiology' },
-  // канал на 1877 подписчиков; ранее стояло t.me/ikpk_su — страница есть,
+  // ранее стояло t.me/ikpk_su — страница есть,
   // но это не канал
   { label: 'Telegram', href: 'https://t.me/ikpk_spb' },
   // совпадает со старым сайтом; на запрос отвечает 403 — это антибот, не поломка
