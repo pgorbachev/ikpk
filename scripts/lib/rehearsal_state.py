@@ -14,6 +14,11 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Callable, Iterator, Optional
 
+try:
+    from .housekeeping_journal import validate_journal_history
+except ImportError:  # Installed wrapper places both files in one private module directory.
+    from housekeeping_journal import validate_journal_history
+
 
 class RehearsalRefusal(RuntimeError):
     pass
@@ -140,6 +145,75 @@ class RehearsalState:
                 rows.append(value)
         except ValueError as error:
             raise RehearsalRefusal("append-only operation journal is malformed") from error
+        return rows
+
+    def read_journal_for_cleanup(self, *, validate_history: bool = False) -> list[dict]:
+        """Read the journal without repair; destructive cleanup must fail closed."""
+        try:
+            before = self.journal_path.lstat()
+        except FileNotFoundError:
+            return []
+        if not stat.S_ISREG(before.st_mode) or before.st_nlink != 1:
+            raise RehearsalRefusal("journal must be a regular unlinked file")
+        try:
+            fd = os.open(self.journal_path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+        except OSError as error:
+            raise RehearsalRefusal("append-only operation journal is unreadable") from error
+        try:
+            opened = os.fstat(fd)
+            if (not stat.S_ISREG(opened.st_mode) or opened.st_nlink != 1
+                    or (opened.st_dev, opened.st_ino) != (before.st_dev, before.st_ino)):
+                raise RehearsalRefusal("journal changed during cleanup inspection")
+            chunks = []
+            while True:
+                block = os.read(fd, 65536)
+                if not block:
+                    break
+                chunks.append(block)
+            raw = b"".join(chunks)
+            after = os.fstat(fd)
+            named = self.journal_path.lstat()
+            if ((after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns)
+                    != (opened.st_dev, opened.st_ino, opened.st_size, opened.st_mtime_ns)
+                    or (named.st_dev, named.st_ino) != (opened.st_dev, opened.st_ino)):
+                raise RehearsalRefusal("journal changed during cleanup inspection")
+        finally:
+            os.close(fd)
+        if raw and not raw.endswith(b"\n"):
+            raise RehearsalRefusal("operation journal has an incomplete tail; recover it before cleanup")
+        rows = []
+        known_records = {
+            "start", "fenced-baseline", "new-bundle", "committed", "recovered",
+            "static-main-start", "static-main-prepared", "static-main-switch-intent",
+            "static-main-switched", "static-main-committed", "static-main-recovered",
+            "static-main-rolled-back", "static-main-rollback-intent",
+            "static-main-rollback-completed", "restore-prepared",
+        }
+        try:
+            for line in raw.splitlines():
+                value = json.loads(line.decode("utf-8"))
+                if (not isinstance(value, dict) or value.get("version") != 1
+                        or value.get("record") not in known_records):
+                    raise ValueError("unknown journal record")
+                record = value["record"]
+                operation_id = value.get("operationId")
+                if not isinstance(operation_id, str) or not OPERATION_ID.fullmatch(operation_id):
+                    raise ValueError("operation identity is missing or malformed")
+                if record.startswith("static-main-") and value.get("operationKind") != "static-main":
+                    raise ValueError("static-main phase has no matching operation kind")
+                if value.get("operationKind") not in (None, "static-main"):
+                    raise ValueError("unknown operation kind")
+                rows.append(value)
+        except (UnicodeDecodeError, ValueError) as error:
+            raise RehearsalRefusal("append-only operation journal is malformed or has an unknown phase") from error
+        if validate_history:
+            try:
+                validate_journal_history(rows)
+            except ValueError as error:
+                message = ("operation journal contains an unfinished operation"
+                           if str(error) == "incomplete operation" else
+                           "operation journal history is inconsistent")
+                raise RehearsalRefusal(message) from error
         return rows
 
     def _repair_incomplete_tail(self) -> None:

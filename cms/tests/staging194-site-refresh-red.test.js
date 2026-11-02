@@ -5,7 +5,7 @@ import { mkdtempSync, mkdirSync, readFileSync, rmSync, unlinkSync, writeFileSync
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { childEnvironment, refreshReady, siteBuildEnv } from '../src/seminar-management/site-refresh-operation.js';
+import { childEnvironment, refreshReady, siteBuildEnv, tryLock } from '../src/seminar-management/site-refresh-operation.js';
 import { resolveDemo193Environment, STAGING194_STATIC_MAIN_CHAT_LOADER_SRC } from '../../web/scripts/demo193-profile.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -86,6 +86,8 @@ test('операция 194 строит demo из нового серверно�
     const runner = `import {readFileSync} from 'node:fs'; import {join} from 'node:path'; globalThis.fetch=async()=>({status:200,json:async()=>JSON.parse(readFileSync(join(process.env.IKPK_WEB_ROOT,'current','release.json'),'utf8'))}); const {executeRefresh}=await import(${JSON.stringify(worker)}); const r=await executeRefresh(); console.log(JSON.stringify(r));`;
     const env = { ...process.env, PATH: `${bin}:${process.env.PATH}`, IKPK_BUILD_WORKSPACE: ws, IKPK_WEB_ROOT: site, IKPK_REFRESH_STATE: state, IKPK_CAPTURE_PROFILE: 'staging194', IKPK_VERIFY_URL: 'https://194.226.99.10/release.json', IKPK_CAPTURE_DATABASE: join(root,'source.sqlite'), IKPK_CAPTURE_MEDIA: join(root,'uploads'), IKPK_CAPTURE_ROOT: captures, IKPK_MEDIA_CACHE: '/var/www/ikpk/current/media', IKPK_INSTALLED_COMMIT: 'a'.repeat(40) };
     delete env.CHAT_LOADER_SRC; delete env.CHAT_LOADER_PROFILE;
+    env.IKPK_REFRESH_OWNER_PID = String(process.pid); env.IKPK_REFRESH_LOCK_TOKEN = 'a'.repeat(32);
+    assert.equal(tryLock(`${state}.lock`, process.pid, env.IKPK_REFRESH_LOCK_TOKEN), true);
     const run = spawnSync(process.execPath, ['--input-type=module', '-e', runner], { env, encoding: 'utf8', timeout: 30000 });
     assert.equal(run.status, 0, run.stderr); const result = JSON.parse(run.stdout.trim());
     assert.equal(result.status, 'succeeded', JSON.stringify(result));

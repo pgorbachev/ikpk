@@ -15,28 +15,40 @@ while (($#)); do
   esac
 done
 [[ "$PREFIX" = /* && "$PREFIX" != / ]] || { echo 'prefix must be an absolute non-root path' >&2; exit 2; }
-if [[ "$INSTALL_CONFIG_PROFILE" == production-paired ]]; then
-  # Reuse and validate a publisher-created lock when present. Do not create or
-  # change its inode/owner/mode; absence remains a manually coordinated window.
-  python3 - "$ROOT/scripts/production-paired-rehearsal.json" <<'PY'
-import json, os, stat, sys
+if [[ "$INSTALL_CONFIG_PROFILE" == staging193 || "$INSTALL_CONFIG_PROFILE" == production-paired || "$INSTALL_CONFIG_PROFILE" == production-static || "$INSTALL_CONFIG_PROFILE" == initial-prod ]]; then
+  # The shared publication lock must be provisioned by its owner before
+  # enabling cleanup. Never create or replace the transport's inode here.
+  if [[ "$INSTALL_CONFIG_PROFILE" == production-paired ]]; then
+    lock_template="$ROOT/scripts/production-paired-rehearsal.json"
+  elif [[ "$INSTALL_CONFIG_PROFILE" == production-static ]]; then
+    lock_template="$ROOT/scripts/production-static-rehearsal.json"
+  elif [[ "$INSTALL_CONFIG_PROFILE" == staging193 ]]; then
+    lock_template="$ROOT/scripts/staging193-rehearsal.json"
+  else
+    lock_template="$ROOT/scripts/initial-prod-rehearsal.json"
+  fi
+  python3 - "$lock_template" <<'PY'
+import json, os, pwd, stat, sys
 with open(sys.argv[1], encoding="utf-8") as source:
-    lock = json.load(source)["publicationLock"]
+    config = json.load(source)
+    lock = config["publicationLock"]
+    expected_uid = pwd.getpwnam(config["cmsUser"]).pw_uid
 try:
     before = os.lstat(lock)
 except FileNotFoundError:
-    raise SystemExit(0)
+    raise SystemExit("shared publication lock must exist before cleanup is enabled")
 try:
     if (not stat.S_ISREG(before.st_mode) or stat.S_ISLNK(before.st_mode) or before.st_nlink != 1
-            or before.st_uid == 0 or not before.st_mode & stat.S_IWUSR):
-        raise SystemExit("production publication lock must be an existing publisher-owned writable regular file")
+            or before.st_uid != expected_uid or stat.S_IMODE(before.st_mode) != 0o600):
+        raise SystemExit("shared publication lock must be a 0600 regular file owned by the configured CMS user")
     fd = os.open(lock, os.O_RDWR | getattr(os, "O_NOFOLLOW", 0))
 except OSError as error:
     raise SystemExit(f"production publication lock is unavailable; refusing host installation: {error}")
 try:
     after = os.fstat(fd)
-    if (after.st_dev, after.st_ino) != (before.st_dev, before.st_ino):
-        raise SystemExit("production publication lock changed during installer preflight")
+    if ((after.st_dev, after.st_ino) != (before.st_dev, before.st_ino)
+            or after.st_uid != expected_uid or stat.S_IMODE(after.st_mode) != 0o600):
+        raise SystemExit("shared publication lock changed during installer preflight")
 finally:
     os.close(fd)
 PY
@@ -72,6 +84,7 @@ LIB="$PREFIX/lib/ikpk-rehearsal"
 SBIN="$PREFIX/sbin"
 install -d -m 0755 "$LIB" "$SBIN"
 install -m 0644 "$ROOT/scripts/lib/rehearsal_state.py" "$LIB/rehearsal_state.py"
+install -m 0644 "$ROOT/scripts/lib/housekeeping_journal.py" "$LIB/housekeeping_journal.py"
 install -m 0644 "$ROOT/scripts/lib/rehearsal_host.py" "$LIB/rehearsal_host.py"
 cat >"$SBIN/ikpk-rehearsal" <<EOF
 #!/usr/bin/env python3
@@ -141,6 +154,21 @@ for name in ("stateDir", "backupRoot"):
     os.makedirs(config[name], mode=0o700, exist_ok=True)
     os.chown(config[name], 0, 0)
     os.chmod(config[name], 0o700)
+marker_path = config["sitePublicationMarker"]
+marker_dir = os.path.dirname(marker_path)
+if os.path.lexists(marker_dir):
+    info = os.lstat(marker_dir)
+    if not stat.S_ISDIR(info.st_mode) or stat.S_ISLNK(info.st_mode):
+        raise SystemExit("site-publication marker directory must be a real directory")
+else:
+    os.makedirs(marker_dir, mode=0o750, exist_ok=False)
+os.chown(marker_dir, 0, account.pw_gid)
+os.chmod(marker_dir, 0o750)
+if os.path.lexists(marker_path):
+    info = os.lstat(marker_path)
+    if (not stat.S_ISREG(info.st_mode) or stat.S_ISLNK(info.st_mode) or info.st_nlink != 1
+            or info.st_uid != 0 or info.st_gid != account.pw_gid or stat.S_IMODE(info.st_mode) != 0o640):
+        raise SystemExit("existing site-publication marker has unsafe owner or permissions")
 if profile == "production-static":
     if os.path.lexists(config["releaseRoot"]):
         info = os.lstat(config["releaseRoot"])
@@ -172,5 +200,87 @@ PY
     echo 'rehearsal config validation failed; no operation is enabled' >&2
     exit 2
   fi
+  service_profile=$INSTALL_CONFIG_PROFILE
+  [[ "$service_profile" == staging193 ]] && service_profile=staging194
+  state_dir=$(python3 - "$CONFIG" <<'PY'
+import json, sys
+with open(sys.argv[1], encoding="utf-8") as source:
+    print(json.load(source)["stateDir"])
+PY
+)
+  site_state_dir=$(python3 - "$CONFIG" <<'PY'
+import json, os, sys
+with open(sys.argv[1], encoding="utf-8") as source:
+    print(os.path.dirname(json.load(source)["siteRefreshState"]))
+PY
+)
+  site_cleanup_request="$site_state_dir/cleanup.request"
+  cleanup_profile_state_dirs=
+  if [[ "$service_profile" == production-static || "$service_profile" == production-paired || \
+        "$service_profile" == initial-prod ]]; then
+    # A protected marker can belong to another installed production profile.
+    # These exact directories let the helper read that profile's journal under
+    # systemd; '-' means a profile never provisioned here may be absent.
+    cleanup_profile_state_dirs="-/var/lib/ikpk-rehearsal/initial-prod -/var/lib/ikpk-rehearsal/production-static -/var/lib/ikpk-rehearsal/production-paired"
+  fi
+  systemd_dir=/etc/systemd/system
+  unit_tmp="$systemd_dir/ikpk-site-housekeeping.service.new.$$"
+  timer_tmp="$systemd_dir/ikpk-site-housekeeping.timer.new.$$"
+  path_tmp="$systemd_dir/ikpk-site-housekeeping.path.new.$$"
+  cat >"$unit_tmp" <<EOF
+[Unit]
+Description=Clean expired IKPK static site releases
+After=local-fs.target
+
+[Service]
+Type=oneshot
+User=root
+Group=root
+ExecStart=$SBIN/ikpk-rehearsal --profile $service_profile cleanup-site
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+# The helper removes a validated stale .current-next-* symlink from this
+# directory and fsyncs its parent. CMS and the 194 transport serialize through
+# the shared site-refresh reservation; production transport also uses its
+# configured .publication.lock. Do not require that prod-only inode on 194.
+ReadWritePaths=/var/www/ikpk $site_state_dir $state_dir $cleanup_profile_state_dirs /var/lib/ikpk-rehearsal/site-publication
+EOF
+  chmod 0644 "$unit_tmp"
+  mv -f -- "$unit_tmp" "$systemd_dir/ikpk-site-housekeeping.service"
+  cat >"$timer_tmp" <<'EOF'
+[Unit]
+Description=Retry pending IKPK release housekeeping
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=10min
+Unit=ikpk-site-housekeeping.service
+
+[Install]
+WantedBy=timers.target
+EOF
+  chmod 0644 "$timer_tmp"
+  mv -f -- "$timer_tmp" "$systemd_dir/ikpk-site-housekeeping.timer"
+  cat >"$path_tmp" <<EOF
+[Unit]
+Description=Start IKPK release housekeeping after CMS publication success
+
+[Path]
+PathExists=$site_cleanup_request
+Unit=ikpk-site-housekeeping.service
+
+[Install]
+WantedBy=multi-user.target
+EOF
+  chmod 0644 "$path_tmp"
+  mv -f -- "$path_tmp" "$systemd_dir/ikpk-site-housekeeping.path"
+  systemctl daemon-reload
+  systemctl enable --now ikpk-site-housekeeping.path ikpk-site-housekeeping.timer
 fi
 echo "installed rehearsal host entrypoint: $SBIN/ikpk-rehearsal"

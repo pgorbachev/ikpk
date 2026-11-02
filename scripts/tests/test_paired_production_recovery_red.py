@@ -31,6 +31,11 @@ class PairedProductionRecoveryTests(unittest.TestCase):
             root = Path(temporary)
             state_root = root / "state"
             state_root.mkdir()
+            marker_dir = root / "site-publication"
+            marker_dir.mkdir()
+            publication_lock = root / ".publication.lock"
+            publication_lock.write_bytes(b"")
+            publication_lock.chmod(0o600)
             state = RehearsalState(state_root)
 
             database = root / "live.sqlite"
@@ -63,6 +68,7 @@ class PairedProductionRecoveryTests(unittest.TestCase):
             state.begin(operation_id, "a" * 40, old_pair)
             config = {
                 "profile": "production-paired",
+                "cmsUser": "ikpk-cms",
                 "stateDir": str(state_root),
                 "backupRoot": str(root / "backups"),
                 "cmsDatabase": str(database),
@@ -76,6 +82,8 @@ class PairedProductionRecoveryTests(unittest.TestCase):
                 "staticReleaseRoot": str(static_releases),
                 "mediaRoots": [],
                 "siteRefreshState": str(root / "site-refresh-state.json"),
+                "sitePublicationMarker": str(marker_dir / "host-publication.json"),
+                "publicationLock": str(publication_lock),
             }
             flag_changes = []
             commands = []
@@ -90,8 +98,12 @@ class PairedProductionRecoveryTests(unittest.TestCase):
                              backup_sha256=None)
             with patch.object(rehearsal_host.os, "geteuid", return_value=0), \
                  patch.object(rehearsal_host, "_root_config", return_value=config), \
+                 patch.object(rehearsal_host, "SITE_PUBLICATION_MARKER_DIR", marker_dir), \
+                 patch.object(rehearsal_host, "PRODUCTION_PUBLICATION_LOCK", publication_lock), \
+                 patch.object(rehearsal_host, "_read_site_publication_marker", return_value=None), \
+                 patch.object(rehearsal_host, "_write_site_publication_marker"), \
                  patch.object(rehearsal_host, "_destination_publication_lock",
-                              side_effect=lambda _config: contextlib.nullcontext()), \
+                              side_effect=lambda _config, **_kwargs: contextlib.nullcontext()), \
                  patch.object(rehearsal_host, "_set_flag",
                               side_effect=lambda _config, enabled: flag_changes.append(enabled)), \
                  patch.object(rehearsal_host, "_write_gate"), \

@@ -14,7 +14,9 @@ import tarfile
 import tempfile
 import unittest
 from argparse import Namespace
+from contextlib import nullcontext
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from scripts.lib import rehearsal_host
@@ -65,6 +67,92 @@ def backup_archive(operation_id="operator-test"):
 
 
 class RehearsalHostFilesystemTests(unittest.TestCase):
+    def test_cleanup_selects_journal_for_marker_profile_in_both_production_directions(self):
+        profiles = {
+            "production-static": {"sitePublicationMarker": str(rehearsal_host.SITE_PUBLICATION_MARKER_DIR /
+                                                                  rehearsal_host.SITE_PUBLICATION_MARKER),
+                                  "staticReleaseRoot": "/var/www/ikpk/releases",
+                                  "currentStatic": "/var/www/ikpk/current", "stateDir": "/state/static"},
+            "production-paired": {"sitePublicationMarker": str(rehearsal_host.SITE_PUBLICATION_MARKER_DIR /
+                                                                  rehearsal_host.SITE_PUBLICATION_MARKER),
+                                  "staticReleaseRoot": "/var/www/ikpk/releases",
+                                  "currentStatic": "/var/www/ikpk/current", "stateDir": "/state/paired"},
+        }
+        pairs = (("production-static", "production-paired"),
+                 ("production-paired", "production-static"))
+        for requested_profile, marker_profile in pairs:
+            with self.subTest(requested=requested_profile, marker=marker_profile):
+                selected = profiles[marker_profile]
+                with patch.object(rehearsal_host, "_read_site_publication_marker",
+                                  return_value={"profile": marker_profile, "operationId": "op-test",
+                                                "phase": "cleanup-pending"}), \
+                        patch.object(rehearsal_host, "_root_config", return_value=selected) as root_config:
+                    config, profile, marker = rehearsal_host._select_cleanup_profile(
+                        profiles[requested_profile], requested_profile)
+                self.assertIs(config, selected)
+                self.assertEqual(profile, marker_profile)
+                self.assertEqual(marker["profile"], marker_profile)
+                self.assertEqual(root_config.call_args.args[0],
+                                 rehearsal_host._config_path_for_profile(marker_profile))
+                self.assertEqual(root_config.call_args.kwargs["expected_profile"], marker_profile)
+
+    def test_cleanup_rejects_unknown_marker_profile_without_loading_arbitrary_config(self):
+        config = {"sitePublicationMarker": "/fixed/marker", "staticReleaseRoot": "/fixed/releases",
+                  "currentStatic": "/fixed/current"}
+        with patch.object(rehearsal_host, "_read_site_publication_marker",
+                          return_value={"profile": "../../attacker", "operationId": "op-test",
+                                        "phase": "cleanup-pending"}), \
+                patch.object(rehearsal_host, "_root_config") as root_config:
+            with self.assertRaisesRegex(rehearsal_host.HostFailure, "unsupported cleanup profile"):
+                rehearsal_host._select_cleanup_profile(config, "production-static")
+        root_config.assert_not_called()
+
+    def test_cleanup_refuses_marker_replacement_during_lock_acquisition(self):
+        config = {"profile": "production-static", "stateDir": "/state/static",
+                  "sitePublicationMarker": str(rehearsal_host.SITE_PUBLICATION_MARKER_DIR /
+                                                rehearsal_host.SITE_PUBLICATION_MARKER),
+                  "siteRefreshState": "/state/cms-refresh.json",
+                  "staticReleaseRoot": "/var/www/ikpk/releases",
+                  "currentStatic": "/var/www/ikpk/current"}
+        before = {"version": 1, "profile": "production-static", "operationId": "op-first",
+                  "phase": "cleanup-pending"}
+        after = {"version": 1, "profile": "production-paired", "operationId": "op-second",
+                 "phase": "cleanup-pending"}
+        state = SimpleNamespace(lock=lambda: nullcontext(), read_journal_for_cleanup=lambda: [])
+        with patch.object(rehearsal_host.os, "geteuid", return_value=0), \
+                patch.object(rehearsal_host, "_root_config", return_value=config), \
+                patch.object(rehearsal_host, "_read_site_publication_marker",
+                             side_effect=[before, after]), \
+                patch.object(rehearsal_host, "_destination_publication_lock", return_value=nullcontext()), \
+                patch.object(rehearsal_host, "RehearsalState", return_value=state), \
+                patch.object(rehearsal_host, "_reserve_site_refresh_lock") as reserve, \
+                patch.object(rehearsal_host, "_consume_site_cleanup_request") as consume, \
+                patch.object(rehearsal_host, "_cleanup_site_releases") as cleanup:
+            with self.assertRaisesRegex(rehearsal_host.HostFailure, "marker changed while housekeeping"):
+                rehearsal_host.dispatch(Namespace(profile="production-static", action="cleanup-site"))
+        reserve.assert_called_once()
+        consume.assert_not_called()
+        cleanup.assert_not_called()
+
+    def test_cleanup_does_not_auto_remove_a_dead_root_reservation(self):
+        with tempfile.TemporaryDirectory(prefix="ikpk-dead-housekeeping-lock-") as temporary:
+            root = Path(temporary)
+            state_path = root / "site-refresh.json"
+            state_path.write_text(json.dumps({"status": "succeeded", "phase": "done",
+                                              "switched": True, "releaseId": "content-current",
+                                              "cleanupPending": True}), encoding="utf-8")
+            lock = Path(str(state_path) + ".lock")
+            stale_token = f"99999999\n{'a' * 32}\n"
+            lock.write_text(stale_token, encoding="ascii")
+            config = {"profile": "staging194", "siteRefreshState": str(state_path)}
+            with patch.object(rehearsal_host, "_site_refresh_worker_pids", return_value=set()), \
+                    patch.object(rehearsal_host, "_SITE_REFRESH_LOCK_OWNER", None), \
+                    patch.object(rehearsal_host.os, "kill", side_effect=ProcessLookupError), \
+                    patch.object(rehearsal_host.time, "sleep"):
+                with self.assertRaisesRegex(rehearsal_host.HostFailure, "site-refresh lock is stale"):
+                    rehearsal_host._reserve_site_refresh_lock(config, wait=True)
+            self.assertEqual(lock.read_text(encoding="ascii"), stale_token)
+
     def test_recovery_closes_gate_and_drains_refresh_that_started_after_preflight(self):
         with tempfile.TemporaryDirectory(prefix="ikpk-refresh-raced-preflight-") as temporary:
             state_path = Path(temporary) / "state.json"
@@ -78,19 +166,23 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
             drained = []
             def verify_idle(config, *, recovery=False):
                 self.assertTrue(recovery)
-                self.assertEqual(json.loads(state_path.read_text())["status"], "running")
+                expected = "running" if not drained else "succeeded"
+                self.assertEqual(json.loads(state_path.read_text())["status"], expected)
                 drained.append(True)
-                state_path.write_text(json.dumps({"status": "succeeded"}), encoding="utf-8")
+                if not drained[1:]:
+                    state_path.write_text(json.dumps({"status": "succeeded"}), encoding="utf-8")
             config = {"profile": "production-paired", "siteRefreshState": str(state_path), "writerUnits": []}
             with patch.object(rehearsal_host, "_assert_site_refresh_idle") as preflight, \
                  patch.object(rehearsal_host, "_verify_site_refresh_idle", side_effect=verify_idle), \
                  patch.object(rehearsal_host, "_set_flag"), patch.object(rehearsal_host, "_write_gate"), \
                  patch.object(rehearsal_host, "_verify_fence"), patch.object(rehearsal_host, "_stop_writers"), \
-                 patch.object(rehearsal_host, "_record_fenced_baseline"):
+                 patch.object(rehearsal_host, "_record_fenced_baseline"), \
+                 patch.object(rehearsal_host, "_reserve_site_refresh_lock"), \
+                 patch.object(rehearsal_host, "_write_site_publication_marker"):
                 result = rehearsal_host._start_acquisition(config, State(), "retry-op", "a" * 40,
                                                            recovery=True)
             preflight.assert_not_called()
-            self.assertEqual(drained, [True])
+            self.assertEqual(drained, [True, True])
             self.assertEqual(result["phase"], "fenced")
 
     def test_recover_drains_known_interrupted_refresh_through_real_idle_verification(self):
@@ -136,6 +228,7 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
                         raise AssertionError("recovery verification failed")
             config = {
                 "profile": "production-paired", "siteRefreshState": str(refresh_state),
+                "sitePublicationMarker": "/var/lib/ikpk-rehearsal/site-publication/host-publication.json",
                 "cmsDatabase": str(database), "currentCms": str(current_cms),
                 "currentStatic": str(current_static), "releaseRoot": str(root),
                 "staticReleaseRoot": str(root), "backupRoot": str(root / "backups"),
@@ -152,6 +245,8 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
                  patch.object(rehearsal_host, "_set_flag"), patch.object(rehearsal_host, "_write_gate"), \
                  patch.object(rehearsal_host, "_verify_fence"), patch.object(rehearsal_host, "_stop_writers"), \
                  patch.object(rehearsal_host, "_record_fenced_baseline"), \
+                 patch.object(rehearsal_host, "_reserve_site_refresh_lock"), \
+                 patch.object(rehearsal_host, "_write_site_publication_marker"), \
                  patch.object(rehearsal_host, "_assert_no_database_handles"), \
                  patch.object(rehearsal_host, "_write_paired_cms_source_env"), \
                  patch.object(rehearsal_host, "_wait_health"), \
@@ -176,58 +271,78 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix="ikpk-existing-publisher-lock-") as temporary:
             lock = Path(temporary) / ".publication.lock"; lock.write_bytes(b""); lock.chmod(0o600)
             before = lock.stat()
-            config = {"profile": "production-paired", "publicationLock": str(lock)}
+            config = {"profile": "production-paired", "publicationLock": str(lock), "cmsUser": "ikpk-cms"}
             with patch.object(rehearsal_host, "PRODUCTION_PUBLICATION_LOCK", lock):
-                with rehearsal_host._destination_publication_lock(config):
-                    during = lock.stat()
-                    self.assertEqual((during.st_dev, during.st_ino, stat.S_IMODE(during.st_mode), during.st_uid),
-                                     (before.st_dev, before.st_ino, stat.S_IMODE(before.st_mode), before.st_uid))
+                with patch.object(rehearsal_host.pwd, "getpwnam", return_value=type("Account", (), {"pw_uid": os.getuid(), "pw_gid": os.getgid()})()):
+                    with rehearsal_host._destination_publication_lock(config):
+                        during = lock.stat()
+                        self.assertEqual((during.st_dev, during.st_ino, stat.S_IMODE(during.st_mode), during.st_uid),
+                                         (before.st_dev, before.st_ino, stat.S_IMODE(before.st_mode), before.st_uid))
             after = lock.stat()
             self.assertEqual((after.st_dev, after.st_ino, stat.S_IMODE(after.st_mode), after.st_uid),
                              (before.st_dev, before.st_ino, stat.S_IMODE(before.st_mode), before.st_uid))
 
-    def test_production_lock_allows_manual_window_without_creating_missing_lock(self):
+    def test_production_lock_fails_closed_when_shared_inode_is_missing(self):
         with tempfile.TemporaryDirectory(prefix="ikpk-missing-publisher-lock-") as temporary:
             lock = Path(temporary) / ".publication.lock"
-            config = {"profile": "production-paired", "publicationLock": str(lock)}
+            config = {"profile": "production-paired", "publicationLock": str(lock), "cmsUser": "ikpk-cms"}
             with patch.object(rehearsal_host, "PRODUCTION_PUBLICATION_LOCK", lock):
-                with rehearsal_host._destination_publication_lock(config):
-                    self.assertFalse(lock.exists())
+                with self.assertRaisesRegex(rehearsal_host.HostFailure, "shared publication lock is missing"):
+                    with rehearsal_host._destination_publication_lock(config):
+                        self.fail("missing shared publisher lock must refuse")
             self.assertFalse(lock.exists())
 
     def test_production_lock_fails_closed_for_existing_unwritable_lock(self):
         with tempfile.TemporaryDirectory(prefix="ikpk-unwritable-publisher-lock-") as temporary:
             lock = Path(temporary) / ".publication.lock"; lock.write_bytes(b""); lock.chmod(0o400)
-            config = {"profile": "production-paired", "publicationLock": str(lock)}
+            config = {"profile": "production-paired", "publicationLock": str(lock), "cmsUser": "ikpk-cms"}
             with patch.object(rehearsal_host, "PRODUCTION_PUBLICATION_LOCK", lock):
-                with self.assertRaisesRegex(rehearsal_host.HostFailure, "publisher-owned writable"):
-                    with rehearsal_host._destination_publication_lock(config):
-                        self.fail("unwritable existing lock must refuse")
+                with patch.object(rehearsal_host.pwd, "getpwnam", return_value=type("Account", (), {"pw_uid": os.getuid(), "pw_gid": os.getgid()})()):
+                    with self.assertRaisesRegex(rehearsal_host.HostFailure, "0600 regular file"):
+                        with rehearsal_host._destination_publication_lock(config):
+                            self.fail("unwritable existing lock must refuse")
 
     def test_production_lock_fails_closed_when_existing_lock_is_busy(self):
         if os.geteuid() == 0:
             self.skipTest("requires an unprivileged publisher-owned lock fixture")
         with tempfile.TemporaryDirectory(prefix="ikpk-busy-publisher-lock-") as temporary:
             lock = Path(temporary) / ".publication.lock"; lock.write_bytes(b""); lock.chmod(0o600)
-            config = {"profile": "production-paired", "publicationLock": str(lock)}
+            config = {"profile": "production-paired", "publicationLock": str(lock), "cmsUser": "ikpk-cms"}
             publisher_fd = os.open(lock, os.O_RDWR)
             try:
                 import fcntl
                 fcntl.flock(publisher_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-                with patch.object(rehearsal_host, "PRODUCTION_PUBLICATION_LOCK", lock):
-                    with self.assertRaisesRegex(rehearsal_host.HostFailure, "another production publisher"):
+                with patch.object(rehearsal_host, "PRODUCTION_PUBLICATION_LOCK", lock), \
+                     patch.object(rehearsal_host.pwd, "getpwnam", return_value=type("Account", (), {"pw_uid": os.getuid(), "pw_gid": os.getgid()})()):
+                    with self.assertRaisesRegex(rehearsal_host.HostFailure, "another publisher"):
                         with rehearsal_host._destination_publication_lock(config):
                             self.fail("busy publisher lock must refuse")
             finally:
                 os.close(publisher_fd)
 
-    def test_legacy_production_static_does_not_require_paired_publication_lock(self):
+    def test_production_static_uses_shared_publication_lock(self):
         with tempfile.TemporaryDirectory(prefix="ikpk-static-no-paired-lock-") as temporary:
             lock = Path(temporary) / ".publication.lock"
-            config = {"profile": "production-static", "publicationLock": str(lock)}
+            lock.write_bytes(b""); lock.chmod(0o600)
+            config = {"profile": "production-static", "publicationLock": str(lock), "cmsUser": "ikpk-cms"}
             with patch.object(rehearsal_host, "PRODUCTION_PUBLICATION_LOCK", lock):
+                with patch.object(rehearsal_host.pwd, "getpwnam", return_value=type("Account", (), {"pw_uid": os.getuid(), "pw_gid": os.getgid()})()):
+                    with rehearsal_host._destination_publication_lock(config):
+                        self.assertTrue(lock.exists())
+
+    def test_staging194_uses_same_fixed_publication_lock_and_fails_closed_if_missing(self):
+        with tempfile.TemporaryDirectory(prefix="ikpk-staging-shared-lock-") as temporary:
+            lock = Path(temporary) / ".publication.lock"
+            config = {"profile": "staging194", "publicationLock": str(lock), "cmsUser": "ikpk-cms"}
+            with patch.object(rehearsal_host, "PRODUCTION_PUBLICATION_LOCK", lock), \
+                 patch.object(rehearsal_host.pwd, "getpwnam", return_value=type("Account", (), {"pw_uid": os.getuid(), "pw_gid": os.getgid()})()):
+                with self.assertRaisesRegex(rehearsal_host.HostFailure, "shared publication lock is missing"):
+                    with rehearsal_host._destination_publication_lock(config):
+                        self.fail("staging cleanup must refuse without the transport inode")
+                lock.write_bytes(b"")
+                lock.chmod(0o600)
                 with rehearsal_host._destination_publication_lock(config):
-                    self.assertFalse(lock.exists())
+                    self.assertTrue(lock.exists())
 
     def test_production_pre_activation_failure_reopens_without_rewriting_verified_old_database(self):
         with tempfile.TemporaryDirectory(prefix="ikpk-paired-no-mutation-recover-") as temporary:
@@ -548,6 +663,9 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
     def test_initial_prod_binding_is_fixed_to_main_target_and_operation(self):
         data = {"profile": "initial-prod", "allowedSourceRef": "refs/heads/main",
                 "targetHost": "89.111.184.196", "initialOperationId": "initial-prod-20261019-A-01",
+                "siteRefreshState": "/var/www/ikpk/shared/site-refresh/state.json",
+                "publicationLock": str(rehearsal_host.PRODUCTION_PUBLICATION_LOCK),
+                "sitePublicationMarker": "/var/lib/ikpk-rehearsal/site-publication/host-publication.json",
                 "cmsHealthUrl": "http://127.0.0.1:1337/_health",
                 "siteHealthUrl": "https://ikpk.su/", "siteBaseUrl": "https://ikpk.su",
                 "siteReleaseUrl": "https://ikpk.su/release.json",
@@ -654,6 +772,9 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
 
     def test_host_binding_rejects_wrong_host_and_cross_host_probe_urls(self):
         data = {"allowedSourceRef": "refs/heads/main", "targetHost": "194.226.99.10",
+                "siteRefreshState": "/var/lib/ikpk-cms-prototype193/staging/site-refresh194/state/state.json",
+                "publicationLock": str(rehearsal_host.PRODUCTION_PUBLICATION_LOCK),
+                "sitePublicationMarker": "/var/lib/ikpk-rehearsal/site-publication/host-publication.json",
                 "cmsHealthUrl": "http://127.0.0.1:1338/_health",
                 "siteHealthUrl": "https://194.226.99.10/", "siteBaseUrl": "https://194.226.99.10",
                 "siteReleaseUrl": "https://194.226.99.10/release.json",
@@ -1144,8 +1265,8 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
             self.assertEqual(release["commit"], "a" * 40)
             self.assertEqual(stat.S_IMODE((dist / "release.json").stat().st_mode), 0o644,
                              "release metadata must be readable by the static web server")
-            self.assertEqual((dist / "_astro/legacy.0123456789.css").read_text(encoding="utf-8"),
-                             "previous hash asset")
+            self.assertFalse((dist / "_astro/legacy.0123456789.css").exists(),
+                             "a static build must not inherit hashed assets from earlier releases")
 
     def test_static_build_passes_maintenance_banner_config_to_build_environment(self):
         for profile in ("staging194", "initial-prod", "production-static"):
@@ -1290,35 +1411,6 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
                 self.assertEqual(json.loads(archive.extractfile("snapshot/snapshot.json").read()), {"snapshotId": "snap:captured"})
                 self.assertEqual(json.loads(archive.extractfile("snapshot/capture-manifest.json").read()), {"operationId": "export-op"})
 
-    def test_post_switch_checks_old_hashed_asset_url_against_serving_origin(self):
-        with tempfile.TemporaryDirectory(prefix="ikpk-static-hash-check-") as temporary:
-            root = Path(temporary)
-            old_assets = root / "old/public/_astro"
-            new_assets = root / ("new-" + "a" * 40 + "/_astro")
-            old_assets.mkdir(parents=True)
-            new_assets.mkdir(parents=True)
-            old_pagefind = root / "old/public/pagefind/fragment"
-            new_pagefind = root / ("new-" + "a" * 40 + "/pagefind/fragment")
-            old_pagefind.mkdir(parents=True)
-            new_pagefind.mkdir(parents=True)
-            (old_assets / "old.0123456789.css").write_bytes(b"old hashed CSS")
-            (new_assets / "new.abcdef0123.js").write_bytes(b"new hashed JS")
-            (old_pagefind / "ru_2cf1958.pf_fragment").write_bytes(b"old Pagefind fragment")
-            (new_pagefind / "ru_7a12345.pf_fragment").write_bytes(b"new Pagefind fragment")
-            commands = []
-
-            def request(argv, **_kwargs):
-                commands.append(argv)
-                return subprocess.CompletedProcess(argv, 0, "200", "")
-
-            with patch.object(rehearsal_host, "run", side_effect=request):
-                rehearsal_host._verify_retained_hashed_assets({"staticReleaseRoot": str(root),
-                                                                 "siteBaseUrl": "https://194.226.99.10"})
-            urls = {argv[-1] for argv in commands}
-            self.assertIn("https://194.226.99.10/_astro/old.0123456789.css", urls)
-            self.assertIn("https://194.226.99.10/_astro/new.abcdef0123.js", urls)
-            self.assertIn("https://194.226.99.10/pagefind/fragment/ru_2cf1958.pf_fragment", urls)
-
     def test_capture_builder_invokes_existing_sealer_path(self):
         with tempfile.TemporaryDirectory(prefix="ikpk-capture-entrypoint-") as temporary:
             root = Path(temporary)
@@ -1404,6 +1496,8 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
 
             write_db(live_database, "old database")
             config = {"stateDir": str(state_root), "backupRoot": str(backup_root),
+                      "siteRefreshState": str(root / "refresh" / "state.json"),
+                      "sitePublicationMarker": "/var/lib/ikpk-rehearsal/site-publication/host-publication.json",
                       "cmsDatabase": str(live_database), "cmsUnit": "ikpk-cms-test.service",
                       "writerUnits": ["ikpk-cms-test.service"], "cmsHealthUrl": "http://127.0.0.1/health",
                       "siteHealthUrl": "https://127.0.0.1/", "currentCms": str(current_cms),
@@ -1435,6 +1529,8 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
 
             with patch.object(rehearsal_host, "_set_flag"), \
                  patch.object(rehearsal_host, "_write_gate"), \
+                 patch.object(rehearsal_host, "_reserve_site_refresh_lock"), \
+                 patch.object(rehearsal_host, "_write_site_publication_marker"), \
                  patch.object(rehearsal_host, "_verify_fence"), \
                  patch.object(rehearsal_host, "_stop_writers"), \
                  patch.object(rehearsal_host, "_assert_no_database_handles"), \
@@ -2029,10 +2125,15 @@ class StaticMainAdmissionTests(unittest.TestCase):
             (source_root / ".ikpk-rehearsal-ci.json").write_text(json.dumps(provenance), encoding="utf-8")
             config = {"profile": "staging194", "staticMainReleasePolicy": "ci-only-approved",
                 "releaseRoot": str(release_root), "staticReleaseRoot": str(static_root),
+                "siteRefreshState": str(root / "refresh" / "state.json"),
+                "publicationLock": str(root / ".publication.lock"),
+                "sitePublicationMarker": "/var/lib/ikpk-rehearsal/site-publication/host-publication.json",
                 "currentStatic": str(pointer), "stateDir": str(state_dir), "cmsUser": "cms",
                 "currentCms": str(root / "current-cms"), "cmsDatabase": str(root / "live.sqlite"),
                 "mediaRoots": [{"prefix": "/uploads/", "path": str(root / "uploads")}],
                 "siteBaseUrl": "https://194.226.99.10"}
+            Path(config["publicationLock"]).write_bytes(b"")
+            Path(config["publicationLock"]).chmod(0o600)
             archive = b"candidate source archive"
             args = type("Args", (), {"profile": "staging194", "action": "static-main",
                 "operation_id": operation_id, "source_sha": source_sha,
@@ -2059,6 +2160,12 @@ class StaticMainAdmissionTests(unittest.TestCase):
                 return snapshot
             with patch.object(rehearsal_host.os, "geteuid", return_value=0), \
                  patch.object(rehearsal_host, "_root_config", return_value=config), \
+                 patch.multiple(rehearsal_host,
+                    _destination_publication_lock=lambda *args, **kwargs: nullcontext(),
+                    _assert_site_refresh_idle=lambda *args, **kwargs: None,
+                    _reserve_site_refresh_lock=lambda *args, **kwargs: None), \
+                 patch.object(rehearsal_host, "_read_site_publication_marker", return_value=None), \
+                 patch.object(rehearsal_host, "_write_site_publication_marker"), \
                  patch.object(rehearsal_host, "_validate_static_main_admission"), \
                  patch.object(rehearsal_host, "_extract_source_archive", return_value=source_root), \
                  patch.object(rehearsal_host, "_static_main_cms_fingerprint", return_value={"cms": "same"}), \
@@ -2643,13 +2750,27 @@ class ProductionPairedManualPreflightTests(unittest.TestCase):
         self.assertNotIn("siteOperationMarker", template)
         self.assertEqual(template["siteRefreshState"], "/var/www/ikpk/shared/site-refresh/state.json")
 
+    def test_staging194_state_path_matches_the_actual_cms_state_file(self):
+        template = json.loads((ROOT / "scripts/staging193-rehearsal.json").read_text(encoding="utf-8"))
+        rehearsal_host._validate_target_binding(template)
+        self.assertEqual(template["siteRefreshState"],
+                         "/var/lib/ikpk-cms-prototype193/staging/site-refresh194/state/state.json")
+
     def test_source_environment_update_preserves_all_other_cms_settings(self):
         with tempfile.TemporaryDirectory(prefix="ikpk-paired-env-") as temporary:
             env_file = Path(temporary) / "trial.env"
             original = "CONTENT_ADMIN_PASSWORD=keep-me\nCHAT_LOADER_SRC=keep-chat\nIKPK_BUILD_WORKSPACE=/old\n"
             env_file.write_text(original, encoding="utf-8")
             config = {"cmsEnvironmentFile": str(env_file)}
-            previous = rehearsal_host._paired_cms_source_env(config)
+            real_lstat = Path.lstat
+            def root_owned(path, *args, **kwargs):
+                info = real_lstat(path, *args, **kwargs)
+                if path == env_file:
+                    fields = list(info); fields[4] = 0
+                    return os.stat_result(fields)
+                return info
+            with patch.object(Path, "lstat", root_owned):
+                previous = rehearsal_host._paired_cms_source_env(config)
             self.assertEqual(previous, {key: ("/old" if key == "IKPK_BUILD_WORKSPACE" else
                                               "keep-chat" if key == "CHAT_LOADER_SRC" else None)
                                         for key in rehearsal_host.PAIRED_CMS_ENV_KEYS})
@@ -2717,7 +2838,15 @@ class ProductionPairedManualPreflightTests(unittest.TestCase):
             env_file = root / "cms.env"
             env_file.write_text("IKPK_BUILD_WORKSPACE=/old\nPAYMENT_ROLE=ci\nDEMO_FORMS=stub\nCHAT_LOADER_SRC=none\n", encoding="utf-8")
             env_config = {"cmsEnvironmentFile": str(env_file)}
-            previous = rehearsal_host._paired_cms_source_env(env_config)
+            real_lstat = Path.lstat
+            def root_owned(path, *args, **kwargs):
+                info = real_lstat(path, *args, **kwargs)
+                if path == env_file:
+                    fields = list(info); fields[4] = 0
+                    return os.stat_result(fields)
+                return info
+            with patch.object(Path, "lstat", root_owned):
+                previous = rehearsal_host._paired_cms_source_env(env_config)
             rehearsal_host._write_paired_cms_source_env(env_config, {
                 **{key: None for key in rehearsal_host.PAIRED_CMS_ENV_KEYS},
                 "IKPK_BUILD_WORKSPACE": str(workspace), "IKPK_INSTALLED_COMMIT": "a" * 40,

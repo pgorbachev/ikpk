@@ -25,7 +25,7 @@ async function setup(t, fault = {}) {
   mkdirSync(join(old, 'deploy'), { recursive: true });
   writeFileSync(join(old, 'index.html'), 'old body');
   writeFileSync(join(old, artifact), oldRedirects);
-  mkdirSync(join(root, 'shared'));
+  mkdirSync(join(root, 'shared', 'site-refresh'), { recursive: true });
   const fragment = join(root, 'shared', 'nginx-redirects.conf');
   writeFileSync(fragment, oldRedirects);
   symlinkSync('releases/old', join(root, 'current'));

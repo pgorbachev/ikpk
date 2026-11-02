@@ -16,13 +16,25 @@ def _migration(current: Path, template: Path) -> tuple[dict, bool]:
     expected = json.loads(template.read_text(encoding="utf-8"))
     if actual == expected:
         return actual, False
-    if actual.get("allowedSourceRef") != "refs/heads/dev" or expected.get("allowedSourceRef") != "refs/heads/main":
-        raise ValueError("existing rehearsal config differs from the reviewed versioned template")
     normalized = dict(actual)
-    normalized["allowedSourceRef"] = "refs/heads/main"
+    changed = False
+    if normalized.get("allowedSourceRef") == "refs/heads/dev" and expected.get("allowedSourceRef") == "refs/heads/main":
+        normalized["allowedSourceRef"] = "refs/heads/main"
+        changed = True
+    for key in ("siteRefreshState", "sitePublicationMarker", "publicationLock"):
+        if key not in expected:
+            continue
+        if key not in normalized:
+            normalized[key] = expected[key]
+            changed = True
+        elif (key == "siteRefreshState"
+              and normalized[key] == "/var/lib/ikpk-cms-prototype193/staging/site-refresh194/state"
+              and expected[key] == "/var/lib/ikpk-cms-prototype193/staging/site-refresh194/state/state.json"):
+            normalized[key] = expected[key]
+            changed = True
     if normalized != expected:
         raise ValueError("existing rehearsal config has unrelated differences; refusing migration")
-    return actual, True
+    return normalized, changed
 
 
 def check(current: str, template: str) -> None:
@@ -36,7 +48,7 @@ def migrate(current: str, template: str) -> None:
     actual, needed = _migration(path, Path(template))
     if not needed:
         return
-    backup = path.with_name(path.name + ".pre-main-" + datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ") + ".bak")
+    backup = path.with_name(path.name + ".pre-update-" + datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ") + ".bak")
     source = path.read_bytes()
     fd = os.open(backup, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
     try:
@@ -47,7 +59,6 @@ def migrate(current: str, template: str) -> None:
     except Exception:
         backup.unlink(missing_ok=True)
         raise
-    actual["allowedSourceRef"] = "refs/heads/main"
     fd, temporary = tempfile.mkstemp(prefix=path.name + ".new-", dir=path.parent)
     try:
         os.fchmod(fd, stat.S_IMODE(path.stat().st_mode))

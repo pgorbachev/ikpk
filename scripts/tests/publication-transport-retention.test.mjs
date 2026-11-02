@@ -22,6 +22,7 @@ function probeLock(root) {
 function fixture(t, { count = 7, keepReleases = 5, omitLimit = false } = {}) {
   const temp = mkdtempSync(join(tmpdir(), 'ikpk-retention-'));
   const root = join(temp, 'remote'); const releases = join(root, 'releases'); const source = join(temp, 'source');
+  mkdirSync(join(root, 'shared', 'site-refresh'), { recursive: true });
   mkdirSync(releases, { recursive: true }); mkdirSync(source); writeFileSync(join(source, 'index.html'), body);
   const ids = chronology.slice(0, count);
   const identity = (releaseId) => ({ publicationId: `publication-${releaseId}`, releaseId, destinationId: 'stand',

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { fork, spawnSync } from 'node:child_process';
 import {
-  existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync,
+  chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync,
   rmSync, symlinkSync, unlinkSync, writeFileSync, cpSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -43,6 +43,7 @@ function setup(t, fault = {}) {
   const source = join(temp, 'source');
   const old = join(root, 'releases', 'old');
   mkdirSync(old, { recursive: true });
+  mkdirSync(join(root, 'shared', 'site-refresh'), { recursive: true });
   mkdirSync(join(source, 'assets'), { recursive: true });
   writeFileSync(join(old, 'index.html'), oldBody);
   writeFileSync(join(source, 'index.html'), newBody);
@@ -117,19 +118,39 @@ function client(t, config) {
 
 test('stage transfers exact bytes to a separate release without changing current', options, async (t) => {
   const f = setup(t);
+  const siteLock = join(f.root, 'shared', 'site-refresh', 'state.json.lock');
   await f.transport.withLock(async (session) => {
     await f.stage(session);
+    assert.ok(existsSync(siteLock), 'CMS-shared reservation must cover the remote publication');
     assert.equal(f.active(), 'old');
     assert.ok(existsSync(join(f.root, 'releases', 'new')), 'stage must create the uploaded release');
     assert.equal(digest(join(f.root, 'releases', 'new')), f.operation.treeDigest);
     assert.ok(f.connections().length > 0, 'the transfer must use the SSH boundary');
   });
+  assert.equal(existsSync(siteLock), false, 'successful close releases the shared reservation');
 });
 
 test('a wrong declared digest refuses the release before activation', options, async (t) => {
   const f = setup(t);
   await assert.rejects(f.transport.withLock((session) => f.stage(session, { expectedDigest: '0'.repeat(64) })), /digest|checksum|mismatch/i);
   assert.equal(f.active(), 'old');
+});
+
+test('publication fails closed when the shared site-refresh lock directory is missing', options, async (t) => {
+  const f = setup(t);
+  rmSync(join(f.root, 'shared', 'site-refresh'), { recursive: true, force: true });
+  await assert.rejects(f.transport.withLock((session) => f.stage(session)), /shared CMS publication lock directory/i);
+  assert.equal(f.active(), 'old');
+  assert.equal(existsSync(join(f.root, 'releases', 'new')), false);
+});
+
+test('publication fails closed when the shared site-refresh lock directory is not writable', options, async (t) => {
+  if (process.getuid?.() === 0) t.skip('permission fixture requires an unprivileged publisher');
+  const f = setup(t);
+  chmodSync(join(f.root, 'shared', 'site-refresh'), 0o500);
+  await assert.rejects(f.transport.withLock((session) => f.stage(session)), /publication lock directory|filesystem|protocol/i);
+  assert.equal(f.active(), 'old');
+  assert.equal(existsSync(join(f.root, 'releases', 'new')), false);
 });
 
 test('corruption on the upload channel is detected by the remote digest', options, async (t) => {
