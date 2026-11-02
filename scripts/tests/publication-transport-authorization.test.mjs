@@ -16,6 +16,7 @@ function setup(t) {
   const temp = mkdtempSync(join(tmpdir(), 'ikpk-transport-auth-'));
   const root = join(temp, 'remote');
   const source = join(temp, 'source');
+  mkdirSync(join(root, 'shared', 'site-refresh'), { recursive: true });
   mkdirSync(join(root, 'releases', 'old'), { recursive: true });
   mkdirSync(source);
   const body = Buffer.from('authorized bytes only');

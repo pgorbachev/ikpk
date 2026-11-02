@@ -16,7 +16,7 @@ function setup(t, fault = {}) {
   const temp = mkdtempSync(join(tmpdir(), 'ikpk-serving-probes-'));
   const root = join(temp, 'remote');
   mkdirSync(join(root, 'releases', 'old'), { recursive: true });
-  mkdirSync(join(root, 'shared'));
+  mkdirSync(join(root, 'shared', 'site-refresh'), { recursive: true });
   writeFileSync(join(root, 'releases', 'old', 'index.html'), 'old release');
   symlinkSync('releases/old', join(root, 'current'));
   const fragment = join(root, 'shared', 'nginx-redirects.conf');

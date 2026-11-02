@@ -9,6 +9,7 @@ import fnmatch
 import hashlib
 import json
 import os
+import secrets
 import re
 import resource
 import shlex
@@ -38,6 +39,16 @@ class Refusal(Exception):
 def require(condition, message):
     if not condition:
         raise Refusal(message)
+
+
+def site_refresh_lock_path(root, destination):
+    if os.path.realpath(root) == "/var/www/ikpk":
+        if destination == "prod":
+            return "/var/www/ikpk/shared/site-refresh/state.json.lock"
+        if destination == "stand":
+            return "/var/lib/ikpk-cms-prototype193/staging/site-refresh194/state/state.json.lock"
+        raise Refusal("unknown IKPK publication profile")
+    return os.path.join(root, "shared", "site-refresh", "state.json.lock")
 
 
 def reply(value=None, error=None, active_operation=None):
@@ -174,6 +185,104 @@ class PublicationSession:
         self.previous_current = None
         self.retained = {}
         self.active_operation = None
+        self.site_lock = None
+
+    def acquire_site_lock(self):
+        if self.site_lock is not None:
+            return
+        lock_path = site_refresh_lock_path(self.root, self.destination)
+        parent = os.path.dirname(lock_path)
+        require(os.path.isdir(parent) and not os.path.islink(parent),
+                "shared CMS publication lock directory is unavailable")
+        token = (str(os.getpid()) + "\n" + secrets.token_hex(16) + "\n").encode("ascii")
+        for attempt in range(2):
+            try:
+                fd = os.open(lock_path, os.O_CREAT | os.O_EXCL | os.O_RDWR | os.O_NOFOLLOW, 0o600)
+                break
+            except FileExistsError as error:
+                if attempt or not self.reclaim_stale_site_lock(lock_path):
+                    raise Refusal("CMS refresh or Restore owns the shared site lock") from error
+        try:
+            require(os.write(fd, token) == len(token), "could not write shared CMS publication lock")
+            os.fsync(fd)
+            opened, named = os.fstat(fd), os.lstat(lock_path)
+            require(stat.S_ISREG(opened.st_mode) and opened.st_nlink == 1
+                    and (opened.st_dev, opened.st_ino) == (named.st_dev, named.st_ino),
+                    "shared CMS publication lock changed while being created")
+            sync_dir(parent)
+            self.site_lock = (lock_path, fd, token, (opened.st_dev, opened.st_ino))
+        except BaseException:
+            os.close(fd)
+            try:
+                if os.path.lexists(lock_path):
+                    with open(lock_path, "rb") as current:
+                        owned = current.read() == token
+                    if owned:
+                        os.unlink(lock_path)
+                        sync_dir(parent)
+            except OSError:
+                pass
+            raise
+
+    def reclaim_stale_site_lock(self, lock_path):
+        """Reclaim only a dead, exact token while this session holds .publication.lock."""
+        try:
+            before = os.lstat(lock_path)
+            require(stat.S_ISREG(before.st_mode) and before.st_nlink == 1
+                    and before.st_uid == os.geteuid(), "shared CMS lock is unsafe")
+            fd = os.open(lock_path, os.O_RDONLY | os.O_NOFOLLOW)
+            try:
+                opened = os.fstat(fd)
+                raw = os.read(fd, 256)
+                require((opened.st_dev, opened.st_ino) == (before.st_dev, before.st_ino)
+                        and opened.st_nlink == 1, "shared CMS lock changed while being inspected")
+            finally:
+                os.close(fd)
+            match = re.fullmatch(rb"([0-9]+)\n([a-f0-9]{32})\n", raw)
+            require(match is not None and len(match.group(1)) <= 10,
+                    "shared CMS lock has unknown or partial ownership")
+            pid = int(match.group(1))
+            require(2 <= pid <= 2147483647, "shared CMS lock PID is invalid")
+            try:
+                os.kill(pid, 0)
+            except ProcessLookupError:
+                pass
+            except (PermissionError, OSError) as error:
+                raise Refusal("shared CMS lock owner cannot be proven dead") from error
+            else:
+                raise Refusal("shared CMS lock owner is still alive")
+            if os.path.lexists(self.pending):
+                pending = self.read_pending()
+                command = self.current_command
+                operation = command.get("operation") if isinstance(command, dict) else None
+                require(command.get("command") == "recover" or operation == pending,
+                        "shared CMS lock protects a different pending publication")
+            final = os.lstat(lock_path)
+            require((final.st_dev, final.st_ino) == (before.st_dev, before.st_ino)
+                    and final.st_nlink == 1, "shared CMS lock changed before stale-owner cleanup")
+            with open(lock_path, "rb") as current:
+                require(current.read(256) == raw, "shared CMS lock token changed before stale-owner cleanup")
+            os.unlink(lock_path)
+            sync_dir(os.path.dirname(lock_path))
+            return True
+        except FileNotFoundError:
+            return True
+
+    def release_site_lock(self):
+        if self.site_lock is None:
+            return
+        path, fd, token, inode = self.site_lock
+        try:
+            opened, named = os.fstat(fd), os.lstat(path)
+            os.lseek(fd, 0, os.SEEK_SET)
+            require((opened.st_dev, opened.st_ino) == inode == (named.st_dev, named.st_ino)
+                    and os.read(fd, 256) == token,
+                    "shared CMS publication lock ownership changed")
+            os.unlink(path)
+            sync_dir(os.path.dirname(path))
+        finally:
+            os.close(fd)
+            self.site_lock = None
 
     def shared_directory(self):
         return os.open(os.path.join(self.root, "shared"), os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
@@ -750,7 +859,12 @@ class PublicationSession:
             command = json.loads(line)
             require(isinstance(command, dict), "invalid protocol command")
             name = command.get("command")
+            self.current_command = command
             if name == "close":
+                if self.site_lock is not None:
+                    require(not os.path.lexists(self.pending),
+                            "publication remains pending; shared CMS lock retained for recovery")
+                    self.release_site_lock()
                 reply()
                 return
             if name == "recover":
@@ -762,6 +876,7 @@ class PublicationSession:
                 reply(getattr(self, name.replace("-", "_"))(command))
             else:
                 require(name in ("stage", "prepare", "activate", "cancel", "cancel-recovery", "complete-recovery", "finish"), "unknown publication command")
+                self.acquire_site_lock()
                 getattr(self, name.replace("-", "_"))(command)
                 reply()
 

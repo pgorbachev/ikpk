@@ -28,6 +28,7 @@ function digest(tree) {
 function fixture(t, fault = {}) {
   const temp = mkdtempSync(join(tmpdir(), 'ikpk-retained-test-'));
   const root = join(temp, 'remote');
+  mkdirSync(join(root, 'shared', 'site-refresh'), { recursive: true });
   const retained = join(root, 'releases', 'retained');
   mkdirSync(join(retained, 'assets'), { recursive: true });
   mkdirSync(join(root, 'releases', 'current-release'));

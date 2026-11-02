@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import base64
+import secrets
 import io
 import hashlib
 import json
@@ -24,7 +25,7 @@ import sys
 import tarfile
 import tempfile
 import time
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from pathlib import Path
 from typing import Any, Optional
 from urllib.parse import quote, urlsplit
@@ -47,6 +48,9 @@ STAGING194_CHAT_LOADER_SRC = INITIAL_PROD_CHAT_LOADER_SRC
 INITIAL_PROD_CMS_ENV_FILE = Path("/etc/ikpk-cms/trial.env")
 PRODUCTION_PUBLICATION_LOCK = Path("/var/www/ikpk/.publication.lock")
 PRODUCTION_PAIRED_WORKSPACE_ROOT = Path("/var/lib/ikpk-site-build/production-paired")
+SITE_PUBLICATION_MARKER = "host-publication.json"
+SITE_PUBLICATION_MARKER_DIR = Path("/var/lib/ikpk-rehearsal/site-publication")
+_SITE_REFRESH_LOCK_OWNER: Optional[tuple[Path, int, bytes, tuple[int, int]]] = None
 INITIAL_PROD_OPERATION_ID = "initial-prod-20261019-A-01"
 REQUIRED_CONFIG = {
     "stateDir", "maintenanceFlag", "releaseRoot", "currentCms", "currentStatic",
@@ -54,7 +58,8 @@ REQUIRED_CONFIG = {
     "backupRoot", "nginxBinary", "nginxService", "nginxMapFile",
     "nginxServerGateFile", "writerPrefixes", "preservePrefixes",
     "cmsHealthUrl", "siteHealthUrl", "siteBaseUrl", "siteReleaseUrl", "siteProbeUrls", "paymentStatusProbeUrl",
-    "writerProbeUrls", "preserveProbeUrl", "allowedSourceRef", "targetHost",
+    "writerProbeUrls", "preserveProbeUrl", "allowedSourceRef", "targetHost", "siteRefreshState",
+    "sitePublicationMarker", "publicationLock",
 }
 SHA_RE = re.compile(r"[a-f0-9]{40}\Z")
 SHA256_RE = re.compile(r"[a-f0-9]{64}\Z")
@@ -141,10 +146,11 @@ def _root_config(path: Path, expected_profile: str = "staging194") -> dict[str, 
     profile = data.get("profile", "staging194")
     path_keys = ["stateDir", "releaseRoot", "staticReleaseRoot", "backupRoot", "maintenanceFlag", "currentCms", "currentStatic",
                  "cmsDatabase", "nginxMapFile", "nginxServerGateFile"]
-    if profile == "production-paired":
+    if profile in ("staging194", "production-static", "production-paired", "initial-prod"):
         path_keys.append("publicationLock")
     if profile == "production-paired":
-        path_keys.extend(("cmsEnvironmentFile", "siteRefreshState"))
+        path_keys.append("cmsEnvironmentFile")
+    path_keys.extend(("siteRefreshState", "sitePublicationMarker"))
     for key in path_keys:
         value = Path(data[key])
         if not value.is_absolute() or value == Path("/"):
@@ -170,6 +176,10 @@ def _validate_target_binding(data: dict[str, Any]) -> None:
     if profile == "staging194":
         if data["allowedSourceRef"] not in ("refs/heads/main", "refs/heads/dev") or data["targetHost"] != TARGET_HOST:
             raise HostFailure("host config is not bound to the staging194 target/source policy")
+        if (data.get("siteRefreshState") != "/var/lib/ikpk-cms-prototype193/staging/site-refresh194/state/state.json"
+                or data.get("publicationLock") != str(PRODUCTION_PUBLICATION_LOCK)
+                or data.get("sitePublicationMarker") != "/var/lib/ikpk-rehearsal/site-publication/host-publication.json"):
+            raise HostFailure("staging194 site publication coordination paths are not fixed")
         if data["cmsHealthUrl"] != "http://127.0.0.1:1338/_health":
             raise HostFailure("CMS health check must remain bound to the local staging194 service")
         expected_origin = f"https://{TARGET_HOST}"
@@ -179,6 +189,10 @@ def _validate_target_binding(data: dict[str, Any]) -> None:
             raise HostFailure("host config is not bound to the fixed initial-prod operation")
         if data.get("siteBaseUrl") != "https://ikpk.su" or data.get("cmsHealthUrl") != "http://127.0.0.1:1337/_health":
             raise HostFailure("initial-prod origin or local CMS health endpoint is not fixed")
+        if (data.get("siteRefreshState") != "/var/www/ikpk/shared/site-refresh/state.json"
+                or data.get("publicationLock") != str(PRODUCTION_PUBLICATION_LOCK)
+                or data.get("sitePublicationMarker") != "/var/lib/ikpk-rehearsal/site-publication/host-publication.json"):
+            raise HostFailure("initial-prod site publication coordination paths are not fixed")
         expected_origin = "https://ikpk.su"
     elif profile == "production-static":
         if data.get("allowedSourceRef") != "refs/heads/main" or data.get("targetHost") != INITIAL_PROD_HOST:
@@ -187,6 +201,9 @@ def _validate_target_binding(data: dict[str, Any]) -> None:
                 or data.get("currentCms") != "/opt/ikpk-cms/current"
                 or data.get("cmsDatabase") != "/var/lib/ikpk-cms/trial/data/data.db"
                 or data.get("currentStatic") != "/var/www/ikpk/current"
+                or data.get("siteRefreshState") != "/var/www/ikpk/shared/site-refresh/state.json"
+                or data.get("publicationLock") != str(PRODUCTION_PUBLICATION_LOCK)
+                or data.get("sitePublicationMarker") != "/var/lib/ikpk-rehearsal/site-publication/host-publication.json"
                 or data.get("staticReleaseRoot") != "/var/www/ikpk/releases"
                 or data.get("stateDir") != "/var/lib/ikpk-rehearsal/production-static"
                 or data.get("backupRoot") != "/var/lib/ikpk-rehearsal/production-static/backups"
@@ -205,6 +222,8 @@ def _validate_target_binding(data: dict[str, Any]) -> None:
                 or data.get("currentCms") != "/opt/ikpk-cms/current"
                 or data.get("cmsDatabase") != "/var/lib/ikpk-cms/trial/data/data.db"
                 or data.get("currentStatic") != "/var/www/ikpk/current"
+                or data.get("siteRefreshState") != "/var/www/ikpk/shared/site-refresh/state.json"
+                or data.get("sitePublicationMarker") != "/var/lib/ikpk-rehearsal/site-publication/host-publication.json"
                 or data.get("staticReleaseRoot") != "/var/www/ikpk/releases"
                 or data.get("stateDir") != "/var/lib/ikpk-rehearsal/production-paired"
                 or data.get("backupRoot") != "/var/lib/ikpk-rehearsal/production-paired/backups"
@@ -242,44 +261,513 @@ def _validate_target_binding(data: dict[str, Any]) -> None:
 
 
 @contextmanager
-def _destination_publication_lock(config: dict[str, Any]):
-    """Refuse to overlap an active production SSH publication during this operator step."""
-    # The legacy static-only workflow does not participate in the paired CMS
-    # maintenance window and must remain usable without a publisher lock file.
-    if config.get("profile") != "production-paired":
-        yield
-        return
-    path = Path(config.get("publicationLock", PRODUCTION_PUBLICATION_LOCK))
-    if path != PRODUCTION_PUBLICATION_LOCK:
-        raise HostFailure("production publication lock path is not fixed")
+def _destination_publication_lock(config: dict[str, Any], *, wait: bool = False):
+    """Serialize host work with publication-remote on the fixed destination inode."""
+    global _SITE_REFRESH_LOCK_OWNER
     try:
-        before = path.lstat()
-    except FileNotFoundError:
-        # A manually coordinated maintenance window may run where the canonical
-        # publisher has never created its per-command lock. Do not invent a new
-        # inode/owner here: absence is only a point-in-time observation, not
-        # cross-command serialization against another operator.
-        yield
-        return
-    try:
-        if (not stat.S_ISREG(before.st_mode) or before.st_nlink != 1 or before.st_uid == 0
-                or not before.st_mode & stat.S_IWUSR):
-            raise HostFailure("production publication lock must be an existing publisher-owned writable regular file")
-        fd = os.open(path, os.O_RDWR | getattr(os, "O_NOFOLLOW", 0))
-    except OSError as error:
-        raise HostFailure("production publication lock is unavailable") from error
-    try:
-        info = os.fstat(fd)
-        if ((info.st_dev, info.st_ino) != (before.st_dev, before.st_ino) or not stat.S_ISREG(info.st_mode)
-                or info.st_nlink != 1 or info.st_uid == 0 or not info.st_mode & stat.S_IWUSR):
-            raise HostFailure("production publication lock changed or is not writable by its non-root owner")
+        path = Path(config.get("publicationLock", PRODUCTION_PUBLICATION_LOCK))
+        if path != PRODUCTION_PUBLICATION_LOCK:
+            raise HostFailure("shared publication lock path is not fixed")
         try:
-            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except BlockingIOError as error:
-            raise HostFailure("another production publisher holds the destination lock") from error
-        yield
+            before = path.lstat()
+        except FileNotFoundError as error:
+            raise HostFailure("shared publication lock is missing; writers cannot be serialized") from error
+        try:
+            expected_uid = pwd.getpwnam(config["cmsUser"]).pw_uid
+        except (KeyError, OSError) as error:
+            raise HostFailure("configured publication lock owner is unknown") from error
+        try:
+            if (not stat.S_ISREG(before.st_mode) or before.st_nlink != 1 or before.st_uid != expected_uid
+                    or stat.S_IMODE(before.st_mode) != 0o600):
+                raise HostFailure("shared publication lock must be a 0600 regular file owned by the configured CMS user")
+            fd = os.open(path, os.O_RDWR | getattr(os, "O_NOFOLLOW", 0))
+        except OSError as error:
+            raise HostFailure("shared publication lock is unavailable") from error
+        try:
+            info = os.fstat(fd)
+            if ((info.st_dev, info.st_ino) != (before.st_dev, before.st_ino) or not stat.S_ISREG(info.st_mode)
+                    or info.st_nlink != 1 or info.st_uid != expected_uid or stat.S_IMODE(info.st_mode) != 0o600):
+                raise HostFailure("shared publication lock changed or has unsafe owner/permissions")
+            try:
+                fcntl.flock(fd, fcntl.LOCK_EX if wait else fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError as error:
+                raise HostFailure("another publisher holds the destination lock") from error
+            yield
+        finally:
+            os.close(fd)
+    finally:
+        if _SITE_REFRESH_LOCK_OWNER is not None:
+            _release_site_refresh_lock()
+
+
+def _site_marker_path(config: dict[str, Any]) -> Path:
+    expected = SITE_PUBLICATION_MARKER_DIR / SITE_PUBLICATION_MARKER
+    if config.get("sitePublicationMarker") != str(expected):
+        raise HostFailure("site-publication marker path is not the fixed protected path")
+    return expected
+
+
+def _config_path_for_profile(profile: str) -> Path:
+    paths = {
+        "staging194": CONFIG_PATH,
+        "initial-prod": INITIAL_PROD_CONFIG_PATH,
+        "production-static": PRODUCTION_STATIC_CONFIG_PATH,
+        "production-paired": PRODUCTION_PAIRED_CONFIG_PATH,
+    }
+    try:
+        return paths[profile]
+    except KeyError as error:
+        raise HostFailure("site-publication marker names an unsupported cleanup profile") from error
+
+
+def _select_cleanup_profile(config: dict[str, Any], profile: str) -> tuple[dict[str, Any], str, Optional[dict[str, Any]]]:
+    """Use the marker's fixed profile config so cleanup reads its owning journal."""
+    marker = _read_site_publication_marker(config)
+    if marker is None:
+        return config, profile, None
+    marker_profile = marker["profile"]
+    config_path = _config_path_for_profile(marker_profile)
+    if marker_profile == profile:
+        return config, profile, marker
+    selected = _root_config(config_path, expected_profile=marker_profile)
+    if (selected.get("sitePublicationMarker") != config.get("sitePublicationMarker")
+            or selected.get("staticReleaseRoot") != config.get("staticReleaseRoot")
+            or selected.get("currentStatic") != config.get("currentStatic")):
+        raise HostFailure("site-publication profile does not match the fixed cleanup target")
+    return selected, marker_profile, marker
+
+
+def _site_refresh_lock_owned(config: dict[str, Any]) -> bool:
+    owner = _SITE_REFRESH_LOCK_OWNER
+    if owner is None or owner[0] != Path(str(config["siteRefreshState"]) + ".lock"):
+        return False
+    path, fd, token, inode = owner
+    try:
+        opened, named = os.fstat(fd), os.lstat(path)
+        os.lseek(fd, 0, os.SEEK_SET)
+        return ((opened.st_dev, opened.st_ino) == inode == (named.st_dev, named.st_ino)
+                and os.read(fd, 256) == token)
+    except OSError:
+        return False
+
+
+def _reserve_site_refresh_lock(config: dict[str, Any], *, wait: bool = False) -> None:
+    global _SITE_REFRESH_LOCK_OWNER
+    if _SITE_REFRESH_LOCK_OWNER is not None:
+        if _site_refresh_lock_owned(config):
+            return
+        raise HostFailure("site-refresh reservation ownership changed")
+    state = Path(config["siteRefreshState"])
+    lock = Path(str(state) + ".lock")
+    token = f"{os.getpid()}\n{secrets.token_hex(16)}\n".encode("ascii")
+    deadline = time.monotonic() + 3600
+    while True:
+        try:
+            fd = os.open(lock, os.O_CREAT | os.O_EXCL | os.O_RDWR | getattr(os, "O_NOFOLLOW", 0), 0o600)
+            break
+        except FileExistsError as error:
+            if not wait:
+                raise HostFailure("CMS site refresh or Restore is active; resolve it before publication") from error
+            if time.monotonic() >= deadline:
+                raise HostFailure("CMS site refresh or Restore did not drain before housekeeping") from error
+            _verify_site_refresh_idle(config, recovery=True)
+    try:
+        if os.write(fd, token) != len(token):
+            raise HostFailure("could not durably write site-refresh reservation")
+        os.fsync(fd)
+        info, named = os.fstat(fd), os.lstat(lock)
+        if (not stat.S_ISREG(info.st_mode) or info.st_nlink != 1
+                or (info.st_dev, info.st_ino) != (named.st_dev, named.st_ino)):
+            raise HostFailure("site-refresh reservation changed while being created")
+        directory = os.open(lock.parent, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+        try:
+            os.fsync(directory)
+        finally:
+            os.close(directory)
+        _SITE_REFRESH_LOCK_OWNER = (lock, fd, token, (info.st_dev, info.st_ino))
+    except BaseException:
+        os.close(fd)
+        try:
+            if lock.read_bytes() == token:
+                lock.unlink()
+        except OSError:
+            pass
+        raise
+
+
+def _release_site_refresh_lock() -> None:
+    global _SITE_REFRESH_LOCK_OWNER
+    owner, _SITE_REFRESH_LOCK_OWNER = _SITE_REFRESH_LOCK_OWNER, None
+    if owner is None:
+        return
+    path, fd, token, inode = owner
+    try:
+        opened, named = os.fstat(fd), os.lstat(path)
+        os.lseek(fd, 0, os.SEEK_SET)
+        if ((opened.st_dev, opened.st_ino) == inode == (named.st_dev, named.st_ino)
+                and os.read(fd, 256) == token):
+            os.unlink(path)
+            directory = os.open(path.parent, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+            try:
+                os.fsync(directory)
+            finally:
+                os.close(directory)
+    except FileNotFoundError:
+        # Another trusted recovery path may have removed the name after our final
+        # ownership check. Never unlink a replacement inode; absence is already released.
+        pass
     finally:
         os.close(fd)
+
+
+def _read_site_publication_marker(config: dict[str, Any]) -> Optional[dict[str, Any]]:
+    path = _site_marker_path(config)
+    try:
+        parent = path.parent.lstat()
+        cms_gid = pwd.getpwnam(config["cmsUser"]).pw_gid
+    except (OSError, KeyError) as error:
+        raise HostFailure("site-publication marker directory is unavailable; coordination is unknown") from error
+    if (not stat.S_ISDIR(parent.st_mode) or parent.st_uid != 0 or parent.st_gid != cms_gid
+            or stat.S_IMODE(parent.st_mode) != 0o750):
+        raise HostFailure("site-publication marker directory is unsafe; coordination is unknown")
+    try:
+        info = path.lstat()
+    except FileNotFoundError:
+        return None
+    if (not stat.S_ISREG(info.st_mode) or info.st_nlink != 1 or info.st_uid != 0
+            or info.st_gid != cms_gid or stat.S_IMODE(info.st_mode) != 0o640):
+        raise HostFailure("site-publication marker is unsafe; operator recovery is required")
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as error:
+        raise HostFailure("site-publication marker is unreadable; operator recovery is required") from error
+    if (not isinstance(value, dict) or value.get("version") != 1
+            or not isinstance(value.get("operationId"), str)
+            or not isinstance(value.get("profile"), str)
+            or value.get("phase") not in ("active", "cleanup-pending")
+            or (value.get("lastError") is not None and not isinstance(value.get("lastError"), str))):
+        raise HostFailure("site-publication marker is invalid; operator recovery is required")
+    return value
+
+
+def _write_site_publication_marker(config: dict[str, Any], operation_id: str, phase: str = "active",
+                                   last_error: Optional[str] = None) -> None:
+    path = _site_marker_path(config)
+    parent = path.parent.lstat()
+    cms_gid = pwd.getpwnam(config["cmsUser"]).pw_gid
+    if (not stat.S_ISDIR(parent.st_mode) or parent.st_uid != 0 or parent.st_gid != cms_gid
+            or stat.S_IMODE(parent.st_mode) != 0o750):
+        raise HostFailure("site-publication marker directory must be root-owned 0750 and readable by CMS group")
+    existing = _read_site_publication_marker(config)
+    if existing and existing["operationId"] != operation_id:
+        raise HostFailure("another site publication owns the shared marker; recover it first")
+    try:
+        directory = os.open(path.parent, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+        try:
+            fd, temporary = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
+            try:
+                os.fchmod(fd, 0o640)
+                os.fchown(fd, 0, cms_gid)
+                record = {"version": 1, "operationId": operation_id,
+                          "profile": config.get("profile", "staging194"), "phase": phase}
+                if last_error:
+                    record["lastError"] = str(last_error)[:500]
+                payload = json.dumps(record,
+                                     sort_keys=True, separators=(",", ":")).encode() + b"\n"
+                os.write(fd, payload)
+                os.fsync(fd)
+                os.replace(temporary, path)
+                os.fsync(directory)
+            finally:
+                os.close(fd)
+                try:
+                    os.unlink(temporary)
+                except FileNotFoundError:
+                    pass
+        finally:
+            os.close(directory)
+    except OSError as error:
+        raise HostFailure("could not durably write site-publication marker") from error
+
+
+def _clear_site_publication_marker(config: dict[str, Any], operation_id: str) -> None:
+    marker = _read_site_publication_marker(config)
+    if marker is None:
+        return
+    if marker["operationId"] != operation_id:
+        raise HostFailure("site-publication marker belongs to another operation")
+    path = _site_marker_path(config)
+    path.unlink()
+    directory = os.open(path.parent, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+    try:
+        os.fsync(directory)
+    finally:
+        os.close(directory)
+
+
+def _consume_site_cleanup_request(config: dict[str, Any]) -> None:
+    request = Path(config["siteRefreshState"]).parent / "cleanup.request"
+    try:
+        info = request.lstat()
+    except FileNotFoundError:
+        return
+    if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
+        raise HostFailure("site cleanup request is unsafe; housekeeping refused")
+    try:
+        value = json.loads(request.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as error:
+        raise HostFailure("site cleanup request is unreadable; housekeeping refused") from error
+    if not isinstance(value, dict) or value.get("version") != 1 or not isinstance(value.get("releaseId"), str):
+        raise HostFailure("site cleanup request is malformed; housekeeping refused")
+    before = request.lstat()
+    if (before.st_dev, before.st_ino) != (info.st_dev, info.st_ino):
+        raise HostFailure("site cleanup request changed while being read")
+    request.unlink()
+    directory_fd = os.open(request.parent, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+    try:
+        os.fsync(directory_fd)
+    finally:
+        os.close(directory_fd)
+
+
+def _mount_points() -> set[Path]:
+    try:
+        lines = Path("/proc/self/mountinfo").read_text(encoding="utf-8").splitlines()
+    except OSError as error:
+        raise HostFailure("cannot inspect mount points before release cleanup") from error
+    result = set()
+    for line in lines:
+        fields = line.split()
+        if len(fields) < 5:
+            raise HostFailure("mount table is malformed; release cleanup refused")
+        decoded = re.sub(r"\\([0-7]{3})", lambda match: chr(int(match.group(1), 8)), fields[4])
+        result.add(Path(decoded))
+    return result
+
+
+def _remove_release_tree(path: Path, mount_points: set[Path]) -> None:
+    if not getattr(shutil.rmtree, "avoids_symlink_attacks", False):
+        raise HostFailure("safe symlink-resistant release removal is unavailable")
+    before = path.lstat()
+    if not stat.S_ISDIR(before.st_mode) or stat.S_ISLNK(before.st_mode):
+        raise HostFailure("release cleanup encountered a non-directory candidate")
+    if any(point == path or path in point.parents for point in mount_points):
+        raise HostFailure("release cleanup candidate contains a mount point")
+    shutil.rmtree(path)
+
+
+def _expire_site_restore(config: dict[str, Any], current_name: str, *, cleanup_pending: bool) -> None:
+    state_path = Path(config["siteRefreshState"])
+    try:
+        info = state_path.lstat()
+    except FileNotFoundError:
+        previous = {}
+        cms = pwd.getpwnam(config["cmsUser"])
+        owner, group, mode = cms.pw_uid, cms.pw_gid, 0o640
+    else:
+        if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
+            raise HostFailure("site-refresh state is unsafe; release cleanup refused")
+        owner, group, mode = info.st_uid, info.st_gid, stat.S_IMODE(info.st_mode)
+        try:
+            previous = json.loads(state_path.read_text(encoding="utf-8"))
+        except (OSError, ValueError) as error:
+            raise HostFailure("site-refresh state is unreadable; release cleanup refused") from error
+        if (not isinstance(previous, dict) or previous.get("status") not in
+                ("idle", "failed", "interrupted", "succeeded", "verification-failed")):
+            raise HostFailure("site-refresh state is active or unknown; release cleanup refused")
+    now = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    record = {"status": "succeeded", "phase": "done",
+              "message": ("Сайт обновлён. Удаляются предыдущие релизы после проверки."
+                          if cleanup_pending else "Сайт обновлён. Предыдущий релиз удалён после проверки."),
+              "releaseId": current_name, "previousReleaseId": None,
+              "cleanupPending": cleanup_pending,
+              "buildArtifactsCleanupPending": previous.get("buildArtifactsCleanupPending") is True,
+              "siteUrl": config.get("siteBaseUrl"),
+              "startedAt": previous.get("startedAt") or now,
+              "finishedAt": now, "switched": True}
+    directory = state_path.parent
+    if directory.is_symlink() or not directory.is_dir():
+        raise HostFailure("site-refresh state directory is unsafe; release cleanup refused")
+    fd, temporary = tempfile.mkstemp(prefix=f".{state_path.name}.", dir=directory)
+    try:
+        os.fchown(fd, owner, group)
+        os.fchmod(fd, mode)
+        payload = (json.dumps(record, sort_keys=True, separators=(",", ":")) + "\n").encode()
+        if os.write(fd, payload) != len(payload):
+            raise HostFailure("site-refresh state write was incomplete")
+        os.fsync(fd)
+        os.replace(temporary, state_path)
+        dir_fd = os.open(directory, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+        try:
+            os.fsync(dir_fd)
+        finally:
+            os.close(dir_fd)
+    finally:
+        os.close(fd)
+        try:
+            os.unlink(temporary)
+        except FileNotFoundError:
+            pass
+
+
+def _cleanup_site_releases(config: dict[str, Any], state: RehearsalState,
+                           operation_id: Optional[str], *, close_marker: bool = True) -> list[str]:
+    try:
+        # This must precede every journal query: the normal reader repairs a
+        # torn tail, which could erase an unfinished rollback intent.
+        history = state.read_journal_for_cleanup(validate_history=True)
+    except RehearsalRefusal as error:
+        raise HostFailure(str(error)) from error
+
+    def operation_rows(target: str) -> list[dict]:
+        return [row for row in history if row.get("operationId") == target]
+
+    marker = _read_site_publication_marker(config)
+    if operation_id is None and marker is not None and marker["phase"] != "cleanup-pending":
+        rows = operation_rows(marker["operationId"])
+        terminal = any(row.get("record") in ("committed", "recovered", "static-main-committed",
+                                                "static-main-recovered", "static-main-rolled-back",
+                                                "static-main-rollback-completed") for row in rows)
+        if not terminal:
+            raise HostFailure("a host publication is active; CMS cleanup must retry after it finishes")
+        _write_site_publication_marker(config, marker["operationId"], "cleanup-pending")
+        marker = _read_site_publication_marker(config)
+    if operation_id is not None and marker is not None and marker["operationId"] != operation_id:
+        raise HostFailure("release cleanup marker belongs to another operation")
+    if state._unfinished_operation_ids(history):
+        raise HostFailure("another publication is unfinished; release cleanup refused")
+    configured_root = Path(config["staticReleaseRoot"])
+    root_info = configured_root.lstat()
+    if not stat.S_ISDIR(root_info.st_mode) or stat.S_ISLNK(root_info.st_mode):
+        raise HostFailure("static release root is unsafe; cleanup refused")
+    root = configured_root.resolve(strict=True)
+    current = _current_target(Path(config["currentStatic"])).resolve(strict=True)
+    if current.parent != root.resolve(strict=True):
+        raise HostFailure("current static release is not a direct child of its configured root")
+    site_state_path = Path(config["siteRefreshState"])
+    try:
+        site_state = json.loads(site_state_path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        site_state = None
+    except (OSError, ValueError) as error:
+        raise HostFailure("CMS site-refresh state is unreadable; release cleanup refused") from error
+    if site_state is not None and (not isinstance(site_state, dict) or site_state.get("status") not in
+                                   ("idle", "failed", "succeeded")):
+        raise HostFailure("CMS refresh or Restore is active or unresolved; release cleanup refused")
+    if operation_id is None:
+        cms_state = site_state
+        cms_success = (isinstance(cms_state, dict) and cms_state.get("status") == "succeeded"
+                       and cms_state.get("phase") == "done" and cms_state.get("switched") is True
+                       and cms_state.get("releaseId") == current.name)
+        if marker is None:
+            if not cms_success or cms_state.get("cleanupPending") is not True:
+                return []
+            operation_id = f"cms-{current.name}"
+            _write_site_publication_marker(config, operation_id, "cleanup-pending")
+            marker = _read_site_publication_marker(config)
+        operation_id = marker["operationId"]
+        if not cms_success:
+            rows = operation_rows(operation_id)
+            terminal = any(row.get("record") in ("committed", "recovered", "static-main-committed",
+                                                    "static-main-recovered", "static-main-rolled-back",
+                                                    "static-main-rollback-completed") for row in rows)
+            if not terminal:
+                raise HostFailure("pending marker has no durable successful publication record")
+    else:
+        rows = operation_rows(operation_id)
+        terminal = any(row.get("record") in ("committed", "recovered", "static-main-committed",
+                                                "static-main-recovered", "static-main-rolled-back",
+                                                "static-main-rollback-completed") for row in rows)
+        if not terminal:
+            raise HostFailure("release cleanup requires a durable terminal publication record")
+        _write_site_publication_marker(config, operation_id, "cleanup-pending")
+        marker = _read_site_publication_marker(config)
+    protected = {current}
+    for pointer in root.parent.glob(".current-next-*"):
+        before = pointer.lstat()
+        if not stat.S_ISLNK(before.st_mode):
+            raise HostFailure("temporary current pointer is not a symlink; cleanup refused")
+        match = re.fullmatch(r"\.current-next-([A-Za-z0-9][A-Za-z0-9._-]{0,127})", pointer.name)
+        if not match:
+            raise HostFailure("temporary current pointer name is unknown; cleanup refused")
+        try:
+            target = pointer.resolve(strict=True)
+            link_text = os.readlink(pointer)
+        except OSError as error:
+            raise HostFailure("temporary current pointer is unreadable; cleanup refused") from error
+        if (target.parent != root or target.name != match.group(1)
+                or link_text != f"releases/{match.group(1)}"):
+            raise HostFailure("temporary current pointer target is not the exact release child")
+        after = pointer.lstat()
+        if (before.st_dev, before.st_ino) != (after.st_dev, after.st_ino):
+            raise HostFailure("temporary current pointer changed during cleanup")
+        pointer.unlink()
+        dir_fd = os.open(root.parent, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+        try:
+            os.fsync(dir_fd)
+        finally:
+            os.close(dir_fd)
+    for pointer in root.parent.glob(".current.new-*"):
+        try:
+            if not pointer.is_symlink():
+                raise HostFailure("temporary current pointer is not a symlink; cleanup refused")
+            target = pointer.resolve(strict=True)
+        except OSError as error:
+            raise HostFailure("temporary current pointer is unreadable; cleanup refused") from error
+        if target.parent != root.resolve(strict=True):
+            raise HostFailure("temporary current pointer escapes the release root")
+        protected.add(target)
+    for key in ("siteBuildWorkspaceRoot", "releaseRoot", "backupRoot"):
+        value = config.get(key)
+        if not value:
+            continue
+        workspace = Path(value).resolve(strict=True)
+        if workspace.parent == root.resolve(strict=True):
+            protected.add(workspace)
+        elif root.resolve(strict=True) in workspace.parents:
+            protected.add(root.resolve(strict=True) / workspace.relative_to(root.resolve(strict=True)).parts[0])
+    _expire_site_restore(config, current.name, cleanup_pending=True)
+    mounts = _mount_points()
+    removed = []
+    for candidate in sorted(root.iterdir()):
+        if candidate.name.startswith("."):
+            continue
+        info = candidate.lstat()
+        if stat.S_ISLNK(info.st_mode):
+            raise HostFailure("unexpected symlink in static release root; cleanup refused")
+        if not stat.S_ISDIR(info.st_mode) or candidate in protected:
+            continue
+        release_file = candidate / "release.json"
+        try:
+            release_info = release_file.lstat()
+            release = json.loads(release_file.read_text(encoding="utf-8"))
+        except (OSError, ValueError) as error:
+            raise HostFailure("unidentified directory in static release root; cleanup refused") from error
+        if (not stat.S_ISREG(release_info.st_mode) or release_info.st_nlink != 1
+                or not isinstance(release, dict)
+                or not re.fullmatch(r"[a-f0-9]{40}", str(release.get("commit", "")))
+                or not isinstance(release.get("snapshotId"), str)
+                or not release["snapshotId"].startswith("snap:")):
+            raise HostFailure("unverified directory in static release root; cleanup refused")
+        _remove_release_tree(candidate, mounts)
+        removed.append(str(candidate))
+    _expire_site_restore(config, current.name, cleanup_pending=False)
+    if close_marker and marker is not None and operation_id is not None:
+        _clear_site_publication_marker(config, operation_id)
+    return removed
+
+
+def _cleanup_after_commit(config: dict[str, Any], state: RehearsalState, operation_id: str) -> dict[str, Any]:
+    try:
+        return {"removedReleases": _cleanup_site_releases(config, state, operation_id)}
+    except (HostFailure, OSError, ValueError) as error:
+        try:
+            marker = _read_site_publication_marker(config)
+            if marker is not None and marker["operationId"] == operation_id:
+                _write_site_publication_marker(config, operation_id, "cleanup-pending", str(error))
+        except (HostFailure, OSError, ValueError):
+            pass
+        return {"cleanupPending": True, "cleanupError": str(error)[:500]}
 
 
 def _save_bytes(path: Path, payload: bytes, mode: int = 0o600) -> None:
@@ -695,7 +1183,7 @@ PAIRED_CMS_ENV_KEYS = ("IKPK_BUILD_WORKSPACE", "IKPK_INSTALLED_COMMIT", "INITIAL
 def _paired_cms_source_env(config: dict[str, Any]) -> dict[str, Optional[str]]:
     path = Path(config["cmsEnvironmentFile"])
     info = path.lstat()
-    if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
+    if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1 or info.st_uid != 0:
         raise HostFailure("paired CMS environment file is not a regular unlinked file")
     text = path.read_text(encoding="utf-8")
     values: dict[str, Optional[str]] = {key: None for key in PAIRED_CMS_ENV_KEYS}
@@ -779,11 +1267,21 @@ def _site_refresh_worker_pids(proc_root: Path = Path("/proc")) -> set[int]:
 
 
 def _verify_site_refresh_idle(config: dict[str, Any], *, recovery: bool = False) -> None:
-    if config.get("profile") != "production-paired":
-        return
     path = Path(config["siteRefreshState"])
     lock_path = Path(str(path) + ".lock")
     deadline = time.monotonic() + 3600
+    ambiguous_attempts = 0
+
+    def retry_ambiguous(message: str) -> None:
+        # A lock can be created empty or rewritten during handoff, and a
+        # worker can exit between a read and its PID probe. Never regard an
+        # ambiguous observation as idle; re-read the entire state and lock.
+        nonlocal ambiguous_attempts
+        ambiguous_attempts += 1
+        if ambiguous_attempts >= 3 or time.monotonic() >= deadline:
+            raise HostFailure(message)
+        time.sleep(1)
+
     while True:
         waiting = False
         try:
@@ -809,7 +1307,8 @@ def _verify_site_refresh_idle(config: dict[str, Any], *, recovery: bool = False)
                 try:
                     os.kill(pid, 0)
                 except ProcessLookupError:
-                    raise HostFailure("site-refresh/Restore state is stale; inspect it instead of stopping CMS")
+                    retry_ambiguous("site-refresh/Restore state is stale; inspect it instead of stopping CMS")
+                    continue
                 except PermissionError:
                     pass
                 waiting = True
@@ -847,22 +1346,34 @@ def _verify_site_refresh_idle(config: dict[str, Any], *, recovery: bool = False)
             lock_info = lock_path.lstat()
         except FileNotFoundError:
             lock_info = None
-        if lock_info is not None:
+        if lock_info is not None and not _site_refresh_lock_owned(config):
             if not stat.S_ISREG(lock_info.st_mode) or lock_info.st_nlink != 1:
                 raise HostFailure("site-refresh lock is unsafe; refusing to stop CMS")
             try:
-                lock_pid_text = lock_path.read_text(encoding="ascii").strip()
-            except OSError as error:
+                lock_text = lock_path.read_text(encoding="ascii")
+            except FileNotFoundError:
+                retry_ambiguous("site-refresh lock changed while reading; refusing to stop CMS")
+                continue
+            except (OSError, UnicodeError) as error:
                 raise HostFailure("site-refresh lock is unreadable; refusing to stop CMS") from error
-            if not lock_pid_text.isdecimal() or int(lock_pid_text) < 2:
-                raise HostFailure("site-refresh lock PID is unknown; refusing to stop CMS")
+            # Legacy writers use a PID-only file; newer workers append a
+            # 32-character lowercase token. Do not treat a partial handoff as idle.
+            legacy_lock = re.fullmatch(r"([0-9]+)\n?", lock_text)
+            token_lock = re.fullmatch(r"([0-9]+)\n[a-f0-9]{32}\n", lock_text)
+            lock_pid_text = legacy_lock.group(1) if legacy_lock else (
+                token_lock.group(1) if token_lock else "")
+            if not lock_pid_text or len(lock_pid_text) > 10 or not 2 <= int(lock_pid_text) <= 2147483647:
+                retry_ambiguous("site-refresh lock PID is unknown; refusing to stop CMS")
+                continue
             try:
                 os.kill(int(lock_pid_text), 0)
             except ProcessLookupError:
-                raise HostFailure("site-refresh lock is stale; inspect it instead of stopping CMS")
+                retry_ambiguous("site-refresh lock is stale; inspect it instead of stopping CMS")
+                continue
             except PermissionError:
                 pass
             waiting = True
+        ambiguous_attempts = 0
         if not waiting:
             return
         if time.monotonic() >= deadline:
@@ -872,8 +1383,6 @@ def _verify_site_refresh_idle(config: dict[str, Any], *, recovery: bool = False)
 
 def _assert_site_refresh_idle(config: dict[str, Any]) -> None:
     """Read-only preflight: active, malformed, or interrupted operations refuse before fencing."""
-    if config.get("profile") != "production-paired":
-        return
     path = Path(config["siteRefreshState"])
     try:
         info = path.lstat()
@@ -890,7 +1399,7 @@ def _assert_site_refresh_idle(config: dict[str, Any]) -> None:
                 "idle", "succeeded", "failed", "verification-failed"):
             raise HostFailure("site-refresh is active or unknown; resolve it before starting paired maintenance")
     lock_path = Path(str(path) + ".lock")
-    if lock_path.exists() or lock_path.is_symlink():
+    if (lock_path.exists() or lock_path.is_symlink()) and not _site_refresh_lock_owned(config):
         raise HostFailure("site-refresh/Restore lock exists; resolve it before starting paired maintenance")
     if record and record.get("phase") and record.get("workerPid") is None and _site_refresh_worker_pids():
         raise HostFailure("legacy terminal site-refresh worker is still active; resolve it before maintenance")
@@ -1430,6 +1939,9 @@ def _start_acquisition(config: dict[str, Any], state: RehearsalState, operation_
     _write_gate(config, True)
     _verify_site_refresh_idle(config, recovery=recovery)
     _stop_writers(config)
+    _verify_site_refresh_idle(config, recovery=recovery)
+    _reserve_site_refresh_lock(config)
+    _write_site_publication_marker(config, operation_id)
     _verify_fence(config)
     state.confirm_fence(operation_id, lambda: all(
         run(["/usr/bin/systemctl", "is-active", unit], check=False).returncode != 0
@@ -1711,7 +2223,6 @@ def _build_static(config: dict[str, Any], source_root: Path, capture: Path,
     dist = web / dist_name
     if not dist.is_dir() or dist.is_symlink():
         raise HostFailure(f"static build did not produce a real {dist_name} directory")
-    _preserve_hashed_assets(config, dist)
     snapshot = json.loads((web / ".snapshot/snapshot.json").read_text(encoding="utf-8"))
     source_identity = json.loads((source_root / ".ikpk-rehearsal-ci.json").read_text(encoding="utf-8"))
     if initial_prod or production_static:
@@ -1737,68 +2248,6 @@ def _build_static(config: dict[str, Any], source_root: Path, capture: Path,
     os.chmod(dist / "release.json", 0o644)
     digest = _tree_sha256(dist)
     return dist, digest
-
-
-def _preserve_hashed_assets(config: dict[str, Any], destination: Path) -> set[str]:
-    root = Path(config["staticReleaseRoot"]).resolve(strict=True)
-    asset_pattern = re.compile(r".+\.[A-Za-z0-9_-]{8,}\.(?:js|css|mjs|woff2?|ttf|svg|png|webp|avif)\Z")
-    pagefind_pattern = re.compile(r".+[._-][a-f0-9]{7,}\.pf_(?:fragment|index|meta)\Z")
-    copied: set[str] = set()
-    for release in sorted(root.iterdir()):
-        if not release.is_dir() or release.is_symlink():
-            continue
-        asset_roots = [(release / "_astro", "_astro", asset_pattern),
-                       (release / "public/_astro", "_astro", asset_pattern),
-                       (release / "pagefind", "pagefind", pagefind_pattern),
-                       (release / "public/pagefind", "pagefind", pagefind_pattern)]
-        for asset_root, public_prefix, pattern in asset_roots:
-            if not asset_root.is_dir() or asset_root.is_symlink():
-                continue
-            for asset in sorted(asset_root.rglob("*")):
-                info = asset.lstat()
-                if stat.S_ISDIR(info.st_mode):
-                    continue
-                if not stat.S_ISREG(info.st_mode):
-                    raise HostFailure("retained release hashed asset tree contains an unsafe object")
-                if not pattern.fullmatch(asset.name):
-                    continue
-                relative = asset.relative_to(asset_root)
-                target = destination / public_prefix / relative
-                target.parent.mkdir(parents=True, exist_ok=True)
-                if target.exists():
-                    if target.is_symlink() or not target.is_file() or sha256_file(target) != sha256_file(asset):
-                        raise HostFailure("same hashed asset URL has different retained bytes")
-                else:
-                    shutil.copy2(asset, target)
-                copied.add("/" + public_prefix + "/" + relative.as_posix())
-    return copied
-
-
-def _verify_retained_hashed_assets(config: dict[str, Any]) -> None:
-    root = Path(config["staticReleaseRoot"]).resolve(strict=True)
-    asset_pattern = re.compile(r".+\.[A-Za-z0-9_-]{8,}\.(?:js|css|mjs|woff2?|ttf|svg|png|webp|avif)\Z")
-    pagefind_pattern = re.compile(r".+[._-][a-f0-9]{7,}\.pf_(?:fragment|index|meta)\Z")
-    urls: set[str] = set()
-    for release in sorted(root.iterdir()):
-        if not release.is_dir() or release.is_symlink():
-            continue
-        for asset_root, public_prefix, pattern in ((release / "_astro", "_astro", asset_pattern),
-                                                   (release / "public/_astro", "_astro", asset_pattern),
-                                                   (release / "pagefind", "pagefind", pagefind_pattern),
-                                                   (release / "public/pagefind", "pagefind", pagefind_pattern)):
-            if not asset_root.is_dir() or asset_root.is_symlink():
-                continue
-            for asset in asset_root.rglob("*"):
-                info = asset.lstat()
-                if stat.S_ISREG(info.st_mode) and pattern.fullmatch(asset.name):
-                    urls.add("/" + public_prefix + "/" + asset.relative_to(asset_root).as_posix())
-    if not urls:
-        raise HostFailure("no retained hashed asset URLs were found for post-switch verification")
-    for path in sorted(urls):
-        response = run(["/usr/bin/curl", "--silent", "--output", "/dev/null", "--write-out", "%{http_code}",
-                        "--max-time", "15", config["siteBaseUrl"].rstrip("/") + path], timeout=20)
-        if response.stdout.strip() not in ("200", "304"):
-            raise HostFailure(f"retained hashed asset is unavailable after static switch: {path}")
 
 
 def _served_release_matches(config: dict[str, Any], source_sha: str, operation_id: str,
@@ -2597,7 +3046,10 @@ def _static_main_rollback(config: dict[str, Any], state: RehearsalState, start: 
     pointer = Path(config["currentStatic"])
     if _current_target(pointer) != candidate.resolve(strict=True):
         raise HostFailure("static-main rollback refused because currentStatic no longer points to this candidate")
-    old = Path(start["oldStaticPath"]).resolve(strict=True)
+    try:
+        old = Path(start["oldStaticPath"]).resolve(strict=True)
+    except OSError as error:
+        raise HostFailure("static-main rollback target expired/unavailable; no switch was attempted") from error
     if _tree_sha256(old) != start.get("oldStaticTreeSha256"):
         raise HostFailure("static-main rollback target differs from the exact old static tree")
     _switch_pointer(pointer, old, Path(config["staticReleaseRoot"]))
@@ -2626,7 +3078,10 @@ def _static_main_rollback_committed(config: dict[str, Any], state: RehearsalStat
         raise HostFailure("committed static rollback requires a matching durable release record")
     source_sha = start["sourceSha"]
     candidate = Path(config["staticReleaseRoot"]) / f"{source_sha}-{operation_id}"
-    old = Path(start["oldStaticPath"]).resolve(strict=True)
+    try:
+        old = Path(start["oldStaticPath"]).resolve(strict=True)
+    except OSError as error:
+        raise HostFailure("static-main rollback target expired/unavailable; no rollback intent was written") from error
     if candidate.is_symlink() or not candidate.is_dir():
         raise HostFailure("committed static rollback candidate is missing or unsafe")
     candidate_digest = _tree_sha256(candidate)
@@ -2740,7 +3195,6 @@ def _static_main_commit(config: dict[str, Any], state: RehearsalState, operation
             raise HostFailure("CMS fingerprint changed during static-main activation")
         if _current_target(pointer) != candidate.resolve(strict=True):
             raise HostFailure("static-main currentStatic changed during served-release probes")
-        _verify_retained_hashed_assets(config)
     except Exception as error:
         _static_main_rollback(config, state, start, candidate)
         raise HostFailure(f"static-main activation failed and the old static tree was restored: {error}") from error
@@ -2799,7 +3253,10 @@ def _static_main_recover(config: dict[str, Any], state: RehearsalState, operatio
     intent = next((row for row in rows if row.get("record") == "static-main-switch-intent"), None)
     pointer = Path(config["currentStatic"])
     current = _current_target(pointer)
-    old = Path(start["oldStaticPath"]).resolve(strict=True)
+    try:
+        old = Path(start["oldStaticPath"]).resolve(strict=True)
+    except OSError as error:
+        raise HostFailure("static-main rollback target expired/unavailable; recovery cannot switch") from error
     if intent:
         candidate = Path(intent["candidateStaticPath"]).resolve(strict=True)
         if current == candidate:
@@ -2907,7 +3364,6 @@ def _static_publish(config: dict[str, Any], state: RehearsalState, args: argpars
                         "--max-time", "15", config["siteBaseUrl"].rstrip("/") + quote(media_url, safe="/%")], timeout=20)
         if response.stdout.strip() not in ("200", "304"):
             raise HostFailure(f"captured media is not served after static switch: {media_url}")
-    _verify_retained_hashed_assets(config)
     marker = state._read_marker() or {}
     if not marker.get("newPairAccepted"):
         cms_root = _current_target(Path(config["currentCms"]))
@@ -3195,25 +3651,53 @@ def _recover(config: dict[str, Any], state: RehearsalState, operation_id: str,
 def dispatch(args: argparse.Namespace) -> dict[str, Any]:
     if os.geteuid() != 0:
         raise HostFailure("host command must run through the installed root-owned entrypoint")
-    RehearsalState._validate_identity(args.operation_id, getattr(args, "source_sha", None))
+    if args.action != "cleanup-site":
+        RehearsalState._validate_identity(args.operation_id, getattr(args, "source_sha", None))
     profile = getattr(args, "profile", "staging194")
     config_path = (INITIAL_PROD_CONFIG_PATH if profile == "initial-prod" else
                    PRODUCTION_STATIC_CONFIG_PATH if profile == "production-static" else
                    PRODUCTION_PAIRED_CONFIG_PATH if profile == "production-paired" else CONFIG_PATH)
     config = _root_config(config_path, expected_profile=profile)
+    cleanup_marker_snapshot = None
+    if args.action == "cleanup-site":
+        config, profile, cleanup_marker_snapshot = _select_cleanup_profile(config, profile)
     if profile == "production-static" and args.action not in (
-            "static-main", "static-main-recover", "export-static-main", "status"):
+            "static-main", "static-main-recover", "export-static-main", "status", "cleanup-site"):
         raise HostFailure("production-static permits only static-main publication and recovery")
     if profile == "production-paired" and args.action not in (
             "cms-update", "static-publish", "export-backup", "export-static", "recover", "restore",
-            "finalize-recover", "status"):
+            "finalize-recover", "status", "cleanup-site"):
         raise HostFailure("production-paired permits only paired CMS update, static publish, and recovery")
     if profile == "initial-prod" and args.action == "recover":
         raise HostFailure("initial-prod recovery is disabled; keep the production fence closed for owner direction")
-    if profile == "initial-prod" and args.action not in ("validate-config",) and args.operation_id != INITIAL_PROD_OPERATION_ID:
+    if (profile == "initial-prod" and args.action not in ("validate-config", "cleanup-site")
+            and args.operation_id != INITIAL_PROD_OPERATION_ID):
         raise HostFailure("initial-prod accepts only its fixed single-use operation ID")
     state = RehearsalState(Path(config["stateDir"]))
-    with _destination_publication_lock(config), state.lock():
+    destination_lock = (nullcontext() if args.action == "status"
+                        else _destination_publication_lock(config, wait=args.action == "cleanup-site"))
+    with destination_lock, state.lock():
+        try:
+            # The ordinary journal reader repairs torn tails. Validate before
+            # any dispatch path (including status/export) can call it.
+            state.read_journal_for_cleanup()
+        except RehearsalRefusal as error:
+            raise HostFailure(str(error)) from error
+        if args.action == "cleanup-site":
+            _reserve_site_refresh_lock(config, wait=True)
+            if _read_site_publication_marker(config) != cleanup_marker_snapshot:
+                raise HostFailure("site-publication marker changed while housekeeping was acquiring locks; retry required")
+            _consume_site_cleanup_request(config)
+            return {"status": "succeeded", "removedReleases": _cleanup_site_releases(config, state, None)}
+        if args.action in ("static-main", "static-publish", "static-main-recover"):
+            if args.action in ("static-main", "static-publish"):
+                _assert_site_refresh_idle(config)
+            _reserve_site_refresh_lock(config)
+            marker = _read_site_publication_marker(config)
+            if marker and marker["operationId"] != args.operation_id:
+                raise HostFailure("another site publication is unresolved; recover it before this operation")
+            if marker is None:
+                _write_site_publication_marker(config, args.operation_id)
         rows = state._operation_rows(args.operation_id)
         static_main_owned = any(row.get("operationKind") == "static-main" for row in rows)
         if static_main_owned and args.action in ("cms-update", "static-publish", "recover", "restore", "finalize-recover"):
@@ -3225,8 +3709,11 @@ def dispatch(args: argparse.Namespace) -> dict[str, Any]:
                 raise HostFailure("static-main source provenance is not valid base64 JSON") from error
             _validate_static_main_admission(config, args.source_sha, provenance)
             if args.browser_digest:
-                return _static_main_commit(config, state, args.operation_id, args.source_sha,
-                                           provenance, args.browser_digest)
+                result = _static_main_commit(config, state, args.operation_id, args.source_sha,
+                                             provenance, args.browser_digest)
+                if result.get("phase") == "committed":
+                    result.update(_cleanup_after_commit(config, state, args.operation_id))
+                return result
             if rows:
                 return _static_main_prepare(config, state, args.operation_id, args.source_sha, provenance,
                                             args.reuse_capture_operation_id)
@@ -3246,11 +3733,19 @@ def dispatch(args: argparse.Namespace) -> dict[str, Any]:
             if args.rollback_committed:
                 if not args.operator or not args.reason:
                     raise HostFailure("committed static rollback requires --operator and --reason")
-                return _static_main_recover(config, state, args.operation_id, rollback_committed=True,
-                                            operator_name=args.operator, reason=args.reason)
+                result = _static_main_recover(config, state, args.operation_id, rollback_committed=True,
+                                              operator_name=args.operator, reason=args.reason)
+                if result.get("phase") == "rolled-back":
+                    _clear_site_publication_marker(config, args.operation_id)
+                return result
             if args.operator is not None or args.reason is not None:
                 raise HostFailure("--operator and --reason require --rollback-committed")
-            return _static_main_recover(config, state, args.operation_id)
+            result = _static_main_recover(config, state, args.operation_id)
+            if result.get("phase") == "recovered":
+                _clear_site_publication_marker(config, args.operation_id)
+            elif result.get("phase") == "committed":
+                result.update(_cleanup_after_commit(config, state, args.operation_id))
+            return result
         if args.action == "export-backup":
             manifest = _backup_manifest(config, args.operation_id)
             return {"_stream": str(Path(config["backupRoot"]) / args.operation_id / "backup.tar"),
@@ -3266,16 +3761,25 @@ def dispatch(args: argparse.Namespace) -> dict[str, Any]:
                 _import_offhost_backup(config, args.operation_id, payload, backup_sha)
                 del payload
             if profile == "production-paired" and args.action == "restore":
-                return _recover(config, state, args.operation_id, stage_only=True,
-                                expected_fingerprint=args.restore_fingerprint)
-            return _recover(config, state, args.operation_id)
+                result = _recover(config, state, args.operation_id, stage_only=True,
+                                  expected_fingerprint=args.restore_fingerprint)
+            else:
+                result = _recover(config, state, args.operation_id)
+            if result.get("phase") == "recovered":
+                marker = _read_site_publication_marker(config)
+                if marker and marker["operationId"] == args.operation_id:
+                    _clear_site_publication_marker(config, args.operation_id)
+            return result
         if args.action == "finalize-recover":
             return _recover(config, state, args.operation_id,
                             finalize_restore_fingerprint=args.restore_fingerprint)
         if args.action == "cms-update":
             return _cms_update(config, state, args)
         if args.action == "static-publish":
-            return _static_publish(config, state, args)
+            result = _static_publish(config, state, args)
+            if result.get("phase") == "committed":
+                result.update(_cleanup_after_commit(config, state, args.operation_id))
+            return result
         if args.action == "status":
             if profile == "production-paired":
                 try:
@@ -3298,6 +3802,7 @@ def main(argv: Optional[list[str]] = None) -> int:
     parser.add_argument("--profile", choices=("staging194", "initial-prod", "production-static", "production-paired"), default="staging194")
     sub = parser.add_subparsers(dest="action", required=True)
     sub.add_parser("validate-config")
+    sub.add_parser("cleanup-site")
     for name in ("cms-update", "static-publish", "static-main"):
         command = sub.add_parser(name)
         command.add_argument("--operation-id", required=True)

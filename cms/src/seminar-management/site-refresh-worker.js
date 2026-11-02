@@ -1,6 +1,6 @@
 import { spawnSync } from 'node:child_process';
-import { chmodSync, lstatSync, mkdirSync, readFileSync, readdirSync, rmSync } from 'node:fs';
-import { join } from 'node:path';
+import { chmodSync, lstatSync, mkdirSync, readFileSync, readlinkSync, readdirSync, realpathSync, rmSync } from 'node:fs';
+import { dirname, isAbsolute, join } from 'node:path';
 import {
   childEnvironment,
   installedCommit,
@@ -10,8 +10,10 @@ import {
   releaseIdentity,
   reuseDerivatives,
   runRefresh,
+  readStateFile,
   siteBuildEnv,
   switchCurrent,
+  transferLock,
   unlock,
   verifyRelease,
   workspaceReady,
@@ -26,6 +28,14 @@ function writeState(record) {
   // Keep the detached worker identity in terminal records too: an operator may
   // observe the terminal write just before this process exits and releases its lock.
   writeJsonAtomic(statePath(), { ...record, workerPid: process.pid });
+}
+
+function writeCleanupState(releaseId, patch) {
+  const current = readStateFile(statePath(), process.env.IKPK_WEB_ROOT);
+  if (!current.readable || current.record?.status !== 'succeeded' || current.record.releaseId !== releaseId) {
+    throw new Error('site refresh state changed before cleanup status update');
+  }
+  writeState({ ...current.record, ...patch });
 }
 
 function runStep(command, args, cwd, extraEnv, restrictedEnv = false) {
@@ -54,15 +64,46 @@ function removeCaptureBundle(path) {
   }
 }
 
+function removeBuiltOutput(workspace, name) {
+  if (!['dist', 'dist-demo193', 'dist-snapshot'].includes(name)) throw new Error('unexpected build output path');
+  const web = realpathSync(join(workspace, 'web'));
+  const target = join(web, name);
+  let info;
+  try { info = lstatSync(target); } catch (error) { if (error?.code === 'ENOENT') return; throw error; }
+  if (!info.isDirectory() || info.isSymbolicLink() || realpathSync(target) !== target) {
+    throw new Error('build output is not a direct real directory');
+  }
+  const mounts = readFileSync('/proc/self/mountinfo', 'utf8').split('\n').filter(Boolean).map((line) => {
+    const field = line.split(' ')[4];
+    if (!field) throw new Error('mount table is malformed');
+    return field.replace(/\\([0-7]{3})/g, (_match, value) => String.fromCharCode(parseInt(value, 8)));
+  });
+  if (mounts.some((mount) => mount === target || mount.startsWith(`${target}/`))) {
+    throw new Error('build output contains a mount point');
+  }
+  rmSync(target, { recursive: true });
+}
+
 export async function executeRefresh() {
   const workspace = process.env.IKPK_BUILD_WORKSPACE;
   const webRoot = process.env.IKPK_WEB_ROOT;
+  if (!webRoot || !isAbsolute(webRoot)) throw new Error('site root is invalid');
   const lock = `${statePath()}.lock`;
+  const owner = Number(process.env.IKPK_REFRESH_OWNER_PID);
+  const token = process.env.IKPK_REFRESH_LOCK_TOKEN;
+  if (!/^[a-f0-9]{32}$/.test(token || '') || !transferLock(lock, owner, process.pid, token)) {
+    throw new Error('site refresh lock handoff failed');
+  }
+  let completed = false;
+  let result;
+  let buildOutputName = null;
   try {
-    return await runRefresh({
+    result = await runRefresh({
+      webRoot,
       pid: process.pid,
       now: () => new Date().toISOString(),
-      write: writeState,
+      write: (record) => writeState(record.status === 'succeeded'
+        ? { ...record, cleanupPending: true, buildArtifactsCleanupPending: true } : record),
       workspaceReady: () => workspaceReady(workspace),
       capture: () => {
         const snapshotDir = join(workspace, 'web', '.snapshot');
@@ -135,11 +176,13 @@ export async function executeRefresh() {
         if (!identity) return { ok: false, detail: 'снимок без snapshotId или нет commit установленного кода' };
         const releaseId = `content-${Date.now()}`;
         const output = staging194 ? 'dist-demo193' : 'dist';
+        buildOutputName = output;
         publishTree(join(workspace, 'web', output), webRoot, releaseId, identity);
         return { ok: true, releaseId, identity };
       },
       canVerify: () => Boolean(process.env.IKPK_VERIFY_URL),
-      switchRelease: (releaseId) => switchCurrent(webRoot, releaseId),
+      readCurrent: () => readlinkSync(join(webRoot, 'current')),
+      switchRelease: (releaseId, expectedPrevious) => switchCurrent(webRoot, releaseId, expectedPrevious),
       verify: (expected) =>
         verifyRelease({
           url: process.env.IKPK_VERIFY_URL,
@@ -148,7 +191,31 @@ export async function executeRefresh() {
           fetchImpl: globalThis.fetch,
         }),
     });
+    completed = !result.recoveryRequired;
+    if (result?.status === 'succeeded' && buildOutputName) {
+      try {
+        removeBuiltOutput(workspace, buildOutputName);
+        removeBuiltOutput(workspace, 'dist-snapshot');
+        writeCleanupState(result.releaseId, { buildArtifactsCleanupPending: false });
+      }
+      catch { result = { ...result, buildArtifactsCleanupPending: true }; }
+    }
   } finally {
-    unlock(lock);
+    // Uncaught failures and interruptions keep the lock; a recorded terminal
+    // verification failure releases it so an operator can use Restore.
+    if (completed) unlock(lock, process.pid, token);
   }
+  if (result?.status === 'succeeded') {
+    let cleanupRequestPending = false;
+    try {
+      writeJsonAtomic(join(dirname(statePath()), 'cleanup.request'), {
+        version: 1, releaseId: result.releaseId, requestedAt: new Date().toISOString(),
+      });
+    } catch {
+      cleanupRequestPending = true;
+    }
+    result = { ...result, cleanupPending: result.cleanupPending !== false,
+      cleanupRequestPending, buildArtifactsCleanupPending: result.buildArtifactsCleanupPending || false };
+  }
+  return result;
 }
