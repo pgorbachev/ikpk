@@ -804,12 +804,14 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
             dependencies.mkdir(parents=True)
             user = type("User", (), {"pw_name": "ikpk-cms", "pw_uid": 0, "pw_gid": 0})()
             calls = []
+            built_artifacts = []
 
             def run_as_cms(_config, cwd, argv, **kwargs):
                 calls.append((cwd, argv, kwargs))
                 if "build-cms-artifact.sh" in " ".join(argv):
                     artifact = Path(argv[-1])
                     artifact.mkdir(parents=True)
+                    built_artifacts.append(artifact)
                 return ""
 
             with patch.object(rehearsal_host, "_prepare_cms_build_dependencies", return_value=dependencies), \
@@ -828,6 +830,30 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
             self.assertEqual(calls[1][2]["timeout"], 3600)
             self.assertEqual(calls[1][2]["environment"], {"NODE_OPTIONS": "--max-old-space-size=1536"})
             self.assertEqual(calls[1][2]["read_only_path"], dependencies)
+            self.assertTrue((built_artifacts[0] / ".strapi").is_dir())
+
+    def test_cms_runtime_directory_refuses_symlink(self):
+        with tempfile.TemporaryDirectory(prefix="ikpk-cms-runtime-dir-") as temporary:
+            artifact = Path(temporary) / "artifact"
+            artifact.mkdir()
+            target = Path(temporary) / "target"
+            target.mkdir()
+            (artifact / ".strapi").symlink_to(target, target_is_directory=True)
+            with self.assertRaisesRegex(rehearsal_host.HostFailure, "not a real directory"):
+                rehearsal_host._ensure_cms_runtime_directory({"cmsUser": getpass.getuser()}, artifact)
+
+    def test_cms_runtime_directory_repairs_empty_partial_creation(self):
+        with tempfile.TemporaryDirectory(prefix="ikpk-cms-runtime-dir-partial-") as temporary:
+            artifact = Path(temporary) / "artifact"
+            runtime = artifact / ".strapi"
+            runtime.mkdir(parents=True)
+            user = type("User", (), {"pw_uid": 1234, "pw_gid": 2345})()
+            with patch.object(rehearsal_host.pwd, "getpwnam", return_value=user), \
+                 patch.object(rehearsal_host.os, "chown") as chown, \
+                 patch.object(rehearsal_host.os, "chmod") as chmod:
+                rehearsal_host._ensure_cms_runtime_directory({"cmsUser": "ikpk-cms"}, artifact)
+            chown.assert_called_once_with(runtime, 1234, 2345)
+            chmod.assert_called_once_with(runtime, 0o750)
 
     def test_complete_cms_build_dependency_generation_is_reused_without_mutation(self):
         with tempfile.TemporaryDirectory(prefix="ikpk-cms-build-deps-") as temporary:

@@ -31,6 +31,7 @@ class InstalledEntrypointTests(unittest.TestCase):
             self.assertEqual(len(list(root.glob("rehearsal.json.pre-main-*.bak"))), 1)
 
         installer = (ROOT / "scripts/install-rehearsal-host.sh").read_text(encoding="utf-8")
+        self.assertIn("--staging193-config) INSTALL_CONFIG_PROFILE=staging194;", installer)
         self.assertIn('profile = config.get("profile")', installer)
         self.assertNotIn('config["profile"]', installer)
 
