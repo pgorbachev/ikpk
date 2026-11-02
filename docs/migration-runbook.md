@@ -1,5 +1,10 @@
 # Migration Runbook — ikpk.su Rebuild
 
+> **The CDN/Netlify deployment and DNS instructions are obsolete.** The
+> cutover and direct deployment steps below must not be used. For release
+> admission and publication process, see [release-process.md](release-process.md)
+> and [deploy-vps.md](deploy-vps.md); verify the destination and rollback before use.
+
 ## Pre-launch Checklist
 
 Complete **all** items before scheduling go-live.
