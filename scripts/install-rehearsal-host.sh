@@ -4,14 +4,16 @@ set -euo pipefail
 ROOT=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 PREFIX=/usr/local
 INSTALL_CONFIG_PROFILE=
+INSTALL_DISABLED=0
 while (($#)); do
   case "$1" in
     --prefix) PREFIX=${2:?missing prefix}; shift 2 ;;
+    --install-disabled) INSTALL_DISABLED=1; shift ;;
     --staging193-config) INSTALL_CONFIG_PROFILE=staging193; shift ;;
     --initial-prod-config) INSTALL_CONFIG_PROFILE=initial-prod; shift ;;
     --production-static-config) INSTALL_CONFIG_PROFILE=production-static; shift ;;
     --production-paired-config) INSTALL_CONFIG_PROFILE=production-paired; shift ;;
-    *) echo "usage: $0 [--prefix ABSOLUTE-PREFIX] [--staging193-config|--initial-prod-config|--production-static-config|--production-paired-config]" >&2; exit 2 ;;
+    *) echo "usage: $0 [--prefix ABSOLUTE-PREFIX] [--install-disabled] [--staging193-config|--initial-prod-config|--production-static-config|--production-paired-config]" >&2; exit 2 ;;
   esac
 done
 [[ "$PREFIX" = /* && "$PREFIX" != / ]] || { echo 'prefix must be an absolute non-root path' >&2; exit 2; }
@@ -281,6 +283,8 @@ EOF
   chmod 0644 "$path_tmp"
   mv -f -- "$path_tmp" "$systemd_dir/ikpk-site-housekeeping.path"
   systemctl daemon-reload
-  systemctl enable --now ikpk-site-housekeeping.path ikpk-site-housekeeping.timer
+  if (( ! INSTALL_DISABLED )); then
+    systemctl enable --now ikpk-site-housekeeping.path ikpk-site-housekeeping.timer
+  fi
 fi
 echo "installed rehearsal host entrypoint: $SBIN/ikpk-rehearsal"

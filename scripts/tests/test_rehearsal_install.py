@@ -129,6 +129,40 @@ class InstalledEntrypointTests(unittest.TestCase):
         self.assertIn("the 194 transport serialize through", installer)
         self.assertIn("Do not require that prod-only inode on 194", installer)
 
+    def test_install_disabled_skips_housekeeping_activation_but_default_enables_units(self):
+        installer = (ROOT / "scripts/install-rehearsal-host.sh").read_text(encoding="utf-8")
+        self.assertIn("INSTALL_DISABLED=0", installer)
+        self.assertIn("--install-disabled) INSTALL_DISABLED=1; shift ;;", installer)
+        self.assertIn("[--install-disabled]", installer)
+        start = installer.index("  systemctl daemon-reload")
+        end = installer.index("\nfi\necho \"installed rehearsal host entrypoint", start)
+        activation = "\n".join(line[2:] for line in installer[start:end].splitlines())
+        self.assertLess(installer.index('mv -f -- "$path_tmp" "$systemd_dir/ikpk-site-housekeeping.path"'), start)
+
+        with tempfile.TemporaryDirectory(prefix="ikpk-housekeeping-systemctl-") as temporary:
+            root = Path(temporary)
+            stub = root / "systemctl"
+            stub.write_text(
+                "#!/usr/bin/env bash\nprintf '%s\\n' \"$*\" >> \"$SYSTEMCTL_CALLS\"\n",
+                encoding="utf-8",
+            )
+            stub.chmod(0o755)
+            for disabled, expected in (
+                (1, ["daemon-reload"]),
+                (0, ["daemon-reload", "enable --now ikpk-site-housekeeping.path ikpk-site-housekeeping.timer"]),
+            ):
+                calls = root / f"calls-{disabled}"
+                run = subprocess.run(
+                    ["bash", "-c", f"INSTALL_DISABLED={disabled}\n{activation}"],
+                    env={**os.environ, "PATH": str(root) + os.pathsep + os.environ["PATH"],
+                         "SYSTEMCTL_CALLS": str(calls)},
+                    text=True,
+                    capture_output=True,
+                    check=False,
+                )
+                self.assertEqual(run.returncode, 0, run.stderr)
+                self.assertEqual(calls.read_text(encoding="utf-8").splitlines(), expected)
+
 
 if __name__ == "__main__":
     unittest.main()
