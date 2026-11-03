@@ -421,7 +421,12 @@ test.describe('3.10a-2 удержание переживает перезагр�
     await expect(page.locator(STATE('succeeded'))).toBeVisible();
     await openForm(page);
     await fillValid(page);
+    const secondPost = page.waitForResponse((response) =>
+      response.request().method() === 'POST'
+      && new URL(response.url()).pathname.endsWith('/payments'),
+    );
     await page.locator(`${FORM} [type="submit"]`).click();
+    await secondPost;
     expect(new Set(ids).size).toBeGreaterThan(1);
   });
 
