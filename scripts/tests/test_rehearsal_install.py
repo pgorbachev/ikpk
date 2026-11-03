@@ -42,6 +42,7 @@ class InstalledEntrypointTests(unittest.TestCase):
             config_path = root / "rehearsal.json"
             current = dict(template)
             current.pop("sitePublicationMarker")
+            current.pop("temporaryRoot")
             current["siteRefreshState"] = "/var/lib/ikpk-cms-prototype193/staging/site-refresh194/state"
             current["allowedSourceRef"] = "refs/heads/dev"
             original = json.dumps(current, indent=2).encode()
@@ -54,7 +55,7 @@ class InstalledEntrypointTests(unittest.TestCase):
                              "/var/lib/ikpk-cms-prototype193/staging/site-refresh194/state/state.json")
 
         installer = (ROOT / "scripts/install-rehearsal-host.sh").read_text(encoding="utf-8")
-        self.assertIn('profile = config.get("profile")', installer)
+        self.assertIn('profile = config.get("profile", "staging194")', installer)
         self.assertNotIn('config["profile"]', installer)
 
     def test_staging194_dev_to_main_migration_is_atomic_backed_up_and_preserves_other_keys(self):

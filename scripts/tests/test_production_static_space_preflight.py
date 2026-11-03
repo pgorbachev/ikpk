@@ -32,11 +32,14 @@ class ProductionStaticSpacePreflightTest(unittest.TestCase):
         (site_media / "asset.bin").write_bytes(b"m" * (512 * 1024))
         return {
             "profile": profile,
+            **({"temporaryRoot": str(root / "tmp")} if profile == "staging194" else {}),
             "currentCms": str(current_cms),
             "currentStatic": str(current_static),
             "releaseRoot": str(root / "source-releases"),
             "staticReleaseRoot": str(root / "www/releases"),
             "stateDir": str(root / "state"),
+            "backupRoot": str(root / "backups"),
+            "cmsUser": "cms",
             "cmsDatabase": str(database),
             "mediaRoots": [
                 {"path": str(uploads), "prefix": "/uploads/"},
@@ -152,10 +155,67 @@ class ProductionStaticSpacePreflightTest(unittest.TestCase):
             config = self._fixture(root, profile="staging194")
             del config["cmsDatabase"]
             del config["mediaRoots"]
-            report = rehearsal_host._space_preflight(config, "space-194", "static-main")
+            temp_root = root / "configured-temp"
+            temp_root.mkdir()
+            config["temporaryRoot"] = str(temp_root)
+            with patch.object(rehearsal_host, "_validate_staging194_temporary_root", return_value=temp_root):
+                report = rehearsal_host._space_preflight(config, "space-194", "static-main")
             self.assertEqual(report["backupBytes"], 0)
             self.assertFalse(any("static capture" in label for item in report["filesystems"]
                                  for label in item["labels"]))
+            temp_fs = next(item for item in report["filesystems"] if "temporary data" in item["labels"])
+            self.assertEqual(temp_fs["path"], str(temp_root))
+
+    def test_staging194_target_rejects_combined_temp_and_release_space_shortfall(self):
+        with tempfile.TemporaryDirectory(prefix="ikpk-194-temp-space-aggregate-") as temporary:
+            root = Path(temporary)
+            config = self._fixture(root, profile="staging194")
+            temp_root = root / "configured-temp"
+            temp_root.mkdir()
+            config["temporaryRoot"] = str(temp_root)
+            static_bytes = rehearsal_host._filesystem_bytes(
+                rehearsal_host._current_target(Path(config["currentStatic"])), required=True)
+            estimated = 3 * static_bytes + 4096
+            real_stat = Path.stat
+
+            class SharedDeviceStat:
+                def __init__(self, result):
+                    self._result = result
+                    self.st_dev = 707
+
+                def __getattr__(self, name):
+                    return getattr(self._result, name)
+
+            def same_device(path, *args, **kwargs):
+                return SharedDeviceStat(real_stat(path, *args, **kwargs))
+
+            free = (1_073_741_824 + estimated) - 1
+            with patch.object(rehearsal_host, "_validate_staging194_temporary_root", return_value=temp_root), \
+                 patch.object(Path, "stat", new=same_device), \
+                 patch.object(rehearsal_host.shutil, "disk_usage",
+                              return_value=SimpleNamespace(total=2_000_000_000, used=0, free=free)):
+                report = rehearsal_host._space_preflight(config, "space-194-aggregate", "static-main")
+            self.assertGreater(report["filesystems"][0]["requiredBytes"], free)
+            with patch.object(operator, "ssh_remote", return_value=json.dumps(report).encode()):
+                with self.assertRaisesRegex(operator.Refusal, "short 1 bytes"):
+                    operator._check_target_space("staging194", "space-194-aggregate", "static-main")
+
+    def test_staging194_cms_preflight_reports_default_npm_cache_filesystem_without_reconfiguring_it(self):
+        with tempfile.TemporaryDirectory(prefix="ikpk-194-npm-cache-space-") as temporary:
+            root = Path(temporary)
+            config = self._fixture(root, profile="staging194")
+            temp_root = root / "configured-temp"
+            temp_root.mkdir()
+            config["temporaryRoot"] = str(temp_root)
+            cms_home = root / "cms-home"
+            (cms_home / ".npm").mkdir(parents=True)
+            account = SimpleNamespace(pw_dir=str(cms_home), pw_gid=0)
+            with patch.object(rehearsal_host, "_validate_staging194_temporary_root", return_value=temp_root), \
+                 patch.object(rehearsal_host.pwd, "getpwnam", return_value=account):
+                report = rehearsal_host._space_preflight(config, "space-194-npm", "cms-update")
+            self.assertTrue(any("CMS npm cache" in item["labels"] for item in report["filesystems"]))
+            self.assertIn("cache growth and npmrc/environment overrides are not separately estimated",
+                          report["spaceNotes"][0])
 
 
 if __name__ == "__main__":

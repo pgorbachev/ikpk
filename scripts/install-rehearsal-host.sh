@@ -134,7 +134,30 @@ with open(sys.argv[1], encoding="utf-8") as source:
     config = json.load(source)
 import os, pwd, stat
 account = pwd.getpwnam(config["cmsUser"])
-profile = config.get("profile")
+profile = config.get("profile", "staging194")
+if profile == "staging194":
+    temp_parent = "/var/tmp"
+    temp_root = config.get("temporaryRoot")
+    if temp_root != "/var/tmp/ikpk-staging194":
+        raise SystemExit("staging194 temporary root must use its fixed host path")
+    parent_info = os.lstat(temp_parent)
+    if (not stat.S_ISDIR(parent_info.st_mode) or stat.S_ISLNK(parent_info.st_mode)
+            or parent_info.st_uid != 0 or not parent_info.st_mode & stat.S_ISVTX):
+        raise SystemExit("staging194 temporary parent must be a sticky root-owned directory")
+    temp_created = False
+    try:
+        os.mkdir(temp_root, 0o1770)
+        temp_created = True
+    except FileExistsError:
+        pass
+    if temp_created:
+        os.chown(temp_root, 0, account.pw_gid)
+        os.chmod(temp_root, 0o1770)
+    temp_info = os.lstat(temp_root)
+    if (not stat.S_ISDIR(temp_info.st_mode) or stat.S_ISLNK(temp_info.st_mode)
+            or temp_info.st_uid != 0 or temp_info.st_gid != account.pw_gid
+            or stat.S_IMODE(temp_info.st_mode) != 0o1770):
+        raise SystemExit("staging194 temporary root must be a root-owned CMS-group directory with mode 1770")
 home = account.pw_dir
 if not os.path.isabs(home) or home == "/":
     raise SystemExit("CMS service account has no safe absolute HOME")
