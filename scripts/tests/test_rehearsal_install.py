@@ -163,6 +163,60 @@ class InstalledEntrypointTests(unittest.TestCase):
                 self.assertEqual(run.returncode, 0, run.stderr)
                 self.assertEqual(calls.read_text(encoding="utf-8").splitlines(), expected)
 
+    def test_staging193_config_uses_staging194_helper_validation_profile(self):
+        installer = (ROOT / "scripts/install-rehearsal-host.sh").read_text(encoding="utf-8")
+        parser_start = installer.index("PREFIX=/usr/local")
+        parser_end = installer.index('\n[[ "$PREFIX"', parser_start)
+        parser = installer[parser_start:parser_end]
+
+        mapping_start = installer.index("  service_profile=$INSTALL_CONFIG_PROFILE", parser_end)
+        mapping_line_end = installer.index("\n", installer.index("&& service_profile=staging194", mapping_start))
+        mapping = installer[mapping_start:mapping_line_end]
+        validation_start = installer.index(
+            '  if ! PYTHONDONTWRITEBYTECODE=1 "$SBIN/ikpk-rehearsal" --profile ', parser_end)
+        validation_end = installer.index("\n  fi", validation_start) + len("\n  fi")
+        validation = installer[validation_start:validation_end]
+        ordered_blocks = "\n".join(
+            block for _, block in sorted(((mapping_start, mapping), (validation_start, validation)))
+        )
+
+        with tempfile.TemporaryDirectory(prefix="ikpk-profile-validation-") as temporary:
+            root = Path(temporary)
+            sbin = root / "sbin"
+            sbin.mkdir()
+            calls = root / "calls"
+            stub = sbin / "ikpk-rehearsal"
+            stub.write_text(
+                "#!/usr/bin/env bash\nprintf '%s\\n' \"$*\" >> \"$PROFILE_CALLS\"\n",
+                encoding="utf-8",
+            )
+            stub.chmod(0o755)
+
+            for option, expected in (
+                ("--staging193-config", "--profile staging194 validate-config"),
+                ("--initial-prod-config", "--profile initial-prod validate-config"),
+                ("--production-static-config", "--profile production-static validate-config"),
+                ("--production-paired-config", "--profile production-paired validate-config"),
+            ):
+                calls.unlink(missing_ok=True)
+                script = (
+                    "set -euo pipefail\n"
+                    f"set -- {option}\n"
+                    f"{parser}\n"
+                    f"SBIN={sbin}\n"
+                    "installed_config=0\n"
+                    f"{ordered_blocks}\n"
+                )
+                run = subprocess.run(
+                    ["bash", "-c", script],
+                    env={**os.environ, "PROFILE_CALLS": str(calls)},
+                    text=True,
+                    capture_output=True,
+                    check=False,
+                )
+                self.assertEqual(run.returncode, 0, run.stderr)
+                self.assertEqual(calls.read_text(encoding="utf-8").strip(), expected)
+
 
 if __name__ == "__main__":
     unittest.main()

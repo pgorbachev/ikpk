@@ -197,13 +197,13 @@ if profile == "production-paired":
         finally:
             os.close(fd)
 PY
-  if ! PYTHONDONTWRITEBYTECODE=1 "$SBIN/ikpk-rehearsal" --profile "$INSTALL_CONFIG_PROFILE" validate-config; then
+  service_profile=$INSTALL_CONFIG_PROFILE
+  [[ "$service_profile" == staging193 ]] && service_profile=staging194
+  if ! PYTHONDONTWRITEBYTECODE=1 "$SBIN/ikpk-rehearsal" --profile "$service_profile" validate-config; then
     if (( installed_config )); then rm -f -- "$CONFIG"; fi
     echo 'rehearsal config validation failed; no operation is enabled' >&2
     exit 2
   fi
-  service_profile=$INSTALL_CONFIG_PROFILE
-  [[ "$service_profile" == staging193 ]] && service_profile=staging194
   state_dir=$(python3 - "$CONFIG" <<'PY'
 import json, sys
 with open(sys.argv[1], encoding="utf-8") as source:
