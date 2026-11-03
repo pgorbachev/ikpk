@@ -324,6 +324,11 @@ def _space_preflight(config: dict[str, Any], operation_id: str, operation_kind: 
                               "installedSourceShaStatus": "known" if installed_source_sha else "unknown"}
     if production_static_capture:
         report["staticCaptureBytes"] = production_static_capture_bytes
+        if config.get("profile") == "production-static":
+            # browser_check exports the current static tree and proof JSON, not
+            # the source database, WAL, or capture media. This is an estimate;
+            # the current tree does not bound the next build's dist size.
+            report["staticExportEstimateBytes"] = static_bytes
     if operation_kind == "cms-update":
         backup_device = Path(config["backupRoot"])
         while not backup_device.exists():

@@ -1,12 +1,14 @@
 import hashlib
 import io
 import json
+import os
 import shlex
 import subprocess
 import tarfile
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 from scripts.rehearsal import staging193
@@ -21,6 +23,7 @@ def space_preflight_response(arguments):
         return json.dumps({"filesystems": [{"path": "/var/lib/test", "freeBytes": 1 << 40,
                                              "estimatedBytes": 1, "reserveBytes": 0,
                                              "requiredBytes": 1}], "backupBytes": 0,
+                            "staticExportEstimateBytes": 0,
                             "backupReserveBytes": 0}).encode()
     return None
 
@@ -442,9 +445,14 @@ class OperatorAdmissionTests(unittest.TestCase):
                     "operation_id": f"{profile}-explicit-preflight", "source_sha": SHA,
                     "backup_dir": None, "release_tag": None})()
                 with patch.object(staging193, "_check_local_space", return_value=[{"path": "/tmp"}]) as local_space, \
-                     patch.object(staging193, "_check_target_space", return_value={"filesystems": [{"path": "/target"}]}) as target_space:
+                     patch.object(staging193, "_check_target_space", return_value={"filesystems": [{"path": "/target"}],
+                         "staticExportEstimateBytes": 123}) as target_space:
                     result = staging193.invoke(args)
-                local_space.assert_called_once_with(SHA, profile, "static-main", None)
+                if profile == "production-static":
+                    local_space.assert_called_once_with(SHA, profile, "static-main", None,
+                        static_export_estimate_bytes=123)
+                else:
+                    local_space.assert_called_once_with(SHA, profile, "static-main", None)
                 target_space.assert_called_once_with(profile, args.operation_id, "static-main")
                 self.assertEqual(result["operationKind"], "static-main")
 
@@ -459,13 +467,15 @@ class OperatorAdmissionTests(unittest.TestCase):
         def ssh(_arguments, **_kwargs):
             return responses.pop(0)
         with patch.object(staging193, "_check_local_space", return_value=[{"path": "/tmp"}]) as local_space, \
-             patch.object(staging193, "_check_target_space", return_value={"filesystems": [{"path": "/target"}]}) as target_space, \
+             patch.object(staging193, "_check_target_space", return_value={"filesystems": [{"path": "/target"}],
+                 "staticExportEstimateBytes": 123}) as target_space, \
              patch.object(staging193, "validate_production_static_release", return_value=admission) as release_admission, \
              patch.object(staging193, "make_archive", return_value=(b"source archive", "a" * 64)), \
              patch.object(staging193, "ssh_remote", side_effect=ssh), \
              patch.object(staging193, "browser_check"):
             staging193.invoke(args)
-        local_space.assert_called_once_with(SHA, "production-static", "static-main", None)
+        local_space.assert_called_once_with(SHA, "production-static", "static-main", None,
+            static_export_estimate_bytes=123)
         target_space.assert_called_once_with("production-static", args.operation_id, "static-main")
         release_admission.assert_called_once_with(SHA, "v2026.1103.1")
 
@@ -482,6 +492,164 @@ class OperatorAdmissionTests(unittest.TestCase):
                     staging193.invoke(args)
                 admit.assert_not_called()
                 ssh.assert_not_called()
+
+    def _invoke_static_with_target_capacity_report(self, local_free_bytes):
+        source_sha = "bfa569b97c8def023e33da599f42e79b14a1120f"
+        source_bytes = staging193._source_tree_bytes(source_sha)
+        # The target report contains a large capture (database/WAL/media), but
+        # browser export omits those capture inputs and extracts only the current
+        # static tree plus snapshot proof files.
+        current_static_bytes = 2 * source_bytes
+        live_database_bytes = source_bytes // 2
+        live_media_bytes = 2 * source_bytes
+        static_capture_bytes = 2 * live_database_bytes + live_media_bytes
+        # Local browser export uses the target's current static tree estimate;
+        # DB/WAL/media remain part of target-side capacity accounting only.
+        target_export_estimate = current_static_bytes
+        target_capacity_estimate = current_static_bytes + static_capture_bytes
+        reserve = staging193._space_reserve_bytes(target_capacity_estimate)
+        source_required = source_bytes + staging193._space_reserve_bytes(source_bytes)
+        target_required = target_capacity_estimate + reserve
+        calls = []
+
+        def disk_usage(_path):
+            return SimpleNamespace(total=local_free_bytes * 2, used=local_free_bytes,
+                                   free=local_free_bytes)
+
+        def ssh(arguments, **kwargs):
+            calls.append((arguments, kwargs))
+            preflight = space_preflight_response(arguments)
+            if preflight is not None:
+                report = json.loads(preflight)
+                report["filesystems"][0].update({"estimatedBytes": target_capacity_estimate,
+                    "reserveBytes": reserve, "requiredBytes": target_required})
+                report["staticCaptureBytes"] = static_capture_bytes
+                report["staticExportEstimateBytes"] = target_export_estimate
+                return json.dumps(report).encode()
+            if arguments[0] == "static-main" and "--browser-digest" in arguments:
+                return json.dumps({"phase": "committed"}).encode()
+            if arguments[0] == "static-main":
+                return json.dumps({"phase": "browser-check-required",
+                                   "staticTreeSha256": "c" * 64}).encode()
+            if arguments[0] == "export-static-main":
+                return b"static candidate tar fixture"
+            raise AssertionError(f"unexpected fake remote command: {arguments!r}")
+
+        args = type("Args", (), {"profile": "production-static", "host": staging193.INITIAL_PROD_HOST,
+            "command": "static-main", "operation_id": "production-static-local-space",
+            "source_sha": source_sha, "release_tag": "v2026.1103.1",
+            "reuse_capture_operation_id": None, "backup_dir": None})()
+        provenance = {"sourceSha": source_sha, "runId": 123, "attempt": 1}
+        with patch.dict(os.environ, {"IKPK_REHEARSAL_SPACE_RESERVE_BYTES": "0"}), \
+             patch.object(staging193.shutil, "disk_usage", side_effect=disk_usage), \
+             patch.object(staging193, "validate_production_static_release", return_value=provenance) as release_admission, \
+             patch.object(staging193, "make_archive", return_value=(b"source archive", "a" * 64)), \
+             patch.object(staging193, "ssh_remote", side_effect=ssh), \
+             patch.object(staging193, "browser_check"):
+            try:
+                staging193.invoke(args)
+                refusal = None
+            except staging193.Refusal as error:
+                refusal = error
+        return {"sourceBytes": source_bytes, "currentStaticBytes": current_static_bytes,
+                "staticCaptureBytes": static_capture_bytes, "targetEstimate": target_capacity_estimate,
+                "staticExportEstimateBytes": target_export_estimate,
+                "reserveBytes": reserve, "sourceRequiredBytes": source_required,
+                "targetRequiredBytes": target_required,
+                "localFreeBytes": local_free_bytes, "refusal": refusal,
+                "releaseAdmission": release_admission, "calls": calls}
+
+    def test_production_static_local_export_ignores_remote_capture_bytes(self):
+        observed = self._invoke_static_with_target_capacity_report(2_200_000_000)
+        self.assertLess(observed["sourceRequiredBytes"], observed["localFreeBytes"])
+        self.assertLess(observed["localFreeBytes"], observed["targetRequiredBytes"])
+        local_estimate = observed["sourceBytes"] + observed["currentStaticBytes"]
+        local_required = local_estimate + staging193._space_reserve_bytes(local_estimate)
+        self.assertGreater(observed["localFreeBytes"], local_required)
+        details = (f"source={observed['sourceBytes']}, static={observed['targetEstimate']}, "
+                   f"reserve={observed['reserveBytes']}, local free={observed['localFreeBytes']}, "
+                   f"release_admission_called={observed['releaseAdmission'].called}, "
+                   f"remote_commands={[call[0][0] for call in observed['calls']]}")
+        self.assertIsNone(observed["refusal"], details)
+        observed["releaseAdmission"].assert_called_once_with(
+            "bfa569b97c8def023e33da599f42e79b14a1120f", "v2026.1103.1")
+        self.assertEqual([call[0][0] for call in observed["calls"]],
+                         ["status", "static-main", "export-static-main", "static-main"])
+
+    def test_production_static_low_local_export_capacity_refuses_before_release_or_prepare(self):
+        observed = self._invoke_static_with_target_capacity_report(1_500_000_000)
+        local_estimate = observed["sourceBytes"] + observed["currentStaticBytes"]
+        local_required = local_estimate + staging193._space_reserve_bytes(local_estimate)
+        self.assertLess(observed["sourceRequiredBytes"], observed["localFreeBytes"])
+        self.assertLess(observed["localFreeBytes"], local_required)
+        details = (f"source={observed['sourceBytes']}, static={observed['currentStaticBytes']}, "
+                   f"local required={local_required}, local free={observed['localFreeBytes']}, "
+                   f"release_admission_called={observed['releaseAdmission'].called}, "
+                   f"remote_commands={[call[0][0] for call in observed['calls']]}")
+        self.assertIsNotNone(observed["refusal"], details)
+        self.assertFalse(observed["releaseAdmission"].called, details)
+        self.assertEqual([call[0][0] for call in observed["calls"]], ["status"], details)
+
+    def test_production_static_local_capacity_with_target_estimate_and_reserve_passes(self):
+        source_sha = "bfa569b97c8def023e33da599f42e79b14a1120f"
+        source_bytes = staging193._source_tree_bytes(source_sha)
+        target_estimate = 2 * source_bytes
+        local_estimate = source_bytes + target_estimate
+        required = local_estimate + staging193._space_reserve_bytes(local_estimate)
+        observed = self._invoke_static_with_target_capacity_report(required + 1_000_000)
+        self.assertIsNone(observed["refusal"])
+        observed["releaseAdmission"].assert_called_once_with(source_sha, "v2026.1103.1")
+        self.assertEqual([call[0][0] for call in observed["calls"]],
+                         ["status", "static-main", "export-static-main", "static-main"])
+
+    def test_local_export_estimate_is_charged_to_temp_and_aggregated_by_device(self):
+        source_bytes = 100
+        temp_path = Path(tempfile.gettempdir())
+        checkout_path = staging193.ROOT
+        real_stat = Path.stat
+
+        class DeviceStat:
+            def __init__(self, result, device):
+                self._result = result
+                self.st_dev = device
+
+            def __getattr__(self, name):
+                return getattr(self._result, name)
+
+        for export_bytes in (50, 500):
+            for same_device in (False, True):
+                with self.subTest(export_bytes=export_bytes, same_device=same_device):
+                    temp_device = 101
+                    checkout_device = temp_device if same_device else 202
+
+                    def stat_with_devices(path, *args, **kwargs):
+                        result = real_stat(path, *args, **kwargs)
+                        if path == temp_path:
+                            return DeviceStat(result, temp_device)
+                        if path == checkout_path:
+                            return DeviceStat(result, checkout_device)
+                        return result
+
+                    def disk_usage(_path):
+                        return SimpleNamespace(total=3 << 30, used=0, free=3 << 30)
+
+                    with patch.object(staging193, "_source_tree_bytes", return_value=source_bytes), \
+                         patch.object(Path, "stat", new=stat_with_devices), \
+                         patch.object(staging193.shutil, "disk_usage", side_effect=disk_usage):
+                        report = staging193._check_local_space("a" * 40, "production-static", "static-main",
+                            None, static_export_estimate_bytes=export_bytes)
+
+                    temp_item = next(item for item in report if "temporary data" in item["label"])
+                    self.assertEqual(temp_item["staticExportEstimateBytes"], export_bytes)
+                    if same_device:
+                        self.assertEqual(len(report), 1)
+                        self.assertIn("source checkout", temp_item["label"])
+                        self.assertEqual(temp_item["estimatedBytes"], source_bytes + export_bytes)
+                    else:
+                        self.assertEqual(len(report), 2)
+                        checkout_item = next(item for item in report if "source checkout" in item["label"])
+                        self.assertEqual(temp_item["estimatedBytes"], max(source_bytes, export_bytes))
+                        self.assertEqual(checkout_item["estimatedBytes"], source_bytes)
 
     def test_production_static_profile_refuses_cms_mutating_commands_before_ci_or_ssh(self):
         for command in ("cms-update", "static-publish", "recover"):

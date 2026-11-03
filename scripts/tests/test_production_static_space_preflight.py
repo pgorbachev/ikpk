@@ -80,6 +80,9 @@ class ProductionStaticSpacePreflightTest(unittest.TestCase):
                            + rehearsal_host._filesystem_bytes(Path(config["mediaRoots"][1]["path"]), required=True))
             self.assertGreaterEqual(source_fs["estimatedBytes"], input_bytes)
             self.assertGreaterEqual(report["staticCaptureBytes"], input_bytes)
+            static_bytes = rehearsal_host._filesystem_bytes(
+                rehearsal_host._current_target(Path(config["currentStatic"])), required=True)
+            self.assertEqual(report["staticExportEstimateBytes"], static_bytes)
             self.assertNotIn("static source releases", other_fs["labels"])
             self.assertNotEqual(source_fs, other_fs)
             self.assertEqual(report["backupBytes"], 0)

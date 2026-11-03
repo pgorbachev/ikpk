@@ -79,7 +79,7 @@ class ProductionStaticReleaseAdmissionTests(unittest.TestCase):
                                   release_tag=RELEASE_TAG)
         with patch.object(staging193, "capture", side_effect=fake_gh_or_git), \
              patch.object(staging193, "_check_local_space", return_value=[]), \
-             patch.object(staging193, "_check_target_space", return_value={}), \
+             patch.object(staging193, "_check_target_space", return_value={"staticExportEstimateBytes": 0}), \
              patch.object(staging193, "make_archive") as make_archive, \
              patch.object(staging193, "ssh_remote") as ssh:
             with self.assertRaisesRegex(staging193.Refusal, "not successful"):
@@ -124,7 +124,7 @@ class ProductionStaticReleaseAdmissionTests(unittest.TestCase):
             chat_loader_src=None, backup_dir=None)
         with patch.object(staging193, "capture", side_effect=fake_capture), \
              patch.object(staging193, "_check_local_space", return_value=[]), \
-             patch.object(staging193, "_check_target_space", return_value={}), \
+             patch.object(staging193, "_check_target_space", return_value={"staticExportEstimateBytes": 0}), \
              patch.object(staging193, "make_archive", return_value=(b"source archive", "a" * 64)) as archive, \
              patch.object(staging193, "ssh_remote", side_effect=fake_ssh), \
              patch.object(staging193, "browser_check"):

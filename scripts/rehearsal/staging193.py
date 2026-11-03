@@ -401,16 +401,62 @@ def _source_tree_bytes(sha: str) -> int:
         raise Refusal(f"cannot determine selected source tree size for {sha}: {error}") from error
 
 
-def _check_local_space(sha: Optional[str], profile: str, command: str, backup_dir: Optional[str]) -> list[dict]:
+def _check_local_space(sha: Optional[str], profile: str, command: str, backup_dir: Optional[str],
+                       *, static_export_estimate_bytes: Optional[int] = None) -> list[dict]:
     estimated_bytes = _source_tree_bytes(sha or "")
-    reserve = _space_reserve_bytes(estimated_bytes)
-    required = estimated_bytes + reserve
     paths = {"temporary data": Path(tempfile.gettempdir()), "source checkout": ROOT}
     if command == "cms-update":
         default = Path.home() / (".local/share/ikpk-production-paired/backups" if profile == "production-paired"
                                  else ".local/share/ikpk-initial-prod/backups" if profile == "initial-prod"
                                  else ".local/share/ikpk-rehearsal/staging194/backups")
         paths["off-host backup"] = Path(backup_dir).expanduser() if backup_dir else default
+    if static_export_estimate_bytes is not None:
+        if (profile != "production-static" or command != "static-main"
+                or type(static_export_estimate_bytes) is not int or static_export_estimate_bytes < 0):
+            raise Refusal("static export estimate is valid only for production-static static-main")
+        # The Git archive is held in memory; browser export extraction writes
+        # only below tempfile.gettempdir(). If temp and checkout use different
+        # devices, preserve the former source-size headroom on each and use the
+        # larger of source or export on temp. If they share a device, count the
+        # source headroom once plus the target-derived export proxy.
+        estimates = [("temporary data", paths["temporary data"]),
+                     ("source checkout", paths["source checkout"])]
+        by_device: dict[int, dict] = {}
+        for label, raw_path in estimates:
+            checked_path = _existing_path(raw_path)
+            disk = shutil.disk_usage(checked_path)
+            device = checked_path.stat().st_dev
+            item = by_device.get(device)
+            if item is None:
+                by_device[device] = {"path": str(checked_path), "labels": [label],
+                                     "freeBytes": disk.free}
+            else:
+                item["labels"].append(label)
+                item["freeBytes"] = min(item["freeBytes"], disk.free)
+        report = []
+        for item in by_device.values():
+            if "temporary data" in item["labels"] and "source checkout" in item["labels"]:
+                estimated = estimated_bytes + static_export_estimate_bytes
+            elif "temporary data" in item["labels"]:
+                estimated = max(estimated_bytes, static_export_estimate_bytes)
+            else:
+                estimated = estimated_bytes
+            item["estimatedBytes"] = estimated
+            reserve = _space_reserve_bytes(item["estimatedBytes"])
+            required = item["estimatedBytes"] + reserve
+            if item["freeBytes"] < required:
+                label = " + ".join(item["labels"])
+                raise Refusal(f"insufficient free space on {label} filesystem ({item['path']}): "
+                              f"need {required} bytes, have {item['freeBytes']} bytes, "
+                              f"short {required - item['freeBytes']} bytes")
+            report.append({"label": " + ".join(item["labels"]), "path": item["path"],
+                           "freeBytes": item["freeBytes"], "estimatedBytes": item["estimatedBytes"],
+                           "reserveBytes": reserve, "requiredBytes": required,
+                           "staticExportEstimateBytes": static_export_estimate_bytes
+                           if "temporary data" in item["labels"] else 0})
+        return report
+    reserve = _space_reserve_bytes(estimated_bytes)
+    required = estimated_bytes + reserve
     report = []
     for label, raw_path in paths.items():
         checked_path = _existing_path(raw_path)
@@ -880,9 +926,18 @@ def invoke(args: argparse.Namespace, *, admission: Optional[dict] = None) -> Opt
     if args.command == "space-preflight" or automatic_static_capacity:
         if preflight_kind not in ("cms-update", "static-main"):
             raise Refusal("space-preflight requires --for cms-update or --for static-main")
-        local_space = _check_local_space(getattr(args, "source_sha", None), profile, preflight_kind,
-                                         getattr(args, "backup_dir", None))
-        target_space = _check_target_space(profile, args.operation_id, preflight_kind)
+        static_local_export_estimate = (profile == "production-static" and preflight_kind == "static-main")
+        if static_local_export_estimate:
+            target_space = _check_target_space(profile, args.operation_id, preflight_kind)
+            export_estimate = target_space.get("staticExportEstimateBytes")
+            if type(export_estimate) is not int or export_estimate < 0:
+                raise Refusal("target preflight omitted a valid static export estimate")
+            local_space = _check_local_space(getattr(args, "source_sha", None), profile, preflight_kind,
+                getattr(args, "backup_dir", None), static_export_estimate_bytes=export_estimate)
+        else:
+            local_space = _check_local_space(getattr(args, "source_sha", None), profile, preflight_kind,
+                                             getattr(args, "backup_dir", None))
+            target_space = _check_target_space(profile, args.operation_id, preflight_kind)
         if preflight_kind == "cms-update" and type(target_space.get("backupBytes")) is int:
             local_backup = _check_local_backup_space(getattr(args, "backup_dir", None), profile,
                 target_space["backupBytes"] + target_space.get("backupReserveBytes", 0))
