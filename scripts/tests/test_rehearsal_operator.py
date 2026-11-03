@@ -494,7 +494,9 @@ class OperatorAdmissionTests(unittest.TestCase):
                 ssh.assert_not_called()
 
     def _invoke_static_with_target_capacity_report(self, local_free_bytes):
-        source_sha = "bfa569b97c8def023e33da599f42e79b14a1120f"
+        source_sha = subprocess.check_output(
+            ["git", "rev-parse", "HEAD"], cwd=staging193.ROOT, text=True
+        ).strip()
         source_bytes = staging193._source_tree_bytes(source_sha)
         # The target report contains a large capture (database/WAL/media), but
         # browser export omits those capture inputs and extracts only the current
@@ -560,7 +562,16 @@ class OperatorAdmissionTests(unittest.TestCase):
                 "releaseAdmission": release_admission, "calls": calls}
 
     def test_production_static_local_export_ignores_remote_capture_bytes(self):
-        observed = self._invoke_static_with_target_capacity_report(2_200_000_000)
+        source_sha = subprocess.check_output(
+            ["git", "rev-parse", "HEAD"], cwd=staging193.ROOT, text=True
+        ).strip()
+        source_bytes = staging193._source_tree_bytes(source_sha)
+        local_estimate = source_bytes + 2 * source_bytes
+        local_required = local_estimate + staging193._space_reserve_bytes(local_estimate)
+        target_estimate = 2 * source_bytes + (2 * (source_bytes // 2) + 2 * source_bytes)
+        target_required = target_estimate + staging193._space_reserve_bytes(target_estimate)
+        local_free_bytes = (local_required + target_required) // 2
+        observed = self._invoke_static_with_target_capacity_report(local_free_bytes)
         self.assertLess(observed["sourceRequiredBytes"], observed["localFreeBytes"])
         self.assertLess(observed["localFreeBytes"], observed["targetRequiredBytes"])
         local_estimate = observed["sourceBytes"] + observed["currentStaticBytes"]
@@ -572,16 +583,28 @@ class OperatorAdmissionTests(unittest.TestCase):
                    f"remote_commands={[call[0][0] for call in observed['calls']]}")
         self.assertIsNone(observed["refusal"], details)
         observed["releaseAdmission"].assert_called_once_with(
-            "bfa569b97c8def023e33da599f42e79b14a1120f", "v2026.1103.1")
+            source_sha, "v2026.1103.1")
         self.assertEqual([call[0][0] for call in observed["calls"]],
                          ["status", "static-main", "export-static-main", "static-main"])
 
     def test_production_static_low_local_export_capacity_refuses_before_release_or_prepare(self):
-        observed = self._invoke_static_with_target_capacity_report(1_500_000_000)
+        source_sha = subprocess.check_output(
+            ["git", "rev-parse", "HEAD"], cwd=staging193.ROOT, text=True
+        ).strip()
+        source_bytes = staging193._source_tree_bytes(source_sha)
+        source_required = source_bytes + staging193._space_reserve_bytes(source_bytes)
+        local_estimate = source_bytes + 2 * source_bytes
+        local_required = local_estimate + staging193._space_reserve_bytes(local_estimate)
+        export_required = 2 * source_bytes + staging193._space_reserve_bytes(2 * source_bytes)
+        local_free_bytes = (source_required + export_required) // 2
+        observed = self._invoke_static_with_target_capacity_report(local_free_bytes)
         local_estimate = observed["sourceBytes"] + observed["currentStaticBytes"]
         local_required = local_estimate + staging193._space_reserve_bytes(local_estimate)
         self.assertLess(observed["sourceRequiredBytes"], observed["localFreeBytes"])
         self.assertLess(observed["localFreeBytes"], local_required)
+        export_required = observed["currentStaticBytes"] + staging193._space_reserve_bytes(
+            observed["currentStaticBytes"])
+        self.assertLess(observed["localFreeBytes"], export_required)
         details = (f"source={observed['sourceBytes']}, static={observed['currentStaticBytes']}, "
                    f"local required={local_required}, local free={observed['localFreeBytes']}, "
                    f"release_admission_called={observed['releaseAdmission'].called}, "
@@ -591,7 +614,9 @@ class OperatorAdmissionTests(unittest.TestCase):
         self.assertEqual([call[0][0] for call in observed["calls"]], ["status"], details)
 
     def test_production_static_local_capacity_with_target_estimate_and_reserve_passes(self):
-        source_sha = "bfa569b97c8def023e33da599f42e79b14a1120f"
+        source_sha = subprocess.check_output(
+            ["git", "rev-parse", "HEAD"], cwd=staging193.ROOT, text=True
+        ).strip()
         source_bytes = staging193._source_tree_bytes(source_sha)
         target_estimate = 2 * source_bytes
         local_estimate = source_bytes + target_estimate
