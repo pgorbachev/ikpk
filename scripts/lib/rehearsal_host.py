@@ -98,6 +98,241 @@ def _maintenance_banner(config: dict[str, Any]) -> str:
     return value
 
 
+def _filesystem_bytes(path: Path, *, required: bool = False, strict_tree: bool = False) -> int:
+    path = Path(path)
+    if path.is_symlink():
+        raise HostFailure(f"cannot estimate free-space requirement through symlink: {path}")
+    if required and not path.exists():
+        raise HostFailure(f"required space-estimate source is unavailable: {path}")
+    if path.is_file():
+        return path.stat().st_size
+    if not path.is_dir():
+        if required:
+            raise HostFailure(f"required space-estimate source is unavailable: {path}")
+        return 0
+    total = 0
+    for item in path.rglob("*"):
+        if item.is_symlink():
+            if strict_tree:
+                raise HostFailure(f"cannot estimate required free space through symlink: {item}")
+            continue
+        try:
+            if item.is_file():
+                total += item.stat().st_size
+            elif strict_tree and not item.is_dir():
+                raise HostFailure(f"required space-estimate tree contains a non-regular object: {item}")
+        except OSError as error:
+            raise HostFailure(f"cannot estimate required free space under {path}: {error}") from error
+    return total
+
+
+def _installed_paired_cms_source_sha(config: dict[str, Any]) -> Optional[str]:
+    """Trust only the service-bound operation workspace and its existing identity marker."""
+    if config.get("profile") != "production-paired":
+        return None
+    try:
+        installed_env = _paired_cms_source_env(config)
+        candidate_sha = installed_env.get("IKPK_INSTALLED_COMMIT")
+        workspace_text = installed_env.get("IKPK_BUILD_WORKSPACE")
+        trusted_root = Path(config.get("siteBuildWorkspaceRoot", ""))
+        workspace = Path(workspace_text) if isinstance(workspace_text, str) else Path("/")
+        if (not isinstance(candidate_sha, str) or not SHA_RE.fullmatch(candidate_sha)
+                or trusted_root != PRODUCTION_PAIRED_WORKSPACE_ROOT
+                or trusted_root.is_symlink() or workspace.is_symlink()
+                or workspace.parent != trusted_root):
+            return None
+        match = re.fullmatch(rf"{re.escape(candidate_sha)}-([A-Za-z0-9][A-Za-z0-9._-]{{0,127}})",
+                             workspace.name)
+        if not match:
+            return None
+        operation_id = match.group(1)
+        if workspace.resolve(strict=True).parent != trusted_root.resolve(strict=True):
+            return None
+        marker = workspace / ".ikpk-workspace-identity.json"
+        info = marker.lstat()
+        if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
+            return None
+        identity = json.loads(marker.read_text(encoding="utf-8"))
+        if identity == {"sourceSha": candidate_sha, "operationId": operation_id}:
+            release_root = Path(config["releaseRoot"]).resolve(strict=True)
+            source_root = _candidate_root(config, candidate_sha, operation_id)
+            if (source_root.is_symlink() or not source_root.is_dir()
+                    or source_root.resolve(strict=True) != source_root
+                    or source_root.parent != release_root):
+                return None
+            artifact = _cms_artifact_path(source_root, operation_id)
+            current_cms = _current_target(Path(config["currentCms"]))
+            artifact_resolved = artifact.resolve(strict=True)
+            if (artifact.is_symlink() or not artifact.is_dir()
+                    or not artifact_resolved.is_relative_to(source_root)
+                    or current_cms != artifact_resolved):
+                return None
+            return candidate_sha
+    except (HostFailure, OSError, ValueError, UnicodeError, KeyError):
+        return None
+    return None
+
+
+def _required_static_capture_tree_bytes(root: Path) -> int:
+    """Measure an entire capture source or refuse when any tree member is ambiguous."""
+    total = 0
+    pending = [root]
+    while pending:
+        directory = pending.pop()
+        try:
+            with os.scandir(directory) as entries:
+                for entry in entries:
+                    info = entry.stat(follow_symlinks=False)
+                    if stat.S_ISDIR(info.st_mode):
+                        pending.append(Path(entry.path))
+                    elif stat.S_ISREG(info.st_mode) and info.st_nlink == 1:
+                        total += info.st_size
+                    else:
+                        raise HostFailure(f"required media tree contains an unsafe object: {entry.path}")
+        except OSError as error:
+            raise HostFailure(f"cannot completely estimate required media tree under {root}: {error}") from error
+    return total
+
+
+def _space_preflight(config: dict[str, Any], operation_id: str, operation_kind: str) -> dict[str, Any]:
+    """Estimate each affected filesystem from current releases, backup inputs, and a stated reserve."""
+    needed = ("currentCms", "currentStatic", "releaseRoot", "staticReleaseRoot", "stateDir")
+    if operation_kind == "cms-update":
+        needed += ("cmsDatabase", "mediaRoots", "backupRoot")
+    production_static_capture_bytes = 0
+    production_static_capture = (operation_kind == "static-main"
+                                 and config.get("profile") in ("production-static", "production-paired"))
+    if production_static_capture:
+        needed += ("cmsDatabase", "mediaRoots")
+    if not all(key in config for key in needed):
+        raise HostFailure("host configuration is incomplete for read-only space preflight")
+    current_cms = _current_target(Path(config["currentCms"]))
+    current_static = _current_target(Path(config["currentStatic"]))
+    cms_bytes = _filesystem_bytes(current_cms) if operation_kind == "cms-update" else 0
+    static_bytes = _filesystem_bytes(current_static)
+    backup_bytes = 0
+    backup_archive_bytes = 0
+    database_bytes = 0
+    live_database_bytes = 0
+    backup_members = 0
+    if operation_kind == "cms-update":
+        database = Path(config["cmsDatabase"])
+        database_info = database.lstat()
+        if not stat.S_ISREG(database_info.st_mode):
+            raise HostFailure(f"required live database is not a regular file: {database}")
+        database_bytes = _filesystem_bytes(database, required=True)
+        live_database_bytes = database_bytes
+        backup_archive = Path(config["backupRoot"]) / operation_id / "backup.tar"
+        if backup_archive.is_file() and not backup_archive.is_symlink():
+            backup_archive_bytes = backup_archive.stat().st_size
+            backup_bytes = backup_archive_bytes
+        else:
+            capture_bytes = database_bytes
+            backup_members = 4  # database.sqlite, media directory, and the two manifests
+            for sidecar in (Path(str(database) + "-wal"), Path(str(database) + "-shm")):
+                sidecar_bytes = _filesystem_bytes(sidecar)
+                capture_bytes += sidecar_bytes
+                live_database_bytes += sidecar_bytes
+                backup_members += int(sidecar_bytes > 0)
+            for media in config["mediaRoots"]:
+                media_path = Path(media["path"])
+                if media_path.is_symlink() or not media_path.is_dir():
+                    raise HostFailure(f"required media source is unavailable or unsafe: {media_path}")
+                capture_bytes += _filesystem_bytes(media_path, required=True, strict_tree=True)
+                backup_members += sum(1 for item in media_path.rglob("*"))
+            # _backup keeps the captured database/media and a second tar containing those bytes.
+            # Per-member tar headers and padding can add up to 1 KiB per entry.
+            tar_overhead = 1024 * (backup_members + 1)
+            backup_archive_bytes = capture_bytes + tar_overhead
+            backup_bytes = capture_bytes + backup_archive_bytes
+    elif production_static_capture:
+        # Production static-main keeps the live CMS in place. Preparation writes a
+        # read-only SQLite backup snapshot, copies that snapshot into the sealed
+        # capture, and copies every configured media tree into the same source root.
+        # The first two files coexist throughout the build; the source DB/WAL remain
+        # live and are inputs only, not a CMS backup archive.
+        database = Path(config["cmsDatabase"])
+        database_info = database.lstat()
+        if not stat.S_ISREG(database_info.st_mode) or database_info.st_nlink != 1:
+            raise HostFailure(f"required live database is not a safe regular file: {database}")
+        database_bytes = _filesystem_bytes(database, required=True)
+        wal = Path(str(database) + "-wal")
+        wal_bytes = 0
+        if os.path.lexists(wal):
+            wal_info = wal.lstat()
+            if not stat.S_ISREG(wal_info.st_mode) or wal_info.st_nlink != 1:
+                raise HostFailure(f"required SQLite WAL is not a safe regular file: {wal}")
+            wal_bytes = wal_info.st_size
+        media_roots = config["mediaRoots"]
+        if not isinstance(media_roots, list) or not media_roots:
+            raise HostFailure("production-static mediaRoots must be a non-empty list")
+        media_bytes = 0
+        for item in media_roots:
+            if (not isinstance(item, dict) or not isinstance(item.get("path"), str)
+                    or not isinstance(item.get("prefix"), str)
+                    or not PREFIX_RE.fullmatch(item["prefix"])):
+                raise HostFailure("production-static mediaRoots contains an incomplete entry")
+            media_path = Path(item["path"])
+            if media_path.is_symlink() or not media_path.is_dir():
+                raise HostFailure(f"required media source is unavailable or unsafe: {media_path}")
+            media_bytes += _required_static_capture_tree_bytes(media_path)
+        # SQLite's read-only backup may materialize WAL pages into the snapshot.
+        # Bound each of the two simultaneously present DB copies by DB + WAL.
+        production_static_capture_bytes = 2 * (database_bytes + wal_bytes) + media_bytes
+    configured_reserve = config.get("spaceReserveBytes", 0)
+    if type(configured_reserve) is not int or configured_reserve < 0:
+        raise HostFailure("spaceReserveBytes must be a non-negative integer")
+    base_needed: dict[int, dict[str, Any]] = {}
+    candidates = [("temporary data", Path(tempfile.gettempdir()), cms_bytes + static_bytes)]
+    if operation_kind == "cms-update":
+        candidates.append(("CMS releases", Path(config["releaseRoot"]), cms_bytes + static_bytes))
+    else:
+        candidates.append(("static source releases", Path(config["releaseRoot"]),
+                           static_bytes + production_static_capture_bytes))
+    candidates.extend((
+        ("static releases", Path(config["staticReleaseRoot"]), static_bytes),
+        ("operation state", Path(config["stateDir"]), 4096),
+    ))
+    if operation_kind == "cms-update":
+        candidates.append(("backups", Path(config["backupRoot"]), backup_bytes))
+        candidates.append(("live database replacement", Path(config["cmsDatabase"]).parent,
+                           live_database_bytes))
+    if operation_kind == "cms-update" and config.get("siteBuildWorkspaceRoot"):
+        candidates.append(("site build workspace", Path(config["siteBuildWorkspaceRoot"]), cms_bytes + static_bytes))
+    for label, path, required in candidates:
+        while not path.exists():
+            path = path.parent
+        usage = shutil.disk_usage(path)
+        device = path.stat().st_dev
+        current = base_needed.get(device)
+        if current is None:
+            base_needed[device] = {"path": str(path), "labels": [label], "freeBytes": usage.free,
+                                   "estimatedBytes": required}
+        else:
+            current["labels"].append(label)
+            current["estimatedBytes"] += required
+    for item in base_needed.values():
+        proportional_reserve = (item["estimatedBytes"] + 3) // 4
+        item["reserveBytes"] = max(1_073_741_824, configured_reserve, proportional_reserve)
+        item["requiredBytes"] = item["estimatedBytes"] + item["reserveBytes"]
+    installed_source_sha = _installed_paired_cms_source_sha(config)
+    report: dict[str, Any] = {"filesystems": list(base_needed.values()),
+                              "reservePolicy": "max(1 GiB, configured reserve, 25% of estimate)",
+                              "configuredReserveBytes": configured_reserve,
+                              "backupBytes": backup_archive_bytes,
+                              "installedSourceSha": installed_source_sha,
+                              "installedSourceShaStatus": "known" if installed_source_sha else "unknown"}
+    if production_static_capture:
+        report["staticCaptureBytes"] = production_static_capture_bytes
+    if operation_kind == "cms-update":
+        backup_device = Path(config["backupRoot"])
+        while not backup_device.exists():
+            backup_device = backup_device.parent
+        device_item = base_needed[backup_device.stat().st_dev]
+        report["backupReserveBytes"] = device_item["reserveBytes"]
+    return report
+
+
 def _root_config(path: Path, expected_profile: str = "staging194") -> dict[str, Any]:
     try:
         info = path.lstat()
@@ -3673,6 +3908,11 @@ def dispatch(args: argparse.Namespace) -> dict[str, Any]:
     if (profile == "initial-prod" and args.action not in ("validate-config", "cleanup-site")
             and args.operation_id != INITIAL_PROD_OPERATION_ID):
         raise HostFailure("initial-prod accepts only its fixed single-use operation ID")
+    if getattr(args, "space_preflight", False):
+        operation_kind = getattr(args, "space_preflight_for", None)
+        if args.action != "status" or operation_kind not in ("cms-update", "static-main"):
+            raise HostFailure("space preflight is available only through status")
+        return _space_preflight(config, args.operation_id, operation_kind)
     state = RehearsalState(Path(config["stateDir"]))
     destination_lock = (nullcontext() if args.action == "status"
                         else _destination_publication_lock(config, wait=args.action == "cleanup-site"))
@@ -3834,6 +4074,9 @@ def main(argv: Optional[list[str]] = None) -> int:
             command.add_argument("--rollback-committed", action="store_true")
             command.add_argument("--operator")
             command.add_argument("--reason")
+        if name == "status":
+            command.add_argument("--space-preflight", action="store_true")
+            command.add_argument("--space-preflight-for", choices=("cms-update", "static-main"))
     args = parser.parse_args(argv)
     try:
         if args.action == "validate-config":

@@ -34,6 +34,15 @@ def sha(payload: bytes) -> str:
     return hashlib.sha256(payload).hexdigest()
 
 
+def space_preflight_response(arguments):
+    if arguments[:1] == ["status"] and "--space-preflight" in arguments:
+        return json.dumps({"filesystems": [{"path": "/var/lib/test", "freeBytes": 1 << 40,
+                                             "estimatedBytes": 1, "reserveBytes": 0,
+                                             "requiredBytes": 1}], "backupBytes": 0,
+                            "backupReserveBytes": 0}).encode()
+    return None
+
+
 def backup_archive(operation_id="operator-test"):
     with tempfile.TemporaryDirectory(prefix="ikpk-offhost-source-") as temporary:
         root = Path(temporary)
@@ -1829,18 +1838,24 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
             self.assertEqual(metadata, {"operationId": "durable-op", "sourceSha": "a" * 40,
                                         "sha256": sha(archive)})
 
-    def test_production_preflight_stops_before_cms_update_when_old_schema_commit_is_missing(self):
+    def test_production_paired_direct_cms_update_checks_old_schema_before_source_admission(self):
         source_sha = "c" * 40
         status = json.dumps({"phase": "idle", "oldPair": {"cmsPath":
             f"/opt/ikpk-cms/releases/{source_sha}-old-release/cms-artifact"}}).encode()
         args = Namespace(profile="production-paired", command="cms-update", host=None,
                          operation_id="shallow-preflight")
-        with patch.object(operator, "ssh_remote", return_value=status) as remote, \
+        def ssh(arguments, **_kwargs):
+            preflight = space_preflight_response(arguments)
+            return preflight if preflight is not None else status
+
+        with patch.object(operator, "_source_tree_bytes", return_value=10), \
+             patch.object(operator, "ssh_remote", side_effect=ssh) as remote, \
              patch.object(operator, "capture", side_effect=operator.Refusal("exact old CMS commit missing")):
             with self.assertRaisesRegex(operator.Refusal, "exact old CMS commit missing"):
                 operator.invoke(args)
         self.assertEqual(remote.call_count, 1)
-        self.assertEqual(remote.call_args.args[0][0], "status")
+        self.assertEqual(remote.call_args_list[0].args[0][0], "status")
+        self.assertNotIn("--space-preflight", remote.call_args_list[0].args[0])
 
     def test_production_recover_reopens_unchanged_pair_before_reading_partial_local_backup(self):
         with tempfile.TemporaryDirectory(prefix="ikpk-no-mutation-cli-recovery-") as temporary:
@@ -1917,6 +1932,8 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
         calls = []
         def ssh(arguments, **_kwargs):
             calls.append(arguments)
+            preflight = space_preflight_response(arguments)
+            if preflight is not None: return preflight
             if arguments[0] == "status": return status
             if arguments[0] == "export-backup": return archive
             if arguments[0] == "cms-update" and "--offhost-sha256" in arguments:
@@ -1931,7 +1948,8 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
             tsx.parent.mkdir(parents=True); tsx.touch()
             args = Namespace(profile="production-paired", command="cms-update", host=None,
                              operation_id="production-op", source_sha=source_sha, backup_dir=temporary)
-            with patch.object(operator, "ssh_remote", side_effect=ssh), \
+            with patch.object(operator, "_source_tree_bytes", return_value=10), \
+                 patch.object(operator, "ssh_remote", side_effect=ssh), \
                  patch.object(operator, "ROOT", backup_dir), \
                  patch.object(operator, "validate_production_paired_admission", return_value={"runId": 7, "attempt": 2}), \
                  patch.object(operator, "make_archive", return_value=(b"source archive", "e" * 64)), \
@@ -1943,7 +1961,9 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
             metadata = json.loads((backup_dir / "production-op.json").read_text(encoding="utf-8"))
             self.assertEqual(metadata["snapshotFingerprint"], fingerprint)
             self.assertNotIn("provenanceLineage", metadata)
-            self.assertEqual([call[0] for call in calls], ["status", "cms-update", "export-backup", "status", "cms-update"])
+            operation_calls = [call for call in calls if "--space-preflight" not in call]
+            self.assertEqual([call[0] for call in operation_calls],
+                             ["status", "cms-update", "export-backup", "status", "cms-update"])
 
     def test_production_static_acceptance_refuses_snapshot_different_from_operation_backup(self):
         source_sha = "c" * 40

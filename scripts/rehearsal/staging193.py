@@ -69,7 +69,7 @@ def capture_bytes(argv: list[str]) -> bytes:
     return result.stdout
 
 
-def validate_sha_and_ci(sha: str, profile: str = "staging194") -> dict:
+def validate_sha_and_ci(sha: str, profile: str = "staging194", *, require_current_head: bool = True) -> dict:
     if profile not in ("staging194", "staging194-dev", "staging194-main", "initial-prod"):
         raise Refusal("unknown fixed rehearsal profile")
     if not SHA.fullmatch(sha):
@@ -85,7 +85,7 @@ def validate_sha_and_ci(sha: str, profile: str = "staging194") -> dict:
     branch = "main" if profile in ("staging194", "staging194-main", "initial-prod") else "dev"
     canonical_ref = f"refs/heads/{branch}"
     canonical_head = capture(["gh", "api", f"repos/{repo}/git/ref/heads/{branch}", "--jq", ".object.sha"])
-    if canonical_head != sha:
+    if require_current_head and canonical_head != sha:
         raise Refusal(f"source SHA is not the current canonical pgorbachev/ikpk {branch} head")
     raw = capture(["gh", "run", "list", "--repo", repo, "--commit", sha,
                    "--workflow", WORKFLOW, "--limit", "50", "--json",
@@ -128,8 +128,9 @@ def validate_sha_and_ci(sha: str, profile: str = "staging194") -> dict:
             "runUrl": f"https://github.com/{repo}/actions/runs/{latest['databaseId']}"}
 
 
-def validate_static_main_ci(sha: str) -> dict:
-    provenance = validate_sha_and_ci(sha, "staging194-main")
+def validate_static_main_ci(sha: str, *, release_tag: Optional[str] = None) -> dict:
+    historical_release = release_tag is not None
+    provenance = validate_sha_and_ci(sha, "staging194-main", require_current_head=not historical_release)
     workflow_proofs = []
     for workflow in STATIC_MAIN_ADDITIONAL_WORKFLOWS:
         raw = capture(["gh", "run", "list", "--repo", CANONICAL_REPOSITORY, "--commit", sha,
@@ -171,15 +172,21 @@ def validate_static_main_ci(sha: str) -> dict:
             "runUrl": f"https://github.com/{CANONICAL_REPOSITORY}/actions/runs/{latest['databaseId']}"})
     canonical_head = capture(["gh", "api", f"repos/{CANONICAL_REPOSITORY}/git/ref/heads/main",
                               "--jq", ".object.sha"])
-    if canonical_head != sha:
+    if not historical_release and canonical_head != sha:
         raise Refusal("canonical main head moved during CI admission")
     provenance["additionalWorkflows"] = workflow_proofs
+    if historical_release:
+        provenance = validate_stable_release(provenance, sha, release_tag=release_tag, historical_release=True)
     return provenance
 
 
-def validate_stable_release(provenance: dict, sha: str) -> dict:
-    """Bind an exact-main CI proof to its stable Release tag and release preflight."""
-    raw = capture(["gh", "release", "view", "--repo", CANONICAL_REPOSITORY,
+def validate_stable_release(provenance: dict, sha: str, *, release_tag: Optional[str] = None,
+                            historical_release: bool = False) -> dict:
+    """Bind exact-SHA CI proof to a published stable Release and release preflight."""
+    command = ["gh", "release", "view"]
+    if release_tag is not None:
+        command.append(release_tag)
+    raw = capture([*command, "--repo", CANONICAL_REPOSITORY,
                    "--json", "tagName,isDraft,isPrerelease,publishedAt"])
     try:
         release = json.loads(raw)
@@ -191,7 +198,8 @@ def validate_stable_release(provenance: dict, sha: str) -> dict:
     published_at = release.get("publishedAt", release.get("published_at"))
     if (not isinstance(tag, str) or not re.fullmatch(r"v[0-9][A-Za-z0-9._-]{0,127}", tag)
             or draft is not False or prerelease is not False
-            or not isinstance(published_at, str) or not published_at):
+            or not isinstance(published_at, str) or not published_at
+            or (release_tag is not None and tag != release_tag)):
         raise Refusal("production paired admission requires a published stable GitHub Release")
     tag_object = capture(["gh", "api", f"repos/{CANONICAL_REPOSITORY}/git/ref/tags/{tag}",
                           "--jq", ".object.sha"])
@@ -199,24 +207,85 @@ def validate_stable_release(provenance: dict, sha: str) -> dict:
         peeled = capture(["gh", "api", f"repos/{CANONICAL_REPOSITORY}/git/tags/{tag_object}",
                           "--jq", ".object.sha"])
         if peeled != sha:
-            raise Refusal("stable Release tag does not resolve to the exact current main SHA")
-    preflight = capture(["node", "web/scripts/release-preflight.ts", "--release-tag", tag,
+            raise Refusal("stable Release tag does not resolve to the exact selected SHA")
+    preflight_command = ["node", "web/scripts/release-preflight.ts"]
+    if historical_release:
+        preflight_command.append("--historical-release")
+    preflight = capture([*preflight_command, "--release-tag", tag,
                          "--commit", sha])
     try:
         preflight_result = json.loads(preflight)
     except ValueError as error:
         raise Refusal("release-preflight returned malformed admission evidence") from error
     if (preflight_result.get("status", preflight_result.get("result")) not in ("admitted", "passed")
-            or preflight_result.get("commit") != sha):
-        raise Refusal("release-preflight did not admit the exact current main SHA")
+            or preflight_result.get("commit") != sha
+            or preflight_result.get("historicalRelease", False) != historical_release):
+        raise Refusal("release-preflight did not admit the exact selected Release SHA")
     provenance["release"] = {"tag": tag, "publishedAt": published_at}
     provenance["releasePreflight"] = preflight_result
+    provenance["historicalRelease"] = historical_release
     return provenance
 
 
 def validate_production_paired_admission(sha: str) -> dict:
     """Require the current main release admission before every new paired phase."""
     return validate_stable_release(validate_static_main_ci(sha), sha)
+
+
+def production_static_admission_from_result(sha: str, tag: str, result: dict) -> dict:
+    """Validate trusted release-preflight output before the caller reuses it in memory."""
+    if not SHA.fullmatch(sha):
+        raise Refusal("source SHA must be a full lowercase commit ID")
+    if not isinstance(result, dict):
+        raise Refusal("release-preflight returned malformed admission evidence")
+    capture(["git", "cat-file", "-e", f"{sha}^{{commit}}"])
+    release = result.get("release")
+    provenance = result.get("operatorAdmission")
+    additional = provenance.get("additionalWorkflows") if isinstance(provenance, dict) else None
+    additional_by_name = ({item.get("workflow"): item for item in additional if isinstance(item, dict)}
+                          if isinstance(additional, list) else {})
+    valid_additional = (isinstance(additional, list) and len(additional) == len(STATIC_MAIN_ADDITIONAL_WORKFLOWS)
+        and set(additional_by_name) == set(STATIC_MAIN_ADDITIONAL_WORKFLOWS)
+        and all(item.get("headSha") == sha and item.get("event") == "push" and item.get("headBranch") == "main"
+                and item.get("status") == "completed" and item.get("conclusion") == "success"
+                and type(item.get("runId")) is int and item["runId"] > 0
+                and type(item.get("attempt")) is int and item["attempt"] > 0
+                and isinstance(item.get("requiredJobs"), list) and bool(item["requiredJobs"])
+                and all(isinstance(job, str) and job for job in item["requiredJobs"])
+                and item["requiredJobs"] == sorted(set(item["requiredJobs"]))
+                and item.get("runUrl") == f"https://github.com/{CANONICAL_REPOSITORY}/actions/runs/{item['runId']}"
+                for item in additional_by_name.values()))
+    if (result.get("status") != "admitted" or result.get("commit") != sha
+            or result.get("historicalRelease") is not True or not isinstance(release, dict)
+            or release.get("tag") != tag or type(release.get("id")) is not int or release["id"] <= 0
+            or not isinstance(release.get("publishedAt"), str) or not release["publishedAt"]
+            or not isinstance(provenance, dict) or not valid_additional
+            or provenance.get("sourceSha") != sha or provenance.get("ref") != "refs/heads/main"
+            or provenance.get("repository") != CANONICAL_REPOSITORY
+            or provenance.get("workflow") != WORKFLOW or provenance.get("workflowName") != WORKFLOW
+            or provenance.get("event") != "push" or provenance.get("headBranch") != "main"
+            or provenance.get("status") != "completed" or provenance.get("conclusion") != "success"
+            or type(provenance.get("runId")) is not int or provenance["runId"] <= 0
+            or type(provenance.get("attempt")) is not int or provenance["attempt"] <= 0
+            or provenance.get("requiredJobs") != sorted(REQUIRED_TEST_JOBS)
+            or provenance.get("runUrl") != f"https://github.com/{CANONICAL_REPOSITORY}/actions/runs/{provenance['runId']}"):
+        raise Refusal("release-preflight did not admit the selected stable Release and exact SHA")
+    provenance["release"] = release
+    provenance["releasePreflight"] = {"status": result["status"], "commit": result["commit"],
+                                      "release": release, "historicalRelease": True}
+    provenance["historicalRelease"] = True
+    return provenance
+
+
+def validate_production_static_release(sha: str, tag: str) -> dict:
+    """Admit one explicitly selected stable Release through the single exact-SHA preflight."""
+    raw = capture(["node", "web/scripts/release-preflight.ts", "--historical-release",
+                   "--release-tag", tag, "--commit", sha])
+    try:
+        result = json.loads(raw)
+    except ValueError as error:
+        raise Refusal("release-preflight returned malformed admission evidence") from error
+    return production_static_admission_from_result(sha, tag, result)
 
 
 def make_archive(sha: str, provenance: dict) -> tuple[bytes, str]:
@@ -297,6 +366,95 @@ def backup_root(requested: Optional[str], profile: str = "staging194") -> Path:
     if root.stat().st_mode & 0o077:
         raise Refusal("off-host backup directory must not be accessible by group or other")
     return root
+
+
+def _space_reserve_bytes(estimated_bytes: int) -> int:
+    value = os.environ.get("IKPK_REHEARSAL_SPACE_RESERVE_BYTES", "0")
+    baseline = max(1_073_741_824, (estimated_bytes + 3) // 4)
+    try:
+        reserve = int(value)
+    except ValueError as error:
+        raise Refusal("IKPK_REHEARSAL_SPACE_RESERVE_BYTES must be a non-negative integer") from error
+    if reserve < 0:
+        raise Refusal("IKPK_REHEARSAL_SPACE_RESERVE_BYTES must be a non-negative integer")
+    return max(baseline, reserve)
+
+
+def _existing_path(path: Path) -> Path:
+    path = path.expanduser().absolute()
+    while not path.exists():
+        path = path.parent
+    return path
+
+
+def _source_tree_bytes(sha: str) -> int:
+    if not isinstance(sha, str) or not SHA.fullmatch(sha):
+        raise Refusal("cannot determine selected source tree size: a canonical source SHA is required")
+    try:
+        listing = capture_bytes(["git", "ls-tree", "-rlz", sha])
+        records = [record for record in listing.split(b"\0") if record]
+        sizes = [int(record.split(b"\t", 1)[0].split()[-1]) for record in records]
+        if not records or any(size < 0 for size in sizes):
+            raise ValueError("empty or invalid git tree listing")
+        return sum(sizes)
+    except (Refusal, ValueError, IndexError) as error:
+        raise Refusal(f"cannot determine selected source tree size for {sha}: {error}") from error
+
+
+def _check_local_space(sha: Optional[str], profile: str, command: str, backup_dir: Optional[str]) -> list[dict]:
+    estimated_bytes = _source_tree_bytes(sha or "")
+    reserve = _space_reserve_bytes(estimated_bytes)
+    required = estimated_bytes + reserve
+    paths = {"temporary data": Path(tempfile.gettempdir()), "source checkout": ROOT}
+    if command == "cms-update":
+        default = Path.home() / (".local/share/ikpk-production-paired/backups" if profile == "production-paired"
+                                 else ".local/share/ikpk-initial-prod/backups" if profile == "initial-prod"
+                                 else ".local/share/ikpk-rehearsal/staging194/backups")
+        paths["off-host backup"] = Path(backup_dir).expanduser() if backup_dir else default
+    report = []
+    for label, raw_path in paths.items():
+        checked_path = _existing_path(raw_path)
+        disk = shutil.disk_usage(checked_path)
+        if disk.free < required:
+            raise Refusal(f"insufficient free space on {label} filesystem ({raw_path}): "
+                          f"need {required} bytes, have {disk.free} bytes, short {required - disk.free} bytes")
+        report.append({"label": label, "path": str(checked_path), "freeBytes": disk.free,
+                       "estimatedBytes": estimated_bytes, "reserveBytes": reserve,
+                       "requiredBytes": required})
+    return report
+
+
+def _check_target_space(profile: str, operation_id: str, command: str) -> dict:
+    report = parse_host_json(ssh_remote(["status", "--operation-id", operation_id, "--space-preflight",
+                                         "--space-preflight-for", command],
+                                        profile=profile))
+    filesystems = report.get("filesystems")
+    if not isinstance(filesystems, list) or not filesystems:
+        raise Refusal("target free-space preflight returned no filesystem estimates")
+    for item in filesystems:
+        if (not isinstance(item, dict) or not isinstance(item.get("path"), str)
+                or type(item.get("freeBytes")) is not int or type(item.get("requiredBytes")) is not int):
+            raise Refusal("target free-space preflight returned a malformed filesystem estimate")
+        if item["freeBytes"] < item["requiredBytes"]:
+            missing = item["requiredBytes"] - item["freeBytes"]
+            raise Refusal(f"insufficient free space on target filesystem {item['path']}: "
+                          f"need {item['requiredBytes']} bytes, have {item['freeBytes']} bytes, "
+                          f"short {missing} bytes")
+    return report
+
+
+def _check_local_backup_space(backup_dir: Optional[str], profile: str, required: int) -> dict:
+    default = Path.home() / (".local/share/ikpk-production-paired/backups" if profile == "production-paired"
+                             else ".local/share/ikpk-initial-prod/backups" if profile == "initial-prod"
+                             else ".local/share/ikpk-production-static/backups" if profile == "production-static"
+                             else ".local/share/ikpk-rehearsal/staging194/backups")
+    path = Path(backup_dir).expanduser() if backup_dir else default
+    disk = shutil.disk_usage(_existing_path(path))
+    if disk.free < required:
+        raise Refusal(f"insufficient free space on off-host backup filesystem ({path}): need {required} bytes, "
+                      f"have {disk.free} bytes, short {required - disk.free} bytes")
+    return {"label": "off-host backup", "path": str(_existing_path(path)), "freeBytes": disk.free,
+            "estimatedBytes": required, "reserveBytes": 0, "requiredBytes": required}
 
 
 def verify_backup_tar(payload: bytes, expected_sha256: str) -> None:
@@ -693,21 +851,45 @@ def browser_check(source_sha: str, operation_id: str, static_digest: str, archiv
             thread.join(timeout=5)
 
 
-def invoke(args: argparse.Namespace) -> None:
+def invoke(args: argparse.Namespace, *, admission: Optional[dict] = None) -> Optional[dict]:
     profile = getattr(args, "profile", "staging194")
+    preflight_kind = getattr(args, "preflight_for", None) if args.command == "space-preflight" else args.command
     target_host = INITIAL_PROD_HOST if profile in ("initial-prod", "production-static", "production-paired") else TARGET_HOST
-    if profile == "production-static" and args.command not in ("static-main", "static-main-recover"):
+    if profile == "production-static" and not (args.command in ("static-main", "static-main-recover")
+                                                or args.command == "space-preflight" and preflight_kind == "static-main"):
         raise Refusal("production-static permits only static-main publication and recovery")
-    if profile == "production-paired" and args.command not in ("cms-update", "static-publish", "recover"):
+    if profile == "production-paired" and not (args.command in ("cms-update", "static-publish", "recover")
+                                                or args.command == "space-preflight"
+                                                and preflight_kind in ("cms-update", "static-main")):
         raise Refusal("production-paired permits only paired CMS update, static publish, and recovery")
-    if args.command in ("static-main", "static-main-recover") and profile not in ("staging194", "production-static"):
+    if (args.command in ("static-main", "static-main-recover")
+            and profile not in ("staging194", "production-static")):
         raise Refusal("static-main commands are bound to the staging194 profile or authorized production-static profile")
+    if (args.command == "space-preflight" and preflight_kind == "static-main"
+            and profile not in ("staging194", "production-static", "production-paired")):
+        raise Refusal("static-main commands are bound to the staging194 profile or authorized production-static profile")
+    if getattr(args, "release_tag", None) is not None and (profile != "production-static" or args.command != "static-main"):
+        raise Refusal("--release-tag is restricted to production-static static-main")
     if args.host is not None and args.host != target_host:
         raise Refusal(f"this command is bound to the authorized {profile} host")
     if profile == "initial-prod" and (args.operation_id != INITIAL_PROD_OPERATION_ID or args.command == "recover"):
         raise Refusal("initial-prod permits only its fixed operation ID and has no DB restore command")
     if not OP.fullmatch(args.operation_id):
         raise Refusal("operation ID has invalid characters")
+    automatic_static_capacity = profile == "production-static" and args.command == "static-main"
+    if args.command == "space-preflight" or automatic_static_capacity:
+        if preflight_kind not in ("cms-update", "static-main"):
+            raise Refusal("space-preflight requires --for cms-update or --for static-main")
+        local_space = _check_local_space(getattr(args, "source_sha", None), profile, preflight_kind,
+                                         getattr(args, "backup_dir", None))
+        target_space = _check_target_space(profile, args.operation_id, preflight_kind)
+        if preflight_kind == "cms-update" and type(target_space.get("backupBytes")) is int:
+            local_backup = _check_local_backup_space(getattr(args, "backup_dir", None), profile,
+                target_space["backupBytes"] + target_space.get("backupReserveBytes", 0))
+            local_space.append(local_backup)
+        if args.command == "space-preflight":
+            return {"operationId": args.operation_id, "operationKind": preflight_kind,
+                    "localFilesystems": local_space, "target": target_space}
     paired_old_cms = None
     if profile == "production-paired" and args.command == "cms-update":
         preflight = parse_host_json(ssh_remote(["status", "--operation-id", args.operation_id], profile=profile))
@@ -801,7 +983,19 @@ def invoke(args: argparse.Namespace) -> None:
         if committed.get("phase") != "committed":
             raise Refusal(f"static publication did not reach durable commit: {committed.get('phase')}")
     elif args.command == "static-main":
-        admitted_run = validate_static_main_ci(args.source_sha)
+        release_tag = getattr(args, "release_tag", None)
+        if admission is not None:
+            release_evidence = admission.get("release") if isinstance(admission, dict) else None
+            if (profile != "production-static" or release_tag is None
+                    or not isinstance(release_evidence, dict)
+                    or admission.get("sourceSha") != args.source_sha
+                    or not admission.get("historicalRelease")
+                    or release_evidence.get("tag") != release_tag):
+                raise Refusal("in-memory static admission does not match the selected production Release and SHA")
+            admitted_run = admission
+        else:
+            admitted_run = (validate_production_static_release(args.source_sha, release_tag)
+                            if release_tag is not None else validate_static_main_ci(args.source_sha))
         provenance_b64 = base64.b64encode(json.dumps(admitted_run, sort_keys=True,
             separators=(",", ":")).encode()).decode("ascii")
         common = ["static-main", "--operation-id", args.operation_id, "--source-sha", args.source_sha,
@@ -823,9 +1017,10 @@ def invoke(args: argparse.Namespace) -> None:
         browser_profile = "production-static" if profile == "production-static" else "staging194"
         browser_check(args.source_sha, args.operation_id, digest, candidate, browser_profile, admitted_run,
                       chat_loader_src=INITIAL_PROD_CHAT_LOADER_SRC if profile == "production-static" else STAGING194_CHAT_LOADER_SRC)
-        current_run = validate_static_main_ci(args.source_sha)
-        if current_run != admitted_run:
-            raise Refusal("canonical main source, Tests run, or Release proof changed during acceptance")
+        if release_tag is None:
+            current_run = validate_static_main_ci(args.source_sha)
+            if current_run != admitted_run:
+                raise Refusal("canonical main source, Tests run, or Release proof changed during acceptance")
         committed = parse_host_json(ssh_remote(common + ["--browser-digest", digest], **remote_options))
         if committed.get("phase") != "committed":
             raise Refusal(f"static-main publication did not reach durable commit: {committed.get('phase')}")
@@ -917,7 +1112,7 @@ def main(argv: Optional[list[str]] = None) -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--profile", choices=("staging194", "initial-prod", "production-static", "production-paired"), default="staging194")
     sub = parser.add_subparsers(dest="command", required=True)
-    for action in ("cms-update", "static-publish", "static-main", "static-main-recover", "recover"):
+    for action in ("cms-update", "static-publish", "static-main", "static-main-recover", "recover", "space-preflight"):
         command = sub.add_parser(action)
         command.add_argument("--host")
         command.add_argument("--operation-id", required=True)
@@ -926,13 +1121,21 @@ def main(argv: Optional[list[str]] = None) -> int:
             command.add_argument("--rollback-committed", action="store_true")
             command.add_argument("--operator")
             command.add_argument("--reason")
-        if action not in ("recover", "static-main-recover"):
+        if action not in ("recover", "static-main-recover", "space-preflight"):
             command.add_argument("--source-sha", required=True)
         if action == "static-main":
             command.add_argument("--reuse-capture-operation-id")
+            command.add_argument("--release-tag")
+        if action == "space-preflight":
+            command.add_argument("--for", dest="preflight_for", required=True,
+                                 choices=("cms-update", "static-main"))
+            command.add_argument("--source-sha", required=True)
     args = parser.parse_args(argv)
+    args.release_tag = getattr(args, "release_tag", None)
     try:
-        invoke(args)
+        result = invoke(args)
+        if args.command == "space-preflight" and result is not None:
+            print(json.dumps(result, sort_keys=True))
         return 0
     except (Refusal, OSError, ValueError, subprocess.CalledProcessError) as error:
         print(f"ikpk-rehearsal: {error}", file=sys.stderr)
