@@ -47,6 +47,7 @@ INITIAL_PROD_CHAT_LOADER_SRC = "https://cdn-ru.bitrix24.ru/b35315886/crm/site_bu
 STAGING194_CHAT_LOADER_SRC = INITIAL_PROD_CHAT_LOADER_SRC
 INITIAL_PROD_CMS_ENV_FILE = Path("/etc/ikpk-cms/trial.env")
 PRODUCTION_PUBLICATION_LOCK = Path("/var/www/ikpk/.publication.lock")
+STAGING194_TEMPORARY_ROOT = Path("/var/tmp/ikpk-staging194")
 PRODUCTION_PAIRED_WORKSPACE_ROOT = Path("/var/lib/ikpk-site-build/production-paired")
 SITE_PUBLICATION_MARKER = "host-publication.json"
 SITE_PUBLICATION_MARKER_DIR = Path("/var/lib/ikpk-rehearsal/site-publication")
@@ -66,6 +67,16 @@ SHA256_RE = re.compile(r"[a-f0-9]{64}\Z")
 CONTENT_FINGERPRINT_RE = re.compile(r"sha256:[a-f0-9]{64}\Z")
 PREFIX_RE = re.compile(r"/[A-Za-z0-9_./*?=-]+\Z")
 UNIT_RE = re.compile(r"[A-Za-z0-9_.@:-]+\.service\Z")
+
+
+def _uses_staging194_temp(config: dict[str, Any]) -> bool:
+    return config.get("profile") == "staging194" and "temporaryRoot" in config or (
+        "profile" not in config and "temporaryRoot" in config)
+
+
+def _configure_profile_temp(config: dict[str, Any]) -> None:
+    if _uses_staging194_temp(config):
+        tempfile.tempdir = str(_validate_staging194_temporary_root(config))
 
 
 class HostFailure(RuntimeError):
@@ -283,7 +294,10 @@ def _space_preflight(config: dict[str, Any], operation_id: str, operation_kind: 
     if type(configured_reserve) is not int or configured_reserve < 0:
         raise HostFailure("spaceReserveBytes must be a non-negative integer")
     base_needed: dict[int, dict[str, Any]] = {}
-    candidates = [("temporary data", Path(tempfile.gettempdir()), cms_bytes + static_bytes)]
+    temporary_root = (_validate_staging194_temporary_root(config)
+                      if _uses_staging194_temp(config)
+                      else Path(tempfile.gettempdir()))
+    candidates = [("temporary data", temporary_root, cms_bytes + static_bytes)]
     if operation_kind == "cms-update":
         candidates.append(("CMS releases", Path(config["releaseRoot"]), cms_bytes + static_bytes))
     else:
@@ -297,6 +311,8 @@ def _space_preflight(config: dict[str, Any], operation_id: str, operation_kind: 
         candidates.append(("backups", Path(config["backupRoot"]), backup_bytes))
         candidates.append(("live database replacement", Path(config["cmsDatabase"]).parent,
                            live_database_bytes))
+        cms_home = Path(pwd.getpwnam(config["cmsUser"]).pw_dir)
+        candidates.append(("CMS npm cache", cms_home / ".npm", 0))
     if operation_kind == "cms-update" and config.get("siteBuildWorkspaceRoot"):
         candidates.append(("site build workspace", Path(config["siteBuildWorkspaceRoot"]), cms_bytes + static_bytes))
     for label, path, required in candidates:
@@ -335,6 +351,10 @@ def _space_preflight(config: dict[str, Any], operation_id: str, operation_kind: 
             backup_device = backup_device.parent
         device_item = base_needed[backup_device.stat().st_dev]
         report["backupReserveBytes"] = device_item["reserveBytes"]
+        if _uses_staging194_temp(config):
+            report["spaceNotes"] = [
+                "default npm cache location is shown, but cache growth and npmrc/environment overrides are not separately estimated; filesystem reserve is the only growth allowance"
+            ]
     return report
 
 
@@ -397,6 +417,8 @@ def _root_config(path: Path, expected_profile: str = "staging194") -> dict[str, 
             raise HostFailure(f"{key} must be an absolute non-root path")
     if profile != expected_profile:
         raise HostFailure("host config does not match the selected fixed profile")
+    if profile == "staging194":
+        _validate_staging194_temporary_root(data)
     if profile in ("initial-prod", "production-static", "production-paired"):
         endpoint = data.get("paymentEndpointProd")
         try:
@@ -409,6 +431,30 @@ def _root_config(path: Path, expected_profile: str = "staging194") -> dict[str, 
             raise HostFailure("production payment endpoint must match the observed production origin")
     _validate_target_binding(data)
     return data
+
+
+def _validate_staging194_temporary_root(config: dict[str, Any]) -> Path:
+    """Return the fixed shared temp directory only when its ownership is safe."""
+    if config.get("temporaryRoot") != str(STAGING194_TEMPORARY_ROOT):
+        raise HostFailure("staging194 temporaryRoot must use the fixed host path")
+    try:
+        cms_user = pwd.getpwnam(config["cmsUser"])
+        for directory in (Path("/"), Path("/var"), STAGING194_TEMPORARY_ROOT.parent):
+            info = directory.lstat()
+            if not stat.S_ISDIR(info.st_mode) or info.st_uid != 0:
+                raise HostFailure("staging194 temporary path parents must be real root-owned directories")
+            if directory == STAGING194_TEMPORARY_ROOT.parent:
+                if not info.st_mode & stat.S_ISVTX:
+                    raise HostFailure("staging194 temporary parent must be sticky")
+            elif info.st_mode & 0o022:
+                raise HostFailure("staging194 temporary path parent is writable by group or other")
+        info = STAGING194_TEMPORARY_ROOT.lstat()
+    except OSError as error:
+        raise HostFailure(f"staging194 temporary directory is unavailable or unsafe: {error}") from error
+    if (not stat.S_ISDIR(info.st_mode) or info.st_uid != 0 or info.st_gid != cms_user.pw_gid
+            or stat.S_IMODE(info.st_mode) != 0o1770):
+        raise HostFailure("staging194 temporary directory must be root-owned, CMS-grouped, and mode 1770")
+    return STAGING194_TEMPORARY_ROOT
 
 
 def _validate_target_binding(data: dict[str, Any]) -> None:
@@ -1928,7 +1974,10 @@ def _run_as_cms(config: dict[str, Any], cwd: Path, argv: list[str], timeout: int
                 raise HostFailure("transient read-only path must be canonical")
             resolved_paths.append(str(resolved))
         command.append(f"--property=ReadOnlyPaths={' '.join(resolved_paths)}")
-    for key, value in (environment or {}).items():
+    child_environment = dict(environment or {})
+    if _uses_staging194_temp(config):
+        child_environment.setdefault("TMPDIR", str(_validate_staging194_temporary_root(config)))
+    for key, value in child_environment.items():
         if not re.fullmatch(r"[A-Z0-9_]+", key) or "\x00" in value:
             raise HostFailure("invalid unprivileged command environment")
         command.extend(["--setenv", f"{key}={value}"])
@@ -2637,6 +2686,8 @@ def _import_offhost_backup(config: dict[str, Any], operation_id: str, payload: b
 
 
 def _cms_update(config: dict[str, Any], state: RehearsalState, args: argparse.Namespace) -> dict[str, Any]:
+    if _uses_staging194_temp(config):
+        tempfile.tempdir = str(_validate_staging194_temporary_root(config))
     op, sha = args.operation_id, args.source_sha
     if not SHA_RE.fullmatch(sha):
         raise HostFailure("source SHA must be a full lowercase commit ID")
@@ -3901,6 +3952,7 @@ def dispatch(args: argparse.Namespace) -> dict[str, Any]:
     cleanup_marker_snapshot = None
     if args.action == "cleanup-site":
         config, profile, cleanup_marker_snapshot = _select_cleanup_profile(config, profile)
+    _configure_profile_temp(config)
     if profile == "production-static" and args.action not in (
             "static-main", "static-main-recover", "export-static-main", "status", "cleanup-site"):
         raise HostFailure("production-static permits only static-main publication and recovery")
@@ -4091,6 +4143,8 @@ def main(argv: Optional[list[str]] = None) -> int:
                            PRODUCTION_STATIC_CONFIG_PATH if args.profile == "production-static" else
                            PRODUCTION_PAIRED_CONFIG_PATH if args.profile == "production-paired" else CONFIG_PATH)
             config = _root_config(config_path, expected_profile=args.profile)
+            if args.profile == "staging194":
+                tempfile.tempdir = str(_validate_staging194_temporary_root(config))
             for key in ("stateDir", "releaseRoot", "staticReleaseRoot", "backupRoot"):
                 path = Path(config[key])
                 if not path.is_dir() or path.is_symlink():

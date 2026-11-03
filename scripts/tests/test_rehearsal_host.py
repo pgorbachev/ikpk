@@ -865,6 +865,48 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
         self.assertEqual(run_command.call_args.kwargs["timeout"], 90)
         self.assertEqual(result, "finished")
 
+    def test_staging194_unprivileged_commands_receive_configured_disk_tmpdir(self):
+        with tempfile.TemporaryDirectory(prefix="ikpk-staging194-temp-") as temporary:
+            temp_root = Path(temporary) / "host-tmp"
+            temp_root.mkdir(mode=0o1770)
+            completed = subprocess.CompletedProcess([], 0, stdout="finished", stderr="")
+            user = type("User", (), {"pw_name": "ikpk-cms"})()
+            with patch.object(rehearsal_host.pwd, "getpwnam", return_value=user), \
+                 patch.object(rehearsal_host, "_validate_staging194_temporary_root", return_value=temp_root), \
+                 patch.object(rehearsal_host, "run", return_value=completed) as run_command:
+                rehearsal_host._run_as_cms(
+                    {"cmsUser": "ikpk-cms", "temporaryRoot": str(temp_root)},
+                    Path("/tmp/cms"), ["/usr/bin/npm", "ci"])
+            command = run_command.call_args.args[0]
+            self.assertIn(["--setenv", f"TMPDIR={temp_root}"],
+                          [command[index:index + 2] for index in range(len(command) - 1)])
+
+    def test_staging194_dispatch_uses_the_same_tempdir_as_space_preflight(self):
+        with tempfile.TemporaryDirectory(prefix="ikpk-staging194-dispatch-temp-") as temporary:
+            temp_root = Path(temporary) / "host-tmp"
+            temp_root.mkdir()
+            config = {"cmsUser": "ikpk-cms", "temporaryRoot": str(temp_root)}
+            args = Namespace(profile="staging194", action="status", operation_id="temp-preflight",
+                             space_preflight=True, space_preflight_for="static-main")
+
+            def preflight(*_args):
+                self.assertEqual(tempfile.gettempdir(), str(temp_root))
+                return {"filesystems": []}
+
+            with patch.object(tempfile, "tempdir", None), \
+                 patch.object(rehearsal_host.os, "geteuid", return_value=0), \
+                 patch.object(rehearsal_host, "_root_config", return_value=config), \
+                 patch.object(rehearsal_host, "_validate_staging194_temporary_root", return_value=temp_root), \
+                 patch.object(rehearsal_host, "_space_preflight", side_effect=preflight):
+                rehearsal_host.dispatch(args)
+
+    def test_production_cleanup_profile_does_not_select_staging_tempdir(self):
+        with patch.object(tempfile, "tempdir", None), \
+             patch.object(rehearsal_host, "_validate_staging194_temporary_root",
+                          side_effect=AssertionError("production cleanup must not select staging temp")):
+            rehearsal_host._configure_profile_temp({"profile": "production-static"})
+            self.assertIsNone(tempfile.tempdir)
+
     def test_cms_artifact_build_can_mount_only_its_validated_dependency_tree_read_only(self):
         with tempfile.TemporaryDirectory(prefix="ikpk-readonly-cms-deps-") as temporary:
             dependencies = Path(temporary) / "deps/node_modules"

@@ -676,6 +676,29 @@ class OperatorAdmissionTests(unittest.TestCase):
                         self.assertEqual(temp_item["estimatedBytes"], max(source_bytes, export_bytes))
                         self.assertEqual(checkout_item["estimatedBytes"], source_bytes)
 
+    def test_cms_update_local_space_sums_temp_checkout_and_backup_on_shared_filesystem(self):
+        real_stat = Path.stat
+
+        class DeviceStat:
+            def __init__(self, result):
+                self._result = result
+                self.st_dev = 101
+
+            def __getattr__(self, name):
+                return getattr(self._result, name)
+
+        def same_device(path, *args, **kwargs):
+            return DeviceStat(real_stat(path, *args, **kwargs))
+
+        with patch.object(staging193, "_source_tree_bytes", return_value=600_000_000), \
+             patch.object(Path, "stat", new=same_device), \
+             patch.object(staging193.shutil, "disk_usage",
+                          return_value=SimpleNamespace(total=2_000_000_000, used=300_000_000,
+                                                       free=1_700_000_000)):
+            with self.assertRaisesRegex(staging193.Refusal,
+                                        "temporary data \+ source checkout \+ off-host backup filesystem"):
+                staging193._check_local_space("a" * 40, "staging194", "cms-update", None)
+
     def test_production_static_profile_refuses_cms_mutating_commands_before_ci_or_ssh(self):
         for command in ("cms-update", "static-publish", "recover"):
             with self.subTest(command=command):

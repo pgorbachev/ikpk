@@ -32,6 +32,9 @@ def _migration(current: Path, template: Path) -> tuple[dict, bool]:
               and expected[key] == "/var/lib/ikpk-cms-prototype193/staging/site-refresh194/state/state.json"):
             normalized[key] = expected[key]
             changed = True
+    if "temporaryRoot" in expected and "temporaryRoot" not in normalized:
+        normalized["temporaryRoot"] = expected["temporaryRoot"]
+        changed = True
     if normalized != expected:
         raise ValueError("existing rehearsal config has unrelated differences; refusing migration")
     return normalized, changed

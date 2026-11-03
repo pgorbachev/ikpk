@@ -402,7 +402,8 @@ def _source_tree_bytes(sha: str) -> int:
 
 
 def _check_local_space(sha: Optional[str], profile: str, command: str, backup_dir: Optional[str],
-                       *, static_export_estimate_bytes: Optional[int] = None) -> list[dict]:
+                       *, static_export_estimate_bytes: Optional[int] = None,
+                       backup_required_bytes: Optional[int] = None) -> list[dict]:
     estimated_bytes = _source_tree_bytes(sha or "")
     paths = {"temporary data": Path(tempfile.gettempdir()), "source checkout": ROOT}
     if command == "cms-update":
@@ -455,18 +456,32 @@ def _check_local_space(sha: Optional[str], profile: str, command: str, backup_di
                            "staticExportEstimateBytes": static_export_estimate_bytes
                            if "temporary data" in item["labels"] else 0})
         return report
-    reserve = _space_reserve_bytes(estimated_bytes)
-    required = estimated_bytes + reserve
-    report = []
+    by_device: dict[int, dict] = {}
     for label, raw_path in paths.items():
         checked_path = _existing_path(raw_path)
         disk = shutil.disk_usage(checked_path)
-        if disk.free < required:
-            raise Refusal(f"insufficient free space on {label} filesystem ({raw_path}): "
-                          f"need {required} bytes, have {disk.free} bytes, short {required - disk.free} bytes")
-        report.append({"label": label, "path": str(checked_path), "freeBytes": disk.free,
-                       "estimatedBytes": estimated_bytes, "reserveBytes": reserve,
-                       "requiredBytes": required})
+        device = checked_path.stat().st_dev
+        item = by_device.get(device)
+        if item is None:
+            item = {"label": label, "path": str(checked_path), "freeBytes": disk.free,
+                    "estimatedBytes": 0}
+            by_device[device] = item
+        else:
+            item["label"] += f" + {label}"
+            item["freeBytes"] = min(item["freeBytes"], disk.free)
+        item["estimatedBytes"] += (backup_required_bytes if label == "off-host backup"
+                                   and backup_required_bytes is not None else estimated_bytes)
+    report = []
+    for item in by_device.values():
+        reserve = _space_reserve_bytes(item["estimatedBytes"])
+        required = item["estimatedBytes"] + reserve
+        if item["freeBytes"] < required:
+            raise Refusal(f"insufficient free space on {item['label']} filesystem ({item['path']}): "
+                          f"need {required} bytes, have {item['freeBytes']} bytes, "
+                          f"short {required - item['freeBytes']} bytes")
+        item["reserveBytes"] = reserve
+        item["requiredBytes"] = required
+        report.append(item)
     return report
 
 
@@ -935,13 +950,16 @@ def invoke(args: argparse.Namespace, *, admission: Optional[dict] = None) -> Opt
             local_space = _check_local_space(getattr(args, "source_sha", None), profile, preflight_kind,
                 getattr(args, "backup_dir", None), static_export_estimate_bytes=export_estimate)
         else:
-            local_space = _check_local_space(getattr(args, "source_sha", None), profile, preflight_kind,
-                                             getattr(args, "backup_dir", None))
             target_space = _check_target_space(profile, args.operation_id, preflight_kind)
-        if preflight_kind == "cms-update" and type(target_space.get("backupBytes")) is int:
-            local_backup = _check_local_backup_space(getattr(args, "backup_dir", None), profile,
-                target_space["backupBytes"] + target_space.get("backupReserveBytes", 0))
-            local_space.append(local_backup)
+            backup_required = None
+            if preflight_kind == "cms-update" and type(target_space.get("backupBytes")) is int:
+                backup_required = target_space["backupBytes"] + target_space.get("backupReserveBytes", 0)
+            if backup_required is None:
+                local_space = _check_local_space(getattr(args, "source_sha", None), profile, preflight_kind,
+                                                 getattr(args, "backup_dir", None))
+            else:
+                local_space = _check_local_space(getattr(args, "source_sha", None), profile, preflight_kind,
+                    getattr(args, "backup_dir", None), backup_required_bytes=backup_required)
         if args.command == "space-preflight":
             return {"operationId": args.operation_id, "operationKind": preflight_kind,
                     "localFilesystems": local_space, "target": target_space}

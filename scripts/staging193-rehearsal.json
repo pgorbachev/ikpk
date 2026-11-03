@@ -1,5 +1,6 @@
 {
   "stateDir": "/var/lib/ikpk-rehearsal/staging194",
+  "temporaryRoot": "/var/tmp/ikpk-staging194",
   "maintenanceFlag": "/var/lib/ikpk-rehearsal/staging194/fenced",
   "releaseRoot": "/opt/ikpk-cms-prototype193/releases",
   "currentCms": "/opt/ikpk-cms-prototype193/current",
