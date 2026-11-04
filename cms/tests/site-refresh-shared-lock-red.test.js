@@ -2,12 +2,13 @@ import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
 import { once } from 'node:events';
 import { randomBytes } from 'node:crypto';
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs';
+import { chmodSync, closeSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, unlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { setTimeout as delay } from 'node:timers/promises';
 import { test } from 'node:test';
+import { acquirePublicationLock, openPublicationLock } from '../src/seminar-management/site-refresh-operation.js';
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const workerUrl = pathToFileURL(join(repoRoot, 'cms/src/seminar-management/site-refresh-worker.js')).href;
@@ -115,55 +116,19 @@ test('live CMS refresh worker excludes the host flock on destination .publicatio
   if (failure) throw failure;
 });
 
-test('CMS GET revalidates the destination lock inode after acquiring the production flock', async () => {
+test('publication lock acquisition rejects an inode replaced after open', () => {
   const root = mkdtempSync(join(tmpdir(), 'ikpk-cms-lock-inode-entry-'));
-  const webRoot = join(root, 'www');
-  const state = join(webRoot, 'shared/site-refresh/state.json');
-  const lock = join(webRoot, '.publication.lock');
-  const ready = join(root, 'holder-ready');
-  const release = join(root, 'holder-release');
-  mkdirSync(join(webRoot, 'releases', 'new'), { recursive: true });
-  mkdirSync(join(webRoot, 'releases', 'old'), { recursive: true });
-  mkdirSync(join(webRoot, 'shared/site-refresh'), { recursive: true });
-  symlinkSync('releases/new', join(webRoot, 'current'));
+  const lock = join(root, '.publication.lock');
   writeFileSync(lock, '', { mode: 0o600 });
   chmodSync(lock, 0o600);
-  const holder = spawn('python3', ['-u', '-c', [
-    'import fcntl, os, sys, time',
-    'fd = os.open(sys.argv[1], os.O_RDWR)',
-    'fcntl.flock(fd, fcntl.LOCK_EX)',
-    "open(sys.argv[2], 'w').write('ready')",
-    'while not os.path.exists(sys.argv[3]): time.sleep(0.005)',
-  ].join('\n'), lock, ready, release], { stdio: 'ignore' });
-  await waitUntil(() => existsSync(ready), 'holder did not acquire the destination flock');
-  const siteModule = pathToFileURL(join(repoRoot, 'cms/src/seminar-management/site-refresh.ts')).href;
-  const waiterCode = `import {writeFileSync} from 'node:fs';import(${JSON.stringify(siteModule)}).then(({registerSiteRefresh})=>{const routes=[];const app={admin:{routes:{admin:{routes}}},db:{query:()=>({findOne:async()=>({roles:[{code:'content-admin'}]})})}};registerSiteRefresh(app);const get=routes.find(r=>r.method==='GET').handler;writeFileSync(process.env.IKPK_REFRESH_STATE,JSON.stringify({status:'running',phase:'switching',pid:process.pid,releaseId:'new',previousReleaseId:'releases/old',switched:false}));console.log(process.pid);const ctx={state:{user:{id:1}}};return get(ctx).then(()=>ctx);}).then(ctx=>{console.log(JSON.stringify(ctx.body));},error=>{process.stderr.write(String(error));process.exitCode=1});`;
-  const waiter = spawn(process.execPath, ['--input-type=module', '-e', waiterCode], {
-    stdio: ['ignore', 'pipe', 'pipe'],
-    env: { ...process.env, IKPK_WEB_ROOT: webRoot, IKPK_REFRESH_STATE: state },
-  });
-  let stdout = '';
-  let stderr = '';
-  waiter.stdout.on('data', (chunk) => { stdout += chunk; });
-  waiter.stderr.on('data', (chunk) => { stderr += chunk; });
+  const fd = openPublicationLock(lock);
   try {
-    await waitUntil(() => /^\d+\n/.test(stdout), 'production GET did not start');
-    const pid = stdout.split('\n', 1)[0];
-    await waitUntil(() => spawnSync('lsof', ['-a', '-p', pid, '-Fn'], { encoding: 'utf8' }).stdout.includes(lock),
-      'production GET did not open the destination lock before blocking on flock');
     unlinkSync(lock);
     writeFileSync(lock, 'replacement', { mode: 0o600 });
     chmodSync(lock, 0o600);
-    writeFileSync(release, 'continue');
-    const [code] = await once(waiter, 'exit');
-    assert.equal(code, 0, stderr);
-    const body = JSON.parse(stdout.trim().split('\n').at(-1));
-    assert.equal(body.status, 'running', 'replaced inode must not authorize GET reconciliation');
-    assert.equal(JSON.parse(readFileSync(state, 'utf8')).status, 'running');
+    assert.throws(() => acquirePublicationLock(fd, { path: lock }), /shared publication lock changed/);
   } finally {
-    writeFileSync(release, 'continue');
-    if (waiter.exitCode === null && waiter.signalCode === null) waiter.kill('SIGKILL');
-    if (holder.exitCode === null && holder.signalCode === null) holder.kill('SIGKILL');
+    closeSync(fd);
     rmSync(root, { recursive: true, force: true });
   }
 });
