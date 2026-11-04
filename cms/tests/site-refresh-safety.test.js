@@ -291,8 +291,8 @@ test('explicit Restore remains available for a cleanup-pending published release
  }
 });
 
-test('Restore preserves verification failure if the target disappears after precheck', async (t) => {
- const f=fixture(t); const old={status:'verification-failed',phase:'verifying',releaseId:'current',previousReleaseId:'releases/previous',switched:true};
+test('Restore preserves verification failure if the target disappears after precheck', async () => {
+ const old={status:'verification-failed',phase:'verifying',releaseId:'current',previousReleaseId:'releases/previous',switched:true};
  let stored=old; let calls=0; let switched=false;
  const result=await runRestoreTransaction({pid:process.pid,current:old,write:r=>{stored=r;},identityOf:()=>++calls===1?{commit:'a'.repeat(40),snapshotId:'snap'}:null,installedCommit:'a'.repeat(40),switchRelease:()=>{switched=true;},verify:async()=>({ok:true})});
  assert.equal(result.status,'failed'); assert.equal(switched,false); assert.deepEqual(stored,old);

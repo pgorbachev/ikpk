@@ -84,7 +84,7 @@ export function registerSiteRefresh(strapi, deps: { hostPublicationStatus?: type
   );
 }
 
-function applyDecision(state, lock) {
+function applyDecision(state) {
   const loaded = readStateFile(state);
   if (!loaded.readable) return { status: 'failed', message: MESSAGES.corrupt, switched: false };
   if (legacyRefreshLockExists(state)) return { status: 'running', message: MESSAGES.busy };

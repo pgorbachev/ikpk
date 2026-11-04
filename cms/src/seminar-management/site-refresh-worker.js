@@ -101,7 +101,8 @@ export async function executeRefresh() {
         || loaded.record?.refreshOperationToken !== token) {
       throw new Error('site refresh intent changed before the worker acquired the destination lock');
     }
-    const { refreshOperationToken: _token, ...intent } = loaded.record;
+    const intent = { ...loaded.record };
+    delete intent.refreshOperationToken;
     writeState({ ...intent, pid: process.pid, workerPid: process.pid });
     return executeRefreshUnderLock(workspace, webRoot);
   }, { wait: true });
