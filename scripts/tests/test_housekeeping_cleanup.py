@@ -1,10 +1,8 @@
 import json
-import hashlib
 import os
 import sqlite3
 import stat
 import tempfile
-import tarfile
 import unittest
 from argparse import Namespace
 from contextlib import nullcontext
@@ -167,42 +165,26 @@ class ReleaseCleanupTests(unittest.TestCase):
         verify.assert_not_called()
 
     def test_backup_verification_checks_archive_database_and_media_without_extracting(self):
-        backup = self.state_dir / 'backups' / 'valid-op'
-        media_dir = backup / 'media'
-        media_dir.mkdir(parents=True)
-        database = backup / 'database.sqlite'
+        backup_root = self.state_dir / 'backups'
+        backup_root.mkdir()
+        database = self.state_dir / 'cms.sqlite'
+        media_root = self.state_dir / 'uploads'
+        media_root.mkdir()
+        (media_root / 'proof.txt').write_bytes(b'preserved media')
         connection = sqlite3.connect(database)
         connection.execute('CREATE TABLE proof (value TEXT)')
         connection.execute("INSERT INTO proof VALUES ('ok')")
         connection.commit()
         connection.close()
-        media = b'preserved media'
-        media_sha = hashlib.sha256(media).hexdigest()
-        (media_dir / f'sha256:{media_sha}').write_bytes(media)
-        media_inventory = [{'url': '/uploads/proof.txt', 'sha256': media_sha, 'size': len(media),
-                            'originalName': 'proof.txt', 'mode': 0o600, 'uid': 0, 'gid': 0,
-                            'file': f'media/sha256:{media_sha}'}]
-        media_doc = {'media': media_inventory}
-        media_bytes = json.dumps(media_doc, sort_keys=True, separators=(',', ':')).encode() + b'\n'
-        (backup / 'media-manifest.json').write_bytes(media_bytes)
-        database_sha = hashlib.sha256(database.read_bytes()).hexdigest()
-        manifest = {'version': 1, 'operationId': 'valid-op', 'database': '/srv/cms.sqlite',
-                    'postCheckpointLiveSha256': database_sha, 'databaseSha256': database_sha,
-                    'mediaManifestSha256': hashlib.sha256(media_bytes).hexdigest(), 'media': media_inventory}
-        manifest_path = backup / 'manifest.json'
-        manifest_path.write_text(json.dumps(manifest, sort_keys=True, separators=(',', ':')) + '\n')
-        archive = backup / 'backup.tar'
-        with tarfile.open(archive, 'w') as output:
-            for path in sorted(backup.rglob('*')):
-                if path == archive:
-                    continue
-                output.add(path, arcname=str(path.relative_to(backup)), recursive=False)
-        manifest['archiveSha256'] = hashlib.sha256(archive.read_bytes()).hexdigest()
-        manifest_path.write_text(json.dumps(manifest, sort_keys=True, separators=(',', ':')) + '\n')
+        with patch.object(host, '_assert_no_database_handles'):
+            host._backup({'cmsDatabase': str(database), 'backupRoot': str(backup_root),
+                          'mediaRoots': [{'path': str(media_root), 'prefix': '/uploads/'}]}, 'valid-op')
+        backup = backup_root / 'valid-op'
 
-        self.assertTrue(host._verified_cleanup_backup(backup, 'valid-op', '/srv/cms.sqlite'))
-        database.write_bytes(database.read_bytes() + b'corruption')
-        self.assertFalse(host._verified_cleanup_backup(backup, 'valid-op', '/srv/cms.sqlite'))
+        self.assertTrue(host._verified_cleanup_backup(backup, 'valid-op', str(database.resolve())))
+        backup_database = backup / 'database.sqlite'
+        backup_database.write_bytes(backup_database.read_bytes() + b'corruption')
+        self.assertFalse(host._verified_cleanup_backup(backup, 'valid-op', str(database.resolve())))
         self.assertFalse(host._verified_cleanup_backup(backup, 'valid-op', '/different/database.sqlite'))
 
     def test_cleanup_marker_survives_backup_stage_failure_after_site_cleanup_and_retry(self):
