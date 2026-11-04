@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import {
-  cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync,
+  chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync,
   readlinkSync, rmSync, symlinkSync, unlinkSync, writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -17,6 +17,7 @@ function setup(t) {
   const root = join(temp, 'remote');
   const source = join(temp, 'source');
   mkdirSync(join(root, 'shared', 'site-refresh'), { recursive: true });
+  writeFileSync(join(root, '.publication.lock'), ''); chmodSync(join(root, '.publication.lock'), 0o600);
   mkdirSync(join(root, 'releases', 'old'), { recursive: true });
   mkdirSync(source);
   const body = Buffer.from('authorized bytes only');

@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readlinkSync, readdirSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readlinkSync, readdirSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -17,6 +17,7 @@ function setup(t, fault = {}) {
   const root = join(temp, 'remote');
   mkdirSync(join(root, 'releases', 'old'), { recursive: true });
   mkdirSync(join(root, 'shared', 'site-refresh'), { recursive: true });
+  writeFileSync(join(root, '.publication.lock'), '', { mode: 0o600 }); chmodSync(join(root, '.publication.lock'), 0o600);
   writeFileSync(join(root, 'releases', 'old', 'index.html'), 'old release');
   symlinkSync('releases/old', join(root, 'current'));
   const fragment = join(root, 'shared', 'nginx-redirects.conf');

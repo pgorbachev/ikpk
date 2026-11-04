@@ -24,3 +24,7 @@ The staging194 rehearsal retains the existing configured CMS release, SQLite, up
 ## Risks
 
 Current CI evidence is stale or failed, and disk inspection cannot prove loaded Nginx behavior. These facts block rehearsal admission; demo success will not establish production readiness.
+
+8. **Shared site admission:** CMS refresh and restore, deployment, recovery, and cleanup use the existing destination flock. Under that lock they check existing unresolved operation evidence before changing site state; the existing operation journal lock remains internal. Preserve current and contract-protected rollback targets during cleanup.
+
+9. **Explicit cancellation of an unclaimed refresh:** An authenticated content administrator can request `cancel-starting` with the exact `pid` and `refreshOperationToken` read from the protected local refresh state. Under the destination flock, the handler cancels only the matching unswitched record with status `running`, phase `starting`, and no worker PID; an acquired worker or a changed record is never cancelled. A worker still waiting for the lock must recheck its intent before capture and exit if it was cancelled. This action can cancel a live pending launch, so it is never automatic. The token stays out of GET responses, URLs and logs; do not expose it in shell history. A cancelled start is recorded as failed before a new attempt is admitted.

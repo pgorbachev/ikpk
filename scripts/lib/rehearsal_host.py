@@ -27,7 +27,7 @@ import tempfile
 import time
 from contextlib import contextmanager, nullcontext
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 from urllib.parse import quote, urlsplit
 
 try:
@@ -51,7 +51,6 @@ STAGING194_TEMPORARY_ROOT = Path("/var/tmp/ikpk-staging194")
 PRODUCTION_PAIRED_WORKSPACE_ROOT = Path("/var/lib/ikpk-site-build/production-paired")
 SITE_PUBLICATION_MARKER = "host-publication.json"
 SITE_PUBLICATION_MARKER_DIR = Path("/var/lib/ikpk-rehearsal/site-publication")
-_SITE_REFRESH_LOCK_OWNER: Optional[tuple[Path, int, bytes, tuple[int, int]]] = None
 INITIAL_PROD_OPERATION_ID = "initial-prod-20261019-A-01"
 REQUIRED_CONFIG = {
     "stateDir", "maintenanceFlag", "releaseRoot", "currentCms", "currentStatic",
@@ -549,41 +548,47 @@ def _validate_target_binding(data: dict[str, Any]) -> None:
 @contextmanager
 def _destination_publication_lock(config: dict[str, Any], *, wait: bool = False):
     """Serialize host work with publication-remote on the fixed destination inode."""
-    global _SITE_REFRESH_LOCK_OWNER
+    path = Path(config.get("publicationLock", PRODUCTION_PUBLICATION_LOCK))
+    if path != PRODUCTION_PUBLICATION_LOCK:
+        raise HostFailure("shared publication lock path is not fixed")
     try:
-        path = Path(config.get("publicationLock", PRODUCTION_PUBLICATION_LOCK))
-        if path != PRODUCTION_PUBLICATION_LOCK:
-            raise HostFailure("shared publication lock path is not fixed")
+        before = path.lstat()
+    except FileNotFoundError as error:
+        raise HostFailure("shared publication lock is missing; writers cannot be serialized") from error
+    try:
+        expected_uid = pwd.getpwnam(config["cmsUser"]).pw_uid
+    except (KeyError, OSError) as error:
+        raise HostFailure("configured publication lock owner is unknown") from error
+    try:
+        if (not stat.S_ISREG(before.st_mode) or before.st_nlink != 1 or before.st_uid != expected_uid
+                or stat.S_IMODE(before.st_mode) != 0o600):
+            raise HostFailure("shared publication lock must be a 0600 regular file owned by the configured CMS user")
+        fd = os.open(path, os.O_RDWR | getattr(os, "O_NOFOLLOW", 0))
+    except OSError as error:
+        raise HostFailure("shared publication lock is unavailable") from error
+    try:
+        info = os.fstat(fd)
+        if ((info.st_dev, info.st_ino) != (before.st_dev, before.st_ino) or not stat.S_ISREG(info.st_mode)
+                or info.st_nlink != 1 or info.st_uid != expected_uid or stat.S_IMODE(info.st_mode) != 0o600):
+            raise HostFailure("shared publication lock changed or has unsafe owner/permissions")
         try:
-            before = path.lstat()
-        except FileNotFoundError as error:
-            raise HostFailure("shared publication lock is missing; writers cannot be serialized") from error
+            fcntl.flock(fd, fcntl.LOCK_EX if wait else fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError as error:
+            raise HostFailure("another publisher holds the destination lock") from error
+        opened = os.fstat(fd)
         try:
-            expected_uid = pwd.getpwnam(config["cmsUser"]).pw_uid
-        except (KeyError, OSError) as error:
-            raise HostFailure("configured publication lock owner is unknown") from error
-        try:
-            if (not stat.S_ISREG(before.st_mode) or before.st_nlink != 1 or before.st_uid != expected_uid
-                    or stat.S_IMODE(before.st_mode) != 0o600):
-                raise HostFailure("shared publication lock must be a 0600 regular file owned by the configured CMS user")
-            fd = os.open(path, os.O_RDWR | getattr(os, "O_NOFOLLOW", 0))
+            named = path.lstat()
         except OSError as error:
-            raise HostFailure("shared publication lock is unavailable") from error
-        try:
-            info = os.fstat(fd)
-            if ((info.st_dev, info.st_ino) != (before.st_dev, before.st_ino) or not stat.S_ISREG(info.st_mode)
-                    or info.st_nlink != 1 or info.st_uid != expected_uid or stat.S_IMODE(info.st_mode) != 0o600):
-                raise HostFailure("shared publication lock changed or has unsafe owner/permissions")
-            try:
-                fcntl.flock(fd, fcntl.LOCK_EX if wait else fcntl.LOCK_EX | fcntl.LOCK_NB)
-            except BlockingIOError as error:
-                raise HostFailure("another publisher holds the destination lock") from error
-            yield
-        finally:
-            os.close(fd)
+            raise HostFailure("shared publication lock changed while waiting") from error
+        if ((opened.st_dev, opened.st_ino) != (named.st_dev, named.st_ino)
+                or not stat.S_ISREG(opened.st_mode) or not stat.S_ISREG(named.st_mode)
+                or opened.st_nlink != 1 or named.st_nlink != 1
+                or opened.st_uid != expected_uid or named.st_uid != expected_uid
+                or stat.S_IMODE(opened.st_mode) != 0o600 or stat.S_IMODE(named.st_mode) != 0o600):
+            raise HostFailure("shared publication lock changed or has unsafe owner/permissions")
+        yield
     finally:
-        if _SITE_REFRESH_LOCK_OWNER is not None:
-            _release_site_refresh_lock()
+        os.close(fd)
 
 
 def _site_marker_path(config: dict[str, Any]) -> Path:
@@ -621,89 +626,6 @@ def _select_cleanup_profile(config: dict[str, Any], profile: str) -> tuple[dict[
             or selected.get("currentStatic") != config.get("currentStatic")):
         raise HostFailure("site-publication profile does not match the fixed cleanup target")
     return selected, marker_profile, marker
-
-
-def _site_refresh_lock_owned(config: dict[str, Any]) -> bool:
-    owner = _SITE_REFRESH_LOCK_OWNER
-    if owner is None or owner[0] != Path(str(config["siteRefreshState"]) + ".lock"):
-        return False
-    path, fd, token, inode = owner
-    try:
-        opened, named = os.fstat(fd), os.lstat(path)
-        os.lseek(fd, 0, os.SEEK_SET)
-        return ((opened.st_dev, opened.st_ino) == inode == (named.st_dev, named.st_ino)
-                and os.read(fd, 256) == token)
-    except OSError:
-        return False
-
-
-def _reserve_site_refresh_lock(config: dict[str, Any], *, wait: bool = False) -> None:
-    global _SITE_REFRESH_LOCK_OWNER
-    if _SITE_REFRESH_LOCK_OWNER is not None:
-        if _site_refresh_lock_owned(config):
-            return
-        raise HostFailure("site-refresh reservation ownership changed")
-    state = Path(config["siteRefreshState"])
-    lock = Path(str(state) + ".lock")
-    token = f"{os.getpid()}\n{secrets.token_hex(16)}\n".encode("ascii")
-    deadline = time.monotonic() + 3600
-    while True:
-        try:
-            fd = os.open(lock, os.O_CREAT | os.O_EXCL | os.O_RDWR | getattr(os, "O_NOFOLLOW", 0), 0o600)
-            break
-        except FileExistsError as error:
-            if not wait:
-                raise HostFailure("CMS site refresh or Restore is active; resolve it before publication") from error
-            if time.monotonic() >= deadline:
-                raise HostFailure("CMS site refresh or Restore did not drain before housekeeping") from error
-            _verify_site_refresh_idle(config, recovery=True)
-    try:
-        if os.write(fd, token) != len(token):
-            raise HostFailure("could not durably write site-refresh reservation")
-        os.fsync(fd)
-        info, named = os.fstat(fd), os.lstat(lock)
-        if (not stat.S_ISREG(info.st_mode) or info.st_nlink != 1
-                or (info.st_dev, info.st_ino) != (named.st_dev, named.st_ino)):
-            raise HostFailure("site-refresh reservation changed while being created")
-        directory = os.open(lock.parent, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
-        try:
-            os.fsync(directory)
-        finally:
-            os.close(directory)
-        _SITE_REFRESH_LOCK_OWNER = (lock, fd, token, (info.st_dev, info.st_ino))
-    except BaseException:
-        os.close(fd)
-        try:
-            if lock.read_bytes() == token:
-                lock.unlink()
-        except OSError:
-            pass
-        raise
-
-
-def _release_site_refresh_lock() -> None:
-    global _SITE_REFRESH_LOCK_OWNER
-    owner, _SITE_REFRESH_LOCK_OWNER = _SITE_REFRESH_LOCK_OWNER, None
-    if owner is None:
-        return
-    path, fd, token, inode = owner
-    try:
-        opened, named = os.fstat(fd), os.lstat(path)
-        os.lseek(fd, 0, os.SEEK_SET)
-        if ((opened.st_dev, opened.st_ino) == inode == (named.st_dev, named.st_ino)
-                and os.read(fd, 256) == token):
-            os.unlink(path)
-            directory = os.open(path.parent, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
-            try:
-                os.fsync(directory)
-            finally:
-                os.close(directory)
-    except FileNotFoundError:
-        # Another trusted recovery path may have removed the name after our final
-        # ownership check. Never unlink a replacement inode; absence is already released.
-        pass
-    finally:
-        os.close(fd)
 
 
 def _read_site_publication_marker(config: dict[str, Any]) -> Optional[dict[str, Any]]:
@@ -789,6 +711,36 @@ def _clear_site_publication_marker(config: dict[str, Any], operation_id: str) ->
         os.fsync(directory)
     finally:
         os.close(directory)
+
+
+def _assert_site_publication_admission(config: dict[str, Any], profile: str, action: str,
+                                      operation_id: Optional[str], unfinished: set[str], *,
+                                      allow_cleanup_pending_rollback: bool = False,
+                                      allow_cleanup_pending_finalize: bool = False,
+                                      allow_marker_recreation: bool = False) -> None:
+    if action == "cleanup-site":
+        if unfinished:
+            raise HostFailure("host publication journal has an unfinished operation; recover it first")
+        return
+    if unfinished and operation_id not in unfinished:
+        raise HostFailure("another host publication is unfinished; recover it first")
+    marker = _read_site_publication_marker(config)
+    if marker is not None:
+        same_operation = marker["profile"] == profile and marker["operationId"] == operation_id
+        if same_operation and marker["phase"] == "active":
+            return
+        if (same_operation and marker["phase"] == "cleanup-pending"
+                and action == "static-main-recover" and allow_cleanup_pending_rollback):
+            return
+        if (same_operation and marker["phase"] == "cleanup-pending"
+                and action == "finalize-recover" and allow_cleanup_pending_finalize):
+            return
+        if not same_operation or marker["phase"] != "active":
+            raise HostFailure("another or unresolved host publication owns the shared marker")
+    recovery_actions = {"cms-update", "static-main", "static-main-recover", "static-publish",
+                        "recover", "restore", "finalize-recover"}
+    if operation_id in unfinished and action in recovery_actions and allow_marker_recreation:
+        _write_site_publication_marker(config, operation_id)
 
 
 def _consume_site_cleanup_request(config: dict[str, Any]) -> None:
@@ -1632,7 +1584,7 @@ def _verify_site_refresh_idle(config: dict[str, Any], *, recovery: bool = False)
             lock_info = lock_path.lstat()
         except FileNotFoundError:
             lock_info = None
-        if lock_info is not None and not _site_refresh_lock_owned(config):
+        if lock_info is not None:
             if not stat.S_ISREG(lock_info.st_mode) or lock_info.st_nlink != 1:
                 raise HostFailure("site-refresh lock is unsafe; refusing to stop CMS")
             try:
@@ -1667,7 +1619,7 @@ def _verify_site_refresh_idle(config: dict[str, Any], *, recovery: bool = False)
         time.sleep(1)
 
 
-def _assert_site_refresh_idle(config: dict[str, Any]) -> None:
+def _assert_site_refresh_idle(config: dict[str, Any], *, allow_interrupted: bool = False) -> None:
     """Read-only preflight: active, malformed, or interrupted operations refuse before fencing."""
     path = Path(config["siteRefreshState"])
     try:
@@ -1681,11 +1633,13 @@ def _assert_site_refresh_idle(config: dict[str, Any]) -> None:
             record = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, ValueError) as error:
             raise HostFailure("site-refresh state is unreadable; refusing before fencing") from error
-        if not isinstance(record, dict) or record.get("status") not in (
-                "idle", "succeeded", "failed", "verification-failed"):
+        allowed_statuses = {"idle", "succeeded", "failed"}
+        if allow_interrupted:
+            allowed_statuses.add("interrupted")
+        if not isinstance(record, dict) or record.get("status") not in allowed_statuses:
             raise HostFailure("site-refresh is active or unknown; resolve it before starting paired maintenance")
     lock_path = Path(str(path) + ".lock")
-    if (lock_path.exists() or lock_path.is_symlink()) and not _site_refresh_lock_owned(config):
+    if lock_path.exists() or lock_path.is_symlink():
         raise HostFailure("site-refresh/Restore lock exists; resolve it before starting paired maintenance")
     if record and record.get("phase") and record.get("workerPid") is None and _site_refresh_worker_pids():
         raise HostFailure("legacy terminal site-refresh worker is still active; resolve it before maintenance")
@@ -1701,6 +1655,23 @@ def _assert_site_refresh_idle(config: dict[str, Any]) -> None:
             raise HostFailure("terminal refresh worker is still active; resolve it before maintenance")
         else:
             raise HostFailure("terminal refresh worker is still active; resolve it before maintenance")
+    if record and record.get("status") == "interrupted":
+        owner_pid = record.get("pid")
+        if isinstance(owner_pid, bool) or not isinstance(owner_pid, int) or owner_pid < 2:
+            raise HostFailure("interrupted refresh state has an invalid owner PID")
+        try:
+            os.kill(owner_pid, 0)
+        except ProcessLookupError:
+            pass
+        except PermissionError:
+            raise HostFailure("interrupted refresh owner is still active; recovery refused")
+        else:
+            raise HostFailure("interrupted refresh owner is still active; recovery refused")
+    site_root = Path(config["staticReleaseRoot"]).parent
+    for name in (".publication-pending.json", ".publication-preparation.json"):
+        evidence = site_root / name
+        if evidence.exists() or evidence.is_symlink():
+            raise HostFailure("SSH publication is unfinished; recover it before host publication")
 
 
 def _old_pair(config: dict[str, Any]) -> dict[str, Any]:
@@ -2223,14 +2194,13 @@ def _start_acquisition(config: dict[str, Any], state: RehearsalState, operation_
         _assert_site_refresh_idle(config)
     prior = next((row for row in state._operation_rows(operation_id) if row.get("record") == "start"), None)
     old_pair = prior.get("oldPair") if prior else _old_pair(config)
+    _write_site_publication_marker(config, operation_id)
     state.begin(operation_id, source_sha, old_pair)
     _set_flag(config, True)
     _write_gate(config, True)
     _verify_site_refresh_idle(config, recovery=recovery)
     _stop_writers(config)
     _verify_site_refresh_idle(config, recovery=recovery)
-    _reserve_site_refresh_lock(config)
-    _write_site_publication_marker(config, operation_id)
     _verify_fence(config)
     state.confirm_fence(operation_id, lambda: all(
         run(["/usr/bin/systemctl", "is-active", unit], check=False).returncode != 0
@@ -3355,7 +3325,8 @@ def _static_main_rollback(config: dict[str, Any], state: RehearsalState, start: 
 
 
 def _static_main_rollback_committed(config: dict[str, Any], state: RehearsalState, operation_id: str,
-                                   operator_name: Optional[str], reason: Optional[str]) -> dict[str, Any]:
+                                   operator_name: Optional[str], reason: Optional[str],
+                                   before_intent: Optional[Callable[[], None]] = None) -> dict[str, Any]:
     if (not isinstance(operator_name, str) or not operator_name.strip() or len(operator_name) > 120
             or any(ord(char) < 32 or ord(char) == 127 for char in operator_name)):
         raise HostFailure("committed static rollback requires a valid operator name")
@@ -3403,6 +3374,8 @@ def _static_main_rollback_committed(config: dict[str, Any], state: RehearsalStat
     if not intent:
         if current != candidate.resolve(strict=True):
             raise HostFailure("static-main rollback refused because currentStatic no longer points to this candidate")
+        if before_intent is not None:
+            before_intent()
         state._append({"version": 1, "record": "static-main-rollback-intent", "operationKind": "static-main",
                        "operationId": operation_id, "sourceSha": source_sha, **details})
     if current == candidate.resolve(strict=True):
@@ -3526,14 +3499,16 @@ def _static_main_export(config: dict[str, Any], state: RehearsalState, operation
 
 def _static_main_recover(config: dict[str, Any], state: RehearsalState, operation_id: str, *,
                          rollback_committed: bool = False, operator_name: Optional[str] = None,
-                         reason: Optional[str] = None) -> dict[str, Any]:
+                         reason: Optional[str] = None,
+                         before_rollback_intent: Optional[Callable[[], None]] = None) -> dict[str, Any]:
     rows = _static_main_rows(state, operation_id)
     start = _static_main_start(rows)
     if not start:
         raise HostFailure("static-main recovery has no matching durable operation")
     if any(row.get("record") == "static-main-committed" for row in rows):
         if rollback_committed:
-            return _static_main_rollback_committed(config, state, operation_id, operator_name, reason)
+            return _static_main_rollback_committed(config, state, operation_id, operator_name, reason,
+                                                   before_rollback_intent)
         if any(row.get("record") == "static-main-rollback-completed" for row in rows):
             return {"operationId": operation_id, "phase": "rolled-back"}
         return {"operationId": operation_id, "phase": "committed"}
@@ -3977,24 +3952,65 @@ def dispatch(args: argparse.Namespace) -> dict[str, Any]:
         try:
             # The ordinary journal reader repairs torn tails. Validate before
             # any dispatch path (including status/export) can call it.
-            state.read_journal_for_cleanup()
+            history = state.read_journal_for_cleanup()
         except RehearsalRefusal as error:
             raise HostFailure(str(error)) from error
+        unfinished = RehearsalState._unfinished_operation_ids(history)
+        marker = _read_site_publication_marker(config)
+        recovery_actions = ("recover", "restore", "finalize-recover", "static-main-recover")
+        matching_rows = [row for row in history if row.get("operationId") == getattr(args, "operation_id", None)]
+        if (args.action in recovery_actions and marker is not None
+                and marker.get("phase") == "active" and marker.get("profile") == profile
+                and marker.get("operationId") == getattr(args, "operation_id", None)
+                and not matching_rows and not unfinished):
+            if args.action == "recover":
+                if getattr(args, "backup_sha256", None) is not None or getattr(args, "restore_fingerprint", None) is not None:
+                    raise HostFailure("marker-only recovery cannot import or finalize a restore")
+            elif args.action == "static-main-recover":
+                if (getattr(args, "rollback_committed", False)
+                        or getattr(args, "operator", None) is not None
+                        or getattr(args, "reason", None) is not None):
+                    raise HostFailure("marker-only recovery has no committed rollback evidence")
+            else:
+                raise HostFailure("marker-only recovery is supported only for recover actions")
+            _assert_site_refresh_idle(config)
+            _clear_site_publication_marker(config, args.operation_id)
+            return {"operationId": args.operation_id, "phase": "recovered"}
+        state_writers = ("cms-update", "static-publish", "recover", "restore", "finalize-recover",
+                         "static-main", "static-main-recover", "cleanup-site")
+        if args.action in state_writers:
+            _assert_site_refresh_idle(config, allow_interrupted=(
+                args.action == "recover" and args.operation_id in unfinished))
+            committed_main = any(row.get("operationId") == getattr(args, "operation_id", None)
+                                 and row.get("record") == "static-main-committed"
+                                 and row.get("operationKind") == "static-main" for row in history)
+            prepared_restore = any(row.get("operationId") == getattr(args, "operation_id", None)
+                                   and row.get("record") == "restore-prepared" for row in history)
+            has_paired_start = any(row.get("operationId") == getattr(args, "operation_id", None)
+                                   and row.get("record") == "start"
+                                   and row.get("operationKind") != "static-main" for row in history)
+            has_static_main_start = any(row.get("operationId") == getattr(args, "operation_id", None)
+                                        and row.get("record") == "static-main-start"
+                                        and row.get("operationKind") == "static-main" for row in history)
+            marker_continuation = (
+                (args.action in ("cms-update", "static-publish", "recover", "restore") and has_paired_start)
+                or (args.action in ("static-main", "static-main-recover") and has_static_main_start)
+                or (args.action == "finalize-recover" and profile == "production-paired" and prepared_restore))
+            _assert_site_publication_admission(
+                config, profile, args.action, getattr(args, "operation_id", None),
+                unfinished,
+                allow_cleanup_pending_rollback=(args.action == "static-main-recover"
+                    and getattr(args, "rollback_committed", False) is True and committed_main),
+                allow_cleanup_pending_finalize=(args.action == "finalize-recover"
+                    and profile == "production-paired" and prepared_restore
+                    and isinstance(getattr(args, "restore_fingerprint", None), str)
+                    and CONTENT_FINGERPRINT_RE.fullmatch(args.restore_fingerprint)),
+                allow_marker_recreation=marker_continuation)
         if args.action == "cleanup-site":
-            _reserve_site_refresh_lock(config, wait=True)
             if _read_site_publication_marker(config) != cleanup_marker_snapshot:
                 raise HostFailure("site-publication marker changed while housekeeping was acquiring locks; retry required")
             _consume_site_cleanup_request(config)
             return {"status": "succeeded", "removedReleases": _cleanup_site_releases(config, state, None)}
-        if args.action in ("static-main", "static-publish", "static-main-recover"):
-            if args.action in ("static-main", "static-publish"):
-                _assert_site_refresh_idle(config)
-            _reserve_site_refresh_lock(config)
-            marker = _read_site_publication_marker(config)
-            if marker and marker["operationId"] != args.operation_id:
-                raise HostFailure("another site publication is unresolved; recover it before this operation")
-            if marker is None:
-                _write_site_publication_marker(config, args.operation_id)
         rows = state._operation_rows(args.operation_id)
         static_main_owned = any(row.get("operationKind") == "static-main" for row in rows)
         if static_main_owned and args.action in ("cms-update", "static-publish", "recover", "restore", "finalize-recover"):
@@ -4019,6 +4035,9 @@ def dispatch(args: argparse.Namespace) -> dict[str, Any]:
             archive_bytes = sys.stdin.buffer.read()
             if not archive_bytes:
                 raise HostFailure("static-main source archive is required before preparation")
+            if hashlib.sha256(archive_bytes).hexdigest() != args.archive_sha256:
+                raise HostFailure("static-main source archive SHA-256 does not match")
+            _write_site_publication_marker(config, args.operation_id)
             source_root = _extract_source_archive(config, args.source_sha, args.operation_id, archive_bytes,
                                                   args.archive_sha256, provenance, "refs/heads/main")
             del archive_bytes
@@ -4030,8 +4049,16 @@ def dispatch(args: argparse.Namespace) -> dict[str, Any]:
             if args.rollback_committed:
                 if not args.operator or not args.reason:
                     raise HostFailure("committed static rollback requires --operator and --reason")
+                def prepare_rollback_marker() -> None:
+                    marker_now = _read_site_publication_marker(config)
+                    if marker_now is None:
+                        _write_site_publication_marker(config, args.operation_id)
+                    elif (marker_now.get("profile") != profile
+                          or marker_now.get("operationId") != args.operation_id):
+                        raise HostFailure("another site publication owns the shared marker")
                 result = _static_main_recover(config, state, args.operation_id, rollback_committed=True,
-                                              operator_name=args.operator, reason=args.reason)
+                                              operator_name=args.operator, reason=args.reason,
+                                              before_rollback_intent=prepare_rollback_marker)
                 if result.get("phase") == "rolled-back":
                     _clear_site_publication_marker(config, args.operation_id)
                 return result
@@ -4068,8 +4095,13 @@ def dispatch(args: argparse.Namespace) -> dict[str, Any]:
                     _clear_site_publication_marker(config, args.operation_id)
             return result
         if args.action == "finalize-recover":
-            return _recover(config, state, args.operation_id,
-                            finalize_restore_fingerprint=args.restore_fingerprint)
+            result = _recover(config, state, args.operation_id,
+                              finalize_restore_fingerprint=args.restore_fingerprint)
+            if result.get("phase") == "recovered":
+                marker = _read_site_publication_marker(config)
+                if marker and marker["operationId"] == args.operation_id:
+                    _clear_site_publication_marker(config, args.operation_id)
+            return result
         if args.action == "cms-update":
             return _cms_update(config, state, args)
         if args.action == "static-publish":
