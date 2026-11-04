@@ -4,6 +4,7 @@ import { dirname, isAbsolute, join } from 'node:path';
 import {
   childEnvironment,
   installedCommit,
+  publicationLockPath,
   publishTree,
   redact,
   refreshStatePath,
@@ -13,8 +14,7 @@ import {
   readStateFile,
   siteBuildEnv,
   switchCurrent,
-  transferLock,
-  unlock,
+  withPublicationLock,
   verifyRelease,
   workspaceReady,
   writeJsonAtomic,
@@ -88,17 +88,29 @@ export async function executeRefresh() {
   const workspace = process.env.IKPK_BUILD_WORKSPACE;
   const webRoot = process.env.IKPK_WEB_ROOT;
   if (!webRoot || !isAbsolute(webRoot)) throw new Error('site root is invalid');
-  const lock = `${statePath()}.lock`;
-  const owner = Number(process.env.IKPK_REFRESH_OWNER_PID);
-  const token = process.env.IKPK_REFRESH_LOCK_TOKEN;
-  if (!/^[a-f0-9]{32}$/.test(token || '') || !transferLock(lock, owner, process.pid, token)) {
-    throw new Error('site refresh lock handoff failed');
-  }
-  let completed = false;
+  return withPublicationLock(publicationLockPath(process.env), async () => {
+    for (const name of ['.publication-pending.json', '.publication-preparation.json']) {
+      try { lstatSync(join(webRoot, name)); throw new Error('host publication remains unresolved'); }
+      catch (error) { if (error?.code !== 'ENOENT') throw error; }
+    }
+    const loaded = readStateFile(statePath(), webRoot);
+    const owner = Number(process.env.IKPK_REFRESH_OWNER_PID);
+    const token = process.env.IKPK_REFRESH_OPERATION_TOKEN;
+    if (!loaded.readable || loaded.record?.status !== 'running' || loaded.record?.phase !== 'starting'
+        || loaded.record?.pid !== owner || !/^[a-f0-9]{32}$/.test(token || '')
+        || loaded.record?.refreshOperationToken !== token) {
+      throw new Error('site refresh intent changed before the worker acquired the destination lock');
+    }
+    const { refreshOperationToken: _token, ...intent } = loaded.record;
+    writeState({ ...intent, pid: process.pid, workerPid: process.pid });
+    return executeRefreshUnderLock(workspace, webRoot);
+  }, { wait: true });
+}
+
+async function executeRefreshUnderLock(workspace, webRoot) {
   let result;
   let buildOutputName = null;
-  try {
-    result = await runRefresh({
+  result = await runRefresh({
       webRoot,
       pid: process.pid,
       now: () => new Date().toISOString(),
@@ -190,20 +202,14 @@ export async function executeRefresh() {
           host: process.env.IKPK_VERIFY_HOST,
           fetchImpl: globalThis.fetch,
         }),
-    });
-    completed = !result.recoveryRequired;
-    if (result?.status === 'succeeded' && buildOutputName) {
-      try {
-        removeBuiltOutput(workspace, buildOutputName);
-        removeBuiltOutput(workspace, 'dist-snapshot');
-        writeCleanupState(result.releaseId, { buildArtifactsCleanupPending: false });
-      }
-      catch { result = { ...result, buildArtifactsCleanupPending: true }; }
+  });
+  if (result?.status === 'succeeded' && buildOutputName) {
+    try {
+      removeBuiltOutput(workspace, buildOutputName);
+      removeBuiltOutput(workspace, 'dist-snapshot');
+      writeCleanupState(result.releaseId, { buildArtifactsCleanupPending: false });
     }
-  } finally {
-    // Uncaught failures and interruptions keep the lock; a recorded terminal
-    // verification failure releases it so an operator can use Restore.
-    if (completed) unlock(lock, process.pid, token);
+    catch { result = { ...result, buildArtifactsCleanupPending: true }; }
   }
   if (result?.status === 'succeeded') {
     let cleanupRequestPending = false;

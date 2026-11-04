@@ -128,18 +128,21 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
         after = {"version": 1, "profile": "production-paired", "operationId": "op-second",
                  "phase": "cleanup-pending"}
         state = SimpleNamespace(lock=lambda: nullcontext(), read_journal_for_cleanup=lambda: [])
+        state_class = rehearsal_host.RehearsalState
+        class StateFactory:
+            _unfinished_operation_ids = staticmethod(state_class._unfinished_operation_ids)
+            def __new__(cls, *_args, **_kwargs):
+                return state
         with patch.object(rehearsal_host.os, "geteuid", return_value=0), \
                 patch.object(rehearsal_host, "_root_config", return_value=config), \
                 patch.object(rehearsal_host, "_read_site_publication_marker",
-                             side_effect=[before, after]), \
+                             side_effect=[before, before, after]), \
                 patch.object(rehearsal_host, "_destination_publication_lock", return_value=nullcontext()), \
-                patch.object(rehearsal_host, "RehearsalState", return_value=state), \
-                patch.object(rehearsal_host, "_reserve_site_refresh_lock") as reserve, \
+                patch.object(rehearsal_host, "RehearsalState", StateFactory), \
                 patch.object(rehearsal_host, "_consume_site_cleanup_request") as consume, \
                 patch.object(rehearsal_host, "_cleanup_site_releases") as cleanup:
             with self.assertRaisesRegex(rehearsal_host.HostFailure, "marker changed while housekeeping"):
                 rehearsal_host.dispatch(Namespace(profile="production-static", action="cleanup-site"))
-        reserve.assert_called_once()
         consume.assert_not_called()
         cleanup.assert_not_called()
 
@@ -155,11 +158,10 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
             lock.write_text(stale_token, encoding="ascii")
             config = {"profile": "staging194", "siteRefreshState": str(state_path)}
             with patch.object(rehearsal_host, "_site_refresh_worker_pids", return_value=set()), \
-                    patch.object(rehearsal_host, "_SITE_REFRESH_LOCK_OWNER", None), \
                     patch.object(rehearsal_host.os, "kill", side_effect=ProcessLookupError), \
                     patch.object(rehearsal_host.time, "sleep"):
                 with self.assertRaisesRegex(rehearsal_host.HostFailure, "site-refresh lock is stale"):
-                    rehearsal_host._reserve_site_refresh_lock(config, wait=True)
+                    rehearsal_host._verify_site_refresh_idle(config)
             self.assertEqual(lock.read_text(encoding="ascii"), stale_token)
 
     def test_recovery_closes_gate_and_drains_refresh_that_started_after_preflight(self):
@@ -186,7 +188,6 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
                  patch.object(rehearsal_host, "_set_flag"), patch.object(rehearsal_host, "_write_gate"), \
                  patch.object(rehearsal_host, "_verify_fence"), patch.object(rehearsal_host, "_stop_writers"), \
                  patch.object(rehearsal_host, "_record_fenced_baseline"), \
-                 patch.object(rehearsal_host, "_reserve_site_refresh_lock"), \
                  patch.object(rehearsal_host, "_write_site_publication_marker"):
                 result = rehearsal_host._start_acquisition(config, State(), "retry-op", "a" * 40,
                                                            recovery=True)
@@ -254,7 +255,6 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
                  patch.object(rehearsal_host, "_set_flag"), patch.object(rehearsal_host, "_write_gate"), \
                  patch.object(rehearsal_host, "_verify_fence"), patch.object(rehearsal_host, "_stop_writers"), \
                  patch.object(rehearsal_host, "_record_fenced_baseline"), \
-                 patch.object(rehearsal_host, "_reserve_site_refresh_lock"), \
                  patch.object(rehearsal_host, "_write_site_publication_marker"), \
                  patch.object(rehearsal_host, "_assert_no_database_handles"), \
                  patch.object(rehearsal_host, "_write_paired_cms_source_env"), \
@@ -1580,7 +1580,6 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
 
             with patch.object(rehearsal_host, "_set_flag"), \
                  patch.object(rehearsal_host, "_write_gate"), \
-                 patch.object(rehearsal_host, "_reserve_site_refresh_lock"), \
                  patch.object(rehearsal_host, "_write_site_publication_marker"), \
                  patch.object(rehearsal_host, "_verify_fence"), \
                  patch.object(rehearsal_host, "_stop_writers"), \
@@ -2225,7 +2224,7 @@ class StaticMainAdmissionTests(unittest.TestCase):
                  patch.multiple(rehearsal_host,
                     _destination_publication_lock=lambda *args, **kwargs: nullcontext(),
                     _assert_site_refresh_idle=lambda *args, **kwargs: None,
-                    _reserve_site_refresh_lock=lambda *args, **kwargs: None), \
+                 ), \
                  patch.object(rehearsal_host, "_read_site_publication_marker", return_value=None), \
                  patch.object(rehearsal_host, "_write_site_publication_marker"), \
                  patch.object(rehearsal_host, "_validate_static_main_admission"), \
@@ -2925,7 +2924,8 @@ class ProductionPairedManualPreflightTests(unittest.TestCase):
     def test_site_refresh_preflight_rejects_active_or_unknown_worker(self):
         with tempfile.TemporaryDirectory(prefix="ikpk-paired-drain-") as temporary:
             state = Path(temporary) / "state.json"
-            config = {"profile": "production-paired", "siteRefreshState": str(state)}
+            config = {"profile": "production-paired", "siteRefreshState": str(state),
+                      "staticReleaseRoot": str(Path(temporary) / "releases")}
             state.write_text(json.dumps({"status": "running", "pid": "unknown"}), encoding="utf-8")
             with patch.object(rehearsal_host.time, "sleep"):
                 with self.assertRaisesRegex(rehearsal_host.HostFailure, "no trustworthy PID"):
@@ -2938,7 +2938,8 @@ class ProductionPairedManualPreflightTests(unittest.TestCase):
     def test_read_only_refresh_preflight_refuses_active_or_interrupted_state(self):
         with tempfile.TemporaryDirectory(prefix="ikpk-paired-preflight-") as temporary:
             state = Path(temporary) / "state.json"
-            config = {"profile": "production-paired", "siteRefreshState": str(state)}
+            config = {"profile": "production-paired", "siteRefreshState": str(state),
+                      "staticReleaseRoot": str(Path(temporary) / "releases")}
             for status in ("running", "interrupted", "unknown"):
                 state.write_text(json.dumps({"status": status}), encoding="utf-8")
                 with self.subTest(status=status), self.assertRaises(rehearsal_host.HostFailure):

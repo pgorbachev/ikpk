@@ -1,4 +1,5 @@
-import { cpSync, existsSync, fstatSync, fsyncSync, ftruncateSync, lstatSync, mkdirSync, openSync, closeSync, readFileSync, readlinkSync, realpathSync, readdirSync, renameSync, symlinkSync, unlinkSync, writeFileSync, writeSync } from 'node:fs';
+import { constants, cpSync, existsSync, fstatSync, fsyncSync, ftruncateSync, lstatSync, mkdirSync, openSync, closeSync, readFileSync, readlinkSync, realpathSync, readdirSync, renameSync, symlinkSync, unlinkSync, writeFileSync, writeSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
 import { basename, dirname, isAbsolute, join, normalize } from 'node:path';
 
 export const MESSAGES = {
@@ -67,6 +68,70 @@ export function refreshStatePath(env = {}) {
   if (env.IKPK_REFRESH_STATE) return env.IKPK_REFRESH_STATE;
   const root = env.IKPK_WEB_ROOT || '/var/www/ikpk';
   return join(root, 'shared', 'site-refresh', 'state.json');
+}
+
+export function publicationLockPath(env = {}) {
+  const root = env.IKPK_WEB_ROOT || '/var/www/ikpk';
+  if (!isAbsolute(root) || normalize(root) !== root) throw new Error('site root is invalid');
+  return join(root, '.publication.lock');
+}
+
+/** Hold the existing host lock inode while an async CMS writer runs. */
+export function openPublicationLock(path) {
+  let before;
+  try { before = lstatSync(path); }
+  catch (error) { throw new Error('shared publication lock is unavailable', { cause: error }); }
+  const uid = typeof process.getuid === 'function' ? process.getuid() : null;
+  if (!before.isFile() || before.isSymbolicLink() || before.nlink !== 1 || (before.mode & 0o777) !== 0o600
+      || (uid !== null && before.uid !== uid)) throw new Error('shared publication lock has unsafe owner or permissions');
+  const fd = openSync(path, constants.O_RDWR | (constants.O_NOFOLLOW || 0));
+  try {
+    const opened = fstatSync(fd);
+    const named = lstatSync(path);
+    if (!opened.isFile() || opened.nlink !== 1 || opened.dev !== before.dev || opened.ino !== before.ino
+        || opened.dev !== named.dev || opened.ino !== named.ino || (opened.mode & 0o777) !== 0o600
+        || (uid !== null && opened.uid !== uid)) throw new Error('shared publication lock changed or has unsafe owner or permissions');
+    return fd;
+  } catch (error) {
+    closeSync(fd);
+    throw error;
+  }
+}
+
+export function validatePublicationLock(path, fd) {
+  let opened;
+  let named;
+  try { opened = fstatSync(fd); named = lstatSync(path); }
+  catch (error) { throw new Error('shared publication lock changed or is unavailable', { cause: error }); }
+  const uid = typeof process.getuid === 'function' ? process.getuid() : null;
+  if (!opened.isFile() || opened.nlink !== 1 || opened.dev !== named.dev || opened.ino !== named.ino
+      || (opened.mode & 0o777) !== 0o600 || (uid !== null && opened.uid !== uid)
+      || !named.isFile() || named.isSymbolicLink() || named.nlink !== 1 || (named.mode & 0o777) !== 0o600
+      || (uid !== null && named.uid !== uid)) throw new Error('shared publication lock changed or has unsafe owner or permissions');
+}
+
+export function acquirePublicationLock(fd, { wait = false, path } = {}) {
+  const program = 'import fcntl, os, sys\ntry:\n fcntl.flock(3, fcntl.LOCK_EX | (0 if sys.argv[1] == "wait" else fcntl.LOCK_NB))\nexcept BlockingIOError:\n sys.exit(73)\n';
+  const result = spawnSync('python3', ['-c', program, wait ? 'wait' : 'nowait'], {
+    stdio: ['ignore', 'ignore', 'pipe', fd], encoding: 'utf8',
+  });
+  if (result.error) throw new Error('shared publication lock helper is unavailable', { cause: result.error });
+  if (result.status === 73) return false;
+  if (result.status !== 0) throw new Error('shared publication lock could not be acquired');
+  if (path) validatePublicationLock(path, fd);
+  return true;
+}
+
+export async function withPublicationLock(path, action, options = {}) {
+  const fd = openPublicationLock(path);
+  try {
+    if (!acquirePublicationLock(fd, { ...options, path })) {
+      const error = new Error('another publisher holds the destination lock');
+      error.code = 'LOCK_BUSY';
+      throw error;
+    }
+    return await action();
+  } finally { closeSync(fd); }
 }
 
 /** Host publications write a root-owned marker before staging and clear it only
@@ -451,8 +516,10 @@ export function switchCurrent(webRoot, releaseId, expectedPrevious = undefined) 
     throw new Error('release-id');
   }
   const target = join(webRoot, 'releases', releaseId);
-  const stat = lstatSync(target);
-  if (!stat.isDirectory() || stat.isSymbolicLink()) throw new Error('release-not-directory');
+  const targetInfo = lstatSync(target);
+  const releasesInfo = lstatSync(join(webRoot, 'releases'));
+  if (!releasesInfo.isDirectory() || releasesInfo.isSymbolicLink()
+      || !targetInfo.isDirectory() || targetInfo.isSymbolicLink()) throw new Error('release-not-directory');
   const link = join(webRoot, 'current');
   let previous = null;
   try {
@@ -462,13 +529,36 @@ export function switchCurrent(webRoot, releaseId, expectedPrevious = undefined) 
   }
   if (expectedPrevious !== undefined && previous !== expectedPrevious) throw new Error('current release changed before switch');
   const temp = join(webRoot, `.current-next-${releaseId}`);
-  symlinkSync(join('releases', releaseId), temp);
+  const targetText = join('releases', releaseId);
+  let tempInfo;
+  let orphan = false;
+  try {
+    tempInfo = lstatSync(temp);
+    orphan = true;
+  } catch (error) {
+    if (error?.code !== 'ENOENT') throw error;
+  }
+  if (orphan) {
+    if (expectedPrevious === undefined) throw new Error('orphan current pointer requires an exact previous target');
+    normalizeReleaseTarget(expectedPrevious, webRoot, true);
+    if (!tempInfo.isSymbolicLink() || tempInfo.nlink !== 1 || readlinkSync(temp) !== targetText) {
+      throw new Error('orphan current pointer is not the exact expected release symlink');
+    }
+  } else {
+    symlinkSync(targetText, temp);
+    tempInfo = lstatSync(temp);
+  }
+
+  // The caller holds the shared publication flock. Recheck both the saved
+  // source pointer and the exact temporary symlink inode before the atomic move.
+  const beforeRename = lstatSync(temp);
+  if (!sameFile(tempInfo, beforeRename) || !beforeRename.isSymbolicLink()
+      || beforeRename.nlink !== 1 || readlinkSync(temp) !== targetText) {
+    throw new Error('temporary current pointer changed before switch');
+  }
   if (expectedPrevious !== undefined && readlinkSync(link) !== expectedPrevious) {
-    unlinkSync(temp);
     throw new Error('current release changed before switch');
   }
-  // This check and rename are not an atomic CAS; other publisher paths do not
-  // all share this lock, so an operator window is still required.
   renameSync(temp, link);
   return { previous };
 }
@@ -742,9 +832,8 @@ export async function runRestore(deps) {
  * Lock и запись running живут в одном try/finally. Отказ записи снимает lock.
  * Исключение проверки после смены ссылки — ошибка проверки, не «сайт не менялся».
  */
-export async function runLockedRestore({ lock, pid, current, readCurrent, readCurrentTarget, webRoot, write, switchRelease, identityOf, verify,
+export async function runRestoreTransaction({ pid, current, readCurrent, readCurrentTarget, webRoot, write, switchRelease, identityOf, verify,
   installedCommit }) {
-  if (!tryLock(lock, pid)) return { status: 'running', message: MESSAGES.busy };
   let switched = false;
   let switchedReleaseId = null;
   try {
@@ -775,6 +864,7 @@ export async function runLockedRestore({ lock, pid, current, readCurrent, readCu
       message: 'Возвращается предыдущий релиз.',
       startedAt: new Date().toISOString(),
       switched: false,
+      releaseId: current?.releaseId || null,
       previousReleaseId: current?.previousReleaseId || null,
     });
     return await runRestore({
@@ -812,7 +902,12 @@ export async function runLockedRestore({ lock, pid, current, readCurrent, readCu
       // Запись недоступна. Lock снимается ниже, иначе живой pid службы останется навсегда.
     }
     return failed;
-  } finally {
-    unlock(lock, pid);
   }
+}
+
+/** Legacy lock wrapper retained for callers that explicitly provide a lock. */
+export async function runLockedRestore(options) {
+  if (!tryLock(options.lock, options.pid)) return { status: 'running', message: MESSAGES.busy };
+  try { return await runRestoreTransaction(options); }
+  finally { unlock(options.lock, options.pid); }
 }

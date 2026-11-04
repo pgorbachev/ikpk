@@ -24,3 +24,5 @@ The staging194 rehearsal retains the existing configured CMS release, SQLite, up
 ## Risks
 
 Current CI evidence is stale or failed, and disk inspection cannot prove loaded Nginx behavior. These facts block rehearsal admission; demo success will not establish production readiness.
+
+8. **Shared site admission:** CMS refresh and restore, deployment, recovery, and cleanup use the existing destination flock. Under that lock they check existing unresolved operation evidence before changing site state; the existing operation journal lock remains internal. Preserve current and contract-protected rollback targets during cleanup.
