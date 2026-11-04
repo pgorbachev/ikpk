@@ -77,11 +77,46 @@ export function registerSiteRefresh(strapi, deps: { hostPublicationStatus?: type
           ctx.body = await restorePrevious({ hostPublicationStatus: readHostPublication });
           return;
         }
+        if (ctx.request.body?.action === 'cancel-starting') {
+          ctx.body = await cancelStarting(ctx.request.body);
+          return;
+        }
+        if (Object.prototype.hasOwnProperty.call(ctx.request.body || {}, 'action')) {
+          ctx.status = 400;
+          ctx.body = { status: 'failed', message: MESSAGES.failed };
+          return;
+        }
         ctx.body = await launchRefresh({ hostPublicationStatus: readHostPublication });
       },
       config: { policies: ['admin::isAuthenticatedAdmin'] },
     },
   );
+}
+
+async function cancelStarting({ token, ownerPid }: { token?: string, ownerPid?: number }) {
+  if (typeof token !== 'string' || !/^[a-f0-9]{32}$/.test(token)
+      || !Number.isSafeInteger(ownerPid) || ownerPid <= 0) {
+    return { status: 'failed', message: MESSAGES.corrupt };
+  }
+  const { state } = locations();
+  try {
+    return await withPublicationLock(publicationLockPath(process.env), async () => {
+      const loaded = readStateFile(state);
+      const record = loaded.record;
+      if (!loaded.readable || record?.status !== 'running' || record.phase !== 'starting'
+          || record.pid !== ownerPid || record.workerPid != null || record.switched !== false
+          || record.refreshOperationToken !== token) {
+        return { status: 'failed', message: MESSAGES.corrupt };
+      }
+      const cancelled = { status: 'failed', message: 'Запуск обновления отменён. Действующий сайт не менялся.',
+        startedAt: record.startedAt, finishedAt: new Date().toISOString(), switched: false };
+      writeRecord(state, cancelled);
+      return publicView(cancelled);
+    });
+  } catch (error) {
+    if (error?.code === 'LOCK_BUSY') return { status: 'running', message: MESSAGES.busy };
+    throw error;
+  }
 }
 
 function applyDecision(state) {

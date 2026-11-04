@@ -1,4 +1,4 @@
-import { constants, cpSync, existsSync, fstatSync, fsyncSync, ftruncateSync, lstatSync, mkdirSync, openSync, closeSync, readFileSync, readlinkSync, realpathSync, readdirSync, renameSync, symlinkSync, unlinkSync, writeFileSync, writeSync } from 'node:fs';
+import { constants, cpSync, existsSync, fchmodSync, fstatSync, fsyncSync, ftruncateSync, lstatSync, mkdirSync, openSync, closeSync, readFileSync, readlinkSync, realpathSync, readdirSync, renameSync, symlinkSync, unlinkSync, writeFileSync, writeSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { basename, dirname, isAbsolute, join, normalize } from 'node:path';
 
@@ -165,8 +165,9 @@ export function writeJsonAtomic(path, record) {
   const dir = dirname(path);
   mkdirSync(dir, { recursive: true });
   const tmp = join(dir, `.${basename(path)}.${process.pid}.tmp`);
-  const fd = openSync(tmp, 'w');
+  const fd = openSync(tmp, 'w', 0o600);
   try {
+    fchmodSync(fd, 0o600);
     writeFileSync(fd, `${JSON.stringify(record)}\n`);
     fsyncSync(fd);
   } catch (error) {
