@@ -1,5 +1,6 @@
 import json
 import os
+import sqlite3
 import stat
 import tempfile
 import unittest
@@ -109,6 +110,109 @@ class ReleaseCleanupTests(unittest.TestCase):
         finished = json.loads(self.cms_state.read_text())
         self.assertFalse(finished['cleanupPending'])
         self.assertIsNone(finished['previousReleaseId'])
+        self.assertFalse(self.marker.exists())
+
+    def test_backup_retention_keeps_two_verified_terminal_operations_and_skips_unknown(self):
+        backup_root = self.state_dir / 'backups'
+        backup_root.mkdir()
+        for operation in ('old-op', 'middle-op', 'latest-op', 'older-op', 'incomplete-op', 'static-op'):
+            (backup_root / operation).mkdir()
+        history = []
+        database_path = str((self.state_dir / 'cms.sqlite').resolve())
+        for operation, sha in (('older-op', '1' * 40), ('old-op', '2' * 40),
+                               ('middle-op', '3' * 40), ('latest-op', '4' * 40)):
+            history.extend((
+                {'operationId': operation, 'record': 'start', 'sourceSha': sha,
+                 'oldPair': {'cmsDatabaseProof': {'database': database_path}}},
+                {'operationId': operation, 'record': 'new-bundle', 'sourceSha': sha},
+                {'operationId': operation, 'record': 'committed', 'sourceSha': sha},
+            ))
+        history.append({'operationId': 'incomplete-op', 'record': 'start', 'sourceSha': '5' * 40,
+                        'oldPair': {'cmsDatabaseProof': {'database': database_path}}})
+        history.extend((
+            {'operationId': 'static-op', 'record': 'static-main-start', 'sourceSha': '6' * 40,
+             'operationKind': 'static-main'},
+            {'operationId': 'static-op', 'record': 'static-main-committed', 'sourceSha': '6' * 40,
+             'operationKind': 'static-main'},
+        ))
+
+        with patch.object(host, '_verified_cleanup_backup', side_effect=lambda path, op, db: op != 'middle-op'):
+            candidates, reason = host._operation_backup_cleanup_candidates(backup_root, history, database_path, keep=2)
+
+        self.assertEqual(candidates, [backup_root / 'older-op'])
+        self.assertIsNone(reason)
+        self.assertTrue((backup_root / 'old-op').exists())
+        self.assertTrue((backup_root / 'middle-op').exists())
+        self.assertTrue((backup_root / 'incomplete-op').exists())
+        self.assertTrue((backup_root / 'static-op').exists())
+
+        with patch.object(host, '_verified_cleanup_backup', return_value=False):
+            skipped, reason = host._operation_backup_cleanup_candidates(backup_root, history, database_path, keep=2)
+        self.assertEqual(skipped, [])
+        self.assertIn('0 verified terminal operation backups', reason)
+
+        other_database_history = [
+            {'operationId': 'latest-op', 'record': 'start', 'sourceSha': '4' * 40,
+             'oldPair': {'cmsDatabaseProof': {'database': '/different/database.sqlite'}}},
+            {'operationId': 'latest-op', 'record': 'new-bundle', 'sourceSha': '4' * 40},
+            {'operationId': 'latest-op', 'record': 'committed', 'sourceSha': '4' * 40},
+        ]
+        with patch.object(host, '_verified_cleanup_backup', return_value=True) as verify:
+            mismatched, reason = host._operation_backup_cleanup_candidates(
+                backup_root, other_database_history, database_path, keep=2)
+        self.assertEqual(mismatched, [])
+        self.assertIn('0 verified terminal operation backups', reason)
+        verify.assert_not_called()
+
+    def test_backup_verification_checks_archive_database_and_media_without_extracting(self):
+        backup_root = self.state_dir / 'backups'
+        backup_root.mkdir()
+        database = self.state_dir / 'cms.sqlite'
+        media_root = self.state_dir / 'uploads'
+        media_root.mkdir()
+        (media_root / 'proof.txt').write_bytes(b'preserved media')
+        connection = sqlite3.connect(database)
+        connection.execute('CREATE TABLE proof (value TEXT)')
+        connection.execute("INSERT INTO proof VALUES ('ok')")
+        connection.commit()
+        connection.close()
+        with patch.object(host, '_assert_no_database_handles'):
+            host._backup({'cmsDatabase': str(database), 'backupRoot': str(backup_root),
+                          'mediaRoots': [{'path': str(media_root), 'prefix': '/uploads/'}]}, 'valid-op')
+        backup = backup_root / 'valid-op'
+
+        self.assertTrue(host._verified_cleanup_backup(backup, 'valid-op', str(database.resolve())))
+        backup_database = backup / 'database.sqlite'
+        backup_database.write_bytes(backup_database.read_bytes() + b'corruption')
+        self.assertFalse(host._verified_cleanup_backup(backup, 'valid-op', str(database.resolve())))
+        self.assertFalse(host._verified_cleanup_backup(backup, 'valid-op', '/different/database.sqlite'))
+
+    def test_cleanup_marker_survives_backup_stage_failure_after_site_cleanup_and_retry(self):
+        cms_release_root = self.state_dir / 'cms-releases'
+        cms_release_root.mkdir()
+        stale_cms = cms_release_root / ('c' * 40 + '-cms-old')
+        stale_cms.mkdir()
+        backup_root = self.state_dir / 'backups'
+        backup_root.mkdir()
+        database = self.state_dir / 'cms.sqlite'
+        database.write_bytes(b'fixture')
+        self.config['backupRoot'] = str(backup_root)
+        self.config['cmsDatabase'] = str(database)
+
+        with patch.object(host, '_operation_backup_cleanup_candidates',
+                          side_effect=[host.HostFailure('simulated backup inspection failure'), ([], None)]):
+            with self.assertRaisesRegex(host.HostFailure, 'simulated backup inspection failure'):
+                host._cleanup_site_releases(self.config, self.state, 'flow-one')
+            self.assertFalse(self.old.exists())
+            self.assertTrue(self.current.exists())
+            self.assertTrue(stale_cms.exists())
+            self.assertTrue(self.marker.exists())
+            self.assertEqual(json.loads(self.marker.read_text())['phase'], 'cleanup-pending')
+
+            host._cleanup_site_releases(self.config, self.state, None)
+
+        self.assertTrue(stale_cms.exists())
+        self.assertTrue(self.current.exists())
         self.assertFalse(self.marker.exists())
 
     def test_unfinished_operation_blocks_cleanup_before_pointer_expiry(self):

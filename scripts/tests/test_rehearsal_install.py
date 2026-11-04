@@ -124,6 +124,15 @@ class InstalledEntrypointTests(unittest.TestCase):
     def test_housekeeping_unit_allows_stale_pointer_parent_without_requiring_prod_lock_on_194(self):
         installer = (ROOT / "scripts/install-rehearsal-host.sh").read_text(encoding="utf-8")
         self.assertIn("ReadWritePaths=/var/www/ikpk $site_state_dir $state_dir", installer)
+        self.assertIn("$cleanup_backup_root", installer)
+        self.assertIn("$cleanup_profile_artifact_roots", installer)
+        for path in (
+            "-/var/lib/ikpk-rehearsal/initial-prod/backups",
+            "-/var/lib/ikpk-rehearsal/production-static/backups",
+            "-/var/lib/ikpk-rehearsal/production-paired/backups",
+        ):
+            self.assertIn(path, installer)
+        self.assertIn('json.load(source)["backupRoot"]', installer)
         self.assertNotIn("ReadWritePaths=/var/www/ikpk/releases /var/www/ikpk/.publication.lock", installer)
         for profile in ("initial-prod", "production-static", "production-paired"):
             self.assertIn("-/var/lib/ikpk-rehearsal/" + profile, installer)

@@ -233,6 +233,15 @@ with open(sys.argv[1], encoding="utf-8") as source:
     print(json.load(source)["stateDir"])
 PY
 )
+  cleanup_backup_root=$(python3 - "$CONFIG" <<'PY'
+import json, os, sys
+with open(sys.argv[1], encoding="utf-8") as source:
+    path = json.load(source)["backupRoot"]
+if not os.path.isabs(path) or path == "/":
+    raise SystemExit("CMS cleanup backup root must be an absolute non-root path")
+print(path)
+PY
+)
   site_state_dir=$(python3 - "$CONFIG" <<'PY'
 import json, os, sys
 with open(sys.argv[1], encoding="utf-8") as source:
@@ -241,12 +250,16 @@ PY
 )
   site_cleanup_request="$site_state_dir/cleanup.request"
   cleanup_profile_state_dirs=
+  cleanup_profile_artifact_roots=
   if [[ "$service_profile" == production-static || "$service_profile" == production-paired || \
         "$service_profile" == initial-prod ]]; then
     # A protected marker can belong to another installed production profile.
     # These exact directories let the helper read that profile's journal under
     # systemd; '-' means a profile never provisioned here may be absent.
     cleanup_profile_state_dirs="-/var/lib/ikpk-rehearsal/initial-prod -/var/lib/ikpk-rehearsal/production-static -/var/lib/ikpk-rehearsal/production-paired"
+    # The shared housekeeping unit can be selected by any production marker,
+    # even when it was installed from another production profile.
+    cleanup_profile_artifact_roots="-/var/lib/ikpk-rehearsal/initial-prod/backups -/var/lib/ikpk-rehearsal/production-static/backups -/var/lib/ikpk-rehearsal/production-paired/backups"
   fi
   systemd_dir=/etc/systemd/system
   unit_tmp="$systemd_dir/ikpk-site-housekeeping.service.new.$$"
@@ -274,7 +287,7 @@ ProtectControlGroups=yes
 # directory and fsyncs its parent. CMS and the 194 transport serialize through
 # the shared site-refresh reservation; production transport also uses its
 # configured .publication.lock. Do not require that prod-only inode on 194.
-ReadWritePaths=/var/www/ikpk $site_state_dir $state_dir $cleanup_profile_state_dirs /var/lib/ikpk-rehearsal/site-publication
+ReadWritePaths=/var/www/ikpk $site_state_dir $state_dir $cleanup_profile_state_dirs /var/lib/ikpk-rehearsal/site-publication $cleanup_backup_root $cleanup_profile_artifact_roots
 EOF
   chmod 0644 "$unit_tmp"
   mv -f -- "$unit_tmp" "$systemd_dir/ikpk-site-housekeeping.service"
