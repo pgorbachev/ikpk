@@ -9,7 +9,7 @@ The production CMS currently has a one-time initial-install path and a separate 
 - Preserve production SQLite, uploads, users, roles, and grants; capture and verify a production-only off-host backup before database mutation.
 - Bind the production snapshot and restore checks to the existing production-paired operation journal and verified off-host backup; do not compare production content with the shared stand-only provenance ledger.
 - Keep writers fenced until CMS and production-mode static candidate checks pass; support safe pre-backup recovery when no mutation began and verified-backup recovery after mutation.
-- Keep the target and CMS/data effects of the one-time `initial-prod` and reusable `production-static` profiles unchanged. Run paired phases in one manual single-operator maintenance window; do not add or claim global lock/handoff serialization with CMS refresh or UI Restore. Do not copy CMS data or media from staging194.
+- Keep the target and CMS/data effects of the one-time `initial-prod` and reusable `production-static` profiles unchanged. Run paired phases in one manual single-operator maintenance window. The existing shared destination lock serializes individual host-side state-changing commands with CMS refresh and UI Restore, but is not held across the multi-command paired window and does not prove that an already accepted CMS handler has drained. Do not copy CMS data or media from staging194.
 
 ## Capabilities
 
