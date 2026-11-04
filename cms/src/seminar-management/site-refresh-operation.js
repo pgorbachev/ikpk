@@ -110,7 +110,9 @@ export function validatePublicationLock(path, fd) {
       || (uid !== null && named.uid !== uid)) throw new Error('shared publication lock changed or has unsafe owner or permissions');
 }
 
-export function acquirePublicationLock(fd, { wait = false, path } = {}) {
+/** @param {{ wait?: boolean, path?: string }} [options] */
+export function acquirePublicationLock(fd, options = {}) {
+  const { wait = false, path } = options;
   const program = 'import fcntl, os, sys\ntry:\n fcntl.flock(3, fcntl.LOCK_EX | (0 if sys.argv[1] == "wait" else fcntl.LOCK_NB))\nexcept BlockingIOError:\n sys.exit(73)\n';
   const result = spawnSync('python3', ['-c', program, wait ? 'wait' : 'nowait'], {
     stdio: ['ignore', 'ignore', 'pipe', fd], encoding: 'utf8',
