@@ -794,6 +794,149 @@ def _remove_release_tree(path: Path, mount_points: set[Path]) -> None:
     shutil.rmtree(path)
 
 
+def _verified_cleanup_backup(directory: Path, operation_id: str, expected_database: str) -> bool:
+    """Validate an existing operation backup without extraction or writes."""
+    import sqlite3
+    try:
+        if directory.is_symlink() or not directory.is_dir():
+            return False
+        manifest_path = directory / "manifest.json"
+        database = directory / "database.sqlite"
+        media_path = directory / "media-manifest.json"
+        archive = directory / "backup.tar"
+        for path in (manifest_path, database, media_path, archive):
+            info = path.lstat()
+            if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
+                return False
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        media_doc = json.loads(media_path.read_text(encoding="utf-8"))
+        if (not isinstance(manifest, dict) or not isinstance(media_doc, dict)
+                or manifest.get("operationId") != operation_id
+                or manifest.get("database") != expected_database
+                or not SHA256_RE.fullmatch(str(manifest.get("databaseSha256", "")))
+                or not SHA256_RE.fullmatch(str(manifest.get("mediaManifestSha256", "")))
+                or not SHA256_RE.fullmatch(str(manifest.get("archiveSha256", "")))
+                or sha256_file(database) != manifest["databaseSha256"]
+                or sha256_file(media_path) != manifest["mediaManifestSha256"]
+                or sha256_file(archive) != manifest["archiveSha256"]
+                or not isinstance(media_doc.get("media"), list)
+                or manifest.get("media") != media_doc["media"]):
+            return False
+        checked = sqlite3.connect(f"file:{quote(str(database))}?mode=ro", uri=True)
+        try:
+            if checked.execute("PRAGMA integrity_check").fetchone() != ("ok",):
+                return False
+        finally:
+            checked.close()
+        expected = {"manifest.json", "database.sqlite", "media-manifest.json"}
+        for item in media_doc["media"]:
+            if not isinstance(item, dict):
+                return False
+            relative = item.get("file")
+            digest = item.get("sha256")
+            size = item.get("size")
+            if (not SHA256_RE.fullmatch(str(digest)) or relative != f"media/sha256:{digest}"
+                    or type(size) is not int or size < 0):
+                return False
+            media_file = directory / relative
+            media_info = media_file.lstat()
+            if (not stat.S_ISREG(media_info.st_mode) or media_info.st_nlink != 1
+                    or media_info.st_size != size or sha256_file(media_file) != digest):
+                return False
+            expected.add(relative)
+        with tarfile.open(archive, "r|") as bundle:
+            names = set()
+            canonical_names = set()
+            files = set()
+            for member in bundle:
+                name = member.name
+                relative = name.removeprefix("./")
+                if (name.startswith("/") or ".." in Path(name).parts or not relative
+                        or Path(relative).as_posix() != relative or relative in canonical_names or name in names
+                        or not (member.isfile() or member.isdir())):
+                    return False
+                names.add(name)
+                canonical_names.add(relative)
+                if member.isfile():
+                    files.add(relative)
+                    source = bundle.extractfile(member)
+                    if source is None:
+                        return False
+                    if relative == "manifest.json":
+                        embedded = {key: value for key, value in manifest.items() if key != "archiveSha256"}
+                        expected_manifest = (json.dumps(embedded, sort_keys=True, separators=(",", ":")) + "\n").encode()
+                        if source.read() != expected_manifest:
+                            return False
+                        continue
+                    digest = hashlib.sha256()
+                    while True:
+                        block = source.read(1024 * 1024)
+                        if not block:
+                            break
+                        digest.update(block)
+                    local = directory / relative
+                    if not local.is_file() or digest.hexdigest() != sha256_file(local):
+                        return False
+            if expected != files:
+                return False
+        return True
+    except (OSError, ValueError, KeyError, TypeError, AttributeError, tarfile.TarError, sqlite3.Error):
+        return False
+
+
+def _operation_backup_cleanup_candidates(backup_root: Path, history: list[dict], expected_database: str, *, keep: int = 2
+                                        ) -> tuple[list[Path], Optional[str]]:
+    starts = {row["operationId"]: row for row in history if row.get("record") == "start"
+              and row.get("operationKind") is None}
+    terminal_order = []
+    for row in history:
+        operation_id = row.get("operationId")
+        if (row.get("record") in ("committed", "recovered") and operation_id in starts
+                and operation_id not in terminal_order):
+            terminal_order.append(operation_id)
+    verified = []
+    for operation_id in terminal_order:
+        candidate = backup_root / operation_id
+        old_pair = starts[operation_id].get("oldPair")
+        database_proof = old_pair.get("cmsDatabaseProof") if isinstance(old_pair, dict) else None
+        journal_database = database_proof.get("database") if isinstance(database_proof, dict) else None
+        if (journal_database == expected_database
+                and _verified_cleanup_backup(candidate, operation_id, expected_database)):
+            verified.append(candidate)
+    if len(verified) < keep:
+        return [], f"found {len(verified)} verified terminal operation backups; retaining all"
+    preserve = set(verified[-keep:]) if keep else set()
+    return [path for path in verified if path not in preserve], None
+
+
+def _cleanup_operation_backups(config: dict[str, Any], history: list[dict], marker: Optional[dict],
+                               operation_id: Optional[str], mounts: set[Path]) -> list[str]:
+    print("IKPK housekeeping: CMS source release cleanup skipped; systemd EnvironmentFiles can change the restart workspace without changing the live process environment", file=sys.stderr)
+    backup_root = Path(config["backupRoot"])
+    root_info = backup_root.lstat()
+    if not stat.S_ISDIR(root_info.st_mode) or stat.S_ISLNK(root_info.st_mode):
+        raise HostFailure("operation backup root is unsafe; cleanup refused")
+    try:
+        expected_database = str(Path(config["cmsDatabase"]).resolve(strict=True))
+    except (OSError, KeyError, ValueError):
+        print("IKPK housekeeping: backup cleanup skipped: configured CMS database path is unavailable", file=sys.stderr)
+        return []
+    backup_candidates, retention_note = _operation_backup_cleanup_candidates(
+        backup_root, history, expected_database, keep=2)
+    if retention_note:
+        print(f"IKPK housekeeping: backup cleanup skipped: {retention_note}", file=sys.stderr)
+    protected_ids = {operation_id} if operation_id else set()
+    if marker and isinstance(marker.get("operationId"), str):
+        protected_ids.add(marker["operationId"])
+    removed_backups = []
+    for path in backup_candidates:
+        if path.name in protected_ids:
+            continue
+        _remove_release_tree(path, mounts)
+        removed_backups.append(str(path))
+    return removed_backups
+
+
 def _expire_site_restore(config: dict[str, Any], current_name: str, *, cleanup_pending: bool) -> None:
     state_path = Path(config["siteRefreshState"])
     try:
@@ -989,6 +1132,8 @@ def _cleanup_site_releases(config: dict[str, Any], state: RehearsalState,
             raise HostFailure("unverified directory in static release root; cleanup refused")
         _remove_release_tree(candidate, mounts)
         removed.append(str(candidate))
+    if "backupRoot" in config:
+        removed.extend(_cleanup_operation_backups(config, history, marker, operation_id, mounts))
     _expire_site_restore(config, current.name, cleanup_pending=False)
     if close_marker and marker is not None and operation_id is not None:
         _clear_site_publication_marker(config, operation_id)
