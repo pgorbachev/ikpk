@@ -76,8 +76,7 @@ def validate_sha_and_ci(sha: str, profile: str = "staging194", *, require_curren
         raise Refusal("source SHA must be a full lowercase commit ID")
     capture(["git", "cat-file", "-e", f"{sha}^{{commit}}"])
     if profile == "staging194":
-        main_provenance = validate_sha_and_ci(sha, "staging194-main")
-        return validate_stable_release(main_provenance, sha)
+        return validate_staging194_paired_admission(sha)
     repo = capture(["gh", "repo", "view", CANONICAL_REPOSITORY,
                     "--json", "nameWithOwner", "--jq", ".nameWithOwner"])
     if repo != CANONICAL_REPOSITORY:
@@ -128,9 +127,11 @@ def validate_sha_and_ci(sha: str, profile: str = "staging194", *, require_curren
             "runUrl": f"https://github.com/{repo}/actions/runs/{latest['databaseId']}"}
 
 
-def validate_static_main_ci(sha: str, *, release_tag: Optional[str] = None) -> dict:
+def validate_static_main_ci(sha: str, *, release_tag: Optional[str] = None,
+                            require_current_head: bool = True) -> dict:
     historical_release = release_tag is not None
-    provenance = validate_sha_and_ci(sha, "staging194-main", require_current_head=not historical_release)
+    provenance = validate_sha_and_ci(sha, "staging194-main",
+                                    require_current_head=require_current_head and not historical_release)
     workflow_proofs = []
     for workflow in STATIC_MAIN_ADDITIONAL_WORKFLOWS:
         raw = capture(["gh", "run", "list", "--repo", CANONICAL_REPOSITORY, "--commit", sha,
@@ -172,11 +173,36 @@ def validate_static_main_ci(sha: str, *, release_tag: Optional[str] = None) -> d
             "runUrl": f"https://github.com/{CANONICAL_REPOSITORY}/actions/runs/{latest['databaseId']}"})
     canonical_head = capture(["gh", "api", f"repos/{CANONICAL_REPOSITORY}/git/ref/heads/main",
                               "--jq", ".object.sha"])
-    if not historical_release and canonical_head != sha:
+    if require_current_head and not historical_release and canonical_head != sha:
         raise Refusal("canonical main head moved during CI admission")
     provenance["additionalWorkflows"] = workflow_proofs
     if historical_release:
         provenance = validate_stable_release(provenance, sha, release_tag=release_tag, historical_release=True)
+    return provenance
+
+
+def validate_staging194_paired_admission(sha: str) -> dict:
+    """Admit staging194 from exact-SHA canonical main push CI, without a Release."""
+    if not SHA.fullmatch(sha):
+        raise Refusal("source SHA must be a full lowercase commit ID")
+    capture(["git", "cat-file", "-e", f"{sha}^{{commit}}"])
+    repo = capture(["gh", "repo", "view", CANONICAL_REPOSITORY,
+                    "--json", "nameWithOwner", "--jq", ".nameWithOwner"])
+    if repo != CANONICAL_REPOSITORY:
+        raise Refusal("GitHub CLI resolved a repository other than the pinned IKPK repository")
+    canonical_head = capture(["gh", "api", f"repos/{repo}/git/ref/heads/main", "--jq", ".object.sha"])
+    if not SHA.fullmatch(canonical_head):
+        raise Refusal("canonical main returned an invalid head SHA")
+    capture(["git", "cat-file", "-e", f"{canonical_head}^{{commit}}"])
+    try:
+        capture(["git", "merge-base", "--is-ancestor", sha, canonical_head])
+    except Refusal as error:
+        raise Refusal("selected source is not an ancestor of canonical main") from error
+    provenance = validate_static_main_ci(sha, require_current_head=False)
+    final_head = capture(["gh", "api", f"repos/{repo}/git/ref/heads/main", "--jq", ".object.sha"])
+    if final_head != canonical_head:
+        raise Refusal("canonical main head moved during staging194 CI admission")
+    provenance["canonicalMainSha"] = canonical_head
     return provenance
 
 
@@ -1050,7 +1076,9 @@ def invoke(args: argparse.Namespace, *, admission: Optional[dict] = None) -> Opt
                 raise Refusal("built production snapshot differs from the fingerprint captured in the verified backup")
         current_run = (validate_production_paired_admission(args.source_sha) if profile == "production-paired"
                        else validate_sha_and_ci(args.source_sha, profile))
-        if (current_run.get("runId"), current_run.get("attempt")) != (admitted_run.get("runId"), admitted_run.get("attempt")):
+        if profile == "staging194" and current_run != admitted_run:
+            raise Refusal("canonical main source or exact-SHA workflow proofs changed during acceptance")
+        if profile != "staging194" and (current_run.get("runId"), current_run.get("attempt")) != (admitted_run.get("runId"), admitted_run.get("attempt")):
             raise Refusal("canonical exact-SHA run/attempt changed during the acceptance window")
         committed = parse_host_json(ssh_remote(common + ["--browser-digest", digest], profile=profile))
         if committed.get("phase") != "committed":
@@ -1068,7 +1096,9 @@ def invoke(args: argparse.Namespace, *, admission: Optional[dict] = None) -> Opt
             admitted_run = admission
         else:
             admitted_run = (validate_production_static_release(args.source_sha, release_tag)
-                            if release_tag is not None else validate_static_main_ci(args.source_sha))
+                            if release_tag is not None else
+                            validate_staging194_paired_admission(args.source_sha)
+                            if profile == "staging194" else validate_static_main_ci(args.source_sha))
         provenance_b64 = base64.b64encode(json.dumps(admitted_run, sort_keys=True,
             separators=(",", ":")).encode()).decode("ascii")
         common = ["static-main", "--operation-id", args.operation_id, "--source-sha", args.source_sha,
@@ -1091,9 +1121,10 @@ def invoke(args: argparse.Namespace, *, admission: Optional[dict] = None) -> Opt
         browser_check(args.source_sha, args.operation_id, digest, candidate, browser_profile, admitted_run,
                       chat_loader_src=INITIAL_PROD_CHAT_LOADER_SRC if profile == "production-static" else STAGING194_CHAT_LOADER_SRC)
         if release_tag is None:
-            current_run = validate_static_main_ci(args.source_sha)
+            current_run = (validate_staging194_paired_admission(args.source_sha)
+                           if profile == "staging194" else validate_static_main_ci(args.source_sha))
             if current_run != admitted_run:
-                raise Refusal("canonical main source, Tests run, or Release proof changed during acceptance")
+                raise Refusal("canonical main source or exact-SHA workflow proofs changed during acceptance")
         committed = parse_host_json(ssh_remote(common + ["--browser-digest", digest], **remote_options))
         if committed.get("phase") != "committed":
             raise Refusal(f"static-main publication did not reach durable commit: {committed.get('phase')}")
@@ -1195,7 +1226,7 @@ def main(argv: Optional[list[str]] = None) -> int:
             command.add_argument("--operator")
             command.add_argument("--reason")
         if action not in ("recover", "static-main-recover", "space-preflight"):
-            command.add_argument("--source-sha", required=True)
+            command.add_argument("--source-sha", required=action not in ("static-publish", "static-main"))
         if action == "static-main":
             command.add_argument("--reuse-capture-operation-id")
             command.add_argument("--release-tag")
@@ -1206,6 +1237,13 @@ def main(argv: Optional[list[str]] = None) -> int:
     args = parser.parse_args(argv)
     args.release_tag = getattr(args, "release_tag", None)
     try:
+        if args.command in ("static-publish", "static-main") and args.source_sha is None:
+            if args.profile != "staging194":
+                raise Refusal("--source-sha is required outside the staging194 profile")
+            args.source_sha = capture(["gh", "api", f"repos/{CANONICAL_REPOSITORY}/git/matching-refs/heads/main",
+                                       "--jq", ".[0].object.sha"])
+            if not SHA.fullmatch(args.source_sha):
+                raise Refusal("canonical main returned an invalid head SHA")
         result = invoke(args)
         if args.command == "space-preflight" and result is not None:
             print(json.dumps(result, sort_keys=True))

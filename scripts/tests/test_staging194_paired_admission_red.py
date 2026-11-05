@@ -125,6 +125,23 @@ class Staging194PairedAdmissionRedTests(unittest.TestCase):
             with self.assertRaises(operator.Refusal):
                 operator.validate_sha_and_ci(MAIN_SHA, "staging194")
 
+    def test_canonical_main_movement_during_admission_is_refused(self):
+        _, base_capture = canonical_ci_capture(MAIN_SHA, MAIN_SHA)
+        api_calls = 0
+
+        def moving_main(argv: list[str], **kwargs) -> str:
+            nonlocal api_calls
+            result = base_capture(argv, **kwargs)
+            if argv[:2] == ["gh", "api"]:
+                api_calls += 1
+                if api_calls == 4:
+                    return "c" * 40
+            return result
+
+        with patch.object(operator, "capture", side_effect=moving_main):
+            with self.assertRaisesRegex(operator.Refusal, "canonical main head moved"):
+                operator.validate_sha_and_ci(MAIN_SHA, "staging194")
+
     def test_production_paired_admission_keeps_stable_release_gate(self):
         provenance = {"sourceSha": MAIN_SHA}
         with patch.object(operator, "validate_static_main_ci", return_value=provenance) as ci, \

@@ -256,7 +256,7 @@ class OperatorAdmissionTests(unittest.TestCase):
         args = type("Args", (), {"host": staging193.TARGET_HOST, "command": "static-main",
             "operation_id": "new-build", "source_sha": SHA,
             "reuse_capture_operation_id": "sealed-capture"})()
-        with patch.object(staging193, "validate_static_main_ci", return_value=provenance), \
+        with patch.object(staging193, "validate_staging194_paired_admission", return_value=provenance), \
              patch.object(staging193, "_source_tree_bytes", return_value=10), \
              patch.object(staging193, "make_archive", return_value=(b"source archive", "a" * 64)), \
              patch.object(staging193, "ssh_remote", side_effect=ssh), \
@@ -426,7 +426,7 @@ class OperatorAdmissionTests(unittest.TestCase):
             return responses.pop(0)
         with patch.object(staging193, "_check_local_space", return_value=[]) as local_space, \
              patch.object(staging193, "_check_target_space", return_value={"filesystems": []}) as target_space, \
-             patch.object(staging193, "validate_static_main_ci", return_value=provenance) as admission, \
+             patch.object(staging193, "validate_staging194_paired_admission", return_value=provenance) as admission, \
              patch.object(staging193, "make_archive", return_value=(b"source archive", "a" * 64)), \
              patch.object(staging193, "ssh_remote", side_effect=ssh), \
              patch.object(staging193, "browser_check"):
@@ -846,7 +846,7 @@ class OperatorAdmissionTests(unittest.TestCase):
                 return preflight
             return responses.pop(0)
 
-        with patch.object(staging193, "validate_static_main_ci", side_effect=[provenance, provenance]) as admit, \
+        with patch.object(staging193, "validate_staging194_paired_admission", side_effect=[provenance, provenance]) as admit, \
              patch.object(staging193, "_source_tree_bytes", return_value=10), \
              patch.object(staging193, "make_archive", return_value=(b"source archive", "a" * 64)), \
              patch.object(staging193, "ssh_remote", side_effect=ssh), \
@@ -877,7 +877,7 @@ class OperatorAdmissionTests(unittest.TestCase):
                 return preflight
             return responses.pop(0)
 
-        with patch.object(staging193, "validate_static_main_ci", side_effect=[admitted, changed]), \
+        with patch.object(staging193, "validate_staging194_paired_admission", side_effect=[admitted, changed]), \
              patch.object(staging193, "_source_tree_bytes", return_value=10), \
              patch.object(staging193, "make_archive", return_value=(b"source archive", "a" * 64)), \
              patch.object(staging193, "ssh_remote", side_effect=ssh), \
