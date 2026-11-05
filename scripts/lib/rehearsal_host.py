@@ -1307,7 +1307,7 @@ def _assert_no_database_handles(database: Path) -> None:
         for descriptor in descriptors:
             try:
                 info = descriptor.stat()
-            except OSError:
+            except (OSError, RuntimeError):
                 continue
             if (info.st_dev, info.st_ino) in expected:
                 matches.append(proc.name)
@@ -2486,8 +2486,19 @@ def _prepare_cms_candidate(config: dict[str, Any], source_root: Path, operation_
         else:
             source_dependencies.symlink_to(dependencies, target_is_directory=True)
         if os.path.lexists(artifact / "node_modules"):
-            raise HostFailure("CI CMS artifact unexpectedly contains node_modules")
-        artifact.joinpath("node_modules").symlink_to(dependencies, target_is_directory=True)
+            artifact_dependencies = artifact / "node_modules"
+            try:
+                canonical_artifact_dependencies = (artifact_dependencies.is_symlink()
+                                                   and artifact_dependencies.resolve(strict=True) == dependencies)
+            except OSError:
+                canonical_artifact_dependencies = False
+            if not canonical_artifact_dependencies:
+                raise HostFailure("CI CMS artifact node_modules is not the canonical lock generation")
+        else:
+            artifact.joinpath("node_modules").symlink_to(dependencies, target_is_directory=True)
+        _run_as_cms(config, artifact, [config.get("nodeBinary", "/usr/bin/node"), "-e",
+            "const Database = require('better-sqlite3'); "
+            "const db = new Database(':memory:'); db.close(); require('sharp');"], timeout=120)
         web_dependencies = source_root / "web/node_modules"
         if web_dependencies.is_symlink():
             raise HostFailure("operation web dependencies must be a private source install")

@@ -1001,6 +1001,85 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
             self.assertEqual(calls[1][2]["environment"], {"NODE_OPTIONS": "--max-old-space-size=1536"})
             self.assertEqual(calls[1][2]["read_only_path"], dependencies)
 
+    def test_ci_candidate_checks_native_modules_before_web_install_and_reuses_canonical_link(self):
+        with tempfile.TemporaryDirectory(prefix="ikpk-ci-cms-native-preflight-") as temporary:
+            root = Path(temporary)
+            source = root / ("a" * 40 + "-op")
+            cms = source / "cms"
+            cms.mkdir(parents=True)
+            (source / "web").mkdir()
+            lock = b'{"lockfileVersion":3}'
+            (cms / "package-lock.json").write_bytes(lock)
+            artifact = root / "artifact"
+            artifact.mkdir()
+            (artifact / "package-lock.json").write_bytes(lock)
+            dependencies = root / "deps/node_modules"
+            dependencies.mkdir(parents=True)
+            dependencies = dependencies.resolve()
+            (artifact / "node_modules").symlink_to(dependencies, target_is_directory=True)
+            user = type("User", (), {"pw_name": "ikpk-cms", "pw_uid": 0, "pw_gid": 0})()
+            calls = []
+
+            def run_as_cms(_config, cwd, argv, **kwargs):
+                calls.append((cwd, argv, kwargs))
+                return ""
+
+            with patch.object(rehearsal_host, "_trusted_cms_artifact", return_value={}), \
+                 patch.object(rehearsal_host, "_extract_ci_cms_artifact", return_value=artifact), \
+                 patch.object(rehearsal_host, "_prepare_cms_build_dependencies", return_value=dependencies), \
+                 patch.object(rehearsal_host, "_validate_prepared_cms_candidate",
+                              return_value=(source, artifact, dependencies)), \
+                 patch.object(rehearsal_host.pwd, "getpwnam", return_value=user), \
+                 patch.object(rehearsal_host.os, "chown"), patch.object(rehearsal_host.os, "chmod"), \
+                 patch.object(rehearsal_host, "_run_as_cms", side_effect=run_as_cms):
+                rehearsal_host._prepare_cms_candidate(
+                    {"cmsUser": "ikpk-cms", "profile": "staging194"}, source, "op", {})
+
+            self.assertEqual(len(calls), 2)
+            self.assertEqual(calls[0][0], artifact)
+            self.assertEqual(calls[0][1][:2], ["/usr/bin/node", "-e"])
+            self.assertIn("new Database(':memory:')", calls[0][1][2])
+            self.assertIn("require('sharp')", calls[0][1][2])
+            self.assertEqual(calls[1][0], source / "web")
+            self.assertEqual(calls[1][1], ["/usr/bin/npm", "ci", "--no-audit", "--no-fund"])
+
+    def test_ci_candidate_native_module_failure_refuses_before_web_install(self):
+        with tempfile.TemporaryDirectory(prefix="ikpk-ci-cms-native-failure-") as temporary:
+            root = Path(temporary)
+            source = root / ("b" * 40 + "-op")
+            cms = source / "cms"
+            cms.mkdir(parents=True)
+            (source / "web").mkdir()
+            lock = b'{"lockfileVersion":3}'
+            (cms / "package-lock.json").write_bytes(lock)
+            artifact = root / "artifact"
+            artifact.mkdir()
+            (artifact / "package-lock.json").write_bytes(lock)
+            dependencies = root / "deps/node_modules"
+            dependencies.mkdir(parents=True)
+            dependencies = dependencies.resolve()
+            calls = []
+            user = type("User", (), {"pw_name": "ikpk-cms", "pw_uid": 0, "pw_gid": 0})()
+
+            def run_as_cms(_config, cwd, argv, **kwargs):
+                calls.append((cwd, argv))
+                raise rehearsal_host.HostFailure("node exited 1: native load failed")
+
+            with patch.object(rehearsal_host, "_trusted_cms_artifact", return_value={}), \
+                 patch.object(rehearsal_host, "_extract_ci_cms_artifact", return_value=artifact), \
+                 patch.object(rehearsal_host, "_prepare_cms_build_dependencies", return_value=dependencies), \
+                 patch.object(rehearsal_host, "_validate_prepared_cms_candidate") as validate, \
+                 patch.object(rehearsal_host.pwd, "getpwnam", return_value=user), \
+                 patch.object(rehearsal_host.os, "chown"), patch.object(rehearsal_host.os, "chmod"), \
+                 patch.object(rehearsal_host, "_run_as_cms", side_effect=run_as_cms):
+                with self.assertRaisesRegex(rehearsal_host.HostFailure, "native load failed"):
+                    rehearsal_host._prepare_cms_candidate(
+                        {"cmsUser": "ikpk-cms", "profile": "production-paired"}, source, "op", {})
+
+            self.assertEqual(len(calls), 1)
+            self.assertEqual(calls[0][0], artifact)
+            validate.assert_not_called()
+
     def test_ci_cms_artifact_revalidation_rejects_changed_extracted_bytes(self):
         with tempfile.TemporaryDirectory(prefix="ikpk-ci-cms-exact-payload-") as temporary:
             root = Path(temporary)
