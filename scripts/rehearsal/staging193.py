@@ -1096,9 +1096,7 @@ def invoke(args: argparse.Namespace, *, admission: Optional[dict] = None) -> Opt
             admitted_run = admission
         else:
             admitted_run = (validate_production_static_release(args.source_sha, release_tag)
-                            if release_tag is not None else
-                            validate_staging194_paired_admission(args.source_sha)
-                            if profile == "staging194" else validate_static_main_ci(args.source_sha))
+                            if release_tag is not None else validate_static_main_ci(args.source_sha))
         provenance_b64 = base64.b64encode(json.dumps(admitted_run, sort_keys=True,
             separators=(",", ":")).encode()).decode("ascii")
         common = ["static-main", "--operation-id", args.operation_id, "--source-sha", args.source_sha,
@@ -1121,8 +1119,7 @@ def invoke(args: argparse.Namespace, *, admission: Optional[dict] = None) -> Opt
         browser_check(args.source_sha, args.operation_id, digest, candidate, browser_profile, admitted_run,
                       chat_loader_src=INITIAL_PROD_CHAT_LOADER_SRC if profile == "production-static" else STAGING194_CHAT_LOADER_SRC)
         if release_tag is None:
-            current_run = (validate_staging194_paired_admission(args.source_sha)
-                           if profile == "staging194" else validate_static_main_ci(args.source_sha))
+            current_run = validate_static_main_ci(args.source_sha)
             if current_run != admitted_run:
                 raise Refusal("canonical main source or exact-SHA workflow proofs changed during acceptance")
         committed = parse_host_json(ssh_remote(common + ["--browser-digest", digest], **remote_options))
