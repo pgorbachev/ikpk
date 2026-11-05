@@ -268,3 +268,24 @@ CMS/static. Browser checks SHALL читать те же sealed static bytes, к�
 **Reason**: проверка изменения контента не должна запускать автоматическую публикацию; успешный CI остаётся необходимым свидетельством для последующей операторской команды.
 
 **Migration**: content changes могут запускать проверки; результат CI не меняет сайт.
+
+
+### Requirement: Host helper is installed from a provenance-bound release artifact
+
+The host helper SHALL be packaged as `host-helper.tar.gz` from the existing installer, modules, and configuration templates. The artifact SHALL be tied to one exact source SHA and successful required CI evidence, with integrity verified before installation. CI SHALL upload the artifact without host credentials. Staging194 may install the exact-SHA CI artifact without a GitHub Release; production SHALL use the same artifact bytes attached to the GitHub Release. Destination configurations remain separate. Installation SHALL use the existing installer and SHALL NOT replace installed lock/configuration state, weaken admission gates, or introduce a new delivery service or transport. The existing operator has no self-update behavior. Installation SHALL be refused unless the artifact channel is permitted for the destination.
+
+#### Scenario: staging194 installs the exact CI artifact
+
+- **WHEN** the exact-SHA artifact and its successful CI provenance pass integrity checks and the artifact channel is permitted
+- **THEN** the existing installer can install that CI-uploaded artifact without a GitHub Release or host credentials in CI
+- **AND** staging194-specific configuration remains separate
+
+#### Scenario: production reuses the CI artifact in a GitHub Release
+
+- **WHEN** the artifact produced for the exact source SHA is attached to its GitHub Release and its integrity/provenance checks pass
+- **THEN** production installs those same artifact bytes through the existing installer with production-specific configuration
+
+#### Scenario: artifact channel is not permitted
+
+- **WHEN** the artifact channel is not allowed for the destination or exact-SHA/CI/integrity evidence is missing
+- **THEN** installation refuses before changing installed helper, lock, or configuration state

@@ -30,3 +30,10 @@ Initial-prod recovery acceptance, the production equivalent of recovery scenario
 ## 5. Shared publication lock
 
 - [ ] Use the existing destination flock for CMS refresh/restore, deploy/recovery and cleanup; check existing unresolved operation state under the lock, preserve current and protected rollback targets, and verify competing operations and interrupted recovery.
+
+
+## 6. Host helper release artifact
+
+- [ ] Package `host-helper.tar.gz` from the existing installer, modules, and configuration templates for the admitted exact source SHA; upload it from CI with verifiable source/CI provenance and no host credentials.
+- [ ] Configure staging194 to consume the exact-SHA CI artifact without requiring a GitHub Release, and production to reuse the identical artifact bytes as a GitHub Release asset; retain separate destination configurations.
+- [ ] Verify artifact integrity and channel permission before invoking the existing installer; preserve installed lock/configuration, existing gates, and the operator's lack of self-update. Do not add a service or transport.

@@ -14,6 +14,7 @@ Owner-approved staging194 static-only publication continues to use the exact cur
 - Build the initial production candidate with the accepted production origin and payment runtime. Run browser checks against the same frozen candidate with network side effects disabled; verify the served `/release.json`, required routes, and images before commit.
 - Commit the operation and release evidence before reopening writers. This exception supplies no recovery acceptance: failures remain fenced for separate owner-directed handling, and recovery of unknown or pre-journal state requires distinct explicit owner confirmation.
 - For staging194 and production-static static-only mode, atomically switch only the static tree after local build/content/destination/browser checks; each journal and explicit rollback remain bound to that exact candidate and preserve the exact old tree. The installed CMS, service, environment, database, uploads, roles, and users remain unchanged.
+- Package the host helper as `host-helper.tar.gz` from the existing installer, modules, and configuration templates. CI uploads the exact-SHA artifact with verifiable CI provenance and no host credentials; staging194 can consume it without a GitHub Release, while production uses the identical bytes as a GitHub Release asset. Keep destination configurations separate, install through the existing installer, require an allowed artifact channel, and preserve existing gates and installed lock/configuration. The operator does not self-update.
 
 ## Capabilities
 
