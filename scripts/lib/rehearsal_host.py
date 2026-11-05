@@ -1307,7 +1307,7 @@ def _assert_no_database_handles(database: Path) -> None:
         for descriptor in descriptors:
             try:
                 info = descriptor.stat()
-            except (OSError, RuntimeError):
+            except OSError:
                 continue
             if (info.st_dev, info.st_ino) in expected:
                 matches.append(proc.name)
@@ -2496,13 +2496,6 @@ def _prepare_cms_candidate(config: dict[str, Any], source_root: Path, operation_
                 raise HostFailure("CI CMS artifact node_modules is not the canonical lock generation")
         else:
             artifact.joinpath("node_modules").symlink_to(dependencies, target_is_directory=True)
-        _run_as_cms(config, artifact, [config.get("nodeBinary", "/usr/bin/node"), "-e",
-            "const Database = require('better-sqlite3'); "
-            "const db = new Database(':memory:'); db.close(); require('sharp');"], timeout=120)
-        web_dependencies = source_root / "web/node_modules"
-        if web_dependencies.is_symlink():
-            raise HostFailure("operation web dependencies must be a private source install")
-        _run_as_cms(config, source_root / "web", ["/usr/bin/npm", "ci", "--no-audit", "--no-fund"], timeout=1800)
         user = pwd.getpwnam(config["cmsUser"])
         operation_root = artifact.parent
         private_root = operation_root.parent
@@ -2510,6 +2503,13 @@ def _prepare_cms_candidate(config: dict[str, Any], source_root: Path, operation_
         for directory in (rehearsal_root, private_root, operation_root):
             os.chown(directory, user.pw_uid, user.pw_gid)
             os.chmod(directory, 0o700)
+        _run_as_cms(config, artifact, [config.get("nodeBinary", "/usr/bin/node"), "-e",
+            "const Database = require('better-sqlite3'); "
+            "const db = new Database(':memory:'); db.close(); require('sharp');"], timeout=120)
+        web_dependencies = source_root / "web/node_modules"
+        if web_dependencies.is_symlink():
+            raise HostFailure("operation web dependencies must be a private source install")
+        _run_as_cms(config, source_root / "web", ["/usr/bin/npm", "ci", "--no-audit", "--no-fund"], timeout=1800)
         return _validate_prepared_cms_candidate(config, source_root, operation_id, provenance)
     artifact = _cms_artifact_path(source_root, operation_id)
     if os.path.lexists(artifact):

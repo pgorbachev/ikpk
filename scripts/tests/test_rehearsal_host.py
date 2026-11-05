@@ -1019,9 +1019,11 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
             (artifact / "node_modules").symlink_to(dependencies, target_is_directory=True)
             user = type("User", (), {"pw_name": "ikpk-cms", "pw_uid": 0, "pw_gid": 0})()
             calls = []
+            events = []
 
             def run_as_cms(_config, cwd, argv, **kwargs):
                 calls.append((cwd, argv, kwargs))
+                events.append(("run", cwd))
                 return ""
 
             with patch.object(rehearsal_host, "_trusted_cms_artifact", return_value={}), \
@@ -1030,7 +1032,8 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
                  patch.object(rehearsal_host, "_validate_prepared_cms_candidate",
                               return_value=(source, artifact, dependencies)), \
                  patch.object(rehearsal_host.pwd, "getpwnam", return_value=user), \
-                 patch.object(rehearsal_host.os, "chown"), patch.object(rehearsal_host.os, "chmod"), \
+                 patch.object(rehearsal_host.os, "chown", side_effect=lambda *args: events.append(("chown", args[0]))), \
+                 patch.object(rehearsal_host.os, "chmod", side_effect=lambda *args: events.append(("chmod", args[0]))), \
                  patch.object(rehearsal_host, "_run_as_cms", side_effect=run_as_cms):
                 rehearsal_host._prepare_cms_candidate(
                     {"cmsUser": "ikpk-cms", "profile": "staging194"}, source, "op", {})
@@ -1040,6 +1043,9 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
             self.assertEqual(calls[0][1][:2], ["/usr/bin/node", "-e"])
             self.assertIn("new Database(':memory:')", calls[0][1][2])
             self.assertIn("require('sharp')", calls[0][1][2])
+            native_probe = events.index(("run", artifact))
+            self.assertTrue(any(event[0] == "chown" for event in events[:native_probe]))
+            self.assertTrue(any(event[0] == "chmod" for event in events[:native_probe]))
             self.assertEqual(calls[1][0], source / "web")
             self.assertEqual(calls[1][1], ["/usr/bin/npm", "ci", "--no-audit", "--no-fund"])
 
