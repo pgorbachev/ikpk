@@ -1338,3 +1338,116 @@ class CmsCandidateArtifactTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class Staging194HostHelperInstallTests(unittest.TestCase):
+    def test_static_main_exposes_an_explicit_host_helper_step(self):
+        observed = []
+        with patch.object(staging193, "invoke", side_effect=lambda args: observed.append(args)):
+            result = staging193.main(["--profile", "staging194", "static-main", "--host",
+                staging193.TARGET_HOST, "--operation-id", "helper-step", "--source-sha", SHA,
+                "--install-host-helper"])
+        self.assertEqual(result, 0)
+        self.assertTrue(observed[0].install_host_helper)
+
+    def test_helper_install_transfers_and_verifies_bytes_before_running_existing_installer(self):
+        payload = b"verified host helper archive"
+        digest = hashlib.sha256(payload).hexdigest()
+        commands = []
+
+        def run(command, **kwargs):
+            commands.append(command)
+            if command[0] == "scp":
+                transferred = Path(command[-2]).read_bytes()
+                self.assertEqual(transferred, payload)
+            return subprocess.CompletedProcess(command, 0, b"", b"")
+
+        with patch.object(staging193.subprocess, "run", side_effect=run):
+            staging193.install_staging194_host_helper(payload, digest)
+
+        self.assertEqual(commands[0][0], "scp")
+        self.assertIn(staging193.TARGET_HOST, commands[0][-1])
+        remote = [" ".join(command) for command in commands if command[0] == "ssh"]
+        verification = next(index for index, command in enumerate(remote) if "sha256sum" in command)
+        installation = next(index for index, command in enumerate(remote)
+                            if "install-rehearsal-host.sh" in command)
+        self.assertLess(verification, installation)
+        self.assertIn(digest, remote[verification])
+        self.assertFalse(any(option in remote[installation] for option in
+                             ("--staging193-config", "--initial-prod-config",
+                              "--production-static-config", "--production-paired-config")))
+
+    def test_remote_digest_failure_stops_before_installer(self):
+        payload = b"transferred helper bytes"
+        digest = hashlib.sha256(payload).hexdigest()
+        commands = []
+
+        def run(command, **kwargs):
+            commands.append(command)
+            if command[0] == "ssh" and "sha256sum" in " ".join(command):
+                return subprocess.CompletedProcess(command, 1, b"", b"digest mismatch")
+            return subprocess.CompletedProcess(command, 0, b"", b"")
+
+        with patch.object(staging193.subprocess, "run", side_effect=run), \
+             self.assertRaises((staging193.Refusal, subprocess.CalledProcessError, OSError)):
+            staging193.install_staging194_host_helper(payload, digest)
+        self.assertFalse(any(command[0] == "ssh" and "install-rehearsal-host.sh" in " ".join(command)
+                             for command in commands))
+
+    def test_static_main_fetch_failure_stops_before_any_host_operation(self):
+        args = SimpleNamespace(profile="staging194", host=staging193.TARGET_HOST,
+            command="static-main", operation_id="helper-fetch-failure", source_sha=SHA,
+            release_tag=None, reuse_capture_operation_id=None, expected_installed_cms_sha=None,
+            install_host_helper=True)
+        provenance = {"sourceSha": SHA, "runId": 123, "attempt": 2}
+        responses = [json.dumps({"phase": "browser-check-required", "staticTreeSha256": "d" * 64}).encode(),
+                     b"candidate", json.dumps({"phase": "committed"}).encode()]
+        with patch.object(staging193, "validate_static_main_ci", return_value=provenance), \
+             patch.object(staging193, "fetch_host_helper_artifact",
+                          side_effect=staging193.Refusal("host helper archive digest mismatch")), \
+             patch.object(staging193, "make_archive", return_value=(b"source archive", "a" * 64)), \
+             patch.object(staging193, "ssh_remote") as remote, \
+             patch.object(staging193, "browser_check"):
+            remote.side_effect = lambda *_args, **_kwargs: responses.pop(0)
+            try:
+                staging193.invoke(args)
+            except staging193.Refusal as error:
+                self.assertIn("host helper archive digest mismatch", str(error))
+            else:
+                self.fail("static-main continued after the requested helper artifact was rejected")
+        remote.assert_not_called()
+
+    def test_artifact_evidence_does_not_change_the_exact_ci_recheck(self):
+        admitted = {"sourceSha": SHA, "runId": 123, "attempt": 2, "workflow": "Tests",
+                    "conclusion": "success", "requiredJobs": ["Tests"]}
+        artifact_evidence = {"artifactId": 987, "runId": 123, "attempt": 2,
+                             "archiveSha256": "b" * 64, "payloadSha256": "c" * 64}
+        responses = [json.dumps({"phase": "browser-check-required", "staticTreeSha256": "d" * 64}).encode(),
+                     b"candidate bytes", json.dumps({"phase": "committed"}).encode()]
+        host_calls = []
+
+        def attach_helper(provenance, _sha):
+            provenance["hostHelperArtifact"] = dict(artifact_evidence)
+            return b"verified helper bytes"
+
+        def ssh(arguments, input_bytes=None, **_kwargs):
+            host_calls.append((arguments, input_bytes))
+            return responses.pop(0)
+
+        args = SimpleNamespace(profile="staging194", host=staging193.TARGET_HOST,
+            command="static-main", operation_id="helper-and-publish", source_sha=SHA,
+            release_tag=None, reuse_capture_operation_id=None, expected_installed_cms_sha=None,
+            install_host_helper=True)
+        with patch.object(staging193, "validate_static_main_ci", side_effect=[dict(admitted), dict(admitted)]) as admit, \
+             patch.object(staging193, "fetch_host_helper_artifact", side_effect=attach_helper) as fetch, \
+             patch.object(staging193, "install_staging194_host_helper", create=True) as install, \
+             patch.object(staging193, "make_archive", return_value=(b"source archive", "a" * 64)), \
+             patch.object(staging193, "ssh_remote", side_effect=ssh), \
+             patch.object(staging193, "browser_check"):
+            staging193.invoke(args)
+
+        self.assertEqual(admit.call_count, 2)
+        fetch.assert_called_once_with(admitted, SHA)
+        install.assert_called_once_with(b"verified helper bytes", artifact_evidence["payloadSha256"])
+        self.assertEqual([call[0][0] for call in host_calls],
+                         ["static-main", "export-static-main", "static-main"])
