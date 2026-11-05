@@ -330,7 +330,15 @@ def _space_preflight(config: dict[str, Any], operation_id: str, operation_kind: 
         proportional_reserve = (item["estimatedBytes"] + 3) // 4
         item["reserveBytes"] = max(1_073_741_824, configured_reserve, proportional_reserve)
         item["requiredBytes"] = item["estimatedBytes"] + item["reserveBytes"]
-    installed_source_sha = _installed_paired_cms_source_sha(config)
+    if config.get("profile", "staging194") == "staging194":
+        installed_source_sha = None
+        try:
+            state = RehearsalState(Path(config["stateDir"]))
+            installed_source_sha = _staging194_current_cms_source_sha(config, state)
+        except (HostFailure, RehearsalRefusal, OSError, ValueError, KeyError, TypeError):
+            installed_source_sha = None
+    else:
+        installed_source_sha = _installed_paired_cms_source_sha(config)
     report: dict[str, Any] = {"filesystems": list(base_needed.values()),
                               "reservePolicy": "max(1 GiB, configured reserve, 25% of estimate)",
                               "configuredReserveBytes": configured_reserve,
@@ -355,6 +363,77 @@ def _space_preflight(config: dict[str, Any], operation_id: str, operation_kind: 
                 "default npm cache location is shown, but cache growth and npmrc/environment overrides are not separately estimated; filesystem reserve is the only growth allowance"
             ]
     return report
+
+
+def _staging194_current_cms_source_sha(config: dict[str, Any], state: RehearsalState) -> Optional[str]:
+    """Return the source SHA only when journal, artifact contents, and current pointer agree."""
+    if config.get("profile", "staging194") != "staging194":
+        return None
+    try:
+        rows = state.read_journal_for_cleanup()
+        current_link = Path(config["currentCms"])
+        current_link_info = current_link.lstat()
+        initial_current = _current_target(current_link)
+        uploads = [Path(item["path"]) for item in config["mediaRoots"]
+                   if isinstance(item, dict) and item.get("prefix") == "/uploads/"
+                   and isinstance(item.get("path"), str)]
+        if len(uploads) != 1:
+            return None
+        matches = []
+        for bundle in rows:
+            if bundle.get("record") != "new-bundle":
+                continue
+            operation_id = bundle.get("operationId")
+            source_sha = bundle.get("sourceSha")
+            pair = bundle.get("newPair")
+            if (not isinstance(operation_id, str) or not isinstance(source_sha, str)
+                    or not SHA_RE.fullmatch(source_sha) or not isinstance(pair, dict)
+                    or pair.get("sourceSha") != source_sha or pair.get("cmsSha") != source_sha
+                    or not isinstance(pair.get("cmsPayloadSha256"), str)
+                    or not SHA256_RE.fullmatch(pair["cmsPayloadSha256"])):
+                continue
+            operation_rows = [row for row in rows if row.get("operationId") == operation_id]
+            commits = [row for row in operation_rows if row.get("record") == "committed"]
+            starts = [row for row in rows if row.get("record") == "start"
+                      and row.get("operationId") == operation_id and row.get("sourceSha") == source_sha]
+            if (len(commits) != 1 or commits[0].get("sourceSha") != source_sha or len(starts) != 1
+                    or any(row.get("record") == "recovered" for row in operation_rows)):
+                continue
+            # Require exactly one bundle and one terminal commit for this identity.
+            if sum(row.get("record") == "new-bundle" and row.get("operationId") == operation_id
+                   for row in rows) != 1:
+                continue
+            start_index, bundle_index, commit_index = (rows.index(starts[0]), rows.index(bundle), rows.index(commits[0]))
+            if not start_index < bundle_index < commit_index:
+                continue
+            matches.append((source_sha, operation_id, pair["cmsPayloadSha256"]))
+        if len(matches) != 1:
+            return None
+        source_sha, operation_id, expected_payload = matches[0]
+        source_root = _candidate_root(config, source_sha, operation_id)
+        release_root = Path(config["releaseRoot"]).resolve(strict=True)
+        if source_root.is_symlink() or not source_root.is_dir() or source_root.parent != release_root:
+            return None
+        artifact = _cms_artifact_path(source_root, operation_id)
+        if artifact.is_symlink() or not artifact.is_dir():
+            return None
+        artifact_target = artifact.resolve(strict=True)
+        if artifact_target != initial_current or not artifact_target.is_relative_to(source_root.resolve(strict=True)):
+            return None
+        root_before = artifact_target.stat()
+        actual_payload = _cms_payload_sha256(artifact_target, uploads[0])
+        root_after = artifact_target.stat()
+        final_link_info = current_link.lstat()
+        final_current = _current_target(current_link)
+        if ((root_before.st_dev, root_before.st_ino, root_before.st_mtime_ns)
+                != (root_after.st_dev, root_after.st_ino, root_after.st_mtime_ns)
+                or (current_link_info.st_dev, current_link_info.st_ino, current_link_info.st_mtime_ns)
+                != (final_link_info.st_dev, final_link_info.st_ino, final_link_info.st_mtime_ns)
+                or final_current != initial_current or actual_payload != expected_payload):
+            return None
+        return source_sha
+    except (HostFailure, RehearsalRefusal, OSError, ValueError, UnicodeError, KeyError, TypeError):
+        return None
 
 
 def _root_config(path: Path, expected_profile: str = "staging194") -> dict[str, Any]:

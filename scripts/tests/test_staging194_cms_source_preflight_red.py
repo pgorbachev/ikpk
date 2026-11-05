@@ -5,6 +5,8 @@ from __future__ import annotations
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import patch
 
 from scripts.lib import rehearsal_host
 from scripts.lib.rehearsal_state import RehearsalState
@@ -89,10 +91,68 @@ class Staging194CmsSourcePreflightRedTests(unittest.TestCase):
 
         self.assertIsNone(self._source_sha())
 
+    def test_current_pointer_change_during_payload_hash_is_unknown(self):
+        self._record_committed_release()
+        original_hash = rehearsal_host._cms_payload_sha256
+        foreign = self.release_root / f"{SOURCE_SHA}-different-operation" / "cms"
+        foreign.mkdir(parents=True)
+        (foreign / "package.json").write_text('{"name":"foreign"}\n', encoding="utf-8")
+
+        def hash_and_switch(*args, **kwargs):
+            digest = original_hash(*args, **kwargs)
+            self.current_cms.unlink()
+            self.current_cms.symlink_to(foreign, target_is_directory=True)
+            return digest
+
+        with patch.object(rehearsal_host, "_cms_payload_sha256", side_effect=hash_and_switch):
+            self.assertIsNone(self._source_sha())
+
     def test_journal_cms_identity_must_match_source_sha(self):
         self._record_committed_release(cms_sha="b" * 40)
 
         self.assertIsNone(self._source_sha())
+
+    def _space_config(self):
+        static_release = self.root / "static-releases"
+        static_release.mkdir()
+        static = static_release / "old"
+        static.mkdir()
+        (static / "index.html").write_text("ok", encoding="utf-8")
+        current_static = self.root / "current-static"
+        current_static.symlink_to(static, target_is_directory=True)
+        database = self.root / "cms.sqlite"
+        database.write_bytes(b"db")
+        backup = self.root / "backups"
+        backup.mkdir()
+        temporary = self.root / "temporary"
+        temporary.mkdir()
+        return {
+            "releaseRoot": str(self.release_root), "currentCms": str(self.current_cms),
+            "currentStatic": str(current_static), "staticReleaseRoot": str(static_release),
+            "stateDir": str(self.state.root), "backupRoot": str(backup),
+            "cmsDatabase": str(database), "cmsUser": "cms",
+            "mediaRoots": [{"prefix": "/uploads/", "path": str(self.uploads)}],
+            "temporaryRoot": str(temporary), "spaceReserveBytes": 0,
+        }
+
+    def test_space_preflight_surfaces_proven_cms_sha_with_default_staging_profile(self):
+        self._record_committed_release()
+        with (patch.object(rehearsal_host.pwd, "getpwnam", return_value=SimpleNamespace(pw_dir=str(self.root))),
+              patch.object(rehearsal_host, "_validate_staging194_temporary_root",
+                           return_value=self.root / "temporary")):
+            report = rehearsal_host._space_preflight(self._space_config(), "space-check", "cms-update")
+        self.assertEqual(report["installedSourceSha"], SOURCE_SHA)
+        self.assertEqual(report["installedSourceShaStatus"], "known")
+
+    def test_space_preflight_reports_unknown_for_changed_cms_payload(self):
+        self._record_committed_release()
+        (self.cms_artifact / "package.json").write_text('{"name":"changed"}\n', encoding="utf-8")
+        with (patch.object(rehearsal_host.pwd, "getpwnam", return_value=SimpleNamespace(pw_dir=str(self.root))),
+              patch.object(rehearsal_host, "_validate_staging194_temporary_root",
+                           return_value=self.root / "temporary")):
+            report = rehearsal_host._space_preflight(self._space_config(), "space-check", "cms-update")
+        self.assertIsNone(report["installedSourceSha"])
+        self.assertEqual(report["installedSourceShaStatus"], "unknown")
 
 
 if __name__ == "__main__":
