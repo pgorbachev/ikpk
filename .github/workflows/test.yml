@@ -52,15 +52,69 @@ jobs:
             echo "CMS candidate unexpectedly contains node_modules" >&2
             exit 1
           fi
-          rm -rf "$CMS_CANDIDATE_DIR/public/uploads"
+          python3 - "$CMS_CANDIDATE_DIR/public/uploads" <<'PY'
+          from pathlib import Path
+          import stat
+          import sys
+
+          uploads = Path(sys.argv[1])
+          if uploads.exists():
+              if uploads.is_symlink() or not uploads.is_dir():
+                  raise SystemExit("CMS public/uploads is not a regular directory")
+              entries = list(uploads.iterdir())
+              if entries:
+                  if len(entries) != 1 or entries[0].name != ".gitkeep":
+                      raise SystemExit("CMS public/uploads contains files beyond the allowed placeholder")
+                  placeholder = entries[0]
+                  metadata = placeholder.lstat()
+                  if not stat.S_ISREG(metadata.st_mode) or placeholder.read_bytes() not in (b"", b"\n"):
+                      raise SystemExit("CMS public/uploads placeholder is not empty")
+                  placeholder.unlink()
+              uploads.rmdir()
+          PY
           mkdir -p "$RUNNER_TEMP/cms-artifact-package"
-          tar -czf "$RUNNER_TEMP/cms-artifact-package/cms-artifact.tar.gz" \
-            -C "$CMS_CANDIDATE_DIR" .
-          tar -tzf "$RUNNER_TEMP/cms-artifact-package/cms-artifact.tar.gz" > "$RUNNER_TEMP/cms-artifact-contents.txt"
-          if grep -E '(^|/)public/uploads(/|$)|(^|/)node_modules(/|$)' "$RUNNER_TEMP/cms-artifact-contents.txt"; then
-            echo "CMS archive contains excluded uploads or node_modules" >&2
-            exit 1
-          fi
+          python3 - "$RUNNER_TEMP/cms-artifact-package/cms-artifact.tar.gz" "$CMS_CANDIDATE_DIR" <<'PY'
+          from pathlib import Path, PurePosixPath
+          import sys
+          import tarfile
+
+          archive_path = Path(sys.argv[1])
+          candidate = Path(sys.argv[2])
+          entries = sorted(candidate.iterdir(), key=lambda entry: entry.name)
+          if not entries:
+              raise SystemExit("CMS candidate is empty")
+          for entry in entries:
+              if entry.name in ("", ".", "..") or "/" in entry.name or any(char in entry.name for char in "\r\n"):
+                  raise SystemExit(f"CMS candidate has an unsafe top-level entry: {entry.name!r}")
+
+          with tarfile.open(archive_path, "w:gz") as output:
+              for entry in entries:
+                  output.add(entry, arcname=entry.name, recursive=True)
+
+          seen = set()
+          with tarfile.open(archive_path, "r:gz") as archive:
+              for member in archive.getmembers():
+                  raw_parts = member.name.split("/")
+                  if member.isdir() and raw_parts[-1] == "":
+                      raw_parts.pop()
+                  path = PurePosixPath(member.name)
+                  if (not member.name or path.is_absolute()
+                          or any(part in ("", ".", "..") for part in raw_parts)):
+                      raise SystemExit(f"CMS archive contains an unsafe path: {member.name!r}")
+                  normalized = path.as_posix()
+                  if normalized in seen:
+                      raise SystemExit(f"CMS archive contains a duplicate path: {normalized}")
+                  seen.add(normalized)
+                  if not (member.isfile() or member.isdir()):
+                      raise SystemExit(f"CMS archive contains a link or special file: {member.name!r}")
+                  if normalized == "public/uploads" or normalized.startswith("public/uploads/"):
+                      raise SystemExit("CMS archive contains public/uploads")
+                  if normalized == "node_modules" or "/node_modules/" in f"/{normalized}/":
+                      raise SystemExit("CMS archive contains node_modules")
+          if "." in seen:
+              raise SystemExit("CMS archive contains the forbidden root member '.'")
+          print(f"CMS archive paths verified ({len(seen)} entries)")
+          PY
 
       - name: Upload trusted CMS candidate
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
@@ -69,7 +123,6 @@ jobs:
           name: cms-candidate-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/cms-artifact-package/cms-artifact.tar.gz
           if-no-files-found: error
-          retention-days: 14
 
   content-snapshot:
     name: Capture content snapshot
