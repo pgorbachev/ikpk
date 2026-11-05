@@ -407,6 +407,37 @@ class OperatorAdmissionTests(unittest.TestCase):
                                              cms_artifact=b"cms tar payload")
         self._assert_capacity_helpers_not_called(local_space, target_space)
 
+    def test_staging194_rechecks_admission_after_backup_before_second_cms_command(self):
+        admitted = {"sourceSha": SHA, "runId": 123, "attempt": 1}
+        changed = {"sourceSha": SHA, "runId": 124, "attempt": 2}
+        calls = []
+        with tempfile.TemporaryDirectory(prefix="ikpk-staging194-backup-recheck-") as temporary:
+            backup_path = Path(temporary) / "backup.tar"
+            backup_path.write_bytes(b"verified local backup")
+            args = SimpleNamespace(profile="staging194", host=staging193.TARGET_HOST,
+                command="cms-update", operation_id="staging194-recheck", source_sha=SHA,
+                backup_dir=None, release_tag=None)
+
+            def ssh(arguments, **_kwargs):
+                calls.append(arguments)
+                if arguments[0] == "cms-update":
+                    return json.dumps({"offhostBackupRequired": True,
+                                       "backupSha256": "b" * 64}).encode()
+                if arguments[0] == "export-backup":
+                    return b"offhost backup"
+                self.fail(f"unexpected host command before re-admission: {arguments[0]}")
+
+            with patch.object(staging193, "validate_sha_and_ci", side_effect=[admitted, changed]) as admission, \
+                 patch.object(staging193, "make_archive", return_value=(b"source archive", "a" * 64)), \
+                 patch.object(staging193, "backup_root", return_value=Path(temporary)), \
+                 patch.object(staging193, "persist_offhost_backup", return_value=backup_path), \
+                 patch.object(staging193, "ssh_remote", side_effect=ssh):
+                with self.assertRaisesRegex(staging193.Refusal, "workflow proofs changed before CMS activation"):
+                    staging193.invoke(args)
+
+        self.assertEqual([call[0] for call in calls], ["cms-update", "export-backup"])
+        self.assertEqual(admission.call_count, 2)
+
     def test_other_direct_cms_update_profiles_do_not_gain_auto_space_checks(self):
         for profile, expected in (("production-paired", ["status", "cms-update"]),
                                   ("initial-prod", ["cms-update"])):

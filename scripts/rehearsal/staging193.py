@@ -194,17 +194,25 @@ def validate_staging194_paired_admission(sha: str) -> dict:
     canonical_head = capture(["gh", "api", f"repos/{repo}/git/ref/heads/main", "--jq", ".object.sha"])
     if not SHA.fullmatch(canonical_head):
         raise Refusal("canonical main returned an invalid head SHA")
-    capture(["git", "cat-file", "-e", f"{canonical_head}^{{commit}}"])
-    try:
-        capture(["git", "merge-base", "--is-ancestor", sha, canonical_head])
-    except Refusal as error:
-        raise Refusal("selected source is not an ancestor of canonical main") from error
+    _require_canonical_main_ancestor(sha, canonical_head)
     provenance = validate_static_main_ci(sha, require_current_head=False)
     final_head = capture(["gh", "api", f"repos/{repo}/git/ref/heads/main", "--jq", ".object.sha"])
-    if final_head != canonical_head:
-        raise Refusal("canonical main head moved during staging194 CI admission")
-    provenance["canonicalMainSha"] = canonical_head
+    if not SHA.fullmatch(final_head):
+        raise Refusal("canonical main returned an invalid head SHA after CI admission")
+    _require_canonical_main_ancestor(sha, final_head)
     return provenance
+
+
+def _require_canonical_main_ancestor(sha: str, main_sha: str) -> None:
+    """Use GitHub's canonical comparison so local remote-tracking refs may be stale."""
+    comparison = capture(["gh", "api", f"repos/{CANONICAL_REPOSITORY}/compare/{sha}...{main_sha}",
+                         "--jq", ".status + \":\" + .merge_base.sha"])
+    try:
+        status, merge_base = comparison.split(":", 1)
+    except ValueError as error:
+        raise Refusal("gh returned malformed canonical main ancestry metadata") from error
+    if status not in ("ahead", "identical") or merge_base != sha:
+        raise Refusal("selected source is not an ancestor of canonical main")
 
 
 def validate_stable_release(provenance: dict, sha: str, *, release_tag: Optional[str] = None,
@@ -1116,6 +1124,10 @@ def invoke(args: argparse.Namespace, *, admission: Optional[dict] = None) -> Opt
                 current_admission = validate_production_paired_admission(args.source_sha)
                 if current_admission != provenance:
                     raise Refusal("production Release/main/CI admission changed before CMS activation; operation remains fenced for same-ID recovery")
+            elif profile == "staging194":
+                current_admission = validate_sha_and_ci(args.source_sha, profile)
+                if current_admission != provenance:
+                    raise Refusal("staging194 exact-SHA workflow proofs changed before CMS activation; operation remains fenced for same-ID recovery")
             completed = parse_host_json(ssh_remote(common + ["--offhost-sha256", digest], profile=profile))
             if completed.get("phase") != "cms-activated":
                 raise Refusal(f"CMS command ended in an unexpected state: {completed.get('phase')}")
@@ -1304,7 +1316,7 @@ def main(argv: Optional[list[str]] = None) -> int:
             command.add_argument("--operator")
             command.add_argument("--reason")
         if action not in ("recover", "static-main-recover", "space-preflight"):
-            command.add_argument("--source-sha", required=action not in ("static-publish", "static-main"))
+            command.add_argument("--source-sha", required=action not in ("cms-update",))
         if action == "static-main":
             command.add_argument("--reuse-capture-operation-id")
             command.add_argument("--release-tag")
@@ -1315,11 +1327,18 @@ def main(argv: Optional[list[str]] = None) -> int:
     args = parser.parse_args(argv)
     args.release_tag = getattr(args, "release_tag", None)
     try:
-        if args.command in ("static-publish", "static-main") and args.source_sha is None:
+        if args.command == "cms-update" and args.source_sha is None:
             if args.profile != "staging194":
                 raise Refusal("--source-sha is required outside the staging194 profile")
-            args.source_sha = capture(["gh", "api", f"repos/{CANONICAL_REPOSITORY}/git/matching-refs/heads/main",
-                                       "--jq", ".[0].object.sha"])
+            try:
+                parse_host_json(ssh_remote(["status", "--operation-id", args.operation_id]))
+            except Refusal as error:
+                if "operation has no maintenance marker or terminal journal record" not in str(error):
+                    raise
+            else:
+                raise Refusal("--source-sha is required to continue an existing staging194 operation")
+            args.source_sha = capture(["gh", "api", f"repos/{CANONICAL_REPOSITORY}/git/ref/heads/main",
+                                       "--jq", ".object.sha"])
             if not SHA.fullmatch(args.source_sha):
                 raise Refusal("canonical main returned an invalid head SHA")
         result = invoke(args)
