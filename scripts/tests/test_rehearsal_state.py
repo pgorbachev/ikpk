@@ -87,6 +87,15 @@ class RehearsalStateTests(unittest.TestCase):
         self.state.mark_cms_activated("op-1")
         self.assertEqual(self.state._read_marker()["fence"], "closed")
 
+    def test_start_journal_binds_ci_cms_artifact_identity(self):
+        artifact = {"artifactId": 42, "runId": 7, "attempt": 2,
+                    "archiveSha256": "b" * 64, "payloadSha256": "c" * 64}
+        self.state.begin("paired-artifact", SOURCE_SHA, OLD_PAIR, cms_artifact=artifact)
+        self.assertEqual(self.state._operation_rows("paired-artifact")[0]["cmsArtifact"], artifact)
+        with self.assertRaisesRegex(RehearsalRefusal, "artifact identity differs"):
+            self.state.begin("paired-artifact", SOURCE_SHA, OLD_PAIR,
+                             cms_artifact={**artifact, "payloadSha256": "d" * 64})
+
     def test_interrupted_start_reconstructs_acquiring_marker_for_explicit_recovery(self):
         self.state._append({"version": 1, "record": "start", "operationId": "op-crash-start",
                             "sourceSha": SOURCE_SHA, "oldPair": OLD_PAIR})

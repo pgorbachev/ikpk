@@ -1001,6 +1001,47 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
             self.assertEqual(calls[1][2]["environment"], {"NODE_OPTIONS": "--max-old-space-size=1536"})
             self.assertEqual(calls[1][2]["read_only_path"], dependencies)
 
+    def test_ci_cms_artifact_revalidation_rejects_changed_extracted_bytes(self):
+        with tempfile.TemporaryDirectory(prefix="ikpk-ci-cms-exact-payload-") as temporary:
+            root = Path(temporary)
+            source = (root / ("a" * 40 + "-cms-op")).resolve()
+            source.mkdir()
+            members = {
+                "package.json": b'{"name":"cms"}',
+                "package-lock.json": b'{"lockfileVersion":3}',
+                "tsconfig.json": b'{}',
+                "dist/config/database.js": b"database config",
+                "database/.migrations-expected": b"v1",
+                "scripts/run-data-migrations.mjs": b"migration runner",
+            }
+            payload_buffer = io.BytesIO()
+            with tarfile.open(fileobj=payload_buffer, mode="w:gz") as archive:
+                for name, data in members.items():
+                    info = tarfile.TarInfo(name)
+                    info.size = len(data)
+                    archive.addfile(info, io.BytesIO(data))
+            payload = payload_buffer.getvalue()
+            (source / ".ikpk-cms-artifact.tar.gz").write_bytes(payload)
+            evidence = {"artifactId": 99, "runId": 7, "attempt": 1,
+                        "archiveSha256": "c" * 64, "payloadSha256": sha(payload)}
+            artifact = rehearsal_host._extract_ci_cms_artifact(
+                {"cmsUser": getpass.getuser()}, source, "cms-op", evidence)
+            rehearsal_host._verify_cms_artifact_bytes(source, artifact, evidence)
+            (artifact / "dist/config/database.js").write_bytes(b"changed after fence")
+            with self.assertRaisesRegex(rehearsal_host.HostFailure, "CI CMS artifact bytes differ"):
+                rehearsal_host._verify_cms_artifact_bytes(source, artifact, evidence)
+
+    def test_ci_cms_artifact_rejects_dependency_and_upload_payload_paths(self):
+        for name in ("node_modules/strapi.js", "public/uploads/live.jpg"):
+            payload_buffer = io.BytesIO()
+            with tarfile.open(fileobj=payload_buffer, mode="w:gz") as archive:
+                info = tarfile.TarInfo(name)
+                info.size = 1
+                archive.addfile(info, io.BytesIO(b"x"))
+            with self.subTest(name=name), self.assertRaisesRegex(
+                    rehearsal_host.HostFailure, "unsafe or forbidden path"):
+                rehearsal_host._cms_tar_members(payload_buffer.getvalue())
+
     def test_missing_ci_cms_artifact_refuses_before_fence_without_host_build(self):
         with tempfile.TemporaryDirectory(prefix="ikpk-cms-artifact-heap-") as temporary:
             root = Path(temporary)
@@ -1021,6 +1062,16 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
                           "workflowName": "Tests", "headBranch": "main", "event": "push", "runId": 7,
                           "attempt": 1, "repository": "pgorbachev/ikpk",
                           "runUrl": "https://github.com/pgorbachev/ikpk/actions/runs/7",
+                          "status": "completed", "conclusion": "success",
+                          "requiredJobs": sorted(rehearsal_host.STATIC_MAIN_REQUIRED_JOBS),
+                          "additionalWorkflows": [{"workflow": workflow, "headSha": source_sha,
+                              "event": "push", "headBranch": "main", "status": "completed",
+                              "conclusion": "success", "runId": 10 + index, "attempt": 1,
+                              "runUrl": f"https://github.com/pgorbachev/ikpk/actions/runs/{10 + index}",
+                              "requiredJobs": ["required job"]}
+                              for index, workflow in enumerate(rehearsal_host.STATIC_MAIN_ADDITIONAL_WORKFLOWS)],
+                          "cmsArtifact": {"artifactId": 99, "runId": 7, "attempt": 1,
+                                          "archiveSha256": "c" * 64, "payloadSha256": "d" * 64},
                           "release": {"tag": "v2026.11.5", "publishedAt": "2026-11-05T10:00:00Z"},
                           "releasePreflight": {"status": "passed", "commit": source_sha}}
             config = {"profile": "staging194", "releaseRoot": str(releases),
