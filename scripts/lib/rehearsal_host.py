@@ -425,7 +425,7 @@ def _staging194_current_cms_source_sha(config: dict[str, Any], state: RehearsalS
             return None
         source_sha, operation_id, expected_payload, artifact_target = matches[0]
         root_before = artifact_target.stat()
-        actual_payload = _cms_payload_sha256(artifact_target, uploads[0])
+        actual_payload = _staging194_stable_cms_payload_sha256(artifact_target, uploads[0])
         root_after = artifact_target.stat()
         final_link_info = current_link.lstat()
         final_current = _current_target(current_link)
@@ -2909,6 +2909,44 @@ def _cms_payload_sha256(root: Path, uploads: Path, expected_dependencies: Path |
         digest.update(relative)
         digest.update(payload)
     return digest.hexdigest()
+
+
+def _cms_payload_metadata(root: Path) -> dict[str, tuple[Any, ...]]:
+    """Capture the non-dependency payload namespace without following symlinks."""
+    root = Path(root)
+    snapshot: dict[str, tuple[Any, ...]] = {}
+    root_info = root.lstat()
+    if not stat.S_ISDIR(root_info.st_mode):
+        raise HostFailure("CMS payload root is no longer a real directory")
+    snapshot["."] = (root_info.st_dev, root_info.st_ino, stat.S_IFMT(root_info.st_mode), root_info.st_size,
+                     root_info.st_mtime_ns, root_info.st_ctime_ns, None)
+    pending = [Path(root)]
+    while pending:
+        directory = pending.pop()
+        with os.scandir(directory) as entries:
+            for entry in entries:
+                path = Path(entry.path)
+                relative = path.relative_to(root).as_posix()
+                if relative.startswith("node_modules/"):
+                    continue
+                info = entry.stat(follow_symlinks=False)
+                mode_type = stat.S_IFMT(info.st_mode)
+                link_target = os.readlink(path) if stat.S_ISLNK(info.st_mode) else None
+                snapshot[relative] = (info.st_dev, info.st_ino, mode_type, info.st_size,
+                                      info.st_mtime_ns, info.st_ctime_ns, link_target)
+                if stat.S_ISDIR(info.st_mode) and relative != "node_modules":
+                    pending.append(path)
+    return snapshot
+
+
+def _staging194_stable_cms_payload_sha256(root: Path, uploads: Path) -> str:
+    """Retain the CMS payload digest only if its tree metadata stays unchanged while read."""
+    before = _cms_payload_metadata(root)
+    digest = _cms_payload_sha256(root, uploads)
+    after = _cms_payload_metadata(root)
+    if before != after:
+        raise HostFailure("CMS payload tree changed while its provenance digest was read")
+    return digest
 
 
 def _config_sha256(config: dict[str, Any]) -> str:

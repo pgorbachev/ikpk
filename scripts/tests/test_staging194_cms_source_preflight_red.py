@@ -114,6 +114,24 @@ class Staging194CmsSourcePreflightRedTests(unittest.TestCase):
 
         self.assertIsNone(self._source_sha())
 
+    def test_payload_change_after_file_read_is_unknown(self):
+        self._record_committed_release()
+        package = self.cms_artifact / "package.json"
+        original_hash_file = rehearsal_host.sha256_file
+        changed = False
+
+        def hash_then_change(path):
+            nonlocal changed
+            result = original_hash_file(path)
+            if Path(path).resolve(strict=True) == package.resolve(strict=True) and not changed:
+                changed = True
+                package.write_text('{"name":"changed-during-hash"}\n', encoding="utf-8")
+            return result
+
+        with patch.object(rehearsal_host, "sha256_file", side_effect=hash_then_change):
+            self.assertIsNone(self._source_sha())
+        self.assertTrue(changed)
+
     def test_current_pointer_change_during_payload_hash_is_unknown(self):
         self._record_committed_release()
         original_hash = rehearsal_host._cms_payload_sha256
