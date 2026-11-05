@@ -65,6 +65,32 @@ def canonical_ci_capture(selected_sha: str, main_sha: str, *, ancestor: bool = T
 
 
 class Staging194PairedAdmissionRedTests(unittest.TestCase):
+    def test_cli_defaults_missing_source_sha_to_canonical_main_before_invoke(self):
+        remote_calls: list[list[str]] = []
+        responses = [
+            json.dumps({"phase": "browser-check-required", "staticTreeSha256": "c" * 64}).encode(),
+            b"candidate static bytes",
+            json.dumps({"phase": "committed"}).encode(),
+        ]
+
+        def ssh(arguments, **_kwargs):
+            remote_calls.append(arguments)
+            return responses.pop(0)
+
+        admission = {"sourceSha": MAIN_SHA, "runId": 701, "attempt": 2}
+        with patch.object(operator, "capture", return_value=MAIN_SHA) as capture, \
+                patch.object(operator, "validate_sha_and_ci", return_value=admission) as validate, \
+                patch.object(operator, "ssh_remote", side_effect=ssh), \
+                patch.object(operator, "browser_check", return_value="d" * 64):
+            result = operator.main(["static-publish", "--operation-id", "cli-default-source"])
+
+        self.assertEqual(result, 0)
+        validate.assert_any_call(MAIN_SHA, "staging194")
+        self.assertTrue(any("--source-sha" in call and MAIN_SHA in call for call in remote_calls))
+        self.assertTrue(any(invocation.args[0][:2] == ["gh", "api"]
+                            and "refs/heads/main" in invocation.args[0][2]
+                            for invocation in capture.call_args_list))
+
     def test_paired_staging_admits_four_exact_sha_push_workflows_without_release(self):
         calls, capture = canonical_ci_capture(MAIN_SHA, MAIN_SHA)
         with patch.object(operator, "capture", side_effect=capture):
