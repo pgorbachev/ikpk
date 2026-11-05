@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'fs';
 import { join } from 'path';
+import { spawnSync } from 'child_process';
+import { parse } from 'yaml';
 import {
   loadWorkflows,
   requiredTestWorkflows,
@@ -102,14 +104,35 @@ function headBuildInvocations(): { wf: Workflow; job: WorkflowJob; step: Workflo
 describe('закреплённый снимок обязательного CI', () => {
   const tests = (): Workflow => requiredTestWorkflows(workflows)[0];
 
-  it('обязательный прогон содержит все пять обязательных джобов и не пишет публикации', () => {
+  it('обязательный прогон содержит все обязательные джобы и не пишет публикации', () => {
     expect(Object.keys(tests().jobs).sort()).toEqual([
-      'content-snapshot', 'dependency-invariants', 'e2e-smoke', 'scripts-unit', 'unit-and-build',
+      'content-snapshot', 'dependency-invariants', 'e2e-smoke', 'provisioning', 'scripts-unit', 'unit-and-build', 'unit-and-build-gate',
     ]);
     expect(tests().permissions).toEqual({ contents: 'read' });
     for (const job of Object.values(tests().jobs)) {
       expect(job.permissions).not.toEqual(expect.objectContaining({ contents: 'write' }));
       expect(job.permissions).not.toBe('write-all');
+    }
+  });
+
+  it('обязательный гейт требует успешных сборки и provisioning, не задерживая e2e', () => {
+    const workflow = parse(readFileSync(join(REPO_ROOT, '.github/workflows/test.yml'), 'utf-8'));
+    const gate = workflow.jobs['unit-and-build-gate'];
+    expect(gate.name).toBe('Unit and build tests');
+    expect(gate.needs.sort()).toEqual(['provisioning', 'unit-and-build']);
+    expect(gate.if).toBe('${{ always() }}');
+    expect(gate['continue-on-error']).not.toBe(true);
+    expect(workflow.jobs['e2e-smoke'].needs).not.toContain('provisioning');
+    const step = gate.steps[0];
+    expect(step.env.BUILD_RESULT).toBe('${{ needs.unit-and-build.result }}');
+    expect(step.env.PROVISIONING_RESULT).toBe('${{ needs.provisioning.result }}');
+    for (const build of ['success', 'failure', 'cancelled', 'skipped', '']) {
+      for (const provisioning of ['success', 'failure', 'cancelled', 'skipped', '']) {
+        const result = spawnSync('bash', ['-c', step.run], {
+          env: { ...process.env, BUILD_RESULT: build, PROVISIONING_RESULT: provisioning },
+        });
+        expect(result.status, `${build}/${provisioning}`).toBe(build === 'success' && provisioning === 'success' ? 0 : 1);
+      }
     }
   });
 
