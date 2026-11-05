@@ -330,7 +330,15 @@ def _space_preflight(config: dict[str, Any], operation_id: str, operation_kind: 
         proportional_reserve = (item["estimatedBytes"] + 3) // 4
         item["reserveBytes"] = max(1_073_741_824, configured_reserve, proportional_reserve)
         item["requiredBytes"] = item["estimatedBytes"] + item["reserveBytes"]
-    installed_source_sha = _installed_paired_cms_source_sha(config)
+    if config.get("profile", "staging194") == "staging194":
+        installed_source_sha = None
+        try:
+            state = RehearsalState(Path(config["stateDir"]))
+            installed_source_sha = _staging194_current_cms_source_sha(config, state)
+        except (HostFailure, RehearsalRefusal, OSError, ValueError, KeyError, TypeError):
+            installed_source_sha = None
+    else:
+        installed_source_sha = _installed_paired_cms_source_sha(config)
     report: dict[str, Any] = {"filesystems": list(base_needed.values()),
                               "reservePolicy": "max(1 GiB, configured reserve, 25% of estimate)",
                               "configuredReserveBytes": configured_reserve,
@@ -355,6 +363,81 @@ def _space_preflight(config: dict[str, Any], operation_id: str, operation_kind: 
                 "default npm cache location is shown, but cache growth and npmrc/environment overrides are not separately estimated; filesystem reserve is the only growth allowance"
             ]
     return report
+
+
+def _staging194_current_cms_source_sha(config: dict[str, Any], state: RehearsalState) -> Optional[str]:
+    """Return the source SHA only when journal, artifact contents, and current pointer agree."""
+    if config.get("profile", "staging194") != "staging194":
+        return None
+    try:
+        rows = state.read_journal_for_cleanup()
+        current_link = Path(config["currentCms"])
+        current_link_info = current_link.lstat()
+        initial_current = _current_target(current_link)
+        uploads = [Path(item["path"]) for item in config["mediaRoots"]
+                   if isinstance(item, dict) and item.get("prefix") == "/uploads/"
+                   and isinstance(item.get("path"), str)]
+        if len(uploads) != 1:
+            return None
+        matches = []
+        release_root = Path(config["releaseRoot"]).resolve(strict=True)
+        for bundle in rows:
+            if bundle.get("record") != "new-bundle":
+                continue
+            operation_id = bundle.get("operationId")
+            source_sha = bundle.get("sourceSha")
+            pair = bundle.get("newPair")
+            if (not isinstance(operation_id, str) or not isinstance(source_sha, str)
+                    or not SHA_RE.fullmatch(source_sha) or not isinstance(pair, dict)
+                    or pair.get("sourceSha") != source_sha or pair.get("cmsSha") != source_sha
+                    or not isinstance(pair.get("cmsPayloadSha256"), str)
+                    or not SHA256_RE.fullmatch(pair["cmsPayloadSha256"])):
+                continue
+            operation_rows = [row for row in rows if row.get("operationId") == operation_id]
+            commits = [row for row in operation_rows if row.get("record") == "committed"]
+            starts = [row for row in rows if row.get("record") == "start"
+                      and row.get("operationId") == operation_id and row.get("sourceSha") == source_sha]
+            if (len(commits) != 1 or commits[0].get("sourceSha") != source_sha or len(starts) != 1
+                    or any(row.get("record") == "recovered" for row in operation_rows)):
+                continue
+            # Require exactly one bundle and one terminal commit for this identity.
+            if sum(row.get("record") == "new-bundle" and row.get("operationId") == operation_id
+                   for row in rows) != 1:
+                continue
+            start_index, bundle_index, commit_index = (rows.index(starts[0]), rows.index(bundle), rows.index(commits[0]))
+            if not start_index < bundle_index < commit_index:
+                continue
+            try:
+                source_root = _candidate_root(config, source_sha, operation_id)
+                if source_root.is_symlink() or not source_root.is_dir() or source_root.parent != release_root:
+                    continue
+                artifact = _cms_artifact_path(source_root, operation_id)
+                if artifact.is_symlink() or not artifact.is_dir():
+                    continue
+                artifact_target = artifact.resolve(strict=True)
+                if (artifact_target != initial_current
+                        or not artifact_target.is_relative_to(source_root.resolve(strict=True))):
+                    continue
+            except (HostFailure, OSError, ValueError):
+                continue
+            matches.append((source_sha, operation_id, pair["cmsPayloadSha256"], artifact_target))
+        if len(matches) != 1:
+            return None
+        source_sha, operation_id, expected_payload, artifact_target = matches[0]
+        root_before = artifact_target.stat()
+        actual_payload = _staging194_stable_cms_payload_sha256(artifact_target, uploads[0])
+        root_after = artifact_target.stat()
+        final_link_info = current_link.lstat()
+        final_current = _current_target(current_link)
+        if ((root_before.st_dev, root_before.st_ino, root_before.st_mtime_ns)
+                != (root_after.st_dev, root_after.st_ino, root_after.st_mtime_ns)
+                or (current_link_info.st_dev, current_link_info.st_ino, current_link_info.st_mtime_ns)
+                != (final_link_info.st_dev, final_link_info.st_ino, final_link_info.st_mtime_ns)
+                or final_current != initial_current or actual_payload != expected_payload):
+            return None
+        return source_sha
+    except (HostFailure, RehearsalRefusal, OSError, ValueError, UnicodeError, KeyError, TypeError):
+        return None
 
 
 def _root_config(path: Path, expected_profile: str = "staging194") -> dict[str, Any]:
@@ -2828,6 +2911,44 @@ def _cms_payload_sha256(root: Path, uploads: Path, expected_dependencies: Path |
     return digest.hexdigest()
 
 
+def _cms_payload_metadata(root: Path) -> dict[str, tuple[Any, ...]]:
+    """Capture the non-dependency payload namespace without following symlinks."""
+    root = Path(root)
+    snapshot: dict[str, tuple[Any, ...]] = {}
+    root_info = root.lstat()
+    if not stat.S_ISDIR(root_info.st_mode):
+        raise HostFailure("CMS payload root is no longer a real directory")
+    snapshot["."] = (root_info.st_dev, root_info.st_ino, stat.S_IFMT(root_info.st_mode), root_info.st_size,
+                     root_info.st_mtime_ns, root_info.st_ctime_ns, None)
+    pending = [Path(root)]
+    while pending:
+        directory = pending.pop()
+        with os.scandir(directory) as entries:
+            for entry in entries:
+                path = Path(entry.path)
+                relative = path.relative_to(root).as_posix()
+                if relative.startswith("node_modules/"):
+                    continue
+                info = entry.stat(follow_symlinks=False)
+                mode_type = stat.S_IFMT(info.st_mode)
+                link_target = os.readlink(path) if stat.S_ISLNK(info.st_mode) else None
+                snapshot[relative] = (info.st_dev, info.st_ino, mode_type, info.st_size,
+                                      info.st_mtime_ns, info.st_ctime_ns, link_target)
+                if stat.S_ISDIR(info.st_mode) and relative != "node_modules":
+                    pending.append(path)
+    return snapshot
+
+
+def _staging194_stable_cms_payload_sha256(root: Path, uploads: Path) -> str:
+    """Retain the CMS payload digest only if its tree metadata stays unchanged while read."""
+    before = _cms_payload_metadata(root)
+    digest = _cms_payload_sha256(root, uploads)
+    after = _cms_payload_metadata(root)
+    if before != after:
+        raise HostFailure("CMS payload tree changed while its provenance digest was read")
+    return digest
+
+
 def _config_sha256(config: dict[str, Any]) -> str:
     payload = json.dumps(config, sort_keys=True, separators=(",", ":")).encode("utf-8")
     return sha256_file_bytes(payload)
@@ -4448,6 +4569,12 @@ def dispatch(args: argparse.Namespace) -> dict[str, Any]:
     if args.action != "cleanup-site":
         RehearsalState._validate_identity(args.operation_id, getattr(args, "source_sha", None))
     profile = getattr(args, "profile", "staging194")
+    expected_installed_cms_sha = getattr(args, "expected_installed_cms_sha", None)
+    if expected_installed_cms_sha is not None:
+        if profile != "staging194" or args.action != "static-main":
+            raise HostFailure("expected installed CMS SHA is supported only for staging194 static-main")
+        if not isinstance(expected_installed_cms_sha, str) or not SHA_RE.fullmatch(expected_installed_cms_sha):
+            raise HostFailure("expected installed CMS SHA must be a full lowercase commit ID")
     config_path = (INITIAL_PROD_CONFIG_PATH if profile == "initial-prod" else
                    PRODUCTION_STATIC_CONFIG_PATH if profile == "production-static" else
                    PRODUCTION_PAIRED_CONFIG_PATH if profile == "production-paired" else CONFIG_PATH)
@@ -4483,6 +4610,10 @@ def dispatch(args: argparse.Namespace) -> dict[str, Any]:
             history = state.read_journal_for_cleanup()
         except RehearsalRefusal as error:
             raise HostFailure(str(error)) from error
+        if args.action == "static-main" and expected_installed_cms_sha is not None:
+            installed_cms_sha = _staging194_current_cms_source_sha(config, state)
+            if installed_cms_sha != expected_installed_cms_sha:
+                raise HostFailure("installed CMS source SHA is unknown or differs from the expected revision")
         unfinished = RehearsalState._unfinished_operation_ids(history)
         marker = _read_site_publication_marker(config)
         recovery_actions = ("recover", "restore", "finalize-recover", "static-main-recover")
@@ -4673,6 +4804,7 @@ def main(argv: Optional[list[str]] = None) -> int:
                 command.add_argument("--browser-digest")
             if name == "static-main":
                 command.add_argument("--reuse-capture-operation-id")
+                command.add_argument("--expected-installed-cms-sha")
         else:
             command.add_argument("--browser-digest")
     for name in ("export-backup", "export-static", "export-static-main", "recover", "restore",
