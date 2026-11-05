@@ -19,6 +19,7 @@ import sys
 import tarfile
 import tempfile
 import threading
+import zipfile
 from pathlib import Path
 from typing import Optional
 
@@ -314,7 +315,77 @@ def validate_production_static_release(sha: str, tag: str) -> dict:
     return production_static_admission_from_result(sha, tag, result)
 
 
-def make_archive(sha: str, provenance: dict) -> tuple[bytes, str]:
+def fetch_cms_candidate_artifact(provenance: dict, sha: str) -> bytes:
+    """Fetch and verify the CMS payload bound to this exact Tests run and SHA."""
+    run_id = provenance.get("runId")
+    attempt = provenance.get("attempt")
+    if (type(run_id) is not int or run_id <= 0 or type(attempt) is not int or attempt <= 0
+            or provenance.get("sourceSha") != sha):
+        raise Refusal("CMS admission omitted the exact workflow run identity")
+
+    artifact_name = f"cms-candidate-{run_id}-{attempt}"
+    endpoint = f"repos/{CANONICAL_REPOSITORY}/actions/runs/{run_id}/artifacts"
+    raw = capture(["gh", "api", endpoint, "--paginate", "--slurp"])
+    try:
+        pages = json.loads(raw)
+    except ValueError as error:
+        raise Refusal("gh returned malformed CMS artifact metadata") from error
+    if not isinstance(pages, list):
+        raise Refusal("gh returned malformed CMS artifact metadata")
+    artifacts = []
+    for page in pages:
+        if isinstance(page, dict) and isinstance(page.get("artifacts"), list):
+            artifacts.extend(page["artifacts"])
+    matches = [item for item in artifacts if isinstance(item, dict) and item.get("name") == artifact_name]
+    if len(matches) != 1:
+        raise Refusal("exact CMS candidate artifact is missing or duplicated")
+    artifact = matches[0]
+    workflow_run = artifact.get("workflow_run")
+    digest = artifact.get("digest")
+    if (type(artifact.get("id")) is not int or artifact["id"] <= 0
+            or artifact.get("expired") is not False
+            or not isinstance(workflow_run, dict)
+            or workflow_run.get("id") != run_id or workflow_run.get("head_sha") != sha
+            or workflow_run.get("head_branch") != "main"
+            or not isinstance(digest, str) or not re.fullmatch(r"sha256:[a-f0-9]{64}", digest)):
+        raise Refusal("CMS candidate artifact is expired or not bound to the admitted run and SHA")
+
+    archive = capture_bytes(["gh", "api",
+        f"repos/{CANONICAL_REPOSITORY}/actions/artifacts/{artifact['id']}/zip"])
+    archive_sha256 = hashlib.sha256(archive).hexdigest()
+    if digest.removeprefix("sha256:") != archive_sha256:
+        raise Refusal("downloaded CMS candidate ZIP does not match GitHub's artifact digest")
+    try:
+        with zipfile.ZipFile(io.BytesIO(archive)) as bundle:
+            entries = bundle.infolist()
+            if (len(entries) != 1 or entries[0].filename != "cms-artifact.tar.gz"
+                    or entries[0].is_dir() or entries[0].flag_bits & 0x1):
+                raise Refusal("CMS candidate ZIP must contain exactly one unencrypted tar payload")
+            payload = bundle.read(entries[0])
+    except Refusal:
+        raise
+    except (OSError, zipfile.BadZipFile, RuntimeError) as error:
+        raise Refusal("CMS candidate ZIP is unreadable") from error
+    try:
+        with tarfile.open(fileobj=io.BytesIO(payload), mode="r:gz") as inner:
+            members = inner.getmembers()
+            seen = set()
+            for member in members:
+                path = Path(member.name)
+                if (not member.name or path.is_absolute() or ".." in path.parts
+                        or member.name in seen or not (member.isfile() or member.isdir())):
+                    raise Refusal("CMS candidate tar contains an unsafe or unsupported entry")
+                seen.add(member.name)
+            if not members:
+                raise Refusal("CMS candidate tar is empty")
+    except (OSError, tarfile.TarError) as error:
+        raise Refusal("CMS candidate payload is not a readable gzip tar") from error
+    provenance["cmsArtifact"] = {"artifactId": artifact["id"], "runId": run_id, "attempt": attempt,
+        "archiveSha256": archive_sha256, "payloadSha256": hashlib.sha256(payload).hexdigest()}
+    return payload
+
+
+def make_archive(sha: str, provenance: dict, *, cms_artifact: Optional[bytes] = None) -> tuple[bytes, str]:
     source = capture_bytes(["git", "archive", "--format=tar", sha])
     tar_buffer = io.BytesIO(source)
     out = io.BytesIO()
@@ -333,6 +404,13 @@ def make_archive(sha: str, provenance: dict) -> tuple[bytes, str]:
                 dst.addfile(member)
             else:
                 raise Refusal(f"source archive contains unsupported entry {member.name}")
+        if cms_artifact is not None:
+            if any(member.name == ".ikpk-cms-artifact.tar.gz" for member in src.getmembers()):
+                raise Refusal("source archive already contains the reserved CMS artifact member")
+            info = tarfile.TarInfo(".ikpk-cms-artifact.tar.gz")
+            info.size = len(cms_artifact)
+            info.mode = 0o600
+            dst.addfile(info, io.BytesIO(cms_artifact))
         payload = json.dumps(provenance, sort_keys=True, separators=(",", ":")).encode() + b"\n"
         info = tarfile.TarInfo(".ikpk-rehearsal-ci.json")
         info.size = len(payload)
@@ -1001,7 +1079,10 @@ def invoke(args: argparse.Namespace, *, admission: Optional[dict] = None) -> Opt
     if args.command == "cms-update":
         provenance = (validate_production_paired_admission(args.source_sha) if profile == "production-paired"
                       else validate_sha_and_ci(args.source_sha, profile))
-        archive, digest = make_archive(args.source_sha, provenance)
+        cms_artifact = (fetch_cms_candidate_artifact(provenance, args.source_sha)
+                        if profile in ("staging194", "production-paired") else None)
+        archive, digest = (make_archive(args.source_sha, provenance, cms_artifact=cms_artifact)
+                           if cms_artifact is not None else make_archive(args.source_sha, provenance))
         provenance_b64 = base64.b64encode(json.dumps(provenance, sort_keys=True, separators=(",", ":")).encode()).decode("ascii")
         common = ["cms-update", "--operation-id", args.operation_id, "--source-sha", args.source_sha,
                   "--provenance-b64", provenance_b64]

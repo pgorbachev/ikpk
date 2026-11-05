@@ -7,6 +7,7 @@ import subprocess
 import tarfile
 import tempfile
 import unittest
+import zipfile
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
@@ -381,11 +382,12 @@ class OperatorAdmissionTests(unittest.TestCase):
                  patch.object(staging193, "_check_target_space", return_value={"filesystems": []}) as target_space, \
                  patch.object(staging193, "validate_production_paired_admission", return_value=provenance) as paired_admission, \
                  patch.object(staging193, "validate_sha_and_ci", return_value=provenance) as cms_admission, \
-                 patch.object(staging193, "make_archive", return_value=(b"source archive", "a" * 64)), \
+                 patch.object(staging193, "fetch_cms_candidate_artifact", return_value=b"cms tar payload") as artifact_fetch, \
+                 patch.object(staging193, "make_archive", return_value=(b"source archive", "a" * 64)) as make_archive, \
                  patch.object(staging193, "production_paired_schema_source", return_value=(SHA, "f" * 64)), \
                  patch.object(staging193, "ssh_remote", side_effect=ssh):
                 staging193.invoke(args)
-            return local_space, target_space, calls, paired, paired_admission, cms_admission
+            return local_space, target_space, calls, paired, paired_admission, cms_admission, artifact_fetch, make_archive
         finally:
             root_context.cleanup()
 
@@ -395,22 +397,32 @@ class OperatorAdmissionTests(unittest.TestCase):
                 helper.assert_not_called()
 
     def test_staging194_direct_cms_update_preserves_admission_and_remote_sequence_without_auto_space_checks(self):
-        local_space, target_space, calls, _, paired_admission, cms_admission = self._direct_cms_update("staging194")
+        local_space, target_space, calls, _, paired_admission, cms_admission, artifact_fetch, make_archive = self._direct_cms_update("staging194")
         self.assertEqual([call[0][0] for call in calls], ["cms-update"])
         self.assertEqual(calls[0][1].get("profile"), "staging194")
         cms_admission.assert_called_once_with(SHA, "staging194")
         paired_admission.assert_not_called()
+        artifact_fetch.assert_called_once_with({"sourceSha": SHA, "runId": 123, "attempt": 1}, SHA)
+        make_archive.assert_called_once_with(SHA, {"sourceSha": SHA, "runId": 123, "attempt": 1},
+                                             cms_artifact=b"cms tar payload")
         self._assert_capacity_helpers_not_called(local_space, target_space)
 
     def test_other_direct_cms_update_profiles_do_not_gain_auto_space_checks(self):
         for profile, expected in (("production-paired", ["status", "cms-update"]),
                                   ("initial-prod", ["cms-update"])):
             with self.subTest(profile=profile):
-                local_space, target_space, calls, _, paired_admission, cms_admission = self._direct_cms_update(profile)
+                local_space, target_space, calls, _, paired_admission, cms_admission, artifact_fetch, make_archive = self._direct_cms_update(profile)
                 self.assertEqual([call[0][0] for call in calls], expected)
                 self.assertTrue(all(call[1].get("profile") == profile for call in calls))
                 (paired_admission.assert_called_once_with(SHA) if profile == "production-paired"
                  else cms_admission.assert_called_once_with(SHA, "initial-prod"))
+                (artifact_fetch.assert_called_once_with({"sourceSha": SHA, "runId": 123, "attempt": 1}, SHA)
+                 if profile == "production-paired" else artifact_fetch.assert_not_called())
+                if profile == "production-paired":
+                    make_archive.assert_called_once_with(SHA, {"sourceSha": SHA, "runId": 123, "attempt": 1},
+                                                         cms_artifact=b"cms tar payload")
+                else:
+                    make_archive.assert_called_once_with(SHA, {"sourceSha": SHA, "runId": 123, "attempt": 1})
                 self._assert_capacity_helpers_not_called(local_space, target_space)
 
     def test_staging194_direct_static_main_preserves_ci_and_remote_sequence_without_auto_space_checks(self):
@@ -1012,6 +1024,7 @@ class OperatorAdmissionTests(unittest.TestCase):
             provenance = {"sourceSha": SHA, "runId": 123, "attempt": 1}
             with patch.object(staging193, "validate_sha_and_ci", return_value=provenance), \
                  patch.object(staging193, "_source_tree_bytes", return_value=10), \
+                 patch.object(staging193, "fetch_cms_candidate_artifact", return_value=b"cms tar payload"), \
                  patch.object(staging193, "make_archive", return_value=(archive, "a" * 64)), \
                  patch.object(staging193, "ssh_remote", side_effect=ssh), \
                  patch.object(staging193, "persist_offhost_backup", side_effect=save_backup):
@@ -1028,6 +1041,104 @@ class OperatorAdmissionTests(unittest.TestCase):
             self.assertIsNone(operation_calls[2][1])
             self.assertNotIn("--archive-sha256", operation_calls[2][0])
             self.assertIn("--offhost-sha256", operation_calls[2][0])
+
+
+class CmsCandidateArtifactTests(unittest.TestCase):
+    def _payload(self):
+        output = io.BytesIO()
+        with tarfile.open(fileobj=output, mode="w:gz") as archive:
+            data = b"built CMS payload"
+            member = tarfile.TarInfo("package.json")
+            member.size = len(data)
+            archive.addfile(member, io.BytesIO(data))
+        return output.getvalue()
+
+    def _zip(self, payload, name="cms-artifact.tar.gz"):
+        output = io.BytesIO()
+        with zipfile.ZipFile(output, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+            archive.writestr(name, payload)
+        return output.getvalue()
+
+    def test_fetches_exact_run_artifact_and_records_both_digests(self):
+        payload = self._payload()
+        zipped = self._zip(payload)
+        metadata = {"artifacts": [{"id": 987, "name": "cms-candidate-123-2", "expired": False,
+            "digest": "sha256:" + hashlib.sha256(zipped).hexdigest(),
+            "workflow_run": {"id": 123, "head_sha": SHA, "head_branch": "main"}}]}
+        provenance = {"sourceSha": SHA, "runId": 123, "attempt": 2}
+        with patch.object(staging193, "capture", return_value=json.dumps([metadata])) as capture, \
+             patch.object(staging193, "capture_bytes", return_value=zipped) as capture_bytes:
+            result = staging193.fetch_cms_candidate_artifact(provenance, SHA)
+        self.assertEqual(result, payload)
+        self.assertEqual(provenance["cmsArtifact"], {"artifactId": 987, "runId": 123, "attempt": 2,
+            "archiveSha256": hashlib.sha256(zipped).hexdigest(),
+            "payloadSha256": hashlib.sha256(payload).hexdigest()})
+        self.assertEqual(capture.call_count, 1)
+        self.assertEqual(capture_bytes.call_count, 1)
+        self.assertIn("actions/runs/123/artifacts", capture.call_args.args[0][2])
+        self.assertIn("actions/artifacts/987/zip", capture_bytes.call_args.args[0][2])
+
+    def test_missing_expired_or_misbound_artifact_fails_closed(self):
+        base = {"id": 987, "name": "cms-candidate-123-2", "expired": False,
+            "digest": "sha256:" + "b" * 64,
+            "workflow_run": {"id": 123, "head_sha": SHA, "head_branch": "main"}}
+        for label, artifacts in (
+            ("missing", []),
+            ("expired", [{**base, "expired": True}]),
+            ("wrong run", [{**base, "workflow_run": {**base["workflow_run"], "id": 999}}]),
+            ("wrong sha", [{**base, "workflow_run": {**base["workflow_run"], "head_sha": "c" * 40}}]),
+            ("duplicate", [base, base]),
+        ):
+            with self.subTest(label=label):
+                with patch.object(staging193, "capture", return_value=json.dumps([{"artifacts": artifacts}])), \
+                     patch.object(staging193, "capture_bytes") as download, \
+                     self.assertRaises(staging193.Refusal):
+                    staging193.fetch_cms_candidate_artifact({"sourceSha": SHA, "runId": 123, "attempt": 2}, SHA)
+                download.assert_not_called()
+
+    def test_zip_digest_and_single_payload_contract_are_enforced(self):
+        payload = self._payload()
+        wrong_name_zip = self._zip(payload, "nested/cms-artifact.tar.gz")
+        metadata = {"artifacts": [{"id": 987, "name": "cms-candidate-123-2", "expired": False,
+            "digest": "sha256:" + hashlib.sha256(wrong_name_zip).hexdigest(),
+            "workflow_run": {"id": 123, "head_sha": SHA, "head_branch": "main"}}]}
+        with patch.object(staging193, "capture", return_value=json.dumps([metadata])), \
+             patch.object(staging193, "capture_bytes", return_value=wrong_name_zip), \
+             self.assertRaisesRegex(staging193.Refusal, "exactly one unencrypted tar"):
+            staging193.fetch_cms_candidate_artifact({"sourceSha": SHA, "runId": 123, "attempt": 2}, SHA)
+
+        good_zip = self._zip(payload)
+        metadata["artifacts"][0]["digest"] = "sha256:" + "0" * 64
+        with patch.object(staging193, "capture", return_value=json.dumps([metadata])), \
+             patch.object(staging193, "capture_bytes", return_value=good_zip), \
+             self.assertRaisesRegex(staging193.Refusal, "does not match GitHub"):
+            staging193.fetch_cms_candidate_artifact({"sourceSha": SHA, "runId": 123, "attempt": 2}, SHA)
+
+    def test_source_archive_includes_reserved_payload_member(self):
+        source = io.BytesIO()
+        with tarfile.open(fileobj=source, mode="w:") as archive:
+            data = b"source"
+            member = tarfile.TarInfo("README.md")
+            member.size = len(data)
+            archive.addfile(member, io.BytesIO(data))
+        payload = b"cms gzip tar"
+        with patch.object(staging193, "capture_bytes", return_value=source.getvalue()):
+            result, _ = staging193.make_archive(SHA, {"sourceSha": SHA}, cms_artifact=payload)
+        with tarfile.open(fileobj=io.BytesIO(result), mode="r:") as archive:
+            self.assertEqual(archive.extractfile(".ikpk-cms-artifact.tar.gz").read(), payload)
+
+    def test_missing_candidate_stops_before_host_mutation(self):
+        args = type("Args", (), {"profile": "staging194", "host": staging193.TARGET_HOST,
+            "command": "cms-update", "operation_id": "artifact-required", "source_sha": SHA,
+            "backup_dir": None, "release_tag": None})()
+        provenance = {"sourceSha": SHA, "runId": 123, "attempt": 2}
+        with patch.object(staging193, "validate_sha_and_ci", return_value=provenance), \
+             patch.object(staging193, "fetch_cms_candidate_artifact",
+                           side_effect=staging193.Refusal("exact CMS candidate artifact is missing")), \
+             patch.object(staging193, "ssh_remote") as ssh, \
+             self.assertRaisesRegex(staging193.Refusal, "artifact is missing"):
+            staging193.invoke(args)
+        ssh.assert_not_called()
 
 
 if __name__ == "__main__":

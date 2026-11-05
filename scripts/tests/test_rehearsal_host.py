@@ -2100,6 +2100,7 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
                  patch.object(operator, "ssh_remote", side_effect=ssh), \
                  patch.object(operator, "ROOT", backup_dir), \
                  patch.object(operator, "validate_production_paired_admission", return_value={"runId": 7, "attempt": 2}), \
+                 patch.object(operator, "fetch_cms_candidate_artifact", return_value=b"cms tar payload"), \
                  patch.object(operator, "make_archive", return_value=(b"source archive", "e" * 64)), \
                  patch.object(operator, "production_paired_schema_source", return_value=(old_source, "f" * 64)), \
                  patch.object(operator, "production_paired_backup_fingerprint", return_value=fingerprint), \
