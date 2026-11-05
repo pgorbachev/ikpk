@@ -1001,6 +1001,61 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
             self.assertEqual(calls[1][2]["environment"], {"NODE_OPTIONS": "--max-old-space-size=1536"})
             self.assertEqual(calls[1][2]["read_only_path"], dependencies)
 
+    def test_missing_ci_cms_artifact_refuses_before_fence_without_host_build(self):
+        with tempfile.TemporaryDirectory(prefix="ikpk-cms-artifact-heap-") as temporary:
+            root = Path(temporary)
+            source_sha, operation_id = "a" * 40, "missing-cms-artifact"
+            releases = root / "releases"
+            source = releases / f"{source_sha}-{operation_id}"
+            (source / "cms").mkdir(parents=True)
+            (source / "web").mkdir()
+            dependencies = root / "shared-deps/node_modules"
+            dependencies.mkdir(parents=True)
+            user = type("User", (), {"pw_name": "ikpk-cms", "pw_uid": 0, "pw_gid": 0})()
+            state_dir = root / "state"
+            state_dir.mkdir()
+            (root / "backups").mkdir()
+            state = RehearsalState(state_dir)
+            archive = b"source archive without the CI CMS tar"
+            provenance = {"sourceSha": source_sha, "ref": "refs/heads/main", "workflow": "Tests",
+                          "workflowName": "Tests", "headBranch": "main", "event": "push", "runId": 7,
+                          "attempt": 1, "repository": "pgorbachev/ikpk",
+                          "runUrl": "https://github.com/pgorbachev/ikpk/actions/runs/7",
+                          "release": {"tag": "v2026.11.5", "publishedAt": "2026-11-05T10:00:00Z"},
+                          "releasePreflight": {"status": "passed", "commit": source_sha}}
+            config = {"profile": "staging194", "releaseRoot": str(releases),
+                      "allowedSourceRef": "refs/heads/main", "cmsUser": "ikpk-cms",
+                      "backupRoot": str(root / "backups")}
+            args = Namespace(operation_id=operation_id, source_sha=source_sha,
+                             provenance_b64=base64.b64encode(json.dumps(provenance).encode()).decode(),
+                             archive_sha256=sha(archive), offhost_sha256=None)
+            commands = []
+
+            def run_as_cms(_config, cwd, argv, **kwargs):
+                commands.append((cwd, argv, kwargs))
+                if "build-cms-artifact.sh" in " ".join(argv):
+                    artifact = Path(argv[-1])
+                    artifact.mkdir(parents=True)
+                return ""
+
+            host_stdin = type("HostStdin", (), {"buffer": io.BytesIO(archive)})()
+            with patch.object(rehearsal_host.sys, "stdin", host_stdin), \
+                 patch.object(rehearsal_host, "_extract_source_archive", return_value=source), \
+                 patch.object(rehearsal_host, "_prepare_cms_build_dependencies", return_value=dependencies), \
+                 patch.object(rehearsal_host.pwd, "getpwnam", return_value=user), \
+                 patch.object(rehearsal_host.os, "chown"), patch.object(rehearsal_host.os, "chmod"), \
+                 patch.object(rehearsal_host, "_run_as_cms", side_effect=run_as_cms), \
+                 patch.object(rehearsal_host, "_start_acquisition") as start, \
+                 patch.object(rehearsal_host, "_backup") as backup:
+                with self.assertRaises(rehearsal_host.HostFailure):
+                    rehearsal_host._cms_update(config, state, args)
+
+            self.assertFalse(any("build-cms-artifact.sh" in " ".join(argv)
+                                 for _cwd, argv, _kwargs in commands),
+                             "the destination must refuse a source archive missing its CI CMS tar, not build it")
+            start.assert_not_called()
+            backup.assert_not_called()
+
     def test_complete_cms_build_dependency_generation_is_reused_without_mutation(self):
         with tempfile.TemporaryDirectory(prefix="ikpk-cms-build-deps-") as temporary:
             root = Path(temporary)
