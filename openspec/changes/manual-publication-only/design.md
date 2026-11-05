@@ -4,7 +4,7 @@ The staging194 rehearsal retains the existing configured CMS release, SQLite, up
 
 ## Host helper artifact
 
-The existing installer, modules, and configuration templates are packaged into one `host-helper.tar.gz` from the admitted exact source SHA. CI uploads it with SHA/CI artifact provenance; staging194 consumes that artifact directly without requiring a GitHub Release. The production path attaches/reuses the same bytes as a GitHub Release asset. Host configuration remains destination-specific and is not embedded as a shared live configuration. CI has no host credentials. Installation uses the existing installer and existing admission gates; it does not overwrite installed lock/configuration state or introduce a second delivery mechanism. The installed operator does not self-update, and installation proceeds only when the artifact channel is permitted for that host.
+The existing installer, modules, and configuration templates are packaged into one `host-helper.tar.gz` from the exact SHA admitted by the existing source-selection mode. CI uploads it with the successful canonical `main` `Tests` push run/attempt and SHA/CI artifact provenance; staging194 consumes that artifact directly without requiring a GitHub Release. The production path attaches/reuses the same bytes as a GitHub Release asset. Host configuration remains destination-specific and is not embedded as a shared live configuration. CI has no host credentials. Installation uses the existing installer and existing admission gates; it does not overwrite installed lock/configuration state or introduce a second delivery mechanism. The installed operator does not self-update, and installation proceeds only when the artifact channel is permitted for that host.
 
 ## Decisions
 
