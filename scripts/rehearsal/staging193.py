@@ -206,7 +206,7 @@ def validate_staging194_paired_admission(sha: str) -> dict:
 def _require_canonical_main_ancestor(sha: str, main_sha: str) -> None:
     """Use GitHub's canonical comparison so local remote-tracking refs may be stale."""
     comparison = capture(["gh", "api", f"repos/{CANONICAL_REPOSITORY}/compare/{sha}...{main_sha}",
-                         "--jq", ".status + \":\" + .merge_base.sha"])
+                         "--jq", ".status + \":\" + .merge_base_commit.sha"])
     try:
         status, merge_base = comparison.split(":", 1)
     except ValueError as error:

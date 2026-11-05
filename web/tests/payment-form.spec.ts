@@ -1535,6 +1535,8 @@ test.describe('remove-payment-venue: built form and saved attempts', () => {
       for (let n = 1; n <= 3; n += 1) {
         await resumeVenueForm(page);
         await submitVenueForm(page);
+        await expect.poll(() => posts.length).toBe(n);
+        await expect(page.locator(FORM)).toBeHidden();
         await expect(page.locator(STATE('verification_required'))).toBeVisible();
         expect(posts).toHaveLength(n);
         expect(posts[n - 1]).toMatchObject({ requestId: id, venue: 'Москва' });

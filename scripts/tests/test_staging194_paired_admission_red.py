@@ -26,7 +26,10 @@ def canonical_ci_capture(selected_sha: str, main_sha: str, *, ancestor: bool = T
             return operator.CANONICAL_REPOSITORY
         if argv[:2] == ["gh", "api"]:
             if "/compare/" in argv[2]:
-                return f"{'ahead' if ancestor else 'diverged'}:{selected_sha if ancestor else 'c' * 40}"
+                if argv[-1] != '.status + ":" + .merge_base_commit.sha':
+                    return "ahead:null"
+                status = ('identical' if selected_sha == main_sha else 'ahead') if ancestor else 'diverged'
+                return f"{status}:{selected_sha if ancestor else 'c' * 40}"
             return main_sha
         if argv[:3] == ["gh", "run", "list"]:
             workflow = argv[argv.index("--workflow") + 1]
@@ -104,7 +107,7 @@ class Staging194PairedAdmissionRedTests(unittest.TestCase):
 
         self.assertEqual(provenance["sourceSha"], OLDER_SHA)
         self.assertIn(["gh", "api", f"repos/{operator.CANONICAL_REPOSITORY}/compare/{OLDER_SHA}...{MAIN_SHA}",
-                       "--jq", ".status + \":\" + .merge_base.sha"], calls)
+                       "--jq", ".status + \":\" + .merge_base_commit.sha"], calls)
         self.assertNotIn(["git", "cat-file", "-e", f"{MAIN_SHA}^{{commit}}"], calls)
         self.assertFalse(any(argv[:3] == ["git", "merge-base", "--is-ancestor"] for argv in calls))
 
@@ -113,6 +116,12 @@ class Staging194PairedAdmissionRedTests(unittest.TestCase):
         with patch.object(operator, "capture", side_effect=capture):
             with self.assertRaisesRegex(operator.Refusal, "not an ancestor"):
                 operator.validate_sha_and_ci(OLDER_SHA, "staging194")
+
+    def test_compare_rejects_behind_or_unrelated_merge_base(self):
+        for response in (f"behind:{OLDER_SHA}", f"ahead:{'c' * 40}", "ahead:null"):
+            with self.subTest(response=response), patch.object(operator, "capture", return_value=response):
+                with self.assertRaisesRegex(operator.Refusal, "not an ancestor"):
+                    operator._require_canonical_main_ancestor(OLDER_SHA, MAIN_SHA)
 
     def test_missing_required_push_workflow_refuses_paired_staging_admission(self):
         _, capture = canonical_ci_capture(MAIN_SHA, MAIN_SHA, missing_workflow="Security")
