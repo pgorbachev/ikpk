@@ -594,7 +594,7 @@ jobs:
 
       - name: Verify staging193 rehearsal command and recovery boundaries
         working-directory: .
-        run: python3 -m unittest scripts.tests.test_rehearsal_state scripts.tests.test_rehearsal_host scripts.tests.test_rehearsal_install scripts.tests.test_rehearsal_operator scripts.tests.test_host_helper_artifact -v
+        run: python3 -m unittest scripts.tests.test_rehearsal_state scripts.tests.test_rehearsal_host scripts.tests.test_rehearsal_install scripts.tests.test_rehearsal_operator scripts.tests.test_host_helper_artifact scripts.tests.test_production_static_release_admission -v
 
       - name: Classify dependency-only change for scripts test-count
         id: scripts-dependency-scope

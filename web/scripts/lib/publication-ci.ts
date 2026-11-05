@@ -289,6 +289,10 @@ export async function readCiEvidence(options: ReadCiEvidenceOptions): Promise<Ci
     if (helperPayload.byteLength === 0 || helperPayload.byteLength > 20 * 1024 * 1024) throw new Error('invalid-host-helper-payload-size');
     helperPayloadSha256 = createHash('sha256').update(helperPayload).digest('hex');
   }
+  if (options.requireCurrentMain !== false) {
+    const { data: main } = await request(`${API}/git/ref/heads/main`);
+    if (main.ref !== 'refs/heads/main' || (main.object as { sha?: string } | undefined)?.sha !== options.commit) throw new Error('head-moved');
+  }
   if (options.ensureRelease) {
     await options.ensureRelease(options.releaseTag, options.commit);
     release = await verifyPublishedRelease();

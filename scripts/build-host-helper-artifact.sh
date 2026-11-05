@@ -11,7 +11,7 @@ OUTPUT=$1
 mkdir -p -- "$(dirname -- "$OUTPUT")"
 
 cd "$ROOT"
-COPYFILE_DISABLE=1 tar -czf "$OUTPUT" -- \
+git archive --format=tar HEAD -- \
   scripts/install-rehearsal-host.sh \
   scripts/lib/rehearsal_state.py \
   scripts/lib/housekeeping_journal.py \
@@ -20,4 +20,4 @@ COPYFILE_DISABLE=1 tar -czf "$OUTPUT" -- \
   scripts/staging193-rehearsal.json \
   scripts/initial-prod-rehearsal.json \
   scripts/production-static-rehearsal.json \
-  scripts/production-paired-rehearsal.json
+  scripts/production-paired-rehearsal.json | gzip -n > "$OUTPUT"

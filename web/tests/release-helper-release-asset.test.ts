@@ -21,7 +21,8 @@ async function operation(): Promise<Ensure> {
   return candidate;
 }
 
-function githubFixture(options: { commit?: string; assets?: Array<Record<string, unknown>> } = {}) {
+function githubFixture(options: { commit?: string; assets?: Array<Record<string, unknown>>;
+  assetPages?: Array<Array<Record<string, unknown>>> } = {}) {
   const calls: Call[] = [];
   let assets = options.assets ?? [];
   const fetch: typeof globalThis.fetch = async (request, init) => {
@@ -33,7 +34,13 @@ function githubFixture(options: { commit?: string; assets?: Array<Record<string,
       prerelease: false, published_at: '2026-11-05T12:00:00Z', upload_url: UPLOAD });
     if (url === `${API}/git/ref/tags/${TAG}`) return json({ ref: `refs/tags/${TAG}`,
       object: { type: 'commit', sha: options.commit ?? SHA } });
-    if (url === `${API}/releases/123/assets?per_page=100`) return json({ total_count: assets.length, assets });
+    if (url.startsWith(`${API}/releases/123/assets?per_page=100`)) {
+      const page = Number(new URL(url).searchParams.get('page') ?? '1');
+      const selected = options.assetPages?.[page - 1] ?? assets;
+      const link = options.assetPages && page < options.assetPages.length
+        ? { headers: { link: `<${API}/releases/123/assets?per_page=100&page=${page + 1}>; rel="next"` } } : {};
+      return new Response(JSON.stringify(selected), { status: 200, ...link });
+    }
     if (url.startsWith('https://uploads.github.com/') && method === 'POST') {
       assets = [{ id: 456, name: 'host-helper.tar.gz', digest: `sha256:${DIGEST}`, state: 'uploaded' }];
       return json(assets[0], 201);
@@ -61,6 +68,17 @@ describe('production Release host-helper asset', () => {
     const f = githubFixture({ assets: [{ id: 456, name: 'host-helper.tar.gz', digest: `sha256:${DIGEST}`, state: 'uploaded' }] });
     await (await operation())(TAG, SHA, PAYLOAD, DIGEST, TOKEN, f.fetch);
     expect(f.calls.some((call) => call.method === 'POST')).toBe(false);
+  });
+
+  it('reads complete paginated GitHub asset lists and detects a duplicate on a later page', async () => {
+    const filler = Array.from({ length: 100 }, (_, index) => ({ id: index + 1, name: `other-${index}`, digest: null, state: 'uploaded' }));
+    const existing = { id: 456, name: 'host-helper.tar.gz', digest: `sha256:${DIGEST}`, state: 'uploaded' };
+    const okay = githubFixture({ assetPages: [filler, [existing]] });
+    await (await operation())(TAG, SHA, PAYLOAD, DIGEST, TOKEN, okay.fetch);
+    expect(okay.calls.some((call) => call.url.endsWith('/assets?per_page=100&page=2'))).toBe(true);
+    const duplicate = githubFixture({ assetPages: [filler, [existing, { ...existing, id: 457 }]] });
+    await expect((await operation())(TAG, SHA, PAYLOAD, DIGEST, TOKEN, duplicate.fetch)).rejects.toThrow();
+    expect(duplicate.calls.some((call) => call.method === 'POST')).toBe(false);
   });
 
   it('refuses a different tag target SHA before uploading', async () => {

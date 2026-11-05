@@ -259,6 +259,8 @@ def validate_stable_release(provenance: dict, sha: str, *, release_tag: Optional
             or preflight_result.get("historicalRelease", False) != historical_release):
         raise Refusal("release-preflight did not admit the exact selected Release SHA")
     helper = _verified_preflight_helper_artifact(preflight_result, sha)
+    if helper["runId"] != provenance.get("runId") or helper["attempt"] != provenance.get("attempt"):
+        raise Refusal("release-preflight helper artifact run/attempt changed during current-source admission")
     provenance["release"] = {"tag": tag, "publishedAt": published_at}
     provenance["releasePreflight"] = preflight_result
     provenance["hostHelperArtifact"] = helper

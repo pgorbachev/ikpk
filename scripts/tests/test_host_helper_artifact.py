@@ -93,6 +93,15 @@ class HostHelperArtifactBuildTests(unittest.TestCase):
                     self.assertTrue(item.isfile(), item.name)
                     self.assertEqual(archive.extractfile(item).read(), (REPO_ROOT / item.name).read_bytes(), item.name)
 
+    def test_rebuilding_the_same_commit_produces_identical_payload_bytes(self):
+        with tempfile.TemporaryDirectory(prefix="ikpk-host-helper-repeat-") as temporary:
+            first = Path(temporary) / "first.tar.gz"
+            second = Path(temporary) / "second.tar.gz"
+            builder = str(REPO_ROOT / "scripts/build-host-helper-artifact.sh")
+            subprocess.run(["bash", builder, str(first)], cwd=REPO_ROOT, check=True, capture_output=True, text=True)
+            subprocess.run(["bash", builder, str(second)], cwd=REPO_ROOT, check=True, capture_output=True, text=True)
+            self.assertEqual(first.read_bytes(), second.read_bytes())
+
     def test_builder_does_not_package_credentials_or_host_specific_live_config(self):
         with tempfile.TemporaryDirectory(prefix="ikpk-host-helper-build-") as temporary:
             output = Path(temporary) / "host-helper.tar.gz"

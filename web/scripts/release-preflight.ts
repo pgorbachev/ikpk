@@ -47,11 +47,33 @@ export async function ensureReleaseHelperAsset(tag: string, commit: string, payl
   if (object?.type !== 'commit' || object.sha !== commit) fail('sha-mismatch');
 
   const listAssets = async (): Promise<Array<{ id?: unknown; name?: unknown; digest?: unknown; state?: unknown }>> => {
-    const response = await request(`${API}/releases/${Number(release.id)}/assets?per_page=100`, { headers });
-    if (!response.ok) fail('asset-list');
-    const body = await response.json() as { total_count?: unknown; assets?: unknown };
-    if (!Number.isSafeInteger(body.total_count) || !Array.isArray(body.assets) || Number(body.total_count) !== body.assets.length) fail('asset-list');
-    return body.assets as Array<{ id?: unknown; name?: unknown; digest?: unknown; state?: unknown }>;
+    const initial = `${API}/releases/${Number(release.id)}/assets?per_page=100`;
+    const result: Array<{ id?: unknown; name?: unknown; digest?: unknown; state?: unknown }> = [];
+    const seen = new Set<string>();
+    let url: string | undefined = initial;
+    let page = 1;
+    while (url) {
+      if (seen.has(url) || seen.size >= 100) fail('asset-pagination');
+      seen.add(url);
+      const response = await request(url, { headers });
+      if (!response.ok) fail('asset-list');
+      const body = await response.json() as unknown;
+      if (!Array.isArray(body)) fail('asset-list');
+      result.push(...body as Array<{ id?: unknown; name?: unknown; digest?: unknown; state?: unknown }>);
+      const next = response.headers.get('link')?.match(/<([^>]+)>;\s*rel="next"/)?.[1];
+      if (!next) {
+        if (body.length === 100) fail('asset-page-incomplete');
+        url = undefined;
+        continue;
+      }
+      const parsed = new URL(next);
+      if (parsed.origin !== new URL(initial).origin || parsed.pathname !== new URL(initial).pathname ||
+          parsed.searchParams.get('per_page') !== '100' || parsed.searchParams.get('page') !== String(page + 1) ||
+          [...parsed.searchParams.keys()].some((key) => !['per_page', 'page'].includes(key))) fail('asset-pagination');
+      page++;
+      url = next;
+    }
+    return result;
   };
   const verifyUniqueAsset = (assets: Array<{ id?: unknown; name?: unknown; digest?: unknown; state?: unknown }>): boolean => {
     const matches = assets.filter((asset) => asset.name === HELPER_ASSET);
@@ -134,14 +156,14 @@ try {
   if ((ensureRelease || ensureHelperAsset) && !token) throw new Error('missing-github-token');
   if (historicalRelease && (ensureRelease || ensureHelperAsset)) throw new Error('invalid-arguments');
   const evidence = await readCiEvidence({ commit, releaseTag, token,
-    requireCurrentMain: !historicalRelease && !ensureRelease && !ensureHelperAsset,
+    requireCurrentMain: !historicalRelease && !ensureRelease,
     operatorAdmission: historicalRelease || ensureRelease || ensureHelperAsset,
     ...(ensureRelease ? { ensureRelease: (tag: string, sha: string) => ensureStableRelease(tag, sha, token!) } : {}),
     ...(attachHelperAsset ? { ensureHostHelperAsset: (tag: string, sha: string, payload: Uint8Array, sha256: string) =>
       ensureReleaseHelperAsset(tag, sha, payload, sha256, token, globalThis.fetch, { historicalRelease }) } : {}) });
   process.stdout.write(`${JSON.stringify({ status: 'admitted', commit, release: evidence.release,
     ...(evidence.hostHelperArtifact ? { hostHelperArtifact: evidence.hostHelperArtifact } : {}),
-    historicalRelease: historicalRelease || ensureRelease, ...( (historicalRelease || ensureRelease) && evidence.operatorAdmission
+    historicalRelease: historicalRelease || ensureRelease, ...( (historicalRelease || ensureRelease || ensureHelperAsset) && evidence.operatorAdmission
       ? { operatorAdmission: evidence.operatorAdmission } : {}),
     runs: [{ workflow: evidence.workflow, runId: evidence.runId }, ...evidence.workflows ?? []] })}\n`);
 } catch {

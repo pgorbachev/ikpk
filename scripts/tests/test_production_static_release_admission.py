@@ -14,6 +14,32 @@ RELEASE_TAG = "v2026.1102.1"
 
 
 class ProductionStaticReleaseAdmissionTests(unittest.TestCase):
+    def test_current_release_preflight_requests_and_binds_helper_asset_to_same_ci_attempt(self):
+        helper = {"artifactId": 808, "runId": 901, "attempt": 2,
+                  "archiveSha256": "b" * 64, "payloadSha256": "c" * 64}
+        operator = {"sourceSha": SOURCE_SHA, "runId": 901, "attempt": 2}
+        output = {"status": "admitted", "commit": SOURCE_SHA, "historicalRelease": False,
+                  "operatorAdmission": operator, "hostHelperArtifact": helper}
+        commands = []
+
+        def fake_capture(argv):
+            commands.append(argv)
+            if argv[:2] == ["gh", "release"]:
+                return json.dumps({"tagName": RELEASE_TAG, "isDraft": False,
+                    "isPrerelease": False, "publishedAt": "2026-11-02T10:00:00Z"})
+            if argv[:2] == ["gh", "api"]:
+                return SOURCE_SHA
+            if argv[:2] == ["node", "web/scripts/release-preflight.ts"]:
+                return json.dumps(output)
+            raise AssertionError(f"unexpected command: {argv}")
+
+        provenance = {"sourceSha": SOURCE_SHA, "runId": 901, "attempt": 2}
+        with patch.object(staging193, "capture", side_effect=fake_capture):
+            admitted = staging193.validate_stable_release(provenance, SOURCE_SHA)
+        preflight = next(argv for argv in commands if argv[:2] == ["node", "web/scripts/release-preflight.ts"])
+        self.assertIn("--ensure-helper-asset", preflight)
+        self.assertEqual(admitted["hostHelperArtifact"], helper)
+
     def test_cli_accepts_explicit_release_tag_and_keeps_its_exact_sha(self):
         observed = {}
 
@@ -96,13 +122,16 @@ class ProductionStaticReleaseAdmissionTests(unittest.TestCase):
             "runUrl": f"https://github.com/{staging193.CANONICAL_REPOSITORY}/actions/runs/{run_id + index + 1}"}
             for index, workflow in enumerate(staging193.STATIC_MAIN_ADDITIONAL_WORKFLOWS)]
         release = {"tag": RELEASE_TAG, "id": 702, "publishedAt": "2026-11-02T10:00:00Z"}
+        helper_artifact = {"artifactId": 808, "runId": run_id, "attempt": 1,
+                           "archiveSha256": "b" * 64, "payloadSha256": "c" * 64}
         admission = {"repository": staging193.CANONICAL_REPOSITORY, "ref": "refs/heads/main",
             "sourceSha": SOURCE_SHA, "workflow": staging193.WORKFLOW, "workflowName": staging193.WORKFLOW,
             "event": "push", "headBranch": "main", "runId": run_id, "attempt": 1,
             "status": "completed", "conclusion": "success", "requiredJobs": sorted(staging193.REQUIRED_TEST_JOBS),
             "runUrl": run_url, "additionalWorkflows": additional}
         preflight_result = {"status": "admitted", "commit": SOURCE_SHA, "release": release,
-            "historicalRelease": True, "operatorAdmission": admission}
+            "historicalRelease": True, "operatorAdmission": admission,
+            "hostHelperArtifact": helper_artifact}
         responses = [json.dumps({"phase": "browser-check-required", "staticTreeSha256": "c" * 64}).encode(),
                      b"candidate bytes", json.dumps({"phase": "committed"}).encode()]
         calls = []
@@ -140,11 +169,33 @@ class ProductionStaticReleaseAdmissionTests(unittest.TestCase):
         self.assertEqual(forwarded["sourceSha"], SOURCE_SHA)
         self.assertEqual(forwarded["release"]["tag"], RELEASE_TAG)
         self.assertEqual(forwarded["releasePreflight"], {"status": "admitted", "commit": SOURCE_SHA,
-            "release": release, "historicalRelease": True})
+            "release": release, "historicalRelease": True, "hostHelperArtifact": helper_artifact})
         self.assertNotIn("operatorAdmission", forwarded["releasePreflight"])
         for command, _kwargs in calls:
             if command[0] in ("static-main", "export-static-main") and "--source-sha" in command:
                 self.assertEqual(command[command.index("--source-sha") + 1], SOURCE_SHA)
+
+    def test_helper_artifact_must_match_the_preflight_run_and_attempt(self):
+        run_id = 901
+        additional = [{"workflow": workflow, "headSha": SOURCE_SHA, "event": "push", "headBranch": "main",
+            "runId": run_id + index + 1, "attempt": 1, "status": "completed", "conclusion": "success",
+            "requiredJobs": ["job"], "runUrl": f"https://github.com/{staging193.CANONICAL_REPOSITORY}/actions/runs/{run_id + index + 1}"}
+            for index, workflow in enumerate(staging193.STATIC_MAIN_ADDITIONAL_WORKFLOWS)]
+        operator = {"sourceSha": SOURCE_SHA, "runId": run_id, "attempt": 1,
+                    "additionalWorkflows": additional, "ref": "refs/heads/main",
+                    "repository": staging193.CANONICAL_REPOSITORY, "workflow": staging193.WORKFLOW,
+                    "workflowName": staging193.WORKFLOW, "event": "push", "headBranch": "main",
+                    "status": "completed", "conclusion": "success",
+                    "requiredJobs": sorted(staging193.REQUIRED_TEST_JOBS),
+                    "runUrl": f"https://github.com/{staging193.CANONICAL_REPOSITORY}/actions/runs/{run_id}"}
+        result = {"status": "admitted", "commit": SOURCE_SHA,
+            "release": {"tag": RELEASE_TAG, "id": 702, "publishedAt": "2026-11-02T10:00:00Z"},
+            "historicalRelease": True, "operatorAdmission": operator,
+            "hostHelperArtifact": {"artifactId": 808, "runId": run_id, "attempt": 2,
+                "archiveSha256": "b" * 64, "payloadSha256": "c" * 64}}
+        with patch.object(staging193, "capture", return_value=""):
+            with self.assertRaisesRegex(staging193.Refusal, "selected stable Release"):
+                staging193.production_static_admission_from_result(SOURCE_SHA, RELEASE_TAG, result)
 
 
 if __name__ == "__main__":
