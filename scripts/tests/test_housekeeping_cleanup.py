@@ -193,6 +193,21 @@ class ReleaseCleanupTests(unittest.TestCase):
         self.assertTrue(self.marker.exists())
         self.assertEqual(json.loads(self.marker.read_text())['phase'], 'cleanup-pending')
 
+    def test_tampered_static_candidate_cannot_fall_back_to_matching_cms_state(self):
+        (self.current / 'tampered.txt').write_text('changed after commit')
+        stale = self.releases / ('c' * 40 + '-stale')
+        stale.mkdir()
+        (stale / 'release.json').write_text(json.dumps({'commit': 'c' * 40, 'snapshotId': 'snap:stale'}))
+
+        result = host._cleanup_after_commit(self.config, self.state, 'flow-one')
+
+        self.assertTrue(result['cleanupPending'])
+        self.assertIn('static-main candidate differs', result['cleanupError'])
+        self.assertTrue(self.current.is_dir())
+        self.assertTrue(self.old.is_dir())
+        self.assertTrue(stale.is_dir())
+        self.assertEqual(json.loads(self.marker.read_text())['phase'], 'cleanup-pending')
+
     def test_cms_refresh_cleanup_accepts_current_identity_without_static_main_journal(self):
         self.state.journal_path.write_text('')
         self.marker.write_text(json.dumps({'version': 1, 'operationId': 'flow-one',

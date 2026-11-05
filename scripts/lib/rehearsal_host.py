@@ -1043,10 +1043,15 @@ def _current_rollback_target(root: Path, current: Path, history: list[dict],
             continue
         matches.append(start)
 
+    static_candidate_claimed = any(
+        row.get("operationKind") == "static-main" and row.get("record") == "static-main-switch-intent"
+        and row.get("candidateStaticPath") == str(current) for row in history)
     if matches:
         start = matches[-1]
         raw_target = start.get("oldStaticPath")
         expected_digest = start.get("oldStaticTreeSha256")
+    elif static_candidate_claimed:
+        raise HostFailure("current static-main candidate differs from its committed journal identity; cleanup refused")
     else:
         starts = {row.get("operationId"): row for row in history
                   if row.get("record") == "start" and row.get("operationKind") is None
