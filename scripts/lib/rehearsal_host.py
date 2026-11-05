@@ -991,8 +991,9 @@ def _expire_site_restore(config: dict[str, Any], current_name: str, *, cleanup_p
             pass
 
 
-def _static_main_rollback_target(root: Path, current: Path, history: list[dict]) -> Path:
-    """Find and verify the previous static tree for the currently served commit."""
+def _current_rollback_target(root: Path, current: Path, history: list[dict],
+                             site_state: Optional[dict]) -> Optional[Path]:
+    """Verify the rollback target of the current static-main release, if one exists."""
     current_digest = _tree_sha256(current)
     release_info = None
     release_file = current / "release.json"
@@ -1042,11 +1043,41 @@ def _static_main_rollback_target(root: Path, current: Path, history: list[dict])
             continue
         matches.append(start)
 
-    if not matches:
-        raise HostFailure("current static release has no matching committed journal identity; cleanup refused")
-    start = matches[-1]
-    raw_target = start.get("oldStaticPath")
-    expected_digest = start.get("oldStaticTreeSha256")
+    if matches:
+        start = matches[-1]
+        raw_target = start.get("oldStaticPath")
+        expected_digest = start.get("oldStaticTreeSha256")
+    else:
+        starts = {row.get("operationId"): row for row in history
+                  if row.get("record") == "start" and row.get("operationKind") is None
+                  and isinstance(row.get("operationId"), str)}
+        bundles = {row.get("operationId"): row for row in history
+                   if row.get("record") == "new-bundle" and isinstance(row.get("operationId"), str)}
+        paired_commit = None
+        for row in history:
+            operation = row.get("operationId")
+            start = starts.get(operation) if isinstance(operation, str) else None
+            bundle = bundles.get(operation) if isinstance(operation, str) else None
+            new_pair = bundle.get("newPair") if isinstance(bundle, dict) else None
+            if (row.get("record") != "committed" or not start or not isinstance(new_pair, dict)
+                    or row.get("sourceSha") != start.get("sourceSha")
+                    or new_pair.get("staticTreeSha256") != current_digest
+                    or current.name != f"{row.get('sourceSha')}-{operation}"):
+                continue
+            if release_info is not None and (release_info.get("commit") != row.get("sourceSha")
+                    or release_info.get("operationId") not in (None, operation)):
+                continue
+            paired_commit = row
+        if paired_commit is not None:
+            # The paired recovery protocol is closed by its terminal commit.
+            return None
+        if (isinstance(site_state, dict) and site_state.get("status") == "succeeded"
+                and site_state.get("phase") == "done" and site_state.get("switched") is True
+                and site_state.get("releaseId") == current.name):
+            # The CMS workflow owns and expires its previousReleaseId in state.
+            return None
+        raise HostFailure("current static release has no matching committed identity; cleanup refused")
+
     if (not isinstance(raw_target, str) or not Path(raw_target).is_absolute()
             or not isinstance(expected_digest, str) or not re.fullmatch(r"[a-f0-9]{64}", expected_digest)):
         raise HostFailure("static rollback target identity is malformed; cleanup refused")
@@ -1067,7 +1098,7 @@ def _static_main_rollback_target(root: Path, current: Path, history: list[dict])
 
 
 def _cleanup_site_releases(config: dict[str, Any], state: RehearsalState,
-                           operation_id: Optional[str], *, close_marker: bool = True) -> list[str]:
+                           operation_id: Optional[str], *, close_marker: bool = True) -> dict[str, list[Any]]:
     try:
         # This must precede every journal query: the normal reader repairs a
         # torn tail, which could erase an unfinished rollback intent.
@@ -1100,7 +1131,6 @@ def _cleanup_site_releases(config: dict[str, Any], state: RehearsalState,
     current = _current_target(Path(config["currentStatic"])).resolve(strict=True)
     if current.parent != root.resolve(strict=True):
         raise HostFailure("current static release is not a direct child of its configured root")
-    rollback_target = _static_main_rollback_target(root, current, history)
     site_state_path = Path(config["siteRefreshState"])
     try:
         site_state = json.loads(site_state_path.read_text(encoding="utf-8"))
@@ -1111,14 +1141,13 @@ def _cleanup_site_releases(config: dict[str, Any], state: RehearsalState,
     if site_state is not None and (not isinstance(site_state, dict) or site_state.get("status") not in
                                    ("idle", "failed", "succeeded")):
         raise HostFailure("CMS refresh or Restore is active or unresolved; release cleanup refused")
+    cms_success = (isinstance(site_state, dict) and site_state.get("status") == "succeeded"
+                   and site_state.get("phase") == "done" and site_state.get("switched") is True
+                   and site_state.get("releaseId") == current.name)
     if operation_id is None:
-        cms_state = site_state
-        cms_success = (isinstance(cms_state, dict) and cms_state.get("status") == "succeeded"
-                       and cms_state.get("phase") == "done" and cms_state.get("switched") is True
-                       and cms_state.get("releaseId") == current.name)
         if marker is None:
-            if not cms_success or cms_state.get("cleanupPending") is not True:
-                return []
+            if not cms_success or site_state.get("cleanupPending") is not True:
+                return {"removedReleases": [], "retainedLegacy": []}
             operation_id = f"cms-{current.name}"
             _write_site_publication_marker(config, operation_id, "cleanup-pending")
             marker = _read_site_publication_marker(config)
@@ -1139,6 +1168,7 @@ def _cleanup_site_releases(config: dict[str, Any], state: RehearsalState,
             raise HostFailure("release cleanup requires a durable terminal publication record")
         _write_site_publication_marker(config, operation_id, "cleanup-pending")
         marker = _read_site_publication_marker(config)
+    rollback_target = _current_rollback_target(root, current, history, site_state)
     protected = {current, rollback_target}
     temporary_pointers = []
     for pointer in root.parent.glob(".current-next-*"):
@@ -1181,6 +1211,7 @@ def _cleanup_site_releases(config: dict[str, Any], state: RehearsalState,
             protected.add(root.resolve(strict=True) / workspace.relative_to(root.resolve(strict=True)).parts[0])
     mounts = _mount_points()
     candidates = []
+    retained_legacy = []
     for candidate in sorted(root.iterdir()):
         if candidate.name.startswith("."):
             continue
@@ -1194,13 +1225,17 @@ def _cleanup_site_releases(config: dict[str, Any], state: RehearsalState,
             release_info = release_file.lstat()
             release = json.loads(release_file.read_text(encoding="utf-8"))
         except (OSError, ValueError) as error:
-            raise HostFailure("unidentified directory in static release root; cleanup refused") from error
+            retained_legacy.append({"path": str(candidate), "reason": "release metadata is missing or unreadable"})
+            continue
         if (not stat.S_ISREG(release_info.st_mode) or release_info.st_nlink != 1
                 or not isinstance(release, dict)
                 or not re.fullmatch(r"[a-f0-9]{40}", str(release.get("commit", "")))
                 or not isinstance(release.get("snapshotId"), str)
                 or not release["snapshotId"].startswith("snap:")):
-            raise HostFailure("unverified directory in static release root; cleanup refused")
+            retained_legacy.append({"path": str(candidate), "reason": "release metadata is not verifiable"})
+            continue
+        if any(point == candidate or candidate in point.parents for point in mounts):
+            raise HostFailure("release cleanup candidate contains a mount point; cleanup refused")
         candidates.append(candidate)
 
     # Validate every candidate before the first destructive action. An unknown
@@ -1222,12 +1257,12 @@ def _cleanup_site_releases(config: dict[str, Any], state: RehearsalState,
     _expire_site_restore(config, current.name, cleanup_pending=False)
     if close_marker and marker is not None and operation_id is not None:
         _clear_site_publication_marker(config, operation_id)
-    return removed
+    return {"removedReleases": removed, "retainedLegacy": retained_legacy}
 
 
 def _cleanup_after_commit(config: dict[str, Any], state: RehearsalState, operation_id: str) -> dict[str, Any]:
     try:
-        return {"removedReleases": _cleanup_site_releases(config, state, operation_id)}
+        return _cleanup_site_releases(config, state, operation_id)
     except (HostFailure, OSError, ValueError) as error:
         try:
             marker = _read_site_publication_marker(config)
@@ -4493,7 +4528,7 @@ def dispatch(args: argparse.Namespace) -> dict[str, Any]:
             if _read_site_publication_marker(config) != cleanup_marker_snapshot:
                 raise HostFailure("site-publication marker changed while housekeeping was acquiring locks; retry required")
             _consume_site_cleanup_request(config)
-            return {"status": "succeeded", "removedReleases": _cleanup_site_releases(config, state, None)}
+            return {"status": "succeeded", **_cleanup_site_releases(config, state, None)}
         rows = state._operation_rows(args.operation_id)
         static_main_owned = any(row.get("operationKind") == "static-main" for row in rows)
         if static_main_owned and args.action in ("cms-update", "static-publish", "recover", "restore", "finalize-recover"):
