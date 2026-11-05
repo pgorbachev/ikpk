@@ -1,3 +1,26 @@
+## ADDED Requirements
+
+### Requirement: Host helper is installed from a provenance-bound release artifact
+
+The host helper SHALL be packaged as `host-helper.tar.gz` from the existing installer, modules, and configuration templates. Its CI evidence SHALL bind it to the exact canonical `main` head SHA and successful `Tests` push run and attempt. Artifact retrieval SHALL reuse the existing CMS artifact admission checks: exactly one artifact for the run, unexpired, bound to its workflow run/head SHA, GitHub's digest for the downloaded ZIP verified, and exactly the expected helper payload in that ZIP. The verified payload SHA-256 SHALL be recorded for the operation. CI SHALL upload the artifact without host credentials. Staging194 may use the exact-SHA CI artifact without a GitHub Release; production SHALL use the same payload bytes attached to the GitHub Release, and SHALL verify the Release asset SHA-256 matches the verified CI payload SHA-256. Destination configurations remain separate. Installation SHALL use the existing installer and SHALL NOT replace installed lock/configuration state, weaken admission gates, or introduce a new delivery service or transport. The existing operator has no self-update behavior. Installation SHALL proceed only over an existing channel proven to be permitted for the destination; an unknown or forbidden channel SHALL cause refusal before installation. Calling the installed helper remotely is not by itself evidence that helper-update delivery is available.
+
+#### Scenario: staging194 installs the exact CI artifact
+
+- **WHEN** the exact canonical `main` head SHA, successful `Tests` push run/attempt, unique unexpired run-bound artifact, downloaded ZIP GitHub digest, and exact expected helper payload all verify, and an existing delivery channel is proven permitted
+- **THEN** the existing explicit staging194 publication command obtains/verifies that CI artifact, invokes the existing installer through the proven channel, and continues the existing publication flow
+- **AND** staging194-specific configuration remains separate
+- **AND** acceptance verifies the actually served release and required routes
+
+#### Scenario: production reuses the CI artifact in a GitHub Release
+
+- **WHEN** the verified CI helper payload for an exact SHA is attached to its GitHub Release, the Release asset SHA-256 matches the verified CI payload SHA-256, and an existing delivery channel is proven permitted
+- **THEN** production installs those same artifact bytes through the existing installer with production-specific configuration
+
+#### Scenario: artifact channel is not permitted
+
+- **WHEN** the artifact channel is forbidden or unknown for the destination, the exact-SHA/CI/integrity evidence is missing, or the production Release asset digest differs from the verified CI payload
+- **THEN** the existing publication command refuses before installation or changing installed helper, lock, or configuration state; if no permitted delivery channel can be evidenced, the change remains blocked on that concrete channel decision
+
 ## MODIFIED Requirements
 
 ### Requirement: Публикация только после успешного прогона тестов
@@ -268,24 +291,3 @@ CMS/static. Browser checks SHALL читать те же sealed static bytes, к�
 **Reason**: проверка изменения контента не должна запускать автоматическую публикацию; успешный CI остаётся необходимым свидетельством для последующей операторской команды.
 
 **Migration**: content changes могут запускать проверки; результат CI не меняет сайт.
-
-
-### Requirement: Host helper is installed from a provenance-bound release artifact
-
-The host helper SHALL be packaged as `host-helper.tar.gz` from the existing installer, modules, and configuration templates. The artifact SHALL be tied to one exact source SHA and successful required CI evidence, with integrity verified before installation. CI SHALL upload the artifact without host credentials. Staging194 may install the exact-SHA CI artifact without a GitHub Release; production SHALL use the same artifact bytes attached to the GitHub Release. Destination configurations remain separate. Installation SHALL use the existing installer and SHALL NOT replace installed lock/configuration state, weaken admission gates, or introduce a new delivery service or transport. The existing operator has no self-update behavior. Installation SHALL be refused unless the artifact channel is permitted for the destination.
-
-#### Scenario: staging194 installs the exact CI artifact
-
-- **WHEN** the exact-SHA artifact and its successful CI provenance pass integrity checks and the artifact channel is permitted
-- **THEN** the existing installer can install that CI-uploaded artifact without a GitHub Release or host credentials in CI
-- **AND** staging194-specific configuration remains separate
-
-#### Scenario: production reuses the CI artifact in a GitHub Release
-
-- **WHEN** the artifact produced for the exact source SHA is attached to its GitHub Release and its integrity/provenance checks pass
-- **THEN** production installs those same artifact bytes through the existing installer with production-specific configuration
-
-#### Scenario: artifact channel is not permitted
-
-- **WHEN** the artifact channel is not allowed for the destination or exact-SHA/CI/integrity evidence is missing
-- **THEN** installation refuses before changing installed helper, lock, or configuration state
