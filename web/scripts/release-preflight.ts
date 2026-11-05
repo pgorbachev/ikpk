@@ -2,11 +2,75 @@
 // Node 24; exact-SHA CI admission, with optional post-CI stable Release creation.
 import { readCiEvidence } from './lib/publication-ci.ts';
 import { pathToFileURL } from 'node:url';
+import { createHash } from 'node:crypto';
 
 const API = 'https://api.github.com/repos/pgorbachev/ikpk';
+const UPLOAD_API = 'https://uploads.github.com/repos/pgorbachev/ikpk/releases/';
+const HELPER_ASSET = 'host-helper.tar.gz';
 function githubHeaders(token: string) {
   return { Accept: 'application/vnd.github+json', Authorization: `Bearer ${token}`,
     'X-GitHub-Api-Version': '2022-11-28', 'Content-Type': 'application/json' };
+}
+
+/** Attach only the already-verified helper bytes to their exact stable Release. */
+export async function ensureReleaseHelperAsset(tag: string, commit: string, payload: Uint8Array, sha256: string,
+                                               token: string, fetcher: typeof globalThis.fetch = globalThis.fetch,
+                                               options: { historicalRelease?: boolean } = {}): Promise<void> {
+  const fail = (reason: string): never => { throw new Error(`release-helper-${reason}`); };
+  if (!/^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/.test(tag) || !/^[a-f0-9]{40}$/.test(commit) ||
+      !/^[a-f0-9]{64}$/.test(sha256) || !(payload instanceof Uint8Array) || payload.byteLength === 0 || payload.byteLength > 100 * 1024 * 1024 ||
+      !token || createHash('sha256').update(payload).digest('hex') !== sha256) fail('invalid-payload');
+  const headers = githubHeaders(token);
+  const request = async (url: string, init?: RequestInit): Promise<Response> => {
+    const response = await fetcher(url, { ...init, redirect: 'error', signal: AbortSignal.timeout(30_000) });
+    return response;
+  };
+  const releaseResponse = await request(`${API}/releases/tags/${encodeURIComponent(tag)}`, { headers });
+  if (!releaseResponse.ok) fail('release-lookup');
+  const release = await releaseResponse.json() as { id?: unknown; tag_name?: unknown; draft?: unknown; prerelease?: unknown;
+    published_at?: unknown; upload_url?: unknown };
+  if (!Number.isSafeInteger(release.id) || Number(release.id) <= 0 || release.tag_name !== tag || release.draft !== false ||
+      release.prerelease !== false || typeof release.published_at !== 'string' || !Number.isFinite(Date.parse(release.published_at))) fail('unstable-release');
+  const refResponse = await request(`${API}/git/ref/tags/${encodeURIComponent(tag)}`, { headers });
+  if (!refResponse.ok) fail('tag-lookup');
+  const ref = await refResponse.json() as { ref?: unknown; object?: { type?: unknown; sha?: unknown } };
+  if (ref.ref !== `refs/tags/${tag}`) fail('tag-mismatch');
+  let object = ref.object;
+  for (let depth = 0; object?.type === 'tag' && depth < 8; depth++) {
+    if (typeof object.sha !== 'string' || !/^[a-f0-9]{40}$/.test(object.sha)) fail('tag-mismatch');
+    const annotatedResponse = await request(`${API}/git/tags/${object.sha}`, { headers });
+    if (!annotatedResponse.ok) fail('tag-mismatch');
+    const annotated = await annotatedResponse.json() as { sha?: unknown; object?: { type?: unknown; sha?: unknown } };
+    if (annotated.sha !== object.sha) fail('tag-mismatch');
+    object = annotated.object;
+  }
+  if (object?.type !== 'commit' || object.sha !== commit) fail('sha-mismatch');
+
+  const listAssets = async (): Promise<Array<{ id?: unknown; name?: unknown; digest?: unknown; state?: unknown }>> => {
+    const response = await request(`${API}/releases/${Number(release.id)}/assets?per_page=100`, { headers });
+    if (!response.ok) fail('asset-list');
+    const body = await response.json() as { total_count?: unknown; assets?: unknown };
+    if (!Number.isSafeInteger(body.total_count) || !Array.isArray(body.assets) || Number(body.total_count) !== body.assets.length) fail('asset-list');
+    return body.assets as Array<{ id?: unknown; name?: unknown; digest?: unknown; state?: unknown }>;
+  };
+  const verifyUniqueAsset = (assets: Array<{ id?: unknown; name?: unknown; digest?: unknown; state?: unknown }>): boolean => {
+    const matches = assets.filter((asset) => asset.name === HELPER_ASSET);
+    if (matches.length > 1) fail('duplicate-asset');
+    if (matches.length === 0) return false;
+    const asset = matches[0];
+    if (!Number.isSafeInteger(asset.id) || Number(asset.id) <= 0 || asset.digest !== `sha256:${sha256}` || asset.state !== 'uploaded') fail('asset-mismatch');
+    return true;
+  };
+  const assets = await listAssets();
+  if (verifyUniqueAsset(assets)) return;
+  if (options.historicalRelease) fail('historical-asset-missing');
+  if (release.upload_url !== `${UPLOAD_API}${Number(release.id)}/assets{?name,label}`) fail('upload-endpoint');
+  const uploadUrl = `${release.upload_url.slice(0, -'{?name,label}'.length)}?name=${encodeURIComponent(HELPER_ASSET)}`;
+  const uploadResponse = await request(uploadUrl, { method: 'POST', headers: { ...headers, 'Content-Type': 'application/gzip' }, body: payload });
+  if (uploadResponse.status !== 201) fail('asset-upload');
+  const uploaded = await uploadResponse.json() as { name?: unknown; digest?: unknown; state?: unknown };
+  if (uploaded.name !== HELPER_ASSET || uploaded.digest !== `sha256:${sha256}` || uploaded.state !== 'uploaded') fail('asset-upload-mismatch');
+  if (!verifyUniqueAsset(await listAssets())) fail('asset-not-verifiable');
 }
 
 export async function ensureStableRelease(tag: string, commit: string, token: string,
