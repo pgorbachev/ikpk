@@ -1059,6 +1059,7 @@ def _current_rollback_target(root: Path, current: Path, history: list[dict],
         bundles = {row.get("operationId"): row for row in history
                    if row.get("record") == "new-bundle" and isinstance(row.get("operationId"), str)}
         paired_commit = None
+        paired_candidate_claimed = False
         for row in history:
             operation = row.get("operationId")
             start = starts.get(operation) if isinstance(operation, str) else None
@@ -1066,8 +1067,10 @@ def _current_rollback_target(root: Path, current: Path, history: list[dict],
             new_pair = bundle.get("newPair") if isinstance(bundle, dict) else None
             if (row.get("record") != "committed" or not start or not isinstance(new_pair, dict)
                     or row.get("sourceSha") != start.get("sourceSha")
-                    or new_pair.get("staticTreeSha256") != current_digest
                     or current.name != f"{row.get('sourceSha')}-{operation}"):
+                continue
+            paired_candidate_claimed = True
+            if new_pair.get("staticTreeSha256") != current_digest:
                 continue
             if release_info is not None and (release_info.get("commit") != row.get("sourceSha")
                     or release_info.get("operationId") not in (None, operation)):
@@ -1076,6 +1079,8 @@ def _current_rollback_target(root: Path, current: Path, history: list[dict],
         if paired_commit is not None:
             # The paired recovery protocol is closed by its terminal commit.
             return None
+        if paired_candidate_claimed:
+            raise HostFailure("current paired candidate differs from its committed journal identity; cleanup refused")
         if (isinstance(site_state, dict) and site_state.get("status") == "succeeded"
                 and site_state.get("phase") == "done" and site_state.get("switched") is True
                 and site_state.get("releaseId") == current.name):

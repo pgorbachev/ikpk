@@ -208,6 +208,43 @@ class ReleaseCleanupTests(unittest.TestCase):
         self.assertTrue(stale.is_dir())
         self.assertEqual(json.loads(self.marker.read_text())['phase'], 'cleanup-pending')
 
+    def test_tampered_paired_candidate_cannot_fall_back_to_matching_cms_state(self):
+        digest = 'd' * 64
+        database = self.state_dir / 'cms.sqlite'
+        database.write_bytes(b'fixture database')
+        old_pair = {'cmsPath': str(self.old.resolve()), 'staticPath': str(self.old.resolve()),
+                    'staticTreeSha256': host._tree_sha256(self.old)}
+        new_pair = {'sourceSha': 'a' * 40, 'cmsSha': 'a' * 40, 'staticSha': 'a' * 40,
+                    'cmsPayloadSha256': digest, 'staticTreeSha256': host._tree_sha256(self.current),
+                    'cmsDatabaseSha256': digest, 'cmsMediaManifestSha256': digest,
+                    'cmsCaptureBundleSha256': digest, 'oldDatabaseSha256': digest,
+                    'oldMediaManifestSha256': digest, 'configSha256': digest,
+                    'snapshotId': 'snap:test',
+                    'cmsDatabaseProof': {'pid': 123, 'device': 1, 'inode': 1, 'database': str(database)}}
+        paired_rows = [
+            {'version': 1, 'record': 'start', 'operationId': 'flow-one', 'sourceSha': 'a' * 40,
+             'oldPair': old_pair},
+            {'version': 1, 'record': 'new-bundle', 'operationId': 'flow-one',
+             'sourceSha': 'a' * 40, 'newPair': new_pair},
+            {'version': 1, 'record': 'committed', 'operationId': 'flow-one', 'sourceSha': 'a' * 40},
+        ]
+        self.state.journal_path.write_text('')
+        for row in paired_rows:
+            self.state._append(row)
+        (self.current / 'tampered.txt').write_text('changed after commit')
+        stale = self.releases / ('c' * 40 + '-stale')
+        stale.mkdir()
+        (stale / 'release.json').write_text(json.dumps({'commit': 'c' * 40, 'snapshotId': 'snap:stale'}))
+
+        result = host._cleanup_after_commit(self.config, self.state, 'flow-one')
+
+        self.assertTrue(result['cleanupPending'])
+        self.assertIn('paired candidate differs', result['cleanupError'])
+        self.assertTrue(self.current.is_dir())
+        self.assertTrue(self.old.is_dir())
+        self.assertTrue(stale.is_dir())
+        self.assertEqual(json.loads(self.marker.read_text())['phase'], 'cleanup-pending')
+
     def test_cms_refresh_cleanup_accepts_current_identity_without_static_main_journal(self):
         self.state.journal_path.write_text('')
         self.marker.write_text(json.dumps({'version': 1, 'operationId': 'flow-one',
