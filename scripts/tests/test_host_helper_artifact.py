@@ -136,7 +136,7 @@ class HostHelperArtifactAdmissionTests(unittest.TestCase):
             "payloadSha256": hashlib.sha256(payload).hexdigest(),
         })
         self.assertIn(f"actions/runs/{RUN_ID}/artifacts", capture.call_args.args[0][2])
-        self.assertIn("actions/artifacts/987/zip", capture_bytes.call_args.args[0][0][2])
+        self.assertIn("actions/artifacts/987/zip", capture_bytes.call_args.args[0][2])
 
     def test_missing_expired_duplicate_wrong_run_sha_or_attempt_refuses_before_download(self):
         base, _ = artifact_record()
@@ -194,6 +194,21 @@ class HostHelperArtifactAdmissionTests(unittest.TestCase):
         with patch.object(staging193, "capture", return_value=json.dumps([metadata])), \
              patch.object(staging193, "capture_bytes", return_value=zipped), \
              self.assertRaises(staging193.Refusal):
+            staging193.fetch_host_helper_artifact(
+                {"sourceSha": SOURCE_SHA, "runId": RUN_ID, "attempt": ATTEMPT}, SOURCE_SHA)
+
+    def test_payload_rejects_unsafe_tar_paths(self):
+        zipped = make_zip(make_tar({"../outside.py": b"unsafe"}))
+        metadata = {"artifacts": [{
+            "id": 987,
+            "name": f"host-helper-{RUN_ID}-{ATTEMPT}",
+            "expired": False,
+            "digest": "sha256:" + hashlib.sha256(zipped).hexdigest(),
+            "workflow_run": {"id": RUN_ID, "head_sha": SOURCE_SHA, "head_branch": "main"},
+        }]}
+        with patch.object(staging193, "capture", return_value=json.dumps([metadata])), \
+             patch.object(staging193, "capture_bytes", return_value=zipped), \
+             self.assertRaisesRegex(staging193.Refusal, "unsafe member"):
             staging193.fetch_host_helper_artifact(
                 {"sourceSha": SOURCE_SHA, "runId": RUN_ID, "attempt": ATTEMPT}, SOURCE_SHA)
 

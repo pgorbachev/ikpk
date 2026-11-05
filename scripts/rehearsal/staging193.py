@@ -20,7 +20,7 @@ import tarfile
 import tempfile
 import threading
 import zipfile
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Optional
 
 
@@ -323,30 +323,31 @@ def validate_production_static_release(sha: str, tag: str) -> dict:
     return production_static_admission_from_result(sha, tag, result)
 
 
-def fetch_cms_candidate_artifact(provenance: dict, sha: str) -> bytes:
-    """Fetch and verify the CMS payload bound to this exact Tests run and SHA."""
+def _fetch_tests_run_artifact_payload(provenance: dict, sha: str, *, artifact_prefix: str,
+                                      payload_name: str, evidence_key: str, label: str) -> bytes:
+    """Fetch one digest-verified payload bound to the admitted Tests run and SHA."""
     run_id = provenance.get("runId")
     attempt = provenance.get("attempt")
     if (type(run_id) is not int or run_id <= 0 or type(attempt) is not int or attempt <= 0
             or provenance.get("sourceSha") != sha):
-        raise Refusal("CMS admission omitted the exact workflow run identity")
+        raise Refusal(f"{label} admission omitted the exact workflow run identity")
 
-    artifact_name = f"cms-candidate-{run_id}-{attempt}"
+    artifact_name = f"{artifact_prefix}-{run_id}-{attempt}"
     endpoint = f"repos/{CANONICAL_REPOSITORY}/actions/runs/{run_id}/artifacts"
     raw = capture(["gh", "api", endpoint, "--paginate", "--slurp"])
     try:
         pages = json.loads(raw)
     except ValueError as error:
-        raise Refusal("gh returned malformed CMS artifact metadata") from error
+        raise Refusal(f"gh returned malformed {label} artifact metadata") from error
     if not isinstance(pages, list):
-        raise Refusal("gh returned malformed CMS artifact metadata")
+        raise Refusal(f"gh returned malformed {label} artifact metadata")
     artifacts = []
     for page in pages:
         if isinstance(page, dict) and isinstance(page.get("artifacts"), list):
             artifacts.extend(page["artifacts"])
     matches = [item for item in artifacts if isinstance(item, dict) and item.get("name") == artifact_name]
     if len(matches) != 1:
-        raise Refusal("exact CMS candidate artifact is missing or duplicated")
+        raise Refusal(f"exact {label} artifact is missing or duplicated")
     artifact = matches[0]
     workflow_run = artifact.get("workflow_run")
     digest = artifact.get("digest")
@@ -356,26 +357,73 @@ def fetch_cms_candidate_artifact(provenance: dict, sha: str) -> bytes:
             or workflow_run.get("id") != run_id or workflow_run.get("head_sha") != sha
             or workflow_run.get("head_branch") != "main"
             or not isinstance(digest, str) or not re.fullmatch(r"sha256:[a-f0-9]{64}", digest)):
-        raise Refusal("CMS candidate artifact is expired or not bound to the admitted run and SHA")
+        raise Refusal(f"{label} artifact is expired or not bound to the admitted run and SHA")
 
     archive = capture_bytes(["gh", "api",
         f"repos/{CANONICAL_REPOSITORY}/actions/artifacts/{artifact['id']}/zip"])
     archive_sha256 = hashlib.sha256(archive).hexdigest()
     if digest.removeprefix("sha256:") != archive_sha256:
-        raise Refusal("downloaded CMS candidate ZIP does not match GitHub's artifact digest")
+        raise Refusal(f"downloaded {label} ZIP does not match GitHub's artifact digest")
     try:
         with zipfile.ZipFile(io.BytesIO(archive)) as bundle:
             entries = bundle.infolist()
-            if (len(entries) != 1 or entries[0].filename != "cms-artifact.tar.gz"
+            if (len(entries) != 1 or entries[0].filename != payload_name
                     or entries[0].is_dir() or entries[0].flag_bits & 0x1):
-                raise Refusal("CMS candidate ZIP must contain exactly one unencrypted tar payload")
+                raise Refusal(f"{label} ZIP must contain exactly one unencrypted tar payload")
             payload = bundle.read(entries[0])
     except Refusal:
         raise
     except (OSError, zipfile.BadZipFile, RuntimeError) as error:
-        raise Refusal("CMS candidate ZIP is unreadable") from error
-    provenance["cmsArtifact"] = {"artifactId": artifact["id"], "runId": run_id, "attempt": attempt,
+        raise Refusal(f"{label} ZIP is unreadable") from error
+    provenance[evidence_key] = {"artifactId": artifact["id"], "runId": run_id, "attempt": attempt,
         "archiveSha256": archive_sha256, "payloadSha256": hashlib.sha256(payload).hexdigest()}
+    return payload
+
+
+def fetch_cms_candidate_artifact(provenance: dict, sha: str) -> bytes:
+    """Fetch and verify the CMS payload bound to this exact Tests run and SHA."""
+    return _fetch_tests_run_artifact_payload(
+        provenance, sha, artifact_prefix="cms-candidate", payload_name="cms-artifact.tar.gz",
+        evidence_key="cmsArtifact", label="CMS candidate")
+
+
+HOST_HELPER_ARTIFACT_FILES = frozenset({
+    "scripts/install-rehearsal-host.sh",
+    "scripts/lib/rehearsal_state.py",
+    "scripts/lib/housekeeping_journal.py",
+    "scripts/lib/rehearsal_host.py",
+    "scripts/lib/rehearsal_config.py",
+    "scripts/staging193-rehearsal.json",
+    "scripts/initial-prod-rehearsal.json",
+    "scripts/production-static-rehearsal.json",
+    "scripts/production-paired-rehearsal.json",
+})
+
+
+def fetch_host_helper_artifact(provenance: dict, sha: str) -> bytes:
+    """Fetch the exact helper package and bind its digests to admitted provenance."""
+    payload = _fetch_tests_run_artifact_payload(
+        provenance, sha, artifact_prefix="host-helper", payload_name="host-helper.tar.gz",
+        evidence_key="hostHelperArtifact", label="host helper")
+    try:
+        with tarfile.open(fileobj=io.BytesIO(payload), mode="r:gz") as archive:
+            members = archive.getmembers()
+            names = [member.name for member in members]
+            for member in members:
+                raw_parts = member.name.split("/")
+                path = PurePosixPath(member.name)
+                if (not member.name or path.is_absolute()
+                        or any(part in ("", ".", "..") for part in raw_parts)
+                        or not member.isfile()):
+                    raise Refusal(f"host helper payload contains an unsafe member: {member.name!r}")
+            if len(names) != len(set(names)) or set(names) != HOST_HELPER_ARTIFACT_FILES:
+                raise Refusal("host helper payload does not contain exactly the expected files")
+    except Refusal:
+        provenance.pop("hostHelperArtifact", None)
+        raise
+    except (OSError, tarfile.TarError, EOFError) as error:
+        provenance.pop("hostHelperArtifact", None)
+        raise Refusal("host helper payload is unreadable") from error
     return payload
 
 
