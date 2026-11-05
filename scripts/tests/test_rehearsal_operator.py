@@ -1,3 +1,4 @@
+import base64
 import hashlib
 import io
 import json
@@ -427,7 +428,15 @@ class OperatorAdmissionTests(unittest.TestCase):
                     return b"offhost backup"
                 self.fail(f"unexpected host command before re-admission: {arguments[0]}")
 
+            def add_artifact(provenance, _sha):
+                provenance["cmsArtifact"] = {
+                    "artifactId": 88, "runId": provenance["runId"], "attempt": provenance["attempt"],
+                    "archiveSha256": "b" * 64, "payloadSha256": "c" * 64,
+                }
+                return b"cms payload"
+
             with patch.object(staging193, "validate_sha_and_ci", side_effect=[admitted, changed]) as admission, \
+                 patch.object(staging193, "fetch_cms_candidate_artifact", side_effect=add_artifact), \
                  patch.object(staging193, "make_archive", return_value=(b"source archive", "a" * 64)), \
                  patch.object(staging193, "backup_root", return_value=Path(temporary)), \
                  patch.object(staging193, "persist_offhost_backup", return_value=backup_path), \
@@ -1072,6 +1081,99 @@ class OperatorAdmissionTests(unittest.TestCase):
             self.assertIsNone(operation_calls[2][1])
             self.assertNotIn("--archive-sha256", operation_calls[2][0])
             self.assertIn("--offhost-sha256", operation_calls[2][0])
+
+
+class PairedCmsAdmissionRecheckTests(unittest.TestCase):
+    ARTIFACT = {"artifactId": 88, "runId": 123, "attempt": 1,
+                "archiveSha256": "b" * 64, "payloadSha256": "c" * 64}
+
+    def _run_backup_recheck(self, profile, *, changed):
+        admitted = {"sourceSha": SHA, "runId": 123, "attempt": 1, "ref": "refs/heads/main"}
+        current = ({**admitted, "runId": 124, "attempt": 2} if changed else dict(admitted))
+        calls = []
+        old_cms_path = f"/opt/ikpk-cms/releases/{'d' * 40}-old/cms-artifact"
+        with tempfile.TemporaryDirectory(prefix=f"ikpk-{profile}-admission-recheck-") as temporary:
+            root = Path(temporary)
+            if profile == "production-paired":
+                tsx = root / "web/node_modules/.bin/tsx"
+                tsx.parent.mkdir(parents=True)
+                tsx.touch()
+            operation_id = f"{profile}-admission-recheck"
+            backup_path = root / f"{operation_id}.tar"
+            args = SimpleNamespace(profile=profile,
+                host=staging193.INITIAL_PROD_HOST if profile == "production-paired" else staging193.TARGET_HOST,
+                command="cms-update", operation_id=operation_id, source_sha=SHA,
+                backup_dir=temporary, release_tag=None)
+
+            def ssh(arguments, **_kwargs):
+                calls.append(arguments)
+                if arguments[0] == "status":
+                    return json.dumps({"phase": "idle", "oldPair": {"cmsPath": old_cms_path}}).encode()
+                if arguments[0] == "export-backup":
+                    return b"verified off-host backup"
+                if arguments[0] == "cms-update" and "--offhost-sha256" in arguments:
+                    return json.dumps({"phase": "cms-activated"}).encode()
+                if arguments[0] == "cms-update":
+                    return json.dumps({"phase": "fenced", "offhostBackupRequired": True,
+                                       "backupSha256": "d" * 64}).encode()
+                self.fail(f"unexpected host command: {arguments[0]}")
+
+            def persist_backup(directory, operation_id, source_sha, payload, digest, *extra):
+                backup_path.write_bytes(payload)
+                if profile == "production-paired":
+                    (root / f"{operation_id}.json").write_text(json.dumps({
+                        "oldCmsSourceSha": "d" * 40, "oldCmsSchemaSha256": "e" * 64,
+                        "snapshotFingerprint": "sha256:" + "f" * 64}), encoding="utf-8")
+                return backup_path
+
+            def attach_artifact(provenance, _sha):
+                provenance["cmsArtifact"] = dict(self.ARTIFACT)
+                return b"cms candidate tar"
+
+            admission_patch = (patch.object(staging193, "validate_production_paired_admission",
+                                            side_effect=[dict(admitted), dict(current)])
+                               if profile == "production-paired" else
+                               patch.object(staging193, "validate_sha_and_ci",
+                                            side_effect=[dict(admitted), dict(current)]))
+            with patch.object(staging193, "ROOT", root), \
+                 patch.object(staging193, "ssh_remote", side_effect=ssh), \
+                 patch.object(staging193, "production_paired_schema_source",
+                              return_value=("d" * 40, "e" * 64)), \
+                 patch.object(staging193, "fetch_cms_candidate_artifact", side_effect=attach_artifact), \
+                 patch.object(staging193, "make_archive", return_value=(b"source archive", "a" * 64)) as make_archive, \
+                 patch.object(staging193, "backup_root", return_value=root), \
+                 patch.object(staging193, "persist_offhost_backup", side_effect=persist_backup) as save_backup, \
+                 admission_patch as admission:
+                if changed:
+                    message = ("production Release/main/CI admission changed before CMS activation"
+                               if profile == "production-paired"
+                               else "staging194 exact-SHA workflow proofs changed before CMS activation")
+                    with self.assertRaisesRegex(staging193.Refusal, message):
+                        staging193.invoke(args)
+                else:
+                    staging193.invoke(args)
+
+            self.assertEqual(admission.call_count, 2)
+            self.assertTrue(make_archive.call_args.kwargs["cms_artifact"] == b"cms candidate tar")
+            self.assertEqual(make_archive.call_args.args[1]["cmsArtifact"], self.ARTIFACT)
+            initial_update = next(call for call in calls if call[0] == "cms-update")
+            provenance_arg = initial_update[initial_update.index("--provenance-b64") + 1]
+            sent_provenance = json.loads(base64.b64decode(provenance_arg))
+            self.assertEqual(sent_provenance["cmsArtifact"], self.ARTIFACT)
+            save_backup.assert_called_once()
+            if profile == "production-paired":
+                self.assertEqual(save_backup.call_args.args[5]["cmsArtifact"], self.ARTIFACT)
+            self.assertEqual(sum(1 for call in calls if call[0] == "cms-update"), 1 if changed else 2)
+
+    def test_staging194_recheck_compares_ci_only_but_keeps_artifact_evidence(self):
+        for changed in (False, True):
+            with self.subTest(changed=changed):
+                self._run_backup_recheck("staging194", changed=changed)
+
+    def test_production_paired_recheck_compares_ci_only_but_keeps_artifact_evidence(self):
+        for changed in (False, True):
+            with self.subTest(changed=changed):
+                self._run_backup_recheck("production-paired", changed=changed)
 
 
 class CmsCandidateArtifactTests(unittest.TestCase):

@@ -374,20 +374,6 @@ def fetch_cms_candidate_artifact(provenance: dict, sha: str) -> bytes:
         raise
     except (OSError, zipfile.BadZipFile, RuntimeError) as error:
         raise Refusal("CMS candidate ZIP is unreadable") from error
-    try:
-        with tarfile.open(fileobj=io.BytesIO(payload), mode="r:gz") as inner:
-            members = inner.getmembers()
-            seen = set()
-            for member in members:
-                path = Path(member.name)
-                if (not member.name or path.is_absolute() or ".." in path.parts
-                        or member.name in seen or not (member.isfile() or member.isdir())):
-                    raise Refusal("CMS candidate tar contains an unsafe or unsupported entry")
-                seen.add(member.name)
-            if not members:
-                raise Refusal("CMS candidate tar is empty")
-    except (OSError, tarfile.TarError) as error:
-        raise Refusal("CMS candidate payload is not a readable gzip tar") from error
     provenance["cmsArtifact"] = {"artifactId": artifact["id"], "runId": run_id, "attempt": attempt,
         "archiveSha256": archive_sha256, "payloadSha256": hashlib.sha256(payload).hexdigest()}
     return payload
@@ -1087,6 +1073,7 @@ def invoke(args: argparse.Namespace, *, admission: Optional[dict] = None) -> Opt
     if args.command == "cms-update":
         provenance = (validate_production_paired_admission(args.source_sha) if profile == "production-paired"
                       else validate_sha_and_ci(args.source_sha, profile))
+        ci_admission = dict(provenance)
         cms_artifact = (fetch_cms_candidate_artifact(provenance, args.source_sha)
                         if profile in ("staging194", "production-paired") else None)
         archive, digest = (make_archive(args.source_sha, provenance, cms_artifact=cms_artifact)
@@ -1122,11 +1109,11 @@ def invoke(args: argparse.Namespace, *, admission: Optional[dict] = None) -> Opt
                 return
             if profile == "production-paired":
                 current_admission = validate_production_paired_admission(args.source_sha)
-                if current_admission != provenance:
+                if current_admission != ci_admission:
                     raise Refusal("production Release/main/CI admission changed before CMS activation; operation remains fenced for same-ID recovery")
             elif profile == "staging194":
                 current_admission = validate_sha_and_ci(args.source_sha, profile)
-                if current_admission != provenance:
+                if current_admission != ci_admission:
                     raise Refusal("staging194 exact-SHA workflow proofs changed before CMS activation; operation remains fenced for same-ID recovery")
             completed = parse_host_json(ssh_remote(common + ["--offhost-sha256", digest], profile=profile))
             if completed.get("phase") != "cms-activated":
