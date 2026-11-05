@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import base64
+import copy
 import hashlib
 import http.server
 import io
@@ -452,6 +453,142 @@ def fetch_host_helper_artifact(provenance: dict, sha: str) -> bytes:
         provenance.pop("hostHelperArtifact", None)
         raise Refusal("host helper payload is unreadable") from error
     return payload
+
+
+def install_staging194_host_helper(payload: bytes, digest: str) -> None:
+    """Install a verified helper artifact through the existing staging194 SSH channel."""
+    if not isinstance(payload, bytes) or not re.fullmatch(r"[a-f0-9]{64}", digest):
+        raise Refusal("host helper payload or digest is invalid")
+    if hashlib.sha256(payload).hexdigest() != digest:
+        raise Refusal("host helper payload digest does not match its CI evidence")
+    if not TARGET_IDENTITY.is_file() or not TARGET_KNOWN_HOSTS.is_file():
+        raise Refusal("authorized staging194 SSH identity or known-hosts file is unavailable")
+
+    remote_dir_prefix = "/var/tmp/ikpk-staging194/host-helper."
+    ssh_options = ["-i", str(TARGET_IDENTITY), "-o", "IdentitiesOnly=yes", "-o", "BatchMode=yes",
+                   "-o", "StrictHostKeyChecking=yes", "-o", f"UserKnownHostsFile={TARGET_KNOWN_HOSTS}",
+                   "-o", "GlobalKnownHostsFile=/dev/null", "-o", "ConnectTimeout=15",
+                   f"{TARGET_USER}@{TARGET_HOST}"]
+    def remote(command: list[str]) -> subprocess.CompletedProcess:
+        return subprocess.run(["ssh", *ssh_options, shlex.join(command)], stdout=subprocess.PIPE,
+                              stderr=subprocess.PIPE, check=False, cwd=ROOT)
+
+    created = remote(["mktemp", "-d", "-m", "0700", f"{remote_dir_prefix}XXXXXX"])
+    if created.returncode:
+        raise Refusal("could not create a private staging194 host-helper directory")
+    remote_dir = created.stdout.decode(errors="replace").strip()
+    if not re.fullmatch(re.escape(remote_dir_prefix) + r"[A-Za-z0-9]{6}", remote_dir):
+        raise Refusal("remote mktemp returned an unexpected staging194 path")
+    remote_archive = f"{remote_dir}/host-helper.tar.gz"
+    with tempfile.NamedTemporaryFile(prefix="ikpk-host-helper-", suffix=".tar.gz", delete=False) as source:
+        source.write(payload)
+        local_archive = Path(source.name)
+    failure = None
+    try:
+        transfer = ["scp", "-i", str(TARGET_IDENTITY), "-o", "IdentitiesOnly=yes", "-o", "BatchMode=yes",
+                    "-o", "StrictHostKeyChecking=yes", "-o", f"UserKnownHostsFile={TARGET_KNOWN_HOSTS}",
+                    "-o", "GlobalKnownHostsFile=/dev/null", "-o", "ConnectTimeout=15",
+                    str(local_archive), f"{TARGET_USER}@{TARGET_HOST}:{remote_archive}"]
+        result = subprocess.run(transfer, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False, cwd=ROOT)
+        if result.returncode:
+            raise Refusal(f"staging194 host helper transfer failed ({result.returncode}): "
+                          f"{result.stderr.decode(errors='replace').strip()}")
+        remote_python = r'''import fcntl, hashlib, json, os, pwd, re, shutil, stat, subprocess, sys, tarfile
+temporary, expected_digest = sys.argv[1:]
+archive_path = os.path.join(temporary, "host-helper.tar.gz")
+if not re.fullmatch(r"/var/tmp/ikpk-staging194/host-helper\.[A-Za-z0-9]{6}", temporary):
+    raise SystemExit("staging194 temporary directory is not a pinned mktemp path")
+try:
+    directory = os.lstat(temporary)
+    if not stat.S_ISDIR(directory.st_mode) or directory.st_uid != 0 or stat.S_IMODE(directory.st_mode) != 0o700:
+        raise SystemExit("staging194 helper directory is not root-owned and private")
+    config_path = "/etc/ikpk/rehearsal.json"
+    config_info = os.lstat(config_path)
+    if not stat.S_ISREG(config_info.st_mode):
+        raise SystemExit("staging194 configuration is not a regular file")
+    with open(config_path, "rb") as stream:
+        config_before = stream.read()
+    config = json.loads(config_before)
+    if (config.get("profile", "staging194") != "staging194"
+            or config.get("stateDir") != "/var/lib/ikpk-rehearsal/staging194"
+            or config.get("cmsUser") != "ikpk-cms"
+            or config.get("publicationLock") != "/var/www/ikpk/.publication.lock"
+            or config.get("maintenanceFlag") != "/var/lib/ikpk-rehearsal/staging194/fenced"
+            or config.get("sitePublicationMarker") != "/var/lib/ikpk-rehearsal/site-publication/host-publication.json"):
+        raise SystemExit("staging194 config differs from the validated helper-install lock profile")
+    fds, snapshots = [], []
+    try:
+        locks = [config["publicationLock"], os.path.join(config["stateDir"], ".operation.lock")]
+        for path in locks:
+            before = os.lstat(path)
+            if not stat.S_ISREG(before.st_mode) or before.st_nlink != 1:
+                raise SystemExit("existing staging194 lock is unsafe")
+            fd = os.open(path, os.O_RDWR | getattr(os, "O_NOFOLLOW", 0))
+            fds.append(fd)
+            info = os.fstat(fd)
+            if (info.st_dev, info.st_ino) != (before.st_dev, before.st_ino) or not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
+                raise SystemExit("staging194 lock changed while opening")
+            if path == locks[0] and (info.st_uid != pwd.getpwnam(config["cmsUser"]).pw_uid or stat.S_IMODE(info.st_mode) != 0o600):
+                raise SystemExit("staging194 publication lock has unsafe owner or mode")
+            if stat.S_IMODE(info.st_mode) != 0o600:
+                raise SystemExit("staging194 state lock has unsafe mode")
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            snapshots.append((path, info.st_dev, info.st_ino))
+        if any(os.path.lexists(path) for path in (config["maintenanceFlag"],
+                os.path.join(config["stateDir"], "maintenance.json"), config["sitePublicationMarker"])):
+            raise SystemExit("staging194 publication or maintenance marker exists")
+        for path, device, inode in snapshots:
+            named = os.lstat(path)
+            if (named.st_dev, named.st_ino) != (device, inode) or not stat.S_ISREG(named.st_mode) or named.st_nlink != 1:
+                raise SystemExit("staging194 lock inode changed before installation")
+        subprocess.run(["/usr/local/sbin/ikpk-rehearsal", "--profile", "staging194", "validate-config"], check=True)
+        archive_info = os.lstat(archive_path)
+        if not stat.S_ISREG(archive_info.st_mode) or archive_info.st_uid != 0 or archive_info.st_nlink != 1:
+            raise SystemExit("transferred host helper is not a root-owned regular file")
+        with open(archive_path, "rb") as stream:
+            actual_digest = hashlib.sha256(stream.read()).hexdigest()
+        if actual_digest != expected_digest:
+            raise SystemExit("transferred host helper SHA-256 does not match CI evidence")
+        with tarfile.open(archive_path, "r:gz") as bundle:
+            members = bundle.getmembers()
+            names = [member.name for member in members]
+            files = {member.name for member in members if member.isfile()}
+            directories = {member.name for member in members if member.isdir()}
+            if (len(names) != len(set(names)) or files != EXPECTED_FILES
+                    or directories != {"scripts", "scripts/lib"}
+                    or any(not (member.isfile() or member.isdir()) for member in members)):
+                raise SystemExit("host helper archive contents differ from the admitted package")
+            bundle.extractall(os.path.join(temporary, "payload"))
+        subprocess.run(["bash", os.path.join(temporary, "payload/scripts/install-rehearsal-host.sh")], check=True)
+        subprocess.run(["/usr/local/sbin/ikpk-rehearsal", "--profile", "staging194", "validate-config"], check=True)
+        with open(config_path, "rb") as stream:
+            if stream.read() != config_before:
+                raise SystemExit("staging194 configuration changed during helper installation")
+        for path, device, inode in snapshots:
+            named = os.lstat(path)
+            if (named.st_dev, named.st_ino) != (device, inode) or not stat.S_ISREG(named.st_mode) or named.st_nlink != 1:
+                raise SystemExit("staging194 lock inode changed during helper installation")
+    finally:
+        for fd in reversed(fds):
+            os.close(fd)
+finally:
+    shutil.rmtree(temporary)
+'''.replace("EXPECTED_FILES", repr(set(HOST_HELPER_ARTIFACT_FILES)))
+        install = remote(["python3", "-c", remote_python, remote_dir, digest])
+        if install.returncode:
+            raise Refusal(f"staging194 host helper installation or config validation failed ({install.returncode}): "
+                          f"{install.stderr.decode(errors='replace').strip()}")
+    except Exception as error:
+        failure = error
+    finally:
+        local_archive.unlink(missing_ok=True)
+        cleanup = remote(["rm", "-rf", "--", remote_dir])
+        if cleanup.returncode and failure is None:
+            failure = Refusal("could not clean the private staging194 host-helper directory")
+    if failure is not None:
+        if isinstance(failure, Refusal):
+            raise failure
+        raise Refusal(f"staging194 host helper installation failed: {failure}") from failure
 
 
 def make_archive(sha: str, provenance: dict, *, cms_artifact: Optional[bytes] = None) -> tuple[bytes, str]:
@@ -1087,6 +1224,9 @@ def browser_check(source_sha: str, operation_id: str, static_digest: str, archiv
 
 def invoke(args: argparse.Namespace, *, admission: Optional[dict] = None) -> Optional[dict]:
     profile = getattr(args, "profile", "staging194")
+    install_host_helper = getattr(args, "install_host_helper", False)
+    if install_host_helper and (profile != "staging194" or args.command != "static-main"):
+        raise Refusal("--install-host-helper is restricted to staging194 static-main")
     accept_expired_rollback = getattr(args, "accept_expired_rollback", False)
     if accept_expired_rollback and (profile != "staging194" or args.command != "static-main-recover"
                                     or getattr(args, "rollback_committed", False)):
@@ -1121,7 +1261,8 @@ def invoke(args: argparse.Namespace, *, admission: Optional[dict] = None) -> Opt
     if not OP.fullmatch(args.operation_id):
         raise Refusal("operation ID has invalid characters")
     automatic_static_capacity = profile == "production-static" and args.command == "static-main"
-    if args.command == "space-preflight" or automatic_static_capacity:
+    helper_install_capacity = install_host_helper and profile == "staging194"
+    if args.command == "space-preflight" or automatic_static_capacity or helper_install_capacity:
         if preflight_kind not in ("cms-update", "static-main"):
             raise Refusal("space-preflight requires --for cms-update or --for static-main")
         static_local_export_estimate = (profile == "production-static" and preflight_kind == "static-main")
@@ -1262,7 +1403,20 @@ def invoke(args: argparse.Namespace, *, admission: Optional[dict] = None) -> Opt
         else:
             admitted_run = (validate_production_static_release(args.source_sha, release_tag)
                             if release_tag is not None else validate_static_main_ci(args.source_sha))
-        provenance_b64 = base64.b64encode(json.dumps(admitted_run, sort_keys=True,
+        journal_provenance = copy.deepcopy(admitted_run)
+        helper_payload = None
+        helper_evidence = None
+        if install_host_helper:
+            fetch_provenance = copy.deepcopy(admitted_run)
+            helper_payload = fetch_host_helper_artifact(fetch_provenance, args.source_sha)
+            helper_evidence = copy.deepcopy(fetch_provenance.get("hostHelperArtifact"))
+            if not isinstance(helper_evidence, dict):
+                raise Refusal("verified host helper artifact omitted its operation evidence")
+            fetch_provenance.pop("hostHelperArtifact", None)
+            journal_provenance["hostHelperArtifact"] = helper_evidence
+        if helper_payload is not None and helper_evidence is not None:
+            install_staging194_host_helper(helper_payload, helper_evidence["payloadSha256"])
+        provenance_b64 = base64.b64encode(json.dumps(journal_provenance, sort_keys=True,
             separators=(",", ":")).encode()).decode("ascii")
         common = ["static-main", "--operation-id", args.operation_id, "--source-sha", args.source_sha,
                   "--provenance-b64", provenance_b64]
@@ -1271,7 +1425,7 @@ def invoke(args: argparse.Namespace, *, admission: Optional[dict] = None) -> Opt
         reuse_capture_operation_id = getattr(args, "reuse_capture_operation_id", None)
         if reuse_capture_operation_id is not None:
             common.extend(["--reuse-capture-operation-id", reuse_capture_operation_id])
-        archive, archive_sha256 = make_archive(args.source_sha, admitted_run)
+        archive, archive_sha256 = make_archive(args.source_sha, journal_provenance)
         remote_options = {} if profile == "staging194" else {"profile": profile}
         prepared = parse_host_json(ssh_remote(common + ["--archive-sha256", archive_sha256], **remote_options,
                                               input_bytes=archive))
@@ -1407,6 +1561,7 @@ def main(argv: Optional[list[str]] = None) -> int:
             command.add_argument("--reuse-capture-operation-id")
             command.add_argument("--release-tag")
             command.add_argument("--expected-installed-cms-sha")
+            command.add_argument("--install-host-helper", action="store_true")
         if action == "space-preflight":
             command.add_argument("--for", dest="preflight_for", required=True,
                                  choices=("cms-update", "static-main"))

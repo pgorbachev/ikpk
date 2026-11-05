@@ -1360,20 +1360,30 @@ class Staging194HostHelperInstallTests(unittest.TestCase):
             if command[0] == "scp":
                 transferred = Path(command[-2]).read_bytes()
                 self.assertEqual(transferred, payload)
+            if command[0] == "ssh" and "mktemp" in command[-1]:
+                return subprocess.CompletedProcess(command, 0, b"/var/tmp/ikpk-staging194/host-helper.ABC123\n", b"")
+            if command[0] == "ssh" and "python3 -c" in command[-1]:
+                script = shlex.split(command[-1])[2]
+                compile(script, "remote-host-helper-installer", "exec")
+                config = json.loads((staging193.ROOT / "scripts/staging193-rehearsal.json").read_text())
+                self.assertNotIn("profile", config)
+                self.assertIn('config.get("profile", "staging194")', script)
             return subprocess.CompletedProcess(command, 0, b"", b"")
 
         with patch.object(staging193.subprocess, "run", side_effect=run):
             staging193.install_staging194_host_helper(payload, digest)
 
-        self.assertEqual(commands[0][0], "scp")
-        self.assertIn(staging193.TARGET_HOST, commands[0][-1])
+        transfer = next(command for command in commands if command[0] == "scp")
+        self.assertIn(staging193.TARGET_HOST, transfer[-1])
+        self.assertTrue(any(command[0] == "ssh" and "mktemp" in command[-1] for command in commands))
         remote = [" ".join(command) for command in commands if command[0] == "ssh"]
-        verification = next(index for index, command in enumerate(remote) if "sha256sum" in command)
-        installation = next(index for index, command in enumerate(remote)
-                            if "install-rehearsal-host.sh" in command)
-        self.assertLess(verification, installation)
-        self.assertIn(digest, remote[verification])
-        self.assertFalse(any(option in remote[installation] for option in
+        install_command = next(command for command in remote if "install-rehearsal-host.sh" in command)
+        self.assertLess(install_command.index("transferred host helper SHA-256"),
+                        install_command.index("install-rehearsal-host.sh"))
+        self.assertIn(digest, install_command)
+        self.assertIn("LOCK_NB", install_command)
+        self.assertIn("staging194 lock inode changed during helper installation", install_command)
+        self.assertFalse(any(option in install_command for option in
                              ("--staging193-config", "--initial-prod-config",
                               "--production-static-config", "--production-paired-config")))
 
@@ -1384,15 +1394,21 @@ class Staging194HostHelperInstallTests(unittest.TestCase):
 
         def run(command, **kwargs):
             commands.append(command)
-            if command[0] == "ssh" and "sha256sum" in " ".join(command):
+            if command[0] == "ssh" and "python3 -c" not in command[-1] and "mktemp" in command[-1]:
+                return subprocess.CompletedProcess(command, 0, b"/var/tmp/ikpk-staging194/host-helper.ABC123\n", b"")
+            if command[0] == "ssh" and "python3 -c" in command[-1] and "transferred host helper SHA-256" in command[-1]:
                 return subprocess.CompletedProcess(command, 1, b"", b"digest mismatch")
             return subprocess.CompletedProcess(command, 0, b"", b"")
 
         with patch.object(staging193.subprocess, "run", side_effect=run), \
              self.assertRaises((staging193.Refusal, subprocess.CalledProcessError, OSError)):
             staging193.install_staging194_host_helper(payload, digest)
-        self.assertFalse(any(command[0] == "ssh" and "install-rehearsal-host.sh" in " ".join(command)
-                             for command in commands))
+        wrapper = next(command[-1] for command in commands
+                       if command[0] == "ssh" and "python3 -c" in command[-1])
+        self.assertLess(wrapper.index("if actual_digest != expected_digest"),
+                        wrapper.index("install-rehearsal-host.sh"))
+        self.assertEqual(sum(command[0] == "ssh" and "python3 -c" in command[-1]
+                             for command in commands), 1)
 
     def test_static_main_fetch_failure_stops_before_any_host_operation(self):
         args = SimpleNamespace(profile="staging194", host=staging193.TARGET_HOST,
@@ -1402,7 +1418,9 @@ class Staging194HostHelperInstallTests(unittest.TestCase):
         provenance = {"sourceSha": SHA, "runId": 123, "attempt": 2}
         responses = [json.dumps({"phase": "browser-check-required", "staticTreeSha256": "d" * 64}).encode(),
                      b"candidate", json.dumps({"phase": "committed"}).encode()]
-        with patch.object(staging193, "validate_static_main_ci", return_value=provenance), \
+        with patch.object(staging193, "_check_target_space", return_value={"filesystems": [{"path": "/", "freeBytes": 1, "requiredBytes": 1}]}), \
+             patch.object(staging193, "_check_local_space", return_value=[]), \
+             patch.object(staging193, "validate_static_main_ci", return_value=provenance), \
              patch.object(staging193, "fetch_host_helper_artifact",
                           side_effect=staging193.Refusal("host helper archive digest mismatch")), \
              patch.object(staging193, "make_archive", return_value=(b"source archive", "a" * 64)), \
@@ -1438,16 +1456,57 @@ class Staging194HostHelperInstallTests(unittest.TestCase):
             command="static-main", operation_id="helper-and-publish", source_sha=SHA,
             release_tag=None, reuse_capture_operation_id=None, expected_installed_cms_sha=None,
             install_host_helper=True)
-        with patch.object(staging193, "validate_static_main_ci", side_effect=[dict(admitted), dict(admitted)]) as admit, \
+        journal_provenance = []
+        def capture_archive(sha, provenance):
+            journal_provenance.append(dict(provenance))
+            return b"source archive", "a" * 64
+        order = []
+        def ordered_ssh(arguments, input_bytes=None, **_kwargs):
+            order.append(arguments[0])
+            return ssh(arguments, input_bytes=input_bytes)
+
+        with patch.object(staging193, "_check_target_space", return_value={"filesystems": [{"path": "/", "freeBytes": 1, "requiredBytes": 1}]}), \
+             patch.object(staging193, "_check_local_space", return_value=[]), \
+             patch.object(staging193, "validate_static_main_ci", side_effect=[dict(admitted), dict(admitted)]) as admit, \
              patch.object(staging193, "fetch_host_helper_artifact", side_effect=attach_helper) as fetch, \
-             patch.object(staging193, "install_staging194_host_helper", create=True) as install, \
-             patch.object(staging193, "make_archive", return_value=(b"source archive", "a" * 64)), \
-             patch.object(staging193, "ssh_remote", side_effect=ssh), \
+             patch.object(staging193, "install_staging194_host_helper", create=True,
+                          side_effect=lambda *_args: order.append("install")) as install, \
+             patch.object(staging193, "make_archive", side_effect=capture_archive), \
+             patch.object(staging193, "ssh_remote", side_effect=ordered_ssh), \
              patch.object(staging193, "browser_check"):
             staging193.invoke(args)
 
         self.assertEqual(admit.call_count, 2)
         fetch.assert_called_once_with(admitted, SHA)
+        self.assertNotIn("hostHelperArtifact", admitted)
+        self.assertEqual(journal_provenance[0]["hostHelperArtifact"], artifact_evidence)
+        command_provenance = json.loads(base64.b64decode(
+            host_calls[0][0][host_calls[0][0].index("--provenance-b64") + 1]))
+        self.assertEqual(command_provenance, journal_provenance[0])
         install.assert_called_once_with(b"verified helper bytes", artifact_evidence["payloadSha256"])
         self.assertEqual([call[0][0] for call in host_calls],
                          ["static-main", "export-static-main", "static-main"])
+        self.assertEqual(order, ["install", "static-main", "export-static-main", "static-main"])
+
+    def test_helper_install_failure_stops_before_static_prepare_or_commit(self):
+        args = SimpleNamespace(profile="staging194", host=staging193.TARGET_HOST,
+            command="static-main", operation_id="helper-install-failure", source_sha=SHA,
+            release_tag=None, reuse_capture_operation_id=None, expected_installed_cms_sha=None,
+            install_host_helper=True)
+        provenance = {"sourceSha": SHA, "runId": 123, "attempt": 2}
+        def attach_helper(evidence, _sha):
+            evidence["hostHelperArtifact"] = {"payloadSha256": "c" * 64}
+            return b"verified helper bytes"
+        with patch.object(staging193, "_check_target_space", return_value={"filesystems": [{"path": "/", "freeBytes": 1, "requiredBytes": 1}]}), \
+             patch.object(staging193, "_check_local_space", return_value=[]), \
+             patch.object(staging193, "validate_static_main_ci", return_value=provenance), \
+             patch.object(staging193, "fetch_host_helper_artifact", side_effect=attach_helper), \
+             patch.object(staging193, "install_staging194_host_helper",
+                          side_effect=staging193.Refusal("installer rejected config")) as install, \
+             patch.object(staging193, "make_archive") as archive, \
+             patch.object(staging193, "ssh_remote") as remote:
+            with self.assertRaisesRegex(staging193.Refusal, "installer rejected config"):
+                staging193.invoke(args)
+        install.assert_called_once()
+        archive.assert_not_called()
+        remote.assert_not_called()
