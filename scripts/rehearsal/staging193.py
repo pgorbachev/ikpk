@@ -473,7 +473,7 @@ def install_staging194_host_helper(payload: bytes, digest: str) -> None:
         return subprocess.run(["ssh", *ssh_options, shlex.join(command)], stdout=subprocess.PIPE,
                               stderr=subprocess.PIPE, check=False, cwd=ROOT)
 
-    created = remote(["mktemp", "-d", "-m", "0700", f"{remote_dir_prefix}XXXXXX"])
+    created = remote(["mktemp", "-d", f"{remote_dir_prefix}XXXXXX"])
     if created.returncode:
         raise Refusal("could not create a private staging194 host-helper directory")
     remote_dir = created.stdout.decode(errors="replace").strip()
@@ -536,7 +536,7 @@ try:
             snapshots.append((path, info.st_dev, info.st_ino))
         if any(os.path.lexists(path) for path in (config["maintenanceFlag"],
                 os.path.join(config["stateDir"], "maintenance.json"), config["sitePublicationMarker"])):
-            raise SystemExit("staging194 publication or maintenance marker exists")
+            raise SystemExit("staging194 publication or maintenance marker exists; recover with the previous operation ID, then use a new operation ID")
         for path, device, inode in snapshots:
             named = os.lstat(path)
             if (named.st_dev, named.st_ino) != (device, inode) or not stat.S_ISREG(named.st_mode) or named.st_nlink != 1:

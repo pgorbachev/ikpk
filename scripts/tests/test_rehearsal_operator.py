@@ -1336,11 +1336,19 @@ class CmsCandidateArtifactTests(unittest.TestCase):
         ssh.assert_not_called()
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class Staging194HostHelperInstallTests(unittest.TestCase):
+    def setUp(self):
+        self.ssh_files = tempfile.TemporaryDirectory(prefix="staging194-host-helper-test-")
+        self.addCleanup(self.ssh_files.cleanup)
+        identity = Path(self.ssh_files.name) / "id_rsa"
+        known_hosts = Path(self.ssh_files.name) / "known_hosts"
+        identity.write_text("test identity")
+        known_hosts.write_text("194.226.99.10 ssh-ed25519 test-key\n")
+        for name, value in (("TARGET_IDENTITY", identity), ("TARGET_KNOWN_HOSTS", known_hosts)):
+            patcher = patch.object(staging193, name, value)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
     def test_static_main_exposes_an_explicit_host_helper_step(self):
         observed = []
         with patch.object(staging193, "invoke", side_effect=lambda args: observed.append(args)):
@@ -1383,6 +1391,7 @@ class Staging194HostHelperInstallTests(unittest.TestCase):
         self.assertIn(digest, install_command)
         self.assertIn("LOCK_NB", install_command)
         self.assertIn("staging194 lock inode changed during helper installation", install_command)
+        self.assertIn("recover with the previous operation ID, then use a new operation ID", install_command)
         self.assertFalse(any(option in install_command for option in
                              ("--staging193-config", "--initial-prod-config",
                               "--production-static-config", "--production-paired-config")))
@@ -1510,3 +1519,7 @@ class Staging194HostHelperInstallTests(unittest.TestCase):
         install.assert_called_once()
         archive.assert_not_called()
         remote.assert_not_called()
+
+
+if __name__ == "__main__":
+    unittest.main()
