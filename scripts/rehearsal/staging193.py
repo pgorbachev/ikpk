@@ -1012,6 +1012,10 @@ def browser_check(source_sha: str, operation_id: str, static_digest: str, archiv
 
 def invoke(args: argparse.Namespace, *, admission: Optional[dict] = None) -> Optional[dict]:
     profile = getattr(args, "profile", "staging194")
+    accept_expired_rollback = getattr(args, "accept_expired_rollback", False)
+    if accept_expired_rollback and (profile != "staging194" or args.command != "static-main-recover"
+                                    or getattr(args, "rollback_committed", False)):
+        raise Refusal("expired rollback acceptance is restricted to staging194 and cannot roll back")
     preflight_kind = getattr(args, "preflight_for", None) if args.command == "space-preflight" else args.command
     target_host = INITIAL_PROD_HOST if profile in ("initial-prod", "production-static", "production-paired") else TARGET_HOST
     if profile == "production-static" and not (args.command in ("static-main", "static-main-recover")
@@ -1216,7 +1220,16 @@ def invoke(args: argparse.Namespace, *, admission: Optional[dict] = None) -> Opt
     elif args.command == "static-main-recover":
         command = ["static-main-recover", "--operation-id", args.operation_id]
         expected_phase = "recovered"
-        if args.rollback_committed:
+        accept_expired_rollback = getattr(args, "accept_expired_rollback", False)
+        if accept_expired_rollback:
+            if profile != "staging194" or args.rollback_committed:
+                raise Refusal("expired rollback acceptance is restricted to staging194 and cannot roll back")
+            if (not isinstance(args.operator, str) or not args.operator.strip()
+                    or not isinstance(args.reason, str) or not args.reason.strip()):
+                raise Refusal("expired rollback acceptance requires --operator and --reason")
+            command.extend(["--accept-expired-rollback", "--operator", args.operator, "--reason", args.reason])
+            expected_phase = "rollback-target-expired"
+        elif args.rollback_committed:
             if (not isinstance(args.operator, str) or not args.operator.strip()
                     or not isinstance(args.reason, str) or not args.reason.strip()):
                 raise Refusal("committed static rollback requires --operator and --reason")
@@ -1225,7 +1238,9 @@ def invoke(args: argparse.Namespace, *, admission: Optional[dict] = None) -> Opt
         elif args.operator is not None or args.reason is not None:
             raise Refusal("--operator and --reason require --rollback-committed")
         result = parse_host_json(ssh_remote(command, **({} if profile == "staging194" else {"profile": profile})))
-        allowed_phases = {expected_phase} if args.rollback_committed else {"recovered", "rolled-back"}
+        if result.get("phase") == "rollback-target-expired-cleanup-pending":
+            raise Refusal("rollback loss was durably recorded; site cleanup remains pending; retry the same recovery")
+        allowed_phases = {expected_phase} if args.rollback_committed or accept_expired_rollback else {"recovered", "rolled-back"}
         if result.get("phase") not in allowed_phases:
             raise Refusal(f"static-main recovery did not reach {expected_phase}: {result.get('phase')}")
     else:
@@ -1308,6 +1323,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         command.add_argument("--backup-dir")
         if action == "static-main-recover":
             command.add_argument("--rollback-committed", action="store_true")
+            command.add_argument("--accept-expired-rollback", action="store_true")
             command.add_argument("--operator")
             command.add_argument("--reason")
         if action not in ("recover", "static-main-recover", "space-preflight"):

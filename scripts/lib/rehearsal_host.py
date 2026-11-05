@@ -799,6 +799,7 @@ def _clear_site_publication_marker(config: dict[str, Any], operation_id: str) ->
 def _assert_site_publication_admission(config: dict[str, Any], profile: str, action: str,
                                       operation_id: Optional[str], unfinished: set[str], *,
                                       allow_cleanup_pending_rollback: bool = False,
+                                      allow_cleanup_pending_expiry: bool = False,
                                       allow_cleanup_pending_finalize: bool = False,
                                       allow_marker_recreation: bool = False) -> None:
     if action == "cleanup-site":
@@ -814,6 +815,9 @@ def _assert_site_publication_admission(config: dict[str, Any], profile: str, act
             return
         if (same_operation and marker["phase"] == "cleanup-pending"
                 and action == "static-main-recover" and allow_cleanup_pending_rollback):
+            return
+        if (same_operation and marker["phase"] == "cleanup-pending"
+                and action == "static-main-recover" and allow_cleanup_pending_expiry):
             return
         if (same_operation and marker["phase"] == "cleanup-pending"
                 and action == "finalize-recover" and allow_cleanup_pending_finalize):
@@ -1177,6 +1181,39 @@ def _current_rollback_target(root: Path, current: Path, history: list[dict],
     target = Path(raw_target)
     if target.parent != root or target == current or target.name in ("", ".", ".."):
         raise HostFailure("static rollback target is outside its release root; cleanup refused")
+    operation_id = start.get("operationId")
+    expired = [row for row in history
+               if row.get("operationKind") == "static-main"
+               and row.get("operationId") == operation_id
+               and row.get("record") == "static-main-rollback-expired"]
+    if expired:
+        audit = expired[0]
+        if (len(expired) != 1 or audit.get("sourceSha") != start.get("sourceSha")
+                or audit.get("oldStaticPath") != raw_target
+                or audit.get("oldStaticTreeSha256") != expected_digest
+                or audit.get("candidateStaticPath") != str(current)
+                or audit.get("candidateStaticTreeSha256") != current_digest
+                or audit.get("committedStaticTreeSha256") != current_digest
+                or audit.get("snapshotId") != next((row.get("snapshotId") for row in history
+                    if row.get("record") == "static-main-committed"
+                    and row.get("operationId") == operation_id), None)
+                or audit.get("targetState") != "absent"
+                or not isinstance(audit.get("operator"), str) or not audit["operator"].strip()
+                or not isinstance(audit.get("reason"), str) or not audit["reason"].strip()):
+            raise HostFailure("expired rollback evidence differs from the current committed release; cleanup refused")
+        try:
+            target_info = target.lstat()
+        except FileNotFoundError:
+            return None
+        except OSError as error:
+            raise HostFailure("expired rollback target cannot be inspected; cleanup refused") from error
+        if stat.S_ISDIR(target_info.st_mode) and not stat.S_ISLNK(target_info.st_mode):
+            try:
+                if _tree_sha256(target) == expected_digest:
+                    return target
+            except OSError as error:
+                raise HostFailure("expired rollback target cannot be verified; cleanup refused") from error
+        raise HostFailure("expired rollback target reappeared with different identity; cleanup refused")
     try:
         target_info = target.lstat()
         if not stat.S_ISDIR(target_info.st_mode) or stat.S_ISLNK(target_info.st_mode):
@@ -4042,6 +4079,112 @@ def _static_main_rollback_committed(config: dict[str, Any], state: RehearsalStat
     return {"operationId": operation_id, "phase": "rolled-back", "restoredStaticPath": str(old)}
 
 
+def _static_main_accept_expired_rollback(config: dict[str, Any], state: RehearsalState,
+                                         operation_id: str, operator_name: str,
+                                         reason: str) -> dict[str, Any]:
+    """Durably accept loss of a missing staging rollback tree without switching current."""
+    if (not isinstance(operator_name, str) or not operator_name.strip() or len(operator_name) > 120
+            or any(ord(char) < 32 or ord(char) == 127 for char in operator_name)):
+        raise HostFailure("expired static rollback requires a valid operator name")
+    if (not isinstance(reason, str) or not reason.strip() or len(reason) > 1000
+            or any(ord(char) < 32 or ord(char) == 127 for char in reason)):
+        raise HostFailure("expired static rollback requires a valid reason")
+    if config.get("profile", "staging194") != "staging194":
+        raise HostFailure("accepting an expired static rollback is restricted to staging194")
+
+    try:
+        history = state.read_journal_for_cleanup(validate_history=True)
+    except RehearsalRefusal as error:
+        raise HostFailure(str(error)) from error
+    rows = [row for row in history if row.get("operationId") == operation_id]
+    start = next((row for row in rows if row.get("record") == "static-main-start"), None)
+    prepared = next((row for row in rows if row.get("record") == "static-main-prepared"), None)
+    switch = next((row for row in rows if row.get("record") == "static-main-switch-intent"), None)
+    committed = next((row for row in rows if row.get("record") == "static-main-committed"), None)
+    if (not start or not prepared or not switch or not committed
+            or start.get("operationKind") != "static-main"
+            or start.get("sourceSha") != committed.get("sourceSha")
+            or start.get("sourceSha") != prepared.get("sourceSha")
+            or start.get("sourceSha") != switch.get("sourceSha")
+            or any(row.get("record") in ("static-main-rollback-intent", "static-main-rollback-completed",
+                                           "static-main-rolled-back", "static-main-recovered") for row in rows)):
+        raise HostFailure("expired static rollback requires one matching committed operation")
+
+    release_root = Path(config["staticReleaseRoot"])
+    if release_root.is_symlink() or not release_root.is_dir():
+        raise HostFailure("static release root is unavailable or unsafe")
+    release_root = release_root.resolve(strict=True)
+    source_sha = start["sourceSha"]
+    old_path_value = start.get("oldStaticPath")
+    old_digest = start.get("oldStaticTreeSha256")
+    candidate = release_root / f"{source_sha}-{operation_id}"
+    old = Path(old_path_value) if isinstance(old_path_value, str) else Path(".")
+    try:
+        old_parent = old.parent.resolve(strict=True)
+    except OSError as error:
+        raise HostFailure("expired static rollback target parent is unavailable") from error
+    if (not isinstance(old_path_value, str) or not old.is_absolute()
+            or old != Path(os.path.normpath(old_path_value)) or old_parent != release_root
+            or old == candidate or old.name in ("", ".", "..")
+            or not isinstance(old_digest, str) or not SHA256_RE.fullmatch(old_digest)):
+        raise HostFailure("expired static rollback target identity is malformed or outside the release root")
+    if (switch.get("oldStaticPath") != old_path_value
+            or switch.get("candidateStaticPath") != str(candidate)
+            or switch.get("staticTreeSha256") != prepared.get("staticTreeSha256")
+            or committed.get("staticTreeSha256") != prepared.get("staticTreeSha256")
+            or committed.get("snapshotId") != prepared.get("snapshotId")):
+        raise HostFailure("expired static rollback journal identity is inconsistent")
+    if (candidate.is_symlink() or not candidate.is_dir()
+            or candidate.resolve(strict=True) != candidate):
+        raise HostFailure("committed static candidate is missing or unsafe")
+    candidate_digest = _tree_sha256(candidate)
+    if (not isinstance(committed.get("staticTreeSha256"), str)
+            or candidate_digest != committed.get("staticTreeSha256")):
+        raise HostFailure("current static candidate differs from its committed tree digest")
+    release_file = candidate / "release.json"
+    try:
+        release_info_stat = release_file.lstat()
+        if not stat.S_ISREG(release_info_stat.st_mode) or release_info_stat.st_nlink != 1:
+            raise HostFailure("current static candidate metadata is unsafe")
+        release_info = json.loads(release_file.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as error:
+        raise HostFailure("current static candidate metadata is unavailable or malformed") from error
+    if (not isinstance(release_info, dict) or release_info.get("commit") != source_sha
+            or release_info.get("operationId") != operation_id
+            or release_info.get("staticTreeSha256") != candidate_digest
+            or release_info.get("snapshotId") != committed.get("snapshotId")):
+        raise HostFailure("current static candidate metadata differs from committed journal identity")
+    pointer = Path(config["currentStatic"])
+    if _current_target(pointer) != candidate:
+        raise HostFailure("static rollback expiry refused because currentStatic no longer points to this candidate")
+
+    try:
+        old.lstat()
+    except FileNotFoundError:
+        pass
+    except OSError as error:
+        raise HostFailure("expired static rollback target cannot be inspected") from error
+    else:
+        raise HostFailure("static rollback target still exists; expiry was not recorded")
+
+    audit = {"version": 1, "record": "static-main-rollback-expired", "operationKind": "static-main",
+             "operationId": operation_id, "sourceSha": source_sha,
+             "oldStaticPath": old_path_value, "oldStaticTreeSha256": old_digest,
+             "candidateStaticPath": str(candidate), "candidateStaticTreeSha256": candidate_digest,
+             "committedStaticTreeSha256": committed["staticTreeSha256"],
+             "snapshotId": committed.get("snapshotId"), "targetState": "absent",
+             "operator": operator_name.strip(), "reason": reason.strip()}
+    existing = [row for row in rows if row.get("record") == "static-main-rollback-expired"]
+    if existing:
+        if len(existing) != 1 or any(existing[0].get(key) != value for key, value in audit.items()):
+            raise HostFailure("expired static rollback evidence already exists with different details")
+    else:
+        state._append(audit)
+    return {"operationId": operation_id, "phase": "rollback-target-expired",
+            "oldStaticPath": old_path_value, "oldStaticTreeSha256": old_digest,
+            "currentStaticPath": str(candidate), "currentStaticTreeSha256": candidate_digest}
+
+
 def _static_main_commit(config: dict[str, Any], state: RehearsalState, operation_id: str,
                         source_sha: str, provenance: dict[str, Any], browser_digest: str) -> dict[str, Any]:
     _validate_static_main_admission(config, source_sha, provenance)
@@ -4149,18 +4292,28 @@ def _static_main_export(config: dict[str, Any], state: RehearsalState, operation
 def _static_main_recover(config: dict[str, Any], state: RehearsalState, operation_id: str, *,
                          rollback_committed: bool = False, operator_name: Optional[str] = None,
                          reason: Optional[str] = None,
+                         accept_expired_rollback: bool = False,
                          before_rollback_intent: Optional[Callable[[], None]] = None) -> dict[str, Any]:
     rows = _static_main_rows(state, operation_id)
     start = _static_main_start(rows)
     if not start:
         raise HostFailure("static-main recovery has no matching durable operation")
     if any(row.get("record") == "static-main-committed" for row in rows):
+        if accept_expired_rollback:
+            return _static_main_accept_expired_rollback(config, state, operation_id,
+                                                        operator_name or "", reason or "")
+        if any(row.get("record") == "static-main-rollback-expired" for row in rows):
+            if rollback_committed:
+                raise HostFailure("committed rollback is forbidden after the rollback target was accepted as expired")
+            return {"operationId": operation_id, "phase": "rollback-target-expired"}
         if rollback_committed:
             return _static_main_rollback_committed(config, state, operation_id, operator_name, reason,
                                                    before_rollback_intent)
         if any(row.get("record") == "static-main-rollback-completed" for row in rows):
             return {"operationId": operation_id, "phase": "rolled-back"}
         return {"operationId": operation_id, "phase": "committed"}
+    if accept_expired_rollback:
+        raise HostFailure("expired static rollback requires a matching committed operation")
     if rollback_committed:
         raise HostFailure("committed static rollback requires a matching durable release record")
     if any(row.get("record") in ("static-main-recovered", "static-main-rolled-back") for row in rows):
@@ -4569,6 +4722,10 @@ def dispatch(args: argparse.Namespace) -> dict[str, Any]:
     if args.action != "cleanup-site":
         RehearsalState._validate_identity(args.operation_id, getattr(args, "source_sha", None))
     profile = getattr(args, "profile", "staging194")
+    accept_expired_rollback = getattr(args, "accept_expired_rollback", False)
+    if accept_expired_rollback and (profile != "staging194" or args.action != "static-main-recover"
+                                    or getattr(args, "rollback_committed", False)):
+        raise HostFailure("accepting an expired static rollback is restricted to staging194 recovery")
     expected_installed_cms_sha = getattr(args, "expected_installed_cms_sha", None)
     if expected_installed_cms_sha is not None:
         if profile != "staging194" or args.action != "static-main":
@@ -4616,6 +4773,18 @@ def dispatch(args: argparse.Namespace) -> dict[str, Any]:
                 raise HostFailure("installed CMS source SHA is unknown or differs from the expected revision")
         unfinished = RehearsalState._unfinished_operation_ids(history)
         marker = _read_site_publication_marker(config)
+        if accept_expired_rollback:
+            matching_expiry_audit = any(
+                row.get("operationId") == args.operation_id
+                and row.get("record") == "static-main-rollback-expired"
+                for row in history)
+            marker_matches = (marker is not None and marker.get("profile") == "staging194"
+                              and marker.get("operationId") == args.operation_id
+                              and marker.get("phase") == "cleanup-pending")
+            if not marker_matches and not (marker is None and matching_expiry_audit):
+                raise HostFailure("expired rollback acceptance requires this operation's cleanup-pending marker")
+            if not getattr(args, "operator", None) or not getattr(args, "reason", None):
+                raise HostFailure("expired rollback acceptance requires --operator and --reason")
         recovery_actions = ("recover", "restore", "finalize-recover", "static-main-recover")
         matching_rows = [row for row in history if row.get("operationId") == getattr(args, "operation_id", None)]
         if (args.action in recovery_actions and marker is not None
@@ -4627,6 +4796,7 @@ def dispatch(args: argparse.Namespace) -> dict[str, Any]:
                     raise HostFailure("marker-only recovery cannot import or finalize a restore")
             elif args.action == "static-main-recover":
                 if (getattr(args, "rollback_committed", False)
+                        or getattr(args, "accept_expired_rollback", False)
                         or getattr(args, "operator", None) is not None
                         or getattr(args, "reason", None) is not None):
                     raise HostFailure("marker-only recovery has no committed rollback evidence")
@@ -4660,6 +4830,8 @@ def dispatch(args: argparse.Namespace) -> dict[str, Any]:
                 unfinished,
                 allow_cleanup_pending_rollback=(args.action == "static-main-recover"
                     and getattr(args, "rollback_committed", False) is True and committed_main),
+                allow_cleanup_pending_expiry=(args.action == "static-main-recover"
+                    and accept_expired_rollback and profile == "staging194" and committed_main),
                 allow_cleanup_pending_finalize=(args.action == "finalize-recover"
                     and profile == "production-paired" and prepared_restore
                     and isinstance(getattr(args, "restore_fingerprint", None), str)
@@ -4705,6 +4877,18 @@ def dispatch(args: argparse.Namespace) -> dict[str, Any]:
         if args.action == "export-static-main":
             return {"_bytes": _static_main_export(config, state, args.operation_id, args.source_sha)}
         if args.action == "static-main-recover":
+            if accept_expired_rollback:
+                if getattr(args, "operator", None) is None or getattr(args, "reason", None) is None:
+                    raise HostFailure("expired rollback acceptance requires --operator and --reason")
+                result = _static_main_recover(config, state, args.operation_id,
+                    accept_expired_rollback=True, operator_name=args.operator, reason=args.reason)
+                if marker is None:
+                    return {**result, "idempotent": True}
+                cleanup = _cleanup_after_commit(config, state, args.operation_id)
+                if cleanup.get("cleanupPending"):
+                    return {**result, **cleanup, "phase": "rollback-target-expired-cleanup-pending"}
+                _clear_site_publication_marker(config, args.operation_id)
+                return {**result, "cleanup": cleanup}
             if args.rollback_committed:
                 if not args.operator or not args.reason:
                     raise HostFailure("committed static rollback requires --operator and --reason")
@@ -4726,8 +4910,18 @@ def dispatch(args: argparse.Namespace) -> dict[str, Any]:
             result = _static_main_recover(config, state, args.operation_id)
             if result.get("phase") == "recovered":
                 _clear_site_publication_marker(config, args.operation_id)
-            elif result.get("phase") == "committed":
-                result.update(_cleanup_after_commit(config, state, args.operation_id))
+            elif result.get("phase") in ("committed", "rollback-target-expired"):
+                cleanup = _cleanup_after_commit(config, state, args.operation_id)
+                if cleanup.get("cleanupPending"):
+                    result.update(cleanup)
+                    if result.get("phase") == "rollback-target-expired":
+                        result["phase"] = "rollback-target-expired-cleanup-pending"
+                else:
+                    if result.get("phase") == "rollback-target-expired":
+                        _clear_site_publication_marker(config, args.operation_id)
+                        result["cleanup"] = cleanup
+                    else:
+                        result.update(cleanup)
             return result
         if args.action == "export-backup":
             manifest = _backup_manifest(config, args.operation_id)
@@ -4821,6 +5015,7 @@ def main(argv: Optional[list[str]] = None) -> int:
             command.add_argument("--restore-fingerprint", required=True)
         if name == "static-main-recover":
             command.add_argument("--rollback-committed", action="store_true")
+            command.add_argument("--accept-expired-rollback", action="store_true")
             command.add_argument("--operator")
             command.add_argument("--reason")
         if name == "status":

@@ -187,7 +187,8 @@ class RehearsalState:
             "static-main-start", "static-main-prepared", "static-main-switch-intent",
             "static-main-switched", "static-main-committed", "static-main-recovered",
             "static-main-rolled-back", "static-main-rollback-intent",
-            "static-main-rollback-completed", "restore-prepared",
+            "static-main-rollback-completed", "static-main-rollback-expired",
+            "restore-prepared",
         }
         try:
             for line in raw.splitlines():
@@ -297,7 +298,7 @@ class RehearsalState:
         static_terminal = {row["operationId"] for row in history
                            if row.get("operationKind") == "static-main"
                            and row.get("record") in ("static-main-committed", "static-main-recovered",
-                                                     "static-main-rolled-back")
+                                                     "static-main-rolled-back", "static-main-rollback-expired")
                            and isinstance(row.get("operationId"), str)}
         static_rollback_intents = {row["operationId"] for row in history
                                    if row.get("operationKind") == "static-main"
