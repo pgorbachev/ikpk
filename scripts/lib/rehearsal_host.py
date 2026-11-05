@@ -2203,6 +2203,180 @@ def _cms_artifact_path(source_root: Path, operation_id: str) -> Path:
     return source_root / ".staging193-rehearsal" / operation_id / "migration" / "cms-artifact"
 
 
+def _trusted_cms_artifact(provenance: dict[str, Any]) -> dict[str, Any]:
+    evidence = provenance.get("cmsArtifact")
+    if (not isinstance(evidence, dict)
+            or set(evidence) != {"artifactId", "runId", "attempt", "archiveSha256", "payloadSha256"}
+            or type(evidence.get("artifactId")) is not int or evidence["artifactId"] <= 0
+            or type(evidence.get("runId")) is not int or evidence["runId"] != provenance.get("runId")
+            or type(evidence.get("attempt")) is not int or evidence["attempt"] != provenance.get("attempt")
+            or not SHA256_RE.fullmatch(str(evidence.get("archiveSha256", "")))
+            or not SHA256_RE.fullmatch(str(evidence.get("payloadSha256", "")))):
+        raise HostFailure("trusted CI provenance lacks a valid CMS artifact identity")
+    return {key: evidence[key] for key in
+            ("artifactId", "runId", "attempt", "archiveSha256", "payloadSha256")}
+
+
+def _cms_tar_members(payload: bytes) -> tuple[tarfile.TarFile, list[tarfile.TarInfo]]:
+    try:
+        archive = tarfile.open(fileobj=io.BytesIO(payload), mode="r:gz")
+        members = archive.getmembers()
+    except (OSError, tarfile.TarError) as error:
+        raise HostFailure("CI CMS artifact payload is not a readable gzip tar") from error
+    seen: set[str] = set()
+    for member in members:
+        name = member.name
+        relative = Path(name)
+        if (not name or "\\" in name or relative.is_absolute()
+                or any(part == "" for part in name.rstrip("/").split("/"))
+                or any(part in ("", ".", "..") for part in relative.parts)
+                or any(part.lower() in ("node_modules", "uploads") for part in relative.parts)):
+            archive.close()
+            raise HostFailure("CI CMS artifact contains an unsafe or forbidden path")
+        normalized = relative.as_posix().rstrip("/")
+        if normalized in seen:
+            archive.close()
+            raise HostFailure("CI CMS artifact contains duplicate paths")
+        seen.add(normalized)
+        if not (member.isdir() or member.isfile()):
+            archive.close()
+            raise HostFailure("CI CMS artifact contains a link or unsupported archive member")
+    return archive, members
+
+
+def _verify_cms_artifact_bytes(source_root: Path, artifact: Path, expected: dict[str, Any]) -> bytes:
+    archive_path = source_root / ".ikpk-cms-artifact.tar.gz"
+    try:
+        if source_root.is_symlink() or source_root.resolve(strict=True) != source_root:
+            raise HostFailure("CI CMS source candidate path is unsafe")
+        try:
+            relative_artifact = artifact.relative_to(source_root)
+        except ValueError as error:
+            raise HostFailure("CI CMS artifact path is outside its operation candidate") from error
+        if (len(relative_artifact.parts) != 4
+                or relative_artifact.parts[0] != ".staging193-rehearsal"
+                or relative_artifact.parts[2:] != ("migration", "cms-artifact")):
+            raise HostFailure("CI CMS artifact path is outside its operation candidate")
+        RehearsalState._validate_identity(relative_artifact.parts[1])
+        for parent in (artifact.parent.parent.parent, artifact.parent.parent, artifact.parent):
+            if parent.is_symlink() or parent.resolve(strict=True) != parent:
+                raise HostFailure("CI CMS artifact path contains a symlink")
+        info = archive_path.lstat()
+        if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
+            raise HostFailure("CI CMS artifact archive is missing or unsafe")
+        payload = archive_path.read_bytes()
+    except OSError as error:
+        raise HostFailure("CI CMS artifact archive is missing or unreadable") from error
+    if sha256_file_bytes(payload) != expected["payloadSha256"]:
+        raise HostFailure("CI CMS artifact payload digest differs from trusted provenance")
+    tar, members = _cms_tar_members(payload)
+    try:
+        if artifact.is_symlink() or not artifact.is_dir():
+            raise HostFailure("prepared CI CMS artifact directory is missing or unsafe")
+        expected_paths: set[str] = set()
+        for member in members:
+            relative = Path(member.name)
+            name = relative.as_posix().rstrip("/")
+            expected_paths.add(name)
+            expected_paths.update(parent.as_posix() for parent in relative.parents if str(parent) != ".")
+            target = artifact / relative
+            if member.isdir():
+                if target.is_symlink() or not target.is_dir():
+                    raise HostFailure("prepared CI CMS artifact differs from its admitted payload")
+                continue
+            source = tar.extractfile(member)
+            if source is None or target.is_symlink() or not target.is_file():
+                raise HostFailure("prepared CI CMS artifact differs from its admitted payload")
+            target_info = target.lstat()
+            if not stat.S_ISREG(target_info.st_mode) or target_info.st_nlink != 1:
+                raise HostFailure("prepared CI CMS artifact contains an unsafe file")
+            with target.open("rb") as actual:
+                while True:
+                    expected_block = source.read(1024 * 1024)
+                    if not expected_block:
+                        break
+                    actual_block = actual.read(len(expected_block))
+                    if actual_block != expected_block:
+                        raise HostFailure("prepared CI CMS artifact bytes differ from its admitted payload")
+                if actual.read(1):
+                    raise HostFailure("prepared CI CMS artifact bytes differ from its admitted payload")
+        for path in artifact.rglob("*"):
+            relative = path.relative_to(artifact).as_posix()
+            if relative == "node_modules" or relative.startswith("node_modules/"):
+                continue
+            if relative == "public/uploads":
+                continue
+            if relative not in expected_paths:
+                raise HostFailure("prepared CI CMS artifact has files outside its admitted payload")
+            info = path.lstat()
+            if stat.S_ISLNK(info.st_mode):
+                raise HostFailure("prepared CI CMS artifact contains an unexpected symlink")
+        required = ("package.json", "package-lock.json", "tsconfig.json", "dist/config/database.js",
+                    "database/.migrations-expected", "scripts/run-data-migrations.mjs")
+        if any(not (artifact / name).is_file() or (artifact / name).is_symlink() for name in required):
+            raise HostFailure("CI CMS artifact is structurally incomplete")
+        return payload
+    finally:
+        tar.close()
+
+
+def _extract_ci_cms_artifact(config: dict[str, Any], source_root: Path, operation_id: str,
+                             expected: dict[str, Any]) -> Path:
+    artifact = _cms_artifact_path(source_root, operation_id)
+    operation_root = artifact.parent
+    if any(path.is_symlink() for path in (source_root, artifact.parent, artifact.parent.parent,
+                                          artifact.parent.parent.parent)):
+        raise HostFailure("CI CMS artifact preparation path contains a symlink")
+    operation_root.mkdir(mode=0o700, parents=True, exist_ok=True)
+    if os.path.lexists(artifact):
+        _verify_cms_artifact_bytes(source_root, artifact, expected)
+        return artifact
+    archive_path = source_root / ".ikpk-cms-artifact.tar.gz"
+    try:
+        payload = archive_path.read_bytes()
+    except OSError as error:
+        raise HostFailure("CI CMS artifact archive is missing or unreadable") from error
+    if sha256_file_bytes(payload) != expected["payloadSha256"]:
+        raise HostFailure("CI CMS artifact payload digest differs from trusted provenance")
+    tar, members = _cms_tar_members(payload)
+    temporary = artifact.with_name(f".cms-artifact.new-{os.getpid()}")
+    if os.path.lexists(temporary):
+        tar.close()
+        raise HostFailure("CI CMS artifact temporary extraction path already exists")
+    temporary.mkdir(mode=0o700)
+    try:
+        for member in members:
+            target = temporary / Path(member.name)
+            if member.isdir():
+                target.mkdir(parents=True, exist_ok=True, mode=0o755)
+                continue
+            target.parent.mkdir(parents=True, exist_ok=True, mode=0o755)
+            source = tar.extractfile(member)
+            if source is None:
+                raise HostFailure("cannot read CI CMS artifact member")
+            fd = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0),
+                         0o755 if member.mode & 0o111 else 0o644)
+            with os.fdopen(fd, "wb") as output:
+                shutil.copyfileobj(source, output, 1024 * 1024)
+                output.flush()
+                os.fsync(output.fileno())
+        for directory in sorted((item for item in temporary.rglob("*") if item.is_dir()),
+                                key=lambda item: len(item.parts), reverse=True):
+            os.chmod(directory, 0o755)
+        os.chmod(temporary, 0o755)
+        user = pwd.getpwnam(config["cmsUser"])
+        for path in [temporary, *temporary.rglob("*")]:
+            os.chown(path, user.pw_uid, user.pw_gid, follow_symlinks=False)
+        os.replace(temporary, artifact)
+    except Exception:
+        shutil.rmtree(temporary, ignore_errors=True)
+        raise
+    finally:
+        tar.close()
+    _verify_cms_artifact_bytes(source_root, artifact, expected)
+    return artifact
+
+
 def _validate_prepared_web_dependencies(source_root: Path) -> Path:
     web_dependencies = source_root / "web/node_modules"
     if web_dependencies.is_symlink() or not web_dependencies.is_dir():
@@ -2263,6 +2437,9 @@ def _validate_prepared_cms_candidate(config: dict[str, Any], source_root: Path, 
     artifact = _cms_artifact_path(source_root, operation_id)
     if artifact.is_symlink() or not artifact.is_dir():
         raise HostFailure("prepared CMS artifact is missing or unsafe")
+    if config.get("profile") in ("staging194", "production-paired"):
+        evidence = _trusted_cms_artifact(admitted)
+        _verify_cms_artifact_bytes(source_root, artifact, evidence)
     if sha256_file(source_cms / "package-lock.json") != sha256_file(artifact / "package-lock.json"):
         raise HostFailure("CMS artifact package-lock differs from the operation source lock")
     required = (artifact / "package.json", artifact / "tsconfig.json", artifact / "dist/config/database.js",
@@ -2295,6 +2472,45 @@ def _validate_prepared_cms_candidate(config: dict[str, Any], source_root: Path, 
 
 def _prepare_cms_candidate(config: dict[str, Any], source_root: Path, operation_id: str,
                            provenance: dict[str, Any]) -> tuple[Path, Path, Path]:
+    if config.get("profile") in ("staging194", "production-paired"):
+        evidence = _trusted_cms_artifact(provenance)
+        artifact = _extract_ci_cms_artifact(config, source_root, operation_id, evidence)
+        source_cms = source_root / "cms"
+        if sha256_file(source_cms / "package-lock.json") != sha256_file(artifact / "package-lock.json"):
+            raise HostFailure("CI CMS artifact package-lock differs from the operation source lock")
+        dependencies = _prepare_cms_build_dependencies(config, source_root)
+        source_dependencies = source_cms / "node_modules"
+        if os.path.lexists(source_dependencies):
+            if not source_dependencies.is_symlink() or source_dependencies.resolve(strict=True) != dependencies:
+                raise HostFailure("operation CMS dependencies are not the canonical lock generation")
+        else:
+            source_dependencies.symlink_to(dependencies, target_is_directory=True)
+        if os.path.lexists(artifact / "node_modules"):
+            artifact_dependencies = artifact / "node_modules"
+            try:
+                canonical_artifact_dependencies = (artifact_dependencies.is_symlink()
+                                                   and artifact_dependencies.resolve(strict=True) == dependencies)
+            except OSError:
+                canonical_artifact_dependencies = False
+            if not canonical_artifact_dependencies:
+                raise HostFailure("CI CMS artifact node_modules is not the canonical lock generation")
+        else:
+            artifact.joinpath("node_modules").symlink_to(dependencies, target_is_directory=True)
+        user = pwd.getpwnam(config["cmsUser"])
+        operation_root = artifact.parent
+        private_root = operation_root.parent
+        rehearsal_root = private_root.parent
+        for directory in (rehearsal_root, private_root, operation_root):
+            os.chown(directory, user.pw_uid, user.pw_gid)
+            os.chmod(directory, 0o700)
+        _run_as_cms(config, artifact, [config.get("nodeBinary", "/usr/bin/node"), "-e",
+            "const Database = require('better-sqlite3'); "
+            "const db = new Database(':memory:'); db.close(); require('sharp');"], timeout=120)
+        web_dependencies = source_root / "web/node_modules"
+        if web_dependencies.is_symlink():
+            raise HostFailure("operation web dependencies must be a private source install")
+        _run_as_cms(config, source_root / "web", ["/usr/bin/npm", "ci", "--no-audit", "--no-fund"], timeout=1800)
+        return _validate_prepared_cms_candidate(config, source_root, operation_id, provenance)
     artifact = _cms_artifact_path(source_root, operation_id)
     if os.path.lexists(artifact):
         return _validate_prepared_cms_candidate(config, source_root, operation_id, provenance)
@@ -2334,13 +2550,17 @@ def _prepare_cms_candidate(config: dict[str, Any], source_root: Path, operation_
 
 
 def _start_acquisition(config: dict[str, Any], state: RehearsalState, operation_id: str,
-                       source_sha: str, *, recovery: bool = False) -> dict[str, Any]:
+                       source_sha: str, *, recovery: bool = False,
+                       cms_artifact: Optional[dict[str, Any]] = None) -> dict[str, Any]:
     if not recovery:
         _assert_site_refresh_idle(config)
     prior = next((row for row in state._operation_rows(operation_id) if row.get("record") == "start"), None)
     old_pair = prior.get("oldPair") if prior else _old_pair(config)
     _write_site_publication_marker(config, operation_id)
-    state.begin(operation_id, source_sha, old_pair)
+    if cms_artifact is None:
+        state.begin(operation_id, source_sha, old_pair)
+    else:
+        state.begin(operation_id, source_sha, old_pair, cms_artifact=cms_artifact)
     _set_flag(config, True)
     _write_gate(config, True)
     _verify_site_refresh_idle(config, recovery=recovery)
@@ -2526,7 +2746,18 @@ def _install_migrated_database(config: dict[str, Any], source_root: Path, operat
 def _activate_cms(config: dict[str, Any], cms_release: Path, candidate_db: Path,
                   capture: Path, source_root: Optional[Path] = None,
                   source_sha: Optional[str] = None,
-                  site_workspace: Optional[Path] = None) -> dict[str, Any]:
+                  site_workspace: Optional[Path] = None,
+                  cms_artifact: Optional[dict[str, Any]] = None) -> dict[str, Any]:
+    if config.get("profile") in ("staging194", "production-paired"):
+        if source_root is None or cms_artifact is None:
+            raise HostFailure("paired CMS activation lacks its journal-bound CI artifact identity")
+        try:
+            admitted = json.loads((source_root / ".ikpk-rehearsal-ci.json").read_text(encoding="utf-8"))
+        except (OSError, ValueError) as error:
+            raise HostFailure("paired CMS activation lacks admitted source provenance") from error
+        if _trusted_cms_artifact(admitted) != cms_artifact:
+            raise HostFailure("paired CMS activation artifact identity differs from the operation journal")
+        _verify_cms_artifact_bytes(source_root, cms_release, cms_artifact)
     live = Path(config["cmsDatabase"]).resolve(strict=True)
     _assert_no_database_handles(live)
     _copy_atomic(candidate_db, live)
@@ -2819,15 +3050,27 @@ def _cms_update(config: dict[str, Any], state: RehearsalState, args: argparse.Na
                 or not isinstance(provenance.get("runId"), int) or provenance["runId"] <= 0
                 or not isinstance(provenance.get("attempt"), int) or provenance["attempt"] <= 0):
             raise HostFailure("initial-prod source admission must bind exact canonical main push run")
+    profile = config.get("profile", "staging194")
     main_release_admission = _has_main_release_admission(provenance, sha)
-    if config.get("profile", "staging194") in ("staging194", "production-paired") and not main_release_admission:
-        raise HostFailure("paired source archive lacks stable Release and exact-main admission evidence")
+    cms_artifact = None
+    if profile in ("staging194", "production-paired"):
+        _validate_paired_ci_workflows(sha, provenance)
+        if profile == "production-paired" and not main_release_admission:
+            raise HostFailure("production-paired source archive lacks stable Release and exact-main admission evidence")
+        cms_artifact = _trusted_cms_artifact(provenance)
     try:
         phase = state.phase(op)
     except RehearsalRefusal:
         phase = None
     if phase and phase.get("sourceSha") not in (None, sha):
         raise HostFailure("operation ID is already bound to another source SHA")
+    source_root = _candidate_root(config, sha, op)
+    if phase:
+        start_record = next((row for row in state._operation_rows(op) if row.get("record") == "start"), None)
+        if profile in ("staging194", "production-paired"):
+            if not start_record or start_record.get("cmsArtifact") != cms_artifact:
+                raise HostFailure("operation journal CMS artifact identity differs from trusted provenance")
+            _validate_prepared_cms_candidate(config, source_root, op, provenance)
     if phase and phase.get("phase") == "cms-activated":
         manifest = _backup_manifest(config, op)
         _verify_fence(config)
@@ -2840,7 +3083,6 @@ def _cms_update(config: dict[str, Any], state: RehearsalState, args: argparse.Na
             raise HostFailure("operator-confirmed off-host backup digest differs from actual captured bytes")
         return {"operationId": op, "sourceSha": sha, "phase": "cms-activated",
                 "backupSha256": manifest["archiveSha256"], "cmsDatabaseProof": proof}
-    source_root = _candidate_root(config, sha, op)
     if phase is None:
         if args.offhost_sha256:
             raise HostFailure("off-host confirmation cannot precede initial source preparation and backup")
@@ -2850,7 +3092,7 @@ def _cms_update(config: dict[str, Any], state: RehearsalState, args: argparse.Na
         archive_bytes = sys.stdin.buffer.read()
         if not archive_bytes:
             raise HostFailure("admitted source archive is required before acquisition")
-        if main_release_admission:
+        if profile == "production-paired":
             source_root = _extract_source_archive(config, sha, op, archive_bytes, args.archive_sha256,
                                                  provenance, expected_ref="refs/heads/main")
         else:
@@ -2862,7 +3104,10 @@ def _cms_update(config: dict[str, Any], state: RehearsalState, args: argparse.Na
         _validate_prepared_cms_candidate(config, source_root, op, provenance)
     site_workspace = (_prepare_paired_site_workspace(config, source_root, sha, op)
                       if config.get("profile") == "production-paired" else None)
-    phase = _start_acquisition(config, state, op, sha)
+    if profile in ("staging194", "production-paired"):
+        _validate_prepared_cms_candidate(config, source_root, op, provenance)
+    phase = (_start_acquisition(config, state, op, sha) if cms_artifact is None else
+             _start_acquisition(config, state, op, sha, cms_artifact=cms_artifact))
     backup_manifest_path = Path(config["backupRoot"]) / op / "manifest.json"
     if not backup_manifest_path.exists():
         _verify_fence(config)
@@ -2880,7 +3125,10 @@ def _cms_update(config: dict[str, Any], state: RehearsalState, args: argparse.Na
     old_cms_root = Path(start["oldPair"]["cmsPath"])
     candidate_db, cms_release, cms_payload_sha = _install_migrated_database(config, source_root, op, old_cms_root)
     capture = _create_capture_bundle(config, op, sha, source_root, candidate_db)
-    proof = _activate_cms(config, cms_release, candidate_db, capture, source_root, sha, site_workspace)
+    if profile in ("staging194", "production-paired"):
+        _validate_prepared_cms_candidate(config, source_root, op, provenance)
+    proof = _activate_cms(config, cms_release, candidate_db, capture, source_root, sha, site_workspace,
+                          cms_artifact=cms_artifact)
     _wait_health(config["cmsHealthUrl"], 1200)
     _verify_fence(config)
     state.mark_cms_activated(op)
@@ -2920,6 +3168,40 @@ STATIC_MAIN_REQUIRED_JOBS = {
 STATIC_MAIN_ADDITIONAL_WORKFLOWS = ("Lint and Typecheck", "Security", "Lighthouse CI")
 
 
+def _validate_paired_ci_workflows(source_sha: str, provenance: dict[str, Any],
+                                  subject: str = "paired") -> None:
+    if (not SHA_RE.fullmatch(source_sha) or provenance.get("repository") != "pgorbachev/ikpk"
+            or provenance.get("ref") != "refs/heads/main" or provenance.get("sourceSha") != source_sha
+            or provenance.get("workflow") != "Tests" or provenance.get("workflowName") != "Tests"
+            or provenance.get("event") != "push" or provenance.get("headBranch") != "main"
+            or provenance.get("status") != "completed" or provenance.get("conclusion") != "success"
+            or type(provenance.get("runId")) is not int or provenance["runId"] <= 0
+            or type(provenance.get("attempt")) is not int or provenance["attempt"] <= 0
+            or provenance.get("requiredJobs") != sorted(STATIC_MAIN_REQUIRED_JOBS)):
+        raise HostFailure(f"{subject} source provenance must bind exact-SHA successful main push CI")
+    expected_url = f"https://github.com/pgorbachev/ikpk/actions/runs/{provenance['runId']}"
+    if provenance.get("runUrl") != expected_url:
+        raise HostFailure(f"{subject} Tests run URL does not match its exact run ID")
+    additional = provenance.get("additionalWorkflows")
+    if not isinstance(additional, list) or len(additional) != len(STATIC_MAIN_ADDITIONAL_WORKFLOWS):
+        raise HostFailure(f"{subject} provenance must include Lint and Typecheck, Security, and Lighthouse CI")
+    by_name = {proof.get("workflow"): proof for proof in additional if isinstance(proof, dict)}
+    if set(by_name) != set(STATIC_MAIN_ADDITIONAL_WORKFLOWS):
+        raise HostFailure(f"{subject} provenance is missing an exact main CI workflow proof")
+    for workflow in STATIC_MAIN_ADDITIONAL_WORKFLOWS:
+        proof = by_name[workflow]
+        jobs = proof.get("requiredJobs")
+        if (proof.get("headSha") != source_sha or proof.get("event") != "push"
+                or proof.get("headBranch") != "main" or proof.get("status") != "completed"
+                or proof.get("conclusion") != "success" or type(proof.get("runId")) is not int
+                or proof["runId"] <= 0 or type(proof.get("attempt")) is not int or proof["attempt"] <= 0
+                or not isinstance(jobs, list) or not jobs
+                or any(not isinstance(job, str) or not job for job in jobs)
+                or jobs != sorted(set(jobs))
+                or proof.get("runUrl") != f"https://github.com/pgorbachev/ikpk/actions/runs/{proof['runId']}"):
+            raise HostFailure(f"{subject} {workflow} proof does not bind successful exact-main jobs")
+
+
 def _static_main_release_policy(config: dict[str, Any]) -> str:
     policy = config.get("staticMainReleasePolicy")
     if policy != "ci-only-approved":
@@ -2932,36 +3214,7 @@ def _validate_static_main_admission(config: dict[str, Any], source_sha: str,
     if config.get("profile", "staging194") not in ("staging194", "production-static"):
         raise HostFailure("static-main is bound to the staging194 or production-static host profile")
     policy = _static_main_release_policy(config)
-    if (not SHA_RE.fullmatch(source_sha) or provenance.get("repository") != "pgorbachev/ikpk"
-            or provenance.get("ref") != "refs/heads/main" or provenance.get("sourceSha") != source_sha
-            or provenance.get("workflow") != "Tests" or provenance.get("workflowName") != "Tests"
-            or provenance.get("event") != "push" or provenance.get("headBranch") != "main"
-            or provenance.get("status") != "completed" or provenance.get("conclusion") != "success"
-            or type(provenance.get("runId")) is not int or provenance["runId"] <= 0
-            or type(provenance.get("attempt")) is not int or provenance["attempt"] <= 0
-            or provenance.get("requiredJobs") != sorted(STATIC_MAIN_REQUIRED_JOBS)):
-        raise HostFailure("static-main provenance must bind current canonical main and every successful Tests job")
-    expected_url = f"https://github.com/pgorbachev/ikpk/actions/runs/{provenance['runId']}"
-    if provenance.get("runUrl") != expected_url:
-        raise HostFailure("static-main Tests run URL does not match its exact run ID")
-    additional = provenance.get("additionalWorkflows")
-    if not isinstance(additional, list) or len(additional) != len(STATIC_MAIN_ADDITIONAL_WORKFLOWS):
-        raise HostFailure("static-main provenance must include Lint and Typecheck, Security, and Lighthouse CI")
-    by_name = {proof.get("workflow"): proof for proof in additional if isinstance(proof, dict)}
-    if set(by_name) != set(STATIC_MAIN_ADDITIONAL_WORKFLOWS):
-        raise HostFailure("static-main provenance is missing an exact main CI workflow proof")
-    for workflow in STATIC_MAIN_ADDITIONAL_WORKFLOWS:
-        proof = by_name[workflow]
-        jobs = proof.get("requiredJobs")
-        if (proof.get("headSha") != source_sha or proof.get("event") != "push"
-                or proof.get("headBranch") != "main" or proof.get("status") != "completed"
-                or proof.get("conclusion") != "success" or type(proof.get("runId")) is not int
-                or proof["runId"] <= 0 or type(proof.get("attempt")) is not int or proof["attempt"] <= 0
-                or not isinstance(jobs, list) or not jobs
-                or any(not isinstance(job, str) or not job for job in jobs)
-                or jobs != sorted(set(jobs))
-                or proof.get("runUrl") != f"https://github.com/pgorbachev/ikpk/actions/runs/{proof['runId']}"):
-            raise HostFailure(f"static-main {workflow} proof does not bind successful exact-main jobs")
+    _validate_paired_ci_workflows(source_sha, provenance, subject="static-main")
 
 
 def _static_main_cms_fingerprint(config: dict[str, Any]) -> dict[str, Any]:

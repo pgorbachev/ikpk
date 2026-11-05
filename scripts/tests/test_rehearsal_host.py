@@ -991,7 +991,7 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
                  patch.object(rehearsal_host.os, "chown"), patch.object(rehearsal_host.os, "chmod"), \
                  patch.object(rehearsal_host, "_run_as_cms", side_effect=run_as_cms):
                 rehearsal_host._prepare_cms_candidate(
-                    {"cmsUser": "ikpk-cms"}, source, "op", {"sourceSha": "a" * 40})
+                    {"cmsUser": "ikpk-cms", "profile": "initial-prod"}, source, "op", {"sourceSha": "a" * 40})
 
             self.assertEqual(len(calls), 2)
             self.assertEqual(calls[0][1], ["/usr/bin/npm", "ci", "--no-audit", "--no-fund"])
@@ -1000,6 +1000,198 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
             self.assertEqual(calls[1][2]["timeout"], 3600)
             self.assertEqual(calls[1][2]["environment"], {"NODE_OPTIONS": "--max-old-space-size=1536"})
             self.assertEqual(calls[1][2]["read_only_path"], dependencies)
+
+    def test_ci_candidate_checks_native_modules_before_web_install_and_reuses_canonical_link(self):
+        with tempfile.TemporaryDirectory(prefix="ikpk-ci-cms-native-preflight-") as temporary:
+            root = Path(temporary)
+            source = root / ("a" * 40 + "-op")
+            cms = source / "cms"
+            cms.mkdir(parents=True)
+            (source / "web").mkdir()
+            lock = b'{"lockfileVersion":3}'
+            (cms / "package-lock.json").write_bytes(lock)
+            artifact = root / "artifact"
+            artifact.mkdir()
+            (artifact / "package-lock.json").write_bytes(lock)
+            dependencies = root / "deps/node_modules"
+            dependencies.mkdir(parents=True)
+            dependencies = dependencies.resolve()
+            (artifact / "node_modules").symlink_to(dependencies, target_is_directory=True)
+            user = type("User", (), {"pw_name": "ikpk-cms", "pw_uid": 0, "pw_gid": 0})()
+            calls = []
+            events = []
+
+            def run_as_cms(_config, cwd, argv, **kwargs):
+                calls.append((cwd, argv, kwargs))
+                events.append(("run", cwd))
+                return ""
+
+            with patch.object(rehearsal_host, "_trusted_cms_artifact", return_value={}), \
+                 patch.object(rehearsal_host, "_extract_ci_cms_artifact", return_value=artifact), \
+                 patch.object(rehearsal_host, "_prepare_cms_build_dependencies", return_value=dependencies), \
+                 patch.object(rehearsal_host, "_validate_prepared_cms_candidate",
+                              return_value=(source, artifact, dependencies)), \
+                 patch.object(rehearsal_host.pwd, "getpwnam", return_value=user), \
+                 patch.object(rehearsal_host.os, "chown", side_effect=lambda *args: events.append(("chown", args[0]))), \
+                 patch.object(rehearsal_host.os, "chmod", side_effect=lambda *args: events.append(("chmod", args[0]))), \
+                 patch.object(rehearsal_host, "_run_as_cms", side_effect=run_as_cms):
+                rehearsal_host._prepare_cms_candidate(
+                    {"cmsUser": "ikpk-cms", "profile": "staging194"}, source, "op", {})
+
+            self.assertEqual(len(calls), 2)
+            self.assertEqual(calls[0][0], artifact)
+            self.assertEqual(calls[0][1][:2], ["/usr/bin/node", "-e"])
+            self.assertIn("new Database(':memory:')", calls[0][1][2])
+            self.assertIn("require('sharp')", calls[0][1][2])
+            native_probe = events.index(("run", artifact))
+            self.assertTrue(any(event[0] == "chown" for event in events[:native_probe]))
+            self.assertTrue(any(event[0] == "chmod" for event in events[:native_probe]))
+            self.assertEqual(calls[1][0], source / "web")
+            self.assertEqual(calls[1][1], ["/usr/bin/npm", "ci", "--no-audit", "--no-fund"])
+
+    def test_ci_candidate_native_module_failure_refuses_before_web_install(self):
+        with tempfile.TemporaryDirectory(prefix="ikpk-ci-cms-native-failure-") as temporary:
+            root = Path(temporary)
+            source = root / ("b" * 40 + "-op")
+            cms = source / "cms"
+            cms.mkdir(parents=True)
+            (source / "web").mkdir()
+            lock = b'{"lockfileVersion":3}'
+            (cms / "package-lock.json").write_bytes(lock)
+            artifact = root / "artifact"
+            artifact.mkdir()
+            (artifact / "package-lock.json").write_bytes(lock)
+            dependencies = root / "deps/node_modules"
+            dependencies.mkdir(parents=True)
+            dependencies = dependencies.resolve()
+            calls = []
+            user = type("User", (), {"pw_name": "ikpk-cms", "pw_uid": 0, "pw_gid": 0})()
+
+            def run_as_cms(_config, cwd, argv, **kwargs):
+                calls.append((cwd, argv))
+                raise rehearsal_host.HostFailure("node exited 1: native load failed")
+
+            with patch.object(rehearsal_host, "_trusted_cms_artifact", return_value={}), \
+                 patch.object(rehearsal_host, "_extract_ci_cms_artifact", return_value=artifact), \
+                 patch.object(rehearsal_host, "_prepare_cms_build_dependencies", return_value=dependencies), \
+                 patch.object(rehearsal_host, "_validate_prepared_cms_candidate") as validate, \
+                 patch.object(rehearsal_host.pwd, "getpwnam", return_value=user), \
+                 patch.object(rehearsal_host.os, "chown"), patch.object(rehearsal_host.os, "chmod"), \
+                 patch.object(rehearsal_host, "_run_as_cms", side_effect=run_as_cms):
+                with self.assertRaisesRegex(rehearsal_host.HostFailure, "native load failed"):
+                    rehearsal_host._prepare_cms_candidate(
+                        {"cmsUser": "ikpk-cms", "profile": "production-paired"}, source, "op", {})
+
+            self.assertEqual(len(calls), 1)
+            self.assertEqual(calls[0][0], artifact)
+            validate.assert_not_called()
+
+    def test_ci_cms_artifact_revalidation_rejects_changed_extracted_bytes(self):
+        with tempfile.TemporaryDirectory(prefix="ikpk-ci-cms-exact-payload-") as temporary:
+            root = Path(temporary)
+            source = (root / ("a" * 40 + "-cms-op")).resolve()
+            source.mkdir()
+            members = {
+                "package.json": b'{"name":"cms"}',
+                "package-lock.json": b'{"lockfileVersion":3}',
+                "tsconfig.json": b'{}',
+                "dist/config/database.js": b"database config",
+                "database/.migrations-expected": b"v1",
+                "scripts/run-data-migrations.mjs": b"migration runner",
+            }
+            payload_buffer = io.BytesIO()
+            with tarfile.open(fileobj=payload_buffer, mode="w:gz") as archive:
+                for name, data in members.items():
+                    info = tarfile.TarInfo(name)
+                    info.size = len(data)
+                    archive.addfile(info, io.BytesIO(data))
+            payload = payload_buffer.getvalue()
+            (source / ".ikpk-cms-artifact.tar.gz").write_bytes(payload)
+            evidence = {"artifactId": 99, "runId": 7, "attempt": 1,
+                        "archiveSha256": "c" * 64, "payloadSha256": sha(payload)}
+            artifact = rehearsal_host._extract_ci_cms_artifact(
+                {"cmsUser": getpass.getuser()}, source, "cms-op", evidence)
+            rehearsal_host._verify_cms_artifact_bytes(source, artifact, evidence)
+            (artifact / "dist/config/database.js").write_bytes(b"changed after fence")
+            with self.assertRaisesRegex(rehearsal_host.HostFailure, "CI CMS artifact bytes differ"):
+                rehearsal_host._verify_cms_artifact_bytes(source, artifact, evidence)
+
+    def test_ci_cms_artifact_rejects_dependency_and_upload_payload_paths(self):
+        for name in ("node_modules/strapi.js", "public/uploads/live.jpg"):
+            payload_buffer = io.BytesIO()
+            with tarfile.open(fileobj=payload_buffer, mode="w:gz") as archive:
+                info = tarfile.TarInfo(name)
+                info.size = 1
+                archive.addfile(info, io.BytesIO(b"x"))
+            with self.subTest(name=name), self.assertRaisesRegex(
+                    rehearsal_host.HostFailure, "unsafe or forbidden path"):
+                rehearsal_host._cms_tar_members(payload_buffer.getvalue())
+
+    def test_missing_ci_cms_artifact_refuses_before_fence_without_host_build(self):
+        with tempfile.TemporaryDirectory(prefix="ikpk-cms-artifact-heap-") as temporary:
+            root = Path(temporary)
+            source_sha, operation_id = "a" * 40, "missing-cms-artifact"
+            releases = root / "releases"
+            source = releases / f"{source_sha}-{operation_id}"
+            (source / "cms").mkdir(parents=True)
+            (source / "web").mkdir()
+            dependencies = root / "shared-deps/node_modules"
+            dependencies.mkdir(parents=True)
+            user = type("User", (), {"pw_name": "ikpk-cms", "pw_uid": 0, "pw_gid": 0})()
+            state_dir = root / "state"
+            state_dir.mkdir()
+            (root / "backups").mkdir()
+            state = RehearsalState(state_dir)
+            archive = b"source archive without the CI CMS tar"
+            provenance = {"sourceSha": source_sha, "ref": "refs/heads/main", "workflow": "Tests",
+                          "workflowName": "Tests", "headBranch": "main", "event": "push", "runId": 7,
+                          "attempt": 1, "repository": "pgorbachev/ikpk",
+                          "runUrl": "https://github.com/pgorbachev/ikpk/actions/runs/7",
+                          "status": "completed", "conclusion": "success",
+                          "requiredJobs": sorted(rehearsal_host.STATIC_MAIN_REQUIRED_JOBS),
+                          "additionalWorkflows": [{"workflow": workflow, "headSha": source_sha,
+                              "event": "push", "headBranch": "main", "status": "completed",
+                              "conclusion": "success", "runId": 10 + index, "attempt": 1,
+                              "runUrl": f"https://github.com/pgorbachev/ikpk/actions/runs/{10 + index}",
+                              "requiredJobs": ["required job"]}
+                              for index, workflow in enumerate(rehearsal_host.STATIC_MAIN_ADDITIONAL_WORKFLOWS)],
+                          "cmsArtifact": {"artifactId": 99, "runId": 7, "attempt": 1,
+                                          "archiveSha256": "c" * 64, "payloadSha256": "d" * 64},
+                          "release": {"tag": "v2026.11.5", "publishedAt": "2026-11-05T10:00:00Z"},
+                          "releasePreflight": {"status": "passed", "commit": source_sha}}
+            config = {"profile": "staging194", "releaseRoot": str(releases),
+                      "allowedSourceRef": "refs/heads/main", "cmsUser": "ikpk-cms",
+                      "backupRoot": str(root / "backups")}
+            args = Namespace(operation_id=operation_id, source_sha=source_sha,
+                             provenance_b64=base64.b64encode(json.dumps(provenance).encode()).decode(),
+                             archive_sha256=sha(archive), offhost_sha256=None)
+            commands = []
+
+            def run_as_cms(_config, cwd, argv, **kwargs):
+                commands.append((cwd, argv, kwargs))
+                if "build-cms-artifact.sh" in " ".join(argv):
+                    artifact = Path(argv[-1])
+                    artifact.mkdir(parents=True)
+                return ""
+
+            host_stdin = type("HostStdin", (), {"buffer": io.BytesIO(archive)})()
+            with patch.object(rehearsal_host.sys, "stdin", host_stdin), \
+                 patch.object(rehearsal_host, "_extract_source_archive", return_value=source), \
+                 patch.object(rehearsal_host, "_prepare_cms_build_dependencies", return_value=dependencies), \
+                 patch.object(rehearsal_host.pwd, "getpwnam", return_value=user), \
+                 patch.object(rehearsal_host.os, "chown"), patch.object(rehearsal_host.os, "chmod"), \
+                 patch.object(rehearsal_host, "_run_as_cms", side_effect=run_as_cms), \
+                 patch.object(rehearsal_host, "_start_acquisition") as start, \
+                 patch.object(rehearsal_host, "_backup") as backup:
+                with self.assertRaises(rehearsal_host.HostFailure) as refused:
+                    rehearsal_host._cms_update(config, state, args)
+
+            self.assertFalse(any("build-cms-artifact.sh" in " ".join(argv)
+                                 for _cwd, argv, _kwargs in commands),
+                             "the destination must refuse a source archive missing its CI CMS tar, not build it")
+            self.assertRegex(str(refused.exception), r"CI CMS artifact.*missing")
+            start.assert_not_called()
+            backup.assert_not_called()
 
     def test_complete_cms_build_dependency_generation_is_reused_without_mutation(self):
         with tempfile.TemporaryDirectory(prefix="ikpk-cms-build-deps-") as temporary:
@@ -1503,7 +1695,7 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
             media_rows = json.loads((result / "media-manifest.json").read_text(encoding="utf-8"))["media"]
             self.assertEqual({row["url"].split("/", 2)[1] for row in media_rows}, {"uploads", "media"})
 
-    def test_recovery_restores_uploads_by_bytes_and_static_media_by_old_pointer_only(self):
+    def test_recovery_restores_old_pair_when_unactivated_candidate_artifact_and_database_are_corrupt(self):
         with tempfile.TemporaryDirectory(prefix="ikpk-rehearsal-static-media-recovery-") as temporary:
             root = Path(temporary)
             state_root = root / "state"
@@ -1559,6 +1751,11 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
             old_pair = {"cmsPath": str(old_cms.resolve()), "staticPath": str(old_static.resolve()),
                         "staticTreeSha256": rehearsal_host._tree_sha256(old_static)}
             state.begin(operation_id, source_sha, old_pair)
+            candidate_source = rehearsal_host._candidate_root(config, source_sha, operation_id)
+            candidate_artifact = rehearsal_host._cms_artifact_path(candidate_source, operation_id)
+            candidate_artifact.mkdir(parents=True)
+            (candidate_artifact / "payload-corrupted-after-admission").write_bytes(b"corrupt candidate artifact")
+            (candidate_artifact.parent / "candidate.db").write_bytes(b"corrupt candidate database")
             with patch.object(rehearsal_host, "_assert_no_database_handles"):
                 manifest = rehearsal_host._backup(config, operation_id)
             backup_dir = backup_root / operation_id
@@ -1993,6 +2190,7 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
                  patch.object(operator, "ssh_remote", side_effect=ssh), \
                  patch.object(operator, "ROOT", backup_dir), \
                  patch.object(operator, "validate_production_paired_admission", return_value={"runId": 7, "attempt": 2}), \
+                 patch.object(operator, "fetch_cms_candidate_artifact", return_value=b"cms tar payload"), \
                  patch.object(operator, "make_archive", return_value=(b"source archive", "e" * 64)), \
                  patch.object(operator, "production_paired_schema_source", return_value=(old_source, "f" * 64)), \
                  patch.object(operator, "production_paired_backup_fingerprint", return_value=fingerprint), \

@@ -348,7 +348,8 @@ class RehearsalState:
             if self._unfinished_operation_ids(history):
                 raise RehearsalRefusal("another unfinished operation owns recovery")
 
-    def begin(self, operation_id: str, source_sha: str, old_pair: dict) -> dict:
+    def begin(self, operation_id: str, source_sha: str, old_pair: dict,
+              cms_artifact: Optional[dict] = None) -> dict:
         self._validate_identity(operation_id, source_sha)
         if not isinstance(old_pair, dict) or not old_pair:
             raise RehearsalRefusal("start record must identify the old CMS/static pair")
@@ -360,15 +361,19 @@ class RehearsalState:
                 self._require_mutable(operation_id)
                 if current.get("sourceSha") != source_sha:
                     raise RehearsalRefusal("operation ID is already bound to another source SHA")
-                if not any(row.get("record") == "start" and row.get("sourceSha") == source_sha
-                           for row in self._operation_rows(operation_id)):
+                start = next((row for row in self._operation_rows(operation_id)
+                              if row.get("record") == "start" and row.get("sourceSha") == source_sha), None)
+                if start is None:
                     raise RehearsalRefusal("maintenance marker has no matching journal start record")
+                if cms_artifact is not None and start.get("cmsArtifact") != cms_artifact:
+                    raise RehearsalRefusal("operation CMS artifact identity differs from its journal start")
                 return current
             history = self._journal()
             unfinished = self._unfinished_operation_ids(history)
             if operation_id in unfinished:
                 start = next(row for row in history if row.get("record") == "start" and row.get("operationId") == operation_id)
-                if start.get("sourceSha") != source_sha or start.get("oldPair") != old_pair:
+                if (start.get("sourceSha") != source_sha or start.get("oldPair") != old_pair
+                        or (cms_artifact is not None and start.get("cmsArtifact") != cms_artifact)):
                     raise RehearsalRefusal("interrupted operation identity does not match its journal start")
                 current = {
                     "version": 1,
@@ -392,8 +397,11 @@ class RehearsalState:
                 "newPairAccepted": False,
                 "committed": False,
             }
-            self._append({"version": 1, "record": "start", "operationId": operation_id,
-                          "sourceSha": source_sha, "oldPair": old_pair})
+            start = {"version": 1, "record": "start", "operationId": operation_id,
+                     "sourceSha": source_sha, "oldPair": old_pair}
+            if cms_artifact is not None:
+                start["cmsArtifact"] = cms_artifact
+            self._append(start)
             durable_json(self.marker_path, current)
             return current
 
