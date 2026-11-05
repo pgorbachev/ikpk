@@ -2290,6 +2290,7 @@ class StaticMainAdmissionTests(unittest.TestCase):
                         {"cms": "same"}, [])
 
     def _committed_static_main_fixture(self, root: Path, current_name="candidate"):
+        root = root.resolve()
         releases = root / "releases"
         releases.mkdir()
         old = releases / "old"
@@ -2310,17 +2311,127 @@ class StaticMainAdmissionTests(unittest.TestCase):
         state = RehearsalState(state_dir)
         old_digest = rehearsal_host._tree_sha256(old)
         candidate_digest = rehearsal_host._tree_sha256(candidate)
+        (candidate / "release.json").write_text(json.dumps({"commit": "a" * 40,
+            "operationId": "main-op", "snapshotId": "snap:main",
+            "staticTreeSha256": candidate_digest}), encoding="utf-8")
         state._append({"version": 1, "record": "static-main-start", "operationKind": "static-main",
             "operationId": "main-op", "sourceSha": "a" * 40, "oldStaticPath": str(old),
             "oldStaticTreeSha256": old_digest, "provenance": {}})
         state._append({"version": 1, "record": "static-main-prepared", "operationKind": "static-main",
             "operationId": "main-op", "sourceSha": "a" * 40, "staticTreeSha256": candidate_digest,
-            "snapshotId": "snapshot-main"})
+            "snapshotId": "snap:main"})
+        state._append({"version": 1, "record": "static-main-switch-intent", "operationKind": "static-main",
+            "operationId": "main-op", "sourceSha": "a" * 40, "oldStaticPath": str(old),
+            "candidateStaticPath": str(candidate), "staticTreeSha256": candidate_digest})
+        state._append({"version": 1, "record": "static-main-switched", "operationKind": "static-main",
+            "operationId": "main-op", "sourceSha": "a" * 40, "staticTreeSha256": candidate_digest})
         state._append({"version": 1, "record": "static-main-committed", "operationKind": "static-main",
             "operationId": "main-op", "sourceSha": "a" * 40, "staticTreeSha256": candidate_digest,
-            "snapshotId": "snapshot-main"})
-        return {"currentStatic": str(pointer), "staticReleaseRoot": str(releases),
+            "snapshotId": "snap:main"})
+        return {"profile": "staging194", "currentStatic": str(pointer), "staticReleaseRoot": str(releases),
                 "currentCms": str(current_cms)}, state, pointer, old, candidate, foreign
+
+    def test_static_main_expired_rollback_requires_exact_current_and_durable_audit(self):
+        with tempfile.TemporaryDirectory(prefix="ikpk-static-main-expired-rollback-") as temporary:
+            config, state, pointer, old, candidate, _foreign = self._committed_static_main_fixture(Path(temporary))
+            old_digest = rehearsal_host._tree_sha256(old)
+            shutil.rmtree(old)
+            # The installed staging194 config omits this field; _root_config supplies its default.
+            config.pop("profile")
+            result = rehearsal_host._static_main_recover(
+                config, state, "main-op", accept_expired_rollback=True,
+                operator_name="release-operator", reason="Test stand rollback tree was lost")
+            self.assertEqual(result["phase"], "rollback-target-expired")
+            self.assertEqual(pointer.resolve(strict=True), candidate.resolve(strict=True))
+            audit = next(row for row in state._operation_rows("main-op")
+                         if row.get("record") == "static-main-rollback-expired")
+            self.assertEqual(audit["oldStaticPath"], str(old))
+            self.assertEqual(audit["oldStaticTreeSha256"], old_digest)
+            self.assertEqual(audit["candidateStaticPath"], str(candidate))
+            self.assertEqual(audit["candidateStaticTreeSha256"], rehearsal_host._tree_sha256(candidate))
+            self.assertEqual(audit["operator"], "release-operator")
+            self.assertEqual(audit["reason"], "Test stand rollback tree was lost")
+            self.assertIsNone(rehearsal_host._current_rollback_target(
+                Path(config["staticReleaseRoot"]), candidate,
+                state.read_journal_for_cleanup(validate_history=True), None))
+            rows = state.read_journal_for_cleanup(validate_history=True)
+            self.assertEqual([row["record"] for row in rows if row.get("operationId") == "main-op"][-1],
+                             "static-main-rollback-expired")
+            old.mkdir()
+            (old / "index.html").write_text("old", encoding="utf-8")
+            count_before = len(state._operation_rows("main-op"))
+            with self.assertRaisesRegex(rehearsal_host.HostFailure, "forbidden after.*accepted as expired"):
+                rehearsal_host._static_main_recover(config, state, "main-op", rollback_committed=True,
+                    operator_name="release-operator", reason="Attempt to revive rollback")
+            self.assertEqual(len(state._operation_rows("main-op")), count_before)
+            self.assertEqual(pointer.resolve(strict=True), candidate.resolve(strict=True))
+
+    def test_static_main_expired_rollback_refuses_present_target_or_changed_current(self):
+        with tempfile.TemporaryDirectory(prefix="ikpk-static-main-expired-present-") as temporary:
+            config, state, pointer, old, _candidate, _foreign = self._committed_static_main_fixture(Path(temporary))
+            with self.assertRaisesRegex(rehearsal_host.HostFailure, "still exists"):
+                rehearsal_host._static_main_recover(
+                    config, state, "main-op", accept_expired_rollback=True,
+                    operator_name="release-operator", reason="Test stand reset")
+            self.assertFalse(any(row.get("record") == "static-main-rollback-expired"
+                                 for row in state._operation_rows("main-op")))
+            self.assertEqual(pointer.resolve(strict=True), old.parent / ("a" * 40 + "-main-op"))
+
+        with tempfile.TemporaryDirectory(prefix="ikpk-static-main-expired-foreign-") as temporary:
+            config, state, pointer, old, _candidate, foreign = self._committed_static_main_fixture(
+                Path(temporary), current_name="foreign")
+            shutil.rmtree(old)
+            with self.assertRaisesRegex(rehearsal_host.HostFailure, "no longer points to this candidate"):
+                rehearsal_host._static_main_recover(
+                    config, state, "main-op", accept_expired_rollback=True,
+                    operator_name="release-operator", reason="Test stand reset")
+            self.assertFalse(any(row.get("record") == "static-main-rollback-expired"
+                                 for row in state._operation_rows("main-op")))
+            self.assertEqual(pointer.resolve(strict=True), foreign.resolve(strict=True))
+
+    def test_static_main_expired_rollback_cleanup_retry_preserves_marker_until_success(self):
+        with tempfile.TemporaryDirectory(prefix="ikpk-static-main-expired-retry-") as temporary:
+            root = Path(temporary)
+            config, state, pointer, old, candidate, _foreign = self._committed_static_main_fixture(root)
+            shutil.rmtree(old)
+            marker = {"version": 1, "operationId": "main-op", "profile": "staging194",
+                      "phase": "cleanup-pending"}
+            config.update({"profile": "staging194", "stateDir": str(root / "state"),
+                           "sitePublicationMarker": "/unused-marker", "siteRefreshState": str(root / "refresh.json")})
+            cleanup_results = iter(({"cleanupPending": True, "cleanupError": "synthetic interruption"},
+                                    {"removedReleases": [], "retainedLegacy": []}))
+
+            def cleanup(*_args):
+                return next(cleanup_results)
+
+            def invoke():
+                args = Namespace(profile="staging194", action="static-main-recover", operation_id="main-op",
+                    source_sha=None, accept_expired_rollback=True, rollback_committed=False,
+                    operator="release-operator", reason="Test stand reset", space_preflight=False)
+                return rehearsal_host.dispatch(args)
+
+            with patch.object(rehearsal_host, "_root_config", return_value=config), \
+                 patch.object(rehearsal_host.os, "geteuid", return_value=0), \
+                 patch.object(rehearsal_host, "_configure_profile_temp"), \
+                 patch.object(rehearsal_host, "_destination_publication_lock", return_value=nullcontext()), \
+                 patch.object(rehearsal_host, "_assert_site_refresh_idle"), \
+                 patch.object(rehearsal_host, "_read_site_publication_marker", side_effect=lambda _config: marker.copy() or None), \
+                 patch.object(rehearsal_host, "_write_site_publication_marker"), \
+                 patch.object(rehearsal_host, "_clear_site_publication_marker", side_effect=lambda *_args: marker.clear()), \
+                 patch.object(rehearsal_host, "_cleanup_after_commit", side_effect=cleanup):
+                first = invoke()
+                self.assertTrue(first["cleanupPending"])
+                self.assertEqual(marker["phase"], "cleanup-pending")
+                self.assertEqual(pointer.resolve(strict=True), candidate.resolve(strict=True))
+                second = invoke()
+                self.assertEqual(second["phase"], "rollback-target-expired")
+                self.assertEqual(marker, {})
+                self.assertEqual(pointer.resolve(strict=True), candidate.resolve(strict=True))
+                third = invoke()
+                self.assertTrue(third["idempotent"])
+                self.assertEqual(third["phase"], "rollback-target-expired")
+                self.assertEqual(sum(row.get("record") == "static-main-rollback-expired"
+                                     for row in state._operation_rows("main-op")), 1)
 
     def test_static_main_fails_closed_until_release_policy_is_explicit(self):
         with self.assertRaisesRegex(rehearsal_host.HostFailure, "ci-only-approved"):
@@ -3040,14 +3151,14 @@ class StaticMainAdmissionTests(unittest.TestCase):
                            "cmsFingerprint": fingerprint})
             state._append({"version": 1, "record": "static-main-prepared", "operationKind": "static-main",
                            "operationId": "main-op", "sourceSha": source_sha,
-                           "staticTreeSha256": candidate_digest, "snapshotId": "snapshot-main"})
+                           "staticTreeSha256": candidate_digest, "snapshotId": "snap:main"})
             curl_commands = []
 
             def curl(argv, **_kwargs):
                 curl_commands.append(argv)
                 if argv[-1] == config["siteReleaseUrl"]:
                     release = {"commit": source_sha, "operationId": "main-op",
-                               "staticTreeSha256": candidate_digest, "snapshotId": "snapshot-main"}
+                               "staticTreeSha256": candidate_digest, "snapshotId": "snap:main"}
                     return subprocess.CompletedProcess(argv, 0, json.dumps(release), "")
                 if "--write-out" in argv:
                     return subprocess.CompletedProcess(argv, 0, "200", "")

@@ -142,6 +142,18 @@ def validate_journal_history(rows):
         elif (record == 'static-main-committed' and phase == 'switched'
               and row.get('staticTreeSha256') == state['digest'] and row.get('snapshotId') == state['snapshot']):
             state['phase'] = 'committed'
+        elif record == 'static-main-rollback-expired' and phase == 'committed':
+            if (_path(row.get('oldStaticPath')) != state['old']
+                    or row.get('oldStaticTreeSha256') != state['old_digest']
+                    or _path(row.get('candidateStaticPath')) != state.get('candidate')
+                    or row.get('candidateStaticTreeSha256') != state['digest']
+                    or row.get('committedStaticTreeSha256') != state['digest']
+                    or row.get('snapshotId') != state['snapshot']
+                    or row.get('targetState') != 'absent'
+                    or not _audit_text(row.get('operator'), 120)
+                    or not _audit_text(row.get('reason'), 1000)):
+                raise ValueError('conflicting expired rollback evidence')
+            state['phase'] = 'rollback-expired'
         elif record == 'static-main-rolled-back' and phase in ('intent', 'switched'):
             if _path(row.get('restoredStaticPath')) != state['old']:
                 raise ValueError('conflicting restored target')
@@ -172,6 +184,6 @@ def validate_journal_history(rows):
         else:
             raise ValueError('invalid static sequence')
     for state in states.values():
-        if state['phase'] not in ('committed', 'recovered', 'rolled-back', 'rollback-completed'):
+        if state['phase'] not in ('committed', 'recovered', 'rolled-back', 'rollback-completed', 'rollback-expired'):
             raise ValueError('incomplete operation')
     return refs

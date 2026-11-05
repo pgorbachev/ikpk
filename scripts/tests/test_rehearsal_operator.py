@@ -1073,6 +1073,31 @@ class OperatorAdmissionTests(unittest.TestCase):
                 staging193.invoke(args)
         ssh.assert_not_called()
 
+    def test_expired_static_rollback_acceptance_is_staging_only_and_reports_pending_retry(self):
+        args = type("Args", (), {"host": staging193.TARGET_HOST, "profile": "staging194",
+            "command": "static-main-recover", "operation_id": "main-static",
+            "rollback_committed": False, "accept_expired_rollback": True,
+            "operator": "release-operator", "reason": "Test stand rollback tree was lost"})()
+        with patch.object(staging193, "ssh_remote", return_value=b'{"phase":"rollback-target-expired"}') as ssh:
+            staging193.invoke(args)
+        ssh.assert_called_once_with(["static-main-recover", "--operation-id", "main-static",
+            "--accept-expired-rollback", "--operator", "release-operator", "--reason",
+            "Test stand rollback tree was lost"])
+
+        args.profile = "production-static"
+        with patch.object(staging193, "ssh_remote") as ssh:
+            with self.assertRaisesRegex(staging193.Refusal, "restricted to staging194"):
+                staging193.invoke(args)
+        ssh.assert_not_called()
+
+        args.profile = "staging194"
+        with patch.object(staging193, "ssh_remote",
+                          return_value=b'{"phase":"rollback-target-expired-cleanup-pending",'
+                                       b'"cleanupPending":true}') as ssh:
+            with self.assertRaisesRegex(staging193.Refusal, "durably recorded.*cleanup remains pending"):
+                staging193.invoke(args)
+        ssh.assert_called_once()
+
     def test_cms_update_sends_source_archive_before_offhost_backup_confirmation(self):
         with tempfile.TemporaryDirectory(prefix="ikpk-operator-prefence-") as temporary:
             archive = b"admitted source archive"
