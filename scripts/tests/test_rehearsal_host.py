@@ -1610,7 +1610,7 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
             media_rows = json.loads((result / "media-manifest.json").read_text(encoding="utf-8"))["media"]
             self.assertEqual({row["url"].split("/", 2)[1] for row in media_rows}, {"uploads", "media"})
 
-    def test_recovery_restores_uploads_by_bytes_and_static_media_by_old_pointer_only(self):
+    def test_recovery_restores_old_pair_when_unactivated_candidate_artifact_and_database_are_corrupt(self):
         with tempfile.TemporaryDirectory(prefix="ikpk-rehearsal-static-media-recovery-") as temporary:
             root = Path(temporary)
             state_root = root / "state"
@@ -1666,6 +1666,11 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
             old_pair = {"cmsPath": str(old_cms.resolve()), "staticPath": str(old_static.resolve()),
                         "staticTreeSha256": rehearsal_host._tree_sha256(old_static)}
             state.begin(operation_id, source_sha, old_pair)
+            candidate_source = rehearsal_host._candidate_root(config, source_sha, operation_id)
+            candidate_artifact = rehearsal_host._cms_artifact_path(candidate_source, operation_id)
+            candidate_artifact.mkdir(parents=True)
+            (candidate_artifact / "payload-corrupted-after-admission").write_bytes(b"corrupt candidate artifact")
+            (candidate_artifact.parent / "candidate.db").write_bytes(b"corrupt candidate database")
             with patch.object(rehearsal_host, "_assert_no_database_handles"):
                 manifest = rehearsal_host._backup(config, operation_id)
             backup_dir = backup_root / operation_id
