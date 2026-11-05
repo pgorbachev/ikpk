@@ -67,6 +67,29 @@ class Staging194CmsSourcePreflightRedTests(unittest.TestCase):
 
         self.assertEqual(self._source_sha(), SOURCE_SHA)
 
+    def test_older_committed_release_does_not_make_current_source_ambiguous(self):
+        self._record_committed_release()
+        self.state.finalize(OPERATION_ID, lambda: True)
+        older_sha = "b" * 40
+        older_operation = "older-cms-proof"
+        older_root = self.release_root / f"{older_sha}-{older_operation}"
+        older_artifact = (older_root / ".staging193-rehearsal" / older_operation
+                          / "migration" / "cms-artifact")
+        older_artifact.mkdir(parents=True)
+        (older_artifact / "package.json").write_text('{"name":"older-cms"}\n', encoding="utf-8")
+        older_payload = rehearsal_host._cms_payload_sha256(older_artifact, self.uploads)
+        self.state.begin(older_operation, older_sha,
+                         {"cmsSha": "old-cms", "staticSha": "old-static", "dbSha256": "0" * 64})
+        self.state.confirm_fence(older_operation, lambda: True)
+        self.state.mark_cms_activated(older_operation)
+        self.state.accept_new_pair(older_operation, {
+            "sourceSha": older_sha, "cmsSha": older_sha, "staticSha": older_sha,
+            "cmsPayloadSha256": older_payload,
+        })
+        self.state.commit(older_operation)
+
+        self.assertEqual(self._source_sha(), SOURCE_SHA)
+
     def test_sha_named_path_alone_is_unknown_without_confirmed_journal(self):
         self.assertIsNone(self._source_sha())
 

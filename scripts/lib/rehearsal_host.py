@@ -380,6 +380,7 @@ def _staging194_current_cms_source_sha(config: dict[str, Any], state: RehearsalS
         if len(uploads) != 1:
             return None
         matches = []
+        release_root = Path(config["releaseRoot"]).resolve(strict=True)
         for bundle in rows:
             if bundle.get("record") != "new-bundle":
                 continue
@@ -406,20 +407,23 @@ def _staging194_current_cms_source_sha(config: dict[str, Any], state: RehearsalS
             start_index, bundle_index, commit_index = (rows.index(starts[0]), rows.index(bundle), rows.index(commits[0]))
             if not start_index < bundle_index < commit_index:
                 continue
-            matches.append((source_sha, operation_id, pair["cmsPayloadSha256"]))
+            try:
+                source_root = _candidate_root(config, source_sha, operation_id)
+                if source_root.is_symlink() or not source_root.is_dir() or source_root.parent != release_root:
+                    continue
+                artifact = _cms_artifact_path(source_root, operation_id)
+                if artifact.is_symlink() or not artifact.is_dir():
+                    continue
+                artifact_target = artifact.resolve(strict=True)
+                if (artifact_target != initial_current
+                        or not artifact_target.is_relative_to(source_root.resolve(strict=True))):
+                    continue
+            except (HostFailure, OSError, ValueError):
+                continue
+            matches.append((source_sha, operation_id, pair["cmsPayloadSha256"], artifact_target))
         if len(matches) != 1:
             return None
-        source_sha, operation_id, expected_payload = matches[0]
-        source_root = _candidate_root(config, source_sha, operation_id)
-        release_root = Path(config["releaseRoot"]).resolve(strict=True)
-        if source_root.is_symlink() or not source_root.is_dir() or source_root.parent != release_root:
-            return None
-        artifact = _cms_artifact_path(source_root, operation_id)
-        if artifact.is_symlink() or not artifact.is_dir():
-            return None
-        artifact_target = artifact.resolve(strict=True)
-        if artifact_target != initial_current or not artifact_target.is_relative_to(source_root.resolve(strict=True)):
-            return None
+        source_sha, operation_id, expected_payload, artifact_target = matches[0]
         root_before = artifact_target.stat()
         actual_payload = _cms_payload_sha256(artifact_target, uploads[0])
         root_after = artifact_target.stat()
