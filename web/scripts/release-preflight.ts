@@ -7,19 +7,19 @@ import { createHash } from 'node:crypto';
 const API = 'https://api.github.com/repos/pgorbachev/ikpk';
 const UPLOAD_API = 'https://uploads.github.com/repos/pgorbachev/ikpk/releases/';
 const HELPER_ASSET = 'host-helper.tar.gz';
-function githubHeaders(token: string) {
-  return { Accept: 'application/vnd.github+json', Authorization: `Bearer ${token}`,
+function githubHeaders(token?: string) {
+  return { Accept: 'application/vnd.github+json', ...(token ? { Authorization: `Bearer ${token}` } : {}),
     'X-GitHub-Api-Version': '2022-11-28', 'Content-Type': 'application/json' };
 }
 
 /** Attach only the already-verified helper bytes to their exact stable Release. */
 export async function ensureReleaseHelperAsset(tag: string, commit: string, payload: Uint8Array, sha256: string,
-                                               token: string, fetcher: typeof globalThis.fetch = globalThis.fetch,
+                                               token: string | undefined, fetcher: typeof globalThis.fetch = globalThis.fetch,
                                                options: { historicalRelease?: boolean } = {}): Promise<void> {
   const fail = (reason: string): never => { throw new Error(`release-helper-${reason}`); };
   if (!/^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/.test(tag) || !/^[a-f0-9]{40}$/.test(commit) ||
       !/^[a-f0-9]{64}$/.test(sha256) || !(payload instanceof Uint8Array) || payload.byteLength === 0 || payload.byteLength > 100 * 1024 * 1024 ||
-      !token || createHash('sha256').update(payload).digest('hex') !== sha256) fail('invalid-payload');
+      createHash('sha256').update(payload).digest('hex') !== sha256) fail('invalid-payload');
   const headers = githubHeaders(token);
   const request = async (url: string, init?: RequestInit): Promise<Response> => {
     const response = await fetcher(url, { ...init, redirect: 'error', signal: AbortSignal.timeout(30_000) });
@@ -64,9 +64,12 @@ export async function ensureReleaseHelperAsset(tag: string, commit: string, payl
   const assets = await listAssets();
   if (verifyUniqueAsset(assets)) return;
   if (options.historicalRelease) fail('historical-asset-missing');
-  if (release.upload_url !== `${UPLOAD_API}${Number(release.id)}/assets{?name,label}`) fail('upload-endpoint');
-  const uploadUrl = `${release.upload_url.slice(0, -'{?name,label}'.length)}?name=${encodeURIComponent(HELPER_ASSET)}`;
-  const uploadResponse = await request(uploadUrl, { method: 'POST', headers: { ...headers, 'Content-Type': 'application/gzip' }, body: payload });
+  if (!token) fail('missing-upload-token');
+  if (typeof release.upload_url !== 'string') fail('upload-endpoint');
+  const uploadTemplate = release.upload_url as string;
+  if (uploadTemplate !== `${UPLOAD_API}${Number(release.id)}/assets{?name,label}`) fail('upload-endpoint');
+  const uploadUrl = `${uploadTemplate.slice(0, -'{?name,label}'.length)}?name=${encodeURIComponent(HELPER_ASSET)}`;
+  const uploadResponse = await request(uploadUrl, { method: 'POST', headers: { ...headers, 'Content-Type': 'application/gzip' }, body: Buffer.from(payload) });
   if (uploadResponse.status !== 201) fail('asset-upload');
   const uploaded = await uploadResponse.json() as { name?: unknown; digest?: unknown; state?: unknown };
   if (uploaded.name !== HELPER_ASSET || uploaded.digest !== `sha256:${sha256}` || uploaded.state !== 'uploaded') fail('asset-upload-mismatch');
@@ -102,6 +105,7 @@ try {
   const args = process.argv.slice(2);
   let historicalRelease = false;
   let ensureRelease = false;
+  let ensureHelperAsset = false;
   for (let index = 0; index < args.length;) {
     const name = args[index], value = args[index + 1];
     if (name === '--historical-release' && !historicalRelease) {
@@ -114,6 +118,11 @@ try {
       index++;
       continue;
     }
+    if (name === '--ensure-helper-asset' && !ensureHelperAsset) {
+      ensureHelperAsset = true;
+      index++;
+      continue;
+    }
     if (!['--release-tag', '--commit'].includes(name) || options.has(name) || !value || value.startsWith('--')) throw new Error('invalid-arguments');
     options.set(name, value);
     index += 2;
@@ -121,11 +130,17 @@ try {
   const commit = options.get('--commit') ?? '';
   const releaseTag = options.get('--release-tag') ?? '';
   const token = process.env.GH_TOKEN ?? process.env.GITHUB_TOKEN;
-  if (ensureRelease && !token) throw new Error('missing-github-token');
+  const attachHelperAsset = ensureRelease || ensureHelperAsset || historicalRelease;
+  if ((ensureRelease || ensureHelperAsset) && !token) throw new Error('missing-github-token');
+  if (historicalRelease && (ensureRelease || ensureHelperAsset)) throw new Error('invalid-arguments');
   const evidence = await readCiEvidence({ commit, releaseTag, token,
-    requireCurrentMain: !historicalRelease && !ensureRelease, operatorAdmission: historicalRelease || ensureRelease,
-    ...(ensureRelease ? { ensureRelease: (tag: string, sha: string) => ensureStableRelease(tag, sha, token!) } : {}) });
+    requireCurrentMain: !historicalRelease && !ensureRelease && !ensureHelperAsset,
+    operatorAdmission: historicalRelease || ensureRelease || ensureHelperAsset,
+    ...(ensureRelease ? { ensureRelease: (tag: string, sha: string) => ensureStableRelease(tag, sha, token!) } : {}),
+    ...(attachHelperAsset ? { ensureHostHelperAsset: (tag: string, sha: string, payload: Uint8Array, sha256: string) =>
+      ensureReleaseHelperAsset(tag, sha, payload, sha256, token, globalThis.fetch, { historicalRelease }) } : {}) });
   process.stdout.write(`${JSON.stringify({ status: 'admitted', commit, release: evidence.release,
+    ...(evidence.hostHelperArtifact ? { hostHelperArtifact: evidence.hostHelperArtifact } : {}),
     historicalRelease: historicalRelease || ensureRelease, ...( (historicalRelease || ensureRelease) && evidence.operatorAdmission
       ? { operatorAdmission: evidence.operatorAdmission } : {}),
     runs: [{ workflow: evidence.workflow, runId: evidence.runId }, ...evidence.workflows ?? []] })}\n`);

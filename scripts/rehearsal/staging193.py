@@ -246,6 +246,8 @@ def validate_stable_release(provenance: dict, sha: str, *, release_tag: Optional
     preflight_command = ["node", "web/scripts/release-preflight.ts"]
     if historical_release:
         preflight_command.append("--historical-release")
+    else:
+        preflight_command.append("--ensure-helper-asset")
     preflight = capture([*preflight_command, "--release-tag", tag,
                          "--commit", sha])
     try:
@@ -256,10 +258,26 @@ def validate_stable_release(provenance: dict, sha: str, *, release_tag: Optional
             or preflight_result.get("commit") != sha
             or preflight_result.get("historicalRelease", False) != historical_release):
         raise Refusal("release-preflight did not admit the exact selected Release SHA")
+    helper = _verified_preflight_helper_artifact(preflight_result, sha)
     provenance["release"] = {"tag": tag, "publishedAt": published_at}
     provenance["releasePreflight"] = preflight_result
+    provenance["hostHelperArtifact"] = helper
     provenance["historicalRelease"] = historical_release
     return provenance
+
+
+def _verified_preflight_helper_artifact(result: dict, sha: str) -> dict:
+    helper = result.get("hostHelperArtifact")
+    admission = result.get("operatorAdmission")
+    if (not isinstance(helper, dict) or type(helper.get("artifactId")) is not int or helper["artifactId"] <= 0
+            or type(helper.get("runId")) is not int or helper["runId"] <= 0
+            or type(helper.get("attempt")) is not int or helper["attempt"] <= 0
+            or not re.fullmatch(r"[a-f0-9]{64}", helper.get("archiveSha256", ""))
+            or not re.fullmatch(r"[a-f0-9]{64}", helper.get("payloadSha256", ""))
+            or not isinstance(admission, dict) or admission.get("sourceSha") != sha
+            or admission.get("runId") != helper.get("runId") or admission.get("attempt") != helper.get("attempt")):
+        raise Refusal("release-preflight omitted the verified exact-run host helper artifact digest")
+    return helper
 
 
 def validate_production_paired_admission(sha: str) -> dict:
@@ -305,9 +323,12 @@ def production_static_admission_from_result(sha: str, tag: str, result: dict) ->
             or provenance.get("requiredJobs") != sorted(REQUIRED_TEST_JOBS)
             or provenance.get("runUrl") != f"https://github.com/{CANONICAL_REPOSITORY}/actions/runs/{provenance['runId']}"):
         raise Refusal("release-preflight did not admit the selected stable Release and exact SHA")
+    helper = _verified_preflight_helper_artifact(result, sha)
     provenance["release"] = release
+    provenance["hostHelperArtifact"] = helper
     provenance["releasePreflight"] = {"status": result["status"], "commit": result["commit"],
-                                      "release": release, "historicalRelease": True}
+                                      "release": release, "historicalRelease": True,
+                                      "hostHelperArtifact": helper}
     provenance["historicalRelease"] = True
     return provenance
 
