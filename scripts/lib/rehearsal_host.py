@@ -991,6 +991,81 @@ def _expire_site_restore(config: dict[str, Any], current_name: str, *, cleanup_p
             pass
 
 
+def _static_main_rollback_target(root: Path, current: Path, history: list[dict]) -> Path:
+    """Find and verify the previous static tree for the currently served commit."""
+    current_digest = _tree_sha256(current)
+    release_info = None
+    release_file = current / "release.json"
+    try:
+        release_info_stat = release_file.lstat()
+    except FileNotFoundError:
+        pass
+    except OSError as error:
+        raise HostFailure("current static release metadata is unreadable; cleanup refused") from error
+    else:
+        if not stat.S_ISREG(release_info_stat.st_mode) or release_info_stat.st_nlink != 1:
+            raise HostFailure("current static release metadata is unsafe; cleanup refused")
+        try:
+            release_info = json.loads(release_file.read_text(encoding="utf-8"))
+        except (OSError, ValueError) as error:
+            raise HostFailure("current static release metadata is malformed; cleanup refused") from error
+        if not isinstance(release_info, dict):
+            raise HostFailure("current static release metadata is malformed; cleanup refused")
+
+    starts: dict[str, dict] = {}
+    switches: dict[str, dict] = {}
+    for row in history:
+        if row.get("operationKind") != "static-main":
+            continue
+        operation = row.get("operationId")
+        if not isinstance(operation, str):
+            continue
+        if row.get("record") == "static-main-start":
+            starts[operation] = row
+        elif row.get("record") == "static-main-switch-intent":
+            switches[operation] = row
+
+    matches = []
+    for row in history:
+        if row.get("operationKind") != "static-main" or row.get("record") != "static-main-committed":
+            continue
+        operation = row.get("operationId")
+        start = starts.get(operation) if isinstance(operation, str) else None
+        switch = switches.get(operation) if isinstance(operation, str) else None
+        if not start or not switch or row.get("sourceSha") != start.get("sourceSha"):
+            continue
+        if (switch.get("candidateStaticPath") != str(current)
+                or row.get("staticTreeSha256") != current_digest):
+            continue
+        if (release_info is not None and (release_info.get("commit") != row.get("sourceSha")
+                or release_info.get("operationId") not in (None, operation))):
+            continue
+        matches.append(start)
+
+    if not matches:
+        raise HostFailure("current static release has no matching committed journal identity; cleanup refused")
+    start = matches[-1]
+    raw_target = start.get("oldStaticPath")
+    expected_digest = start.get("oldStaticTreeSha256")
+    if (not isinstance(raw_target, str) or not Path(raw_target).is_absolute()
+            or not isinstance(expected_digest, str) or not re.fullmatch(r"[a-f0-9]{64}", expected_digest)):
+        raise HostFailure("static rollback target identity is malformed; cleanup refused")
+    target = Path(raw_target)
+    if target.parent != root or target == current or target.name in ("", ".", ".."):
+        raise HostFailure("static rollback target is outside its release root; cleanup refused")
+    try:
+        target_info = target.lstat()
+        if not stat.S_ISDIR(target_info.st_mode) or stat.S_ISLNK(target_info.st_mode):
+            raise HostFailure("static rollback target expired or is unsafe; cleanup refused")
+        if _tree_sha256(target) != expected_digest:
+            raise HostFailure("static rollback target expired or changed; cleanup refused")
+    except FileNotFoundError as error:
+        raise HostFailure("static rollback target expired or unavailable; cleanup refused") from error
+    except OSError as error:
+        raise HostFailure("static rollback target cannot be verified; cleanup refused") from error
+    return target
+
+
 def _cleanup_site_releases(config: dict[str, Any], state: RehearsalState,
                            operation_id: Optional[str], *, close_marker: bool = True) -> list[str]:
     try:
@@ -1025,6 +1100,7 @@ def _cleanup_site_releases(config: dict[str, Any], state: RehearsalState,
     current = _current_target(Path(config["currentStatic"])).resolve(strict=True)
     if current.parent != root.resolve(strict=True):
         raise HostFailure("current static release is not a direct child of its configured root")
+    rollback_target = _static_main_rollback_target(root, current, history)
     site_state_path = Path(config["siteRefreshState"])
     try:
         site_state = json.loads(site_state_path.read_text(encoding="utf-8"))
@@ -1063,7 +1139,8 @@ def _cleanup_site_releases(config: dict[str, Any], state: RehearsalState,
             raise HostFailure("release cleanup requires a durable terminal publication record")
         _write_site_publication_marker(config, operation_id, "cleanup-pending")
         marker = _read_site_publication_marker(config)
-    protected = {current}
+    protected = {current, rollback_target}
+    temporary_pointers = []
     for pointer in root.parent.glob(".current-next-*"):
         before = pointer.lstat()
         if not stat.S_ISLNK(before.st_mode):
@@ -1082,12 +1159,7 @@ def _cleanup_site_releases(config: dict[str, Any], state: RehearsalState,
         after = pointer.lstat()
         if (before.st_dev, before.st_ino) != (after.st_dev, after.st_ino):
             raise HostFailure("temporary current pointer changed during cleanup")
-        pointer.unlink()
-        dir_fd = os.open(root.parent, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
-        try:
-            os.fsync(dir_fd)
-        finally:
-            os.close(dir_fd)
+        temporary_pointers.append(pointer)
     for pointer in root.parent.glob(".current.new-*"):
         try:
             if not pointer.is_symlink():
@@ -1107,9 +1179,8 @@ def _cleanup_site_releases(config: dict[str, Any], state: RehearsalState,
             protected.add(workspace)
         elif root.resolve(strict=True) in workspace.parents:
             protected.add(root.resolve(strict=True) / workspace.relative_to(root.resolve(strict=True)).parts[0])
-    _expire_site_restore(config, current.name, cleanup_pending=True)
     mounts = _mount_points()
-    removed = []
+    candidates = []
     for candidate in sorted(root.iterdir()):
         if candidate.name.startswith("."):
             continue
@@ -1130,6 +1201,20 @@ def _cleanup_site_releases(config: dict[str, Any], state: RehearsalState,
                 or not isinstance(release.get("snapshotId"), str)
                 or not release["snapshotId"].startswith("snap:")):
             raise HostFailure("unverified directory in static release root; cleanup refused")
+        candidates.append(candidate)
+
+    # Validate every candidate before the first destructive action. An unknown
+    # legacy tree must not leave a partially pruned release set.
+    _expire_site_restore(config, current.name, cleanup_pending=True)
+    removed = []
+    for pointer in temporary_pointers:
+        pointer.unlink()
+        dir_fd = os.open(root.parent, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+        try:
+            os.fsync(dir_fd)
+        finally:
+            os.close(dir_fd)
+    for candidate in candidates:
         _remove_release_tree(candidate, mounts)
         removed.append(str(candidate))
     if "backupRoot" in config:

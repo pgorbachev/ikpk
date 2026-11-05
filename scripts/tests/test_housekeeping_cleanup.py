@@ -1,5 +1,6 @@
 import json
 import os
+import shutil
 import sqlite3
 import stat
 import tempfile
@@ -22,9 +23,16 @@ class ReleaseCleanupTests(unittest.TestCase):
         self.releases.mkdir()
         self.current = self.releases / ('a' * 40 + '-flow-one')
         self.old = self.releases / ('b' * 40 + '-flow-zero')
-        for path, commit in ((self.current, 'a' * 40), (self.old, 'b' * 40)):
-            path.mkdir()
-            (path / 'release.json').write_text(json.dumps({'commit': commit, 'snapshotId': 'snap:test'}))
+        self.current.mkdir()
+        (self.current / 'index.html').write_text('current release')
+        self.current_static_payload_digest = host._tree_sha256(self.current)
+        (self.current / 'release.json').write_text(json.dumps({'commit': 'a' * 40,
+            'operationId': 'flow-one', 'snapshotId': 'snap:test',
+            'staticTreeSha256': self.current_static_payload_digest}))
+        self.old.mkdir()
+        (self.old / 'index.html').write_text('previous release')
+        (self.old / 'release.json').write_text(json.dumps({'commit': 'b' * 40,
+            'operationId': 'flow-zero', 'snapshotId': 'snap:old'}))
         self.pointer = root / 'current'
         self.pointer.symlink_to(self.current)
         self.next_pointer = root / f'.current-next-{self.old.name}'
@@ -45,7 +53,8 @@ class ReleaseCleanupTests(unittest.TestCase):
                             'oldStaticPath': str(self.old.resolve()), 'candidateStaticPath': str(self.current.resolve()),
                             'staticTreeSha256': current_digest})
         self.state._append({'version': 1, 'record': 'static-main-switched', 'operationKind': 'static-main',
-                            'operationId': 'flow-one', 'sourceSha': 'a' * 40, 'staticTreeSha256': current_digest})
+                            'operationId': 'flow-one', 'sourceSha': 'a' * 40,
+                            'staticTreeSha256': current_digest})
         self.state._append({'version': 1, 'record': 'static-main-committed', 'operationKind': 'static-main',
                             'operationId': 'flow-one', 'sourceSha': 'a' * 40,
                             'staticTreeSha256': current_digest, 'snapshotId': 'snap:test'})
@@ -86,6 +95,9 @@ class ReleaseCleanupTests(unittest.TestCase):
         self.addCleanup(self.mounts.stop)
 
     def test_previous_target_is_closed_before_delete_and_cleanup_retries_after_io_failure(self):
+        stale = self.releases / ('c' * 40 + '-stale')
+        stale.mkdir()
+        (stale / 'release.json').write_text(json.dumps({'commit': 'c' * 40, 'snapshotId': 'snap:stale'}))
         real_remove = host._remove_release_tree
         calls = []
         def fail_first(path, mounts):
@@ -104,13 +116,82 @@ class ReleaseCleanupTests(unittest.TestCase):
         self.assertEqual(json.loads(self.marker.read_text())['phase'], 'cleanup-pending')
 
         removed = host._cleanup_site_releases(self.config, self.state, None)
-        self.assertEqual(removed, [str(self.old.resolve())])
-        self.assertFalse(self.old.exists())
+        self.assertEqual(removed, [str(stale.resolve())])
+        self.assertTrue(self.old.exists(), 'the rollback target survives retry')
+        self.assertFalse(stale.exists())
         self.assertTrue(self.current.exists())
         finished = json.loads(self.cms_state.read_text())
         self.assertFalse(finished['cleanupPending'])
         self.assertIsNone(finished['previousReleaseId'])
         self.assertFalse(self.marker.exists())
+
+    def test_static_main_cleanup_retains_exact_journal_rollback_target(self):
+        stale = self.releases / ('c' * 40 + '-stale')
+        stale.mkdir()
+        (stale / 'release.json').write_text(json.dumps({'commit': 'c' * 40, 'snapshotId': 'snap:stale'}))
+
+        removed = host._cleanup_site_releases(self.config, self.state, 'flow-one')
+
+        self.assertEqual(removed, [str(stale.resolve())])
+        self.assertTrue(self.current.is_dir(), 'the active release must remain')
+        self.assertTrue(self.old.is_dir(), 'the journal-bound previous release must remain rollbackable')
+        self.assertEqual(host._tree_sha256(self.old), self.state._operation_rows('flow-one')[0]['oldStaticTreeSha256'])
+        self.assertFalse(stale.exists(), 'unrelated verified stale releases remain eligible for cleanup')
+
+    def test_journal_identified_legacy_rollback_tree_is_retained_without_manifest(self):
+        (self.old / 'release.json').unlink()
+        rows = self.state.read_journal_for_cleanup()
+        rows[0]['oldStaticTreeSha256'] = host._tree_sha256(self.old)
+        self.state.journal_path.write_text('')
+        for row in rows:
+            self.state._append(row)
+        stale = self.releases / ('c' * 40 + '-stale')
+        stale.mkdir()
+        (stale / 'release.json').write_text(json.dumps({'commit': 'c' * 40, 'snapshotId': 'snap:stale'}))
+
+        removed = host._cleanup_site_releases(self.config, self.state, 'flow-one')
+
+        self.assertEqual(removed, [str(stale.resolve())])
+        self.assertTrue(self.current.is_dir())
+        self.assertTrue(self.old.is_dir(), 'the old path and recorded tree digest identify this legacy rollback target')
+        self.assertFalse((self.old / 'release.json').exists(), 'retention must not fabricate release metadata')
+        self.assertFalse(stale.exists())
+
+    def test_unidentified_legacy_directory_fails_before_any_release_is_removed(self):
+        stale = self.releases / ('c' * 40 + '-stale')
+        stale.mkdir()
+        (stale / 'release.json').write_text(json.dumps({'commit': 'c' * 40, 'snapshotId': 'snap:stale'}))
+        unknown = self.releases / 'legacy-unidentified'
+        unknown.mkdir()
+        (unknown / 'payload.txt').write_text('unidentified data')
+
+        result = host._cleanup_after_commit(self.config, self.state, 'flow-one')
+
+        self.assertTrue(result['cleanupPending'])
+        self.assertRegex(result['cleanupError'], 'unidentified|unverified')
+        self.assertTrue(self.current.is_dir())
+        self.assertTrue(self.old.is_dir())
+        self.assertTrue(stale.is_dir(), 'unknown data must prevent partial cleanup')
+        self.assertTrue(unknown.is_dir())
+        self.assertTrue(self.next_pointer.is_symlink(), 'unknown data must leave temporary pointers untouched')
+        self.assertTrue(self.marker.exists(), 'failed cleanup must leave its durable retry marker')
+        self.assertEqual(json.loads(self.marker.read_text())['phase'], 'cleanup-pending')
+
+    def test_missing_journal_rollback_target_reports_degraded_before_cleanup(self):
+        shutil.rmtree(self.old)
+        stale = self.releases / ('c' * 40 + '-stale')
+        stale.mkdir()
+        (stale / 'release.json').write_text(json.dumps({'commit': 'c' * 40, 'snapshotId': 'snap:stale'}))
+
+        result = host._cleanup_after_commit(self.config, self.state, 'flow-one')
+
+        self.assertTrue(result['cleanupPending'])
+        self.assertIn('rollback target expired or unavailable', result['cleanupError'])
+        self.assertTrue(self.current.is_dir())
+        self.assertTrue(stale.is_dir(), 'unavailable rollback must prevent cleanup from claiming success')
+        self.assertTrue(self.next_pointer.is_symlink())
+        self.assertTrue(self.marker.exists())
+        self.assertEqual(json.loads(self.marker.read_text())['phase'], 'cleanup-pending')
 
     def test_backup_retention_keeps_two_verified_terminal_operations_and_skips_unknown(self):
         backup_root = self.state_dir / 'backups'
@@ -192,6 +273,9 @@ class ReleaseCleanupTests(unittest.TestCase):
         cms_release_root.mkdir()
         stale_cms = cms_release_root / ('c' * 40 + '-cms-old')
         stale_cms.mkdir()
+        stale_site = self.releases / ('c' * 40 + '-stale')
+        stale_site.mkdir()
+        (stale_site / 'release.json').write_text(json.dumps({'commit': 'c' * 40, 'snapshotId': 'snap:stale'}))
         backup_root = self.state_dir / 'backups'
         backup_root.mkdir()
         database = self.state_dir / 'cms.sqlite'
@@ -203,7 +287,8 @@ class ReleaseCleanupTests(unittest.TestCase):
                           side_effect=[host.HostFailure('simulated backup inspection failure'), ([], None)]):
             with self.assertRaisesRegex(host.HostFailure, 'simulated backup inspection failure'):
                 host._cleanup_site_releases(self.config, self.state, 'flow-one')
-            self.assertFalse(self.old.exists())
+            self.assertTrue(self.old.exists(), 'the rollback target survives a later backup-stage failure')
+            self.assertFalse(stale_site.exists(), 'the verified site cleanup stage completed before backup failure')
             self.assertTrue(self.current.exists())
             self.assertTrue(stale_cms.exists())
             self.assertTrue(self.marker.exists())
@@ -252,13 +337,11 @@ class ReleaseCleanupTests(unittest.TestCase):
         with patch.object(host.os, "geteuid", return_value=0), \
              patch.object(host, "_root_config", return_value=config), \
              patch.object(host, "_destination_publication_lock", return_value=nullcontext()), \
-             patch.object(host, "_reserve_site_refresh_lock") as reserve, \
              patch.object(host, "_remove_release_tree") as remove:
             with self.assertRaisesRegex(host.HostFailure, "incomplete tail"):
                 host.dispatch(Namespace(profile="staging194", action="static-main", operation_id="flow-one"))
         self.assertEqual(self.state.journal_path.read_bytes(), raw)
         self.assertTrue(self.old.exists())
-        reserve.assert_not_called()
         remove.assert_not_called()
 
     def test_cleanup_rejects_rollback_intent_without_valid_operation_identity(self):
