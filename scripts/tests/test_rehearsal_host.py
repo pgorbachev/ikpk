@@ -991,7 +991,7 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
                  patch.object(rehearsal_host.os, "chown"), patch.object(rehearsal_host.os, "chmod"), \
                  patch.object(rehearsal_host, "_run_as_cms", side_effect=run_as_cms):
                 rehearsal_host._prepare_cms_candidate(
-                    {"cmsUser": "ikpk-cms"}, source, "op", {"sourceSha": "a" * 40})
+                    {"cmsUser": "ikpk-cms", "profile": "initial-prod"}, source, "op", {"sourceSha": "a" * 40})
 
             self.assertEqual(len(calls), 2)
             self.assertEqual(calls[0][1], ["/usr/bin/npm", "ci", "--no-audit", "--no-fund"])
@@ -1047,12 +1047,13 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
                  patch.object(rehearsal_host, "_run_as_cms", side_effect=run_as_cms), \
                  patch.object(rehearsal_host, "_start_acquisition") as start, \
                  patch.object(rehearsal_host, "_backup") as backup:
-                with self.assertRaises(rehearsal_host.HostFailure):
+                with self.assertRaises(rehearsal_host.HostFailure) as refused:
                     rehearsal_host._cms_update(config, state, args)
 
             self.assertFalse(any("build-cms-artifact.sh" in " ".join(argv)
                                  for _cwd, argv, _kwargs in commands),
                              "the destination must refuse a source archive missing its CI CMS tar, not build it")
+            self.assertRegex(str(refused.exception), r"CI CMS artifact.*missing")
             start.assert_not_called()
             backup.assert_not_called()
 
