@@ -1217,6 +1217,7 @@ class CmsCandidateArtifactTests(unittest.TestCase):
             "workflow_run": {"id": 123, "head_sha": SHA, "head_branch": "main"}}
         for label, artifacts in (
             ("missing", []),
+            ("PR diagnostic is not a deploy candidate", [{**base, "name": "cms-candidate-pr-123-2"}]),
             ("expired", [{**base, "expired": True}]),
             ("wrong run", [{**base, "workflow_run": {**base["workflow_run"], "id": 999}}]),
             ("wrong sha", [{**base, "workflow_run": {**base["workflow_run"], "head_sha": "c" * 40}}]),
