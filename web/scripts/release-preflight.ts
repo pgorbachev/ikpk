@@ -60,18 +60,12 @@ export async function ensureReleaseHelperAsset(tag: string, commit: string, payl
       const body = await response.json() as unknown;
       if (!Array.isArray(body)) fail('asset-list');
       result.push(...body as Array<{ id?: unknown; name?: unknown; digest?: unknown; state?: unknown }>);
-      const next = response.headers.get('link')?.match(/<([^>]+)>;\s*rel="next"/)?.[1];
-      if (!next) {
-        if (body.length === 100) fail('asset-page-incomplete');
-        url = undefined;
-        continue;
-      }
-      const parsed = new URL(next);
-      if (parsed.origin !== new URL(initial).origin || parsed.pathname !== new URL(initial).pathname ||
-          parsed.searchParams.get('per_page') !== '100' || parsed.searchParams.get('page') !== String(page + 1) ||
-          [...parsed.searchParams.keys()].some((key) => !['per_page', 'page'].includes(key))) fail('asset-pagination');
+      const next = response.headers.get('link')?.match(/<[^>]+>;\s*rel="next"/);
+      if (!next) { url = undefined; continue; }
       page++;
-      url = next;
+      const nextPage = new URL(initial);
+      nextPage.searchParams.set('page', String(page));
+      url = nextPage.href;
     }
     return result;
   };

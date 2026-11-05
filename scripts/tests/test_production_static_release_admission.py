@@ -194,7 +194,7 @@ class ProductionStaticReleaseAdmissionTests(unittest.TestCase):
             "hostHelperArtifact": {"artifactId": 808, "runId": run_id, "attempt": 2,
                 "archiveSha256": "b" * 64, "payloadSha256": "c" * 64}}
         with patch.object(staging193, "capture", return_value=""):
-            with self.assertRaisesRegex(staging193.Refusal, "selected stable Release"):
+            with self.assertRaisesRegex(staging193.Refusal, "verified exact-run host helper artifact"):
                 staging193.production_static_admission_from_result(SOURCE_SHA, RELEASE_TAG, result)
 
 

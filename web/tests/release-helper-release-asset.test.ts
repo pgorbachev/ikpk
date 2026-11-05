@@ -22,7 +22,7 @@ async function operation(): Promise<Ensure> {
 }
 
 function githubFixture(options: { commit?: string; assets?: Array<Record<string, unknown>>;
-  assetPages?: Array<Array<Record<string, unknown>>> } = {}) {
+  assetPages?: Array<Array<Record<string, unknown>>>; foreignNext?: boolean } = {}) {
   const calls: Call[] = [];
   let assets = options.assets ?? [];
   const fetch: typeof globalThis.fetch = async (request, init) => {
@@ -38,7 +38,7 @@ function githubFixture(options: { commit?: string; assets?: Array<Record<string,
       const page = Number(new URL(url).searchParams.get('page') ?? '1');
       const selected = options.assetPages?.[page - 1] ?? assets;
       const link = options.assetPages && page < options.assetPages.length
-        ? { headers: { link: `<${API}/releases/123/assets?per_page=100&page=${page + 1}>; rel="next"` } } : {};
+        ? { headers: { link: `<${options.foreignNext ? 'https://evil.example/steal' : `${API}/releases/123/assets?per_page=100&page=${page + 1}`}>; rel="next"` } } : {};
       return new Response(JSON.stringify(selected), { status: 200, ...link });
     }
     if (url.startsWith('https://uploads.github.com/') && method === 'POST') {
@@ -73,9 +73,10 @@ describe('production Release host-helper asset', () => {
   it('reads complete paginated GitHub asset lists and detects a duplicate on a later page', async () => {
     const filler = Array.from({ length: 100 }, (_, index) => ({ id: index + 1, name: `other-${index}`, digest: null, state: 'uploaded' }));
     const existing = { id: 456, name: 'host-helper.tar.gz', digest: `sha256:${DIGEST}`, state: 'uploaded' };
-    const okay = githubFixture({ assetPages: [filler, [existing]] });
+    const okay = githubFixture({ assetPages: [filler, [existing]], foreignNext: true });
     await (await operation())(TAG, SHA, PAYLOAD, DIGEST, TOKEN, okay.fetch);
     expect(okay.calls.some((call) => call.url.endsWith('/assets?per_page=100&page=2'))).toBe(true);
+    expect(okay.calls.every((call) => new URL(call.url).hostname === 'api.github.com' || new URL(call.url).hostname === 'uploads.github.com')).toBe(true);
     const duplicate = githubFixture({ assetPages: [filler, [existing, { ...existing, id: 457 }]] });
     await expect((await operation())(TAG, SHA, PAYLOAD, DIGEST, TOKEN, duplicate.fetch)).rejects.toThrow();
     expect(duplicate.calls.some((call) => call.method === 'POST')).toBe(false);

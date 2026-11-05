@@ -88,7 +88,10 @@ class HostHelperArtifactBuildTests(unittest.TestCase):
             )
             with tarfile.open(output, "r:gz") as archive:
                 members = archive.getmembers()
-                self.assertEqual({item.name for item in members}, EXPECTED_FILES)
+                files = {item.name for item in members if item.isfile()}
+                directories = {item.name for item in members if item.isdir()}
+                self.assertEqual(files, EXPECTED_FILES)
+                self.assertEqual(directories, {"scripts", "scripts/lib"})
                 for item in members:
                     self.assertTrue(item.isfile(), item.name)
                     self.assertEqual(archive.extractfile(item).read(), (REPO_ROOT / item.name).read_bytes(), item.name)
@@ -114,7 +117,8 @@ class HostHelperArtifactBuildTests(unittest.TestCase):
             )
             with tarfile.open(output, "r:gz") as archive:
                 names = {item.name for item in archive.getmembers()}
-                joined = b"\n".join(archive.extractfile(name).read() for name in sorted(names))
+                joined = b"\n".join(archive.extractfile(name).read() for name in sorted(names)
+                                       if archive.getmember(name).isfile())
             self.assertFalse(any(".env" in name or "credential" in name.lower() for name in names))
             self.assertNotIn(b"BEGIN OPENSSH PRIVATE KEY", joined)
             self.assertNotIn(b"ghp_", joined)

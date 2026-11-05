@@ -437,9 +437,13 @@ def fetch_host_helper_artifact(provenance: dict, sha: str) -> bytes:
                 path = PurePosixPath(member.name)
                 if (not member.name or path.is_absolute()
                         or any(part in ("", ".", "..") for part in raw_parts)
-                        or not member.isfile()):
+                        or (member.isdir() and member.name not in {"scripts", "scripts/lib"})
+                        or (not member.isdir() and not member.isfile())):
                     raise Refusal(f"host helper payload contains an unsafe member: {member.name!r}")
-            if len(names) != len(set(names)) or set(names) != HOST_HELPER_ARTIFACT_FILES:
+            file_names = {member.name for member in members if member.isfile()}
+            directories = {member.name for member in members if member.isdir()}
+            if (len(names) != len(set(names)) or file_names != HOST_HELPER_ARTIFACT_FILES
+                    or directories != {"scripts", "scripts/lib"}):
                 raise Refusal("host helper payload does not contain exactly the expected files")
     except Refusal:
         provenance.pop("hostHelperArtifact", None)
