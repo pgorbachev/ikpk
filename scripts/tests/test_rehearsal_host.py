@@ -2360,6 +2360,83 @@ class StaticMainAdmissionTests(unittest.TestCase):
         self.assertEqual(result, 0)
         self.assertEqual(dispatch.call_args.args[0].reuse_capture_operation_id, "sealed-capture")
 
+    def test_static_main_expected_installed_cms_sha_is_checked_under_locks_before_start(self):
+        from contextlib import contextmanager
+
+        expected_cms_sha, installed_cms_sha, source_sha = "b" * 40, "c" * 40, "a" * 40
+        provenance = {"sourceSha": source_sha, "ref": "refs/heads/main"}
+        archive = b"candidate source archive"
+
+        with tempfile.TemporaryDirectory(prefix="ikpk-static-main-cms-binding-") as temporary:
+            root = Path(temporary)
+            state_dir = root / "state"
+            state_dir.mkdir()
+            config = {"profile": "staging194", "stateDir": str(state_dir), "cmsUser": "cms",
+                "publicationLock": str(rehearsal_host.PRODUCTION_PUBLICATION_LOCK),
+                "sitePublicationMarker": str(rehearsal_host.SITE_PUBLICATION_MARKER_DIR /
+                    rehearsal_host.SITE_PUBLICATION_MARKER),
+                "siteRefreshState": str(root / "refresh-state.json")}
+            args = Namespace(profile="staging194", action="static-main", operation_id="cms-binding",
+                source_sha=source_sha, provenance_b64=base64.b64encode(json.dumps(provenance).encode()).decode(),
+                archive_sha256=hashlib.sha256(archive).hexdigest(), browser_digest=None,
+                reuse_capture_operation_id=None, expected_installed_cms_sha=expected_cms_sha)
+
+            for installed, should_refuse in ((installed_cms_sha, True), (expected_cms_sha, False)):
+                with self.subTest(installed=installed), tempfile.TemporaryDirectory(
+                        prefix="ikpk-static-main-cms-binding-case-") as case_dir:
+                    case_root = Path(case_dir)
+                    case_state = case_root / "state"
+                    case_state.mkdir()
+                    case_config = {**config, "stateDir": str(case_state)}
+                    lock_state = {"held": False}
+
+                    @contextmanager
+                    def destination_lock(*_args, **_kwargs):
+                        lock_state["held"] = True
+                        try:
+                            yield
+                        finally:
+                            lock_state["held"] = False
+
+                    def installed_sha_under_lock(_config, _state):
+                        self.assertTrue(lock_state["held"], "CMS binding must be inspected under destination lock")
+                        return installed
+
+                    source_root = case_root / "source"
+                    with patch.object(rehearsal_host.os, "geteuid", return_value=0), \
+                         patch.object(rehearsal_host, "_root_config", return_value=case_config), \
+                         patch.object(rehearsal_host, "_configure_profile_temp"), \
+                         patch.object(rehearsal_host, "_destination_publication_lock", side_effect=destination_lock), \
+                         patch.object(rehearsal_host, "_assert_site_refresh_idle"), \
+                         patch.object(rehearsal_host, "_assert_site_publication_admission"), \
+                         patch.object(rehearsal_host, "_read_site_publication_marker", return_value=None), \
+                         patch.object(rehearsal_host, "_write_site_publication_marker") as write_marker, \
+                         patch.object(rehearsal_host, "_staging194_current_cms_source_sha",
+                                      side_effect=installed_sha_under_lock) as inspect_cms, \
+                         patch.object(rehearsal_host, "_validate_static_main_admission"), \
+                         patch.object(rehearsal_host, "_extract_source_archive", return_value=source_root), \
+                         patch.object(rehearsal_host, "_static_main_prepare",
+                                      return_value={"phase": "browser-check-required"}) as prepare, \
+                         patch.object(rehearsal_host.sys, "stdin", io.TextIOWrapper(io.BytesIO(archive))):
+                        if should_refuse:
+                            with self.assertRaisesRegex(rehearsal_host.HostFailure, "CMS|installed|revision"):
+                                rehearsal_host.dispatch(args)
+                        else:
+                            result = rehearsal_host.dispatch(args)
+                            self.assertEqual(result["phase"], "browser-check-required")
+
+                    inspect_cms.assert_called_once()
+                    self.assertFalse(lock_state["held"])
+                    if should_refuse:
+                        write_marker.assert_not_called()
+                        prepare.assert_not_called()
+                        state = RehearsalState(case_state)
+                        self.assertEqual(state.read_journal_for_cleanup(), [])
+                        self.assertFalse(state.marker_path.exists())
+                    else:
+                        write_marker.assert_called_once()
+                        prepare.assert_called_once()
+
     def test_static_main_missing_reuse_operation_refuses_without_fresh_capture(self):
         import types
         import io

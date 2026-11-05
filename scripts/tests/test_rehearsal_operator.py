@@ -915,6 +915,42 @@ class OperatorAdmissionTests(unittest.TestCase):
         browser.assert_called_once_with(SHA, "main-static", "c" * 64, b"candidate bytes", "staging194", provenance,
             chat_loader_src=staging193.STAGING194_CHAT_LOADER_SRC)
 
+    def test_static_main_forwards_expected_installed_cms_sha_to_host(self):
+        provenance = {"sourceSha": SHA, "runId": 123, "attempt": 1}
+        responses = [json.dumps({"phase": "browser-check-required", "staticTreeSha256": "c" * 64}).encode(),
+                     b"candidate bytes", json.dumps({"phase": "committed"}).encode()]
+        calls = []
+
+        def ssh(arguments, input_bytes=None, **_kwargs):
+            calls.append((arguments, input_bytes))
+            return responses.pop(0)
+
+        args = type("Args", (), {"profile": "staging194", "host": staging193.TARGET_HOST,
+            "command": "static-main", "operation_id": "cms-binding", "source_sha": SHA,
+            "release_tag": None, "reuse_capture_operation_id": None,
+            "expected_installed_cms_sha": "b" * 40})()
+        with patch.object(staging193, "_check_local_space", return_value=[]), \
+             patch.object(staging193, "_check_target_space", return_value={"filesystems": []}), \
+             patch.object(staging193, "validate_static_main_ci", return_value=provenance), \
+             patch.object(staging193, "make_archive", return_value=(b"archive", "a" * 64)), \
+             patch.object(staging193, "ssh_remote", side_effect=ssh), \
+             patch.object(staging193, "browser_check"):
+            staging193.invoke(args)
+
+        operation_calls = [call[0] for call in calls]
+        self.assertEqual([call[0] for call in operation_calls], ["static-main", "export-static-main", "static-main"])
+        for call in (operation_calls[0], operation_calls[2]):
+            self.assertIn("--expected-installed-cms-sha", call)
+            self.assertEqual(call[call.index("--expected-installed-cms-sha") + 1], "b" * 40)
+
+    def test_static_main_cli_accepts_expected_installed_cms_sha(self):
+        observed = []
+        with patch.object(staging193, "invoke", side_effect=lambda args: observed.append(args)):
+            result = staging193.main(["--profile", "staging194", "static-main", "--operation-id",
+                "cms-binding-cli", "--source-sha", SHA, "--expected-installed-cms-sha", "b" * 40])
+        self.assertEqual(result, 0)
+        self.assertEqual(observed[0].expected_installed_cms_sha, "b" * 40)
+
     def test_static_main_refuses_changed_main_proof_before_remote_activation(self):
         admitted = {"sourceSha": SHA, "runId": 123, "attempt": 2}
         changed = {"sourceSha": SHA, "runId": 124, "attempt": 1}
