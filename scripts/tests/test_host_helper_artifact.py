@@ -38,6 +38,11 @@ def make_tar(files=None):
     files = files or {name: (REPO_ROOT / name).read_bytes() for name in EXPECTED_FILES}
     output = io.BytesIO()
     with tarfile.open(fileobj=output, mode="w:gz") as archive:
+        for name in ("scripts", "scripts/lib"):
+            directory = tarfile.TarInfo(name)
+            directory.type = tarfile.DIRTYPE
+            directory.mode = 0o755
+            archive.addfile(directory)
         for name, contents in sorted(files.items()):
             member = tarfile.TarInfo(name)
             member.size = len(contents)
@@ -93,8 +98,8 @@ class HostHelperArtifactBuildTests(unittest.TestCase):
                 self.assertEqual(files, EXPECTED_FILES)
                 self.assertEqual(directories, {"scripts", "scripts/lib"})
                 for item in members:
-                    self.assertTrue(item.isfile(), item.name)
-                    self.assertEqual(archive.extractfile(item).read(), (REPO_ROOT / item.name).read_bytes(), item.name)
+                    if item.isfile():
+                        self.assertEqual(archive.extractfile(item).read(), (REPO_ROOT / item.name).read_bytes(), item.name)
 
     def test_rebuilding_the_same_commit_produces_identical_payload_bytes(self):
         with tempfile.TemporaryDirectory(prefix="ikpk-host-helper-repeat-") as temporary:
