@@ -1029,6 +1029,12 @@ def invoke(args: argparse.Namespace, *, admission: Optional[dict] = None) -> Opt
         raise Refusal("static-main commands are bound to the staging194 profile or authorized production-static profile")
     if getattr(args, "release_tag", None) is not None and (profile != "production-static" or args.command != "static-main"):
         raise Refusal("--release-tag is restricted to production-static static-main")
+    expected_installed_cms_sha = getattr(args, "expected_installed_cms_sha", None)
+    if expected_installed_cms_sha is not None:
+        if profile != "staging194" or args.command != "static-main":
+            raise Refusal("--expected-installed-cms-sha is restricted to staging194 static-main")
+        if not isinstance(expected_installed_cms_sha, str) or not SHA.fullmatch(expected_installed_cms_sha):
+            raise Refusal("--expected-installed-cms-sha must be a full lowercase commit ID")
     if args.host is not None and args.host != target_host:
         raise Refusal(f"this command is bound to the authorized {profile} host")
     if profile == "initial-prod" and (args.operation_id != INITIAL_PROD_OPERATION_ID or args.command == "recover"):
@@ -1181,6 +1187,8 @@ def invoke(args: argparse.Namespace, *, admission: Optional[dict] = None) -> Opt
             separators=(",", ":")).encode()).decode("ascii")
         common = ["static-main", "--operation-id", args.operation_id, "--source-sha", args.source_sha,
                   "--provenance-b64", provenance_b64]
+        if expected_installed_cms_sha is not None:
+            common.extend(["--expected-installed-cms-sha", expected_installed_cms_sha])
         reuse_capture_operation_id = getattr(args, "reuse_capture_operation_id", None)
         if reuse_capture_operation_id is not None:
             common.extend(["--reuse-capture-operation-id", reuse_capture_operation_id])
@@ -1307,6 +1315,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         if action == "static-main":
             command.add_argument("--reuse-capture-operation-id")
             command.add_argument("--release-tag")
+            command.add_argument("--expected-installed-cms-sha")
         if action == "space-preflight":
             command.add_argument("--for", dest="preflight_for", required=True,
                                  choices=("cms-update", "static-main"))

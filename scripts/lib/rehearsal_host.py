@@ -4569,6 +4569,12 @@ def dispatch(args: argparse.Namespace) -> dict[str, Any]:
     if args.action != "cleanup-site":
         RehearsalState._validate_identity(args.operation_id, getattr(args, "source_sha", None))
     profile = getattr(args, "profile", "staging194")
+    expected_installed_cms_sha = getattr(args, "expected_installed_cms_sha", None)
+    if expected_installed_cms_sha is not None:
+        if profile != "staging194" or args.action != "static-main":
+            raise HostFailure("expected installed CMS SHA is supported only for staging194 static-main")
+        if not isinstance(expected_installed_cms_sha, str) or not SHA_RE.fullmatch(expected_installed_cms_sha):
+            raise HostFailure("expected installed CMS SHA must be a full lowercase commit ID")
     config_path = (INITIAL_PROD_CONFIG_PATH if profile == "initial-prod" else
                    PRODUCTION_STATIC_CONFIG_PATH if profile == "production-static" else
                    PRODUCTION_PAIRED_CONFIG_PATH if profile == "production-paired" else CONFIG_PATH)
@@ -4604,6 +4610,10 @@ def dispatch(args: argparse.Namespace) -> dict[str, Any]:
             history = state.read_journal_for_cleanup()
         except RehearsalRefusal as error:
             raise HostFailure(str(error)) from error
+        if args.action == "static-main" and expected_installed_cms_sha is not None:
+            installed_cms_sha = _staging194_current_cms_source_sha(config, state)
+            if installed_cms_sha != expected_installed_cms_sha:
+                raise HostFailure("installed CMS source SHA is unknown or differs from the expected revision")
         unfinished = RehearsalState._unfinished_operation_ids(history)
         marker = _read_site_publication_marker(config)
         recovery_actions = ("recover", "restore", "finalize-recover", "static-main-recover")
@@ -4794,6 +4804,7 @@ def main(argv: Optional[list[str]] = None) -> int:
                 command.add_argument("--browser-digest")
             if name == "static-main":
                 command.add_argument("--reuse-capture-operation-id")
+                command.add_argument("--expected-installed-cms-sha")
         else:
             command.add_argument("--browser-digest")
     for name in ("export-backup", "export-static", "export-static-main", "recover", "restore",
