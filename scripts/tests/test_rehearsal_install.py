@@ -144,10 +144,12 @@ class InstalledEntrypointTests(unittest.TestCase):
         self.assertIn("INSTALL_DISABLED=0", installer)
         self.assertIn("--install-disabled) INSTALL_DISABLED=1; shift ;;", installer)
         self.assertIn("[--install-disabled]", installer)
-        start = installer.index("  systemctl daemon-reload")
+        start = installer.index("  # Older versions enabled a level-triggered PathExists unit.")
         end = installer.index("\nfi\necho \"installed rehearsal host entrypoint", start)
         activation = "\n".join(line[2:] for line in installer[start:end].splitlines())
-        self.assertLess(installer.index('mv -f -- "$path_tmp" "$systemd_dir/ikpk-site-housekeeping.path"'), start)
+        self.assertNotIn("PathExists=", installer)
+        self.assertIn('systemctl disable --now ikpk-site-housekeeping.path', installer)
+        self.assertIn('rm -f -- "$systemd_dir/ikpk-site-housekeeping.path"', installer)
         self.assertIn("OnUnitActiveSec=10min", installer)
         self.assertNotIn("enable --now ikpk-site-housekeeping.path", activation)
 
@@ -155,7 +157,8 @@ class InstalledEntrypointTests(unittest.TestCase):
             root = Path(temporary)
             stub = root / "systemctl"
             stub.write_text(
-                "#!/usr/bin/env bash\nprintf '%s\\n' \"$*\" >> \"$SYSTEMCTL_CALLS\"\n",
+                "#!/usr/bin/env bash\nprintf '%s\\n' \"$*\" >> \"$SYSTEMCTL_CALLS\"\n"
+                "[[ \"${SYSTEMCTL_FAIL:-}\" != \"$*\" ]] || exit 42\n",
                 encoding="utf-8",
             )
             stub.chmod(0o755)
@@ -165,7 +168,7 @@ class InstalledEntrypointTests(unittest.TestCase):
             ):
                 calls = root / f"calls-{disabled}"
                 run = subprocess.run(
-                    ["bash", "-c", f"INSTALL_DISABLED={disabled}\n{activation}"],
+                    ["bash", "-c", f"set -e\nINSTALL_DISABLED={disabled}\nsystemd_dir={root}\n{activation}"],
                     env={**os.environ, "PATH": str(root) + os.pathsep + os.environ["PATH"],
                          "SYSTEMCTL_CALLS": str(calls)},
                     text=True,
@@ -174,6 +177,33 @@ class InstalledEntrypointTests(unittest.TestCase):
                 )
                 self.assertEqual(run.returncode, 0, run.stderr)
                 self.assertEqual(calls.read_text(encoding="utf-8").splitlines(), expected)
+
+            old_path = root / "ikpk-site-housekeeping.path"
+            old_path.write_text("legacy PathExists unit", encoding="utf-8")
+            calls = root / "calls-old-path"
+            run = subprocess.run(
+                ["bash", "-c", f"set -e\nsystemd_dir={root}\n{activation}"],
+                env={**os.environ, "PATH": str(root) + os.pathsep + os.environ["PATH"],
+                     "SYSTEMCTL_CALLS": str(calls)},
+                text=True, capture_output=True, check=False,
+            )
+            self.assertEqual(run.returncode, 0, run.stderr)
+            self.assertEqual(calls.read_text(encoding="utf-8").splitlines(),
+                             ["disable --now ikpk-site-housekeeping.path", "daemon-reload",
+                              "enable --now ikpk-site-housekeeping.timer"])
+            self.assertFalse(old_path.exists())
+
+            calls = root / "calls-disable-failure"
+            old_path.write_text("legacy PathExists unit", encoding="utf-8")
+            run = subprocess.run(
+                ["bash", "-c", f"set -e\nsystemd_dir={root}\n{activation}"],
+                env={**os.environ, "PATH": str(root) + os.pathsep + os.environ["PATH"],
+                     "SYSTEMCTL_CALLS": str(calls),
+                     "SYSTEMCTL_FAIL": "disable --now ikpk-site-housekeeping.path"},
+                text=True, capture_output=True, check=False,
+            )
+            self.assertEqual(run.returncode, 42, run.stderr)
+            self.assertTrue(old_path.exists(), "failed disable must not remove the old unit file")
 
     def test_staging193_config_uses_staging194_helper_validation_profile(self):
         installer = (ROOT / "scripts/install-rehearsal-host.sh").read_text(encoding="utf-8")

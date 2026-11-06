@@ -4832,7 +4832,7 @@ def dispatch(args: argparse.Namespace) -> dict[str, Any]:
     if args.action != "status" and args.action not in DESTINATION_LOCKED_ACTIONS:
         raise HostFailure("host action has no destination lock policy")
     destination_lock = (nullcontext() if args.action == "status" else
-        _destination_publication_lock(config, wait=args.action == "cleanup-site", prelocked_fd=prelocked_fd))
+        _destination_publication_lock(config, prelocked_fd=prelocked_fd))
     with destination_lock, state.lock():
         if profile == "staging194" and args.action == "cms-update":
             try:

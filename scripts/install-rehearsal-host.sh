@@ -119,7 +119,7 @@ locked_actions = {
     "recover", "restore", "finalize-recover", "cleanup-site",
     "export-backup", "export-static", "export-static-main",
 }
-lock_mode = fcntl.LOCK_EX if action == "cleanup-site" else fcntl.LOCK_EX | fcntl.LOCK_NB
+lock_mode = fcntl.LOCK_EX | fcntl.LOCK_NB
 if profile == "staging194" and action in locked_actions:
     lock_path = "/var/www/ikpk/.publication.lock"
     fd = None
@@ -308,7 +308,6 @@ with open(sys.argv[1], encoding="utf-8") as source:
     print(os.path.dirname(json.load(source)["siteRefreshState"]))
 PY
 )
-  site_cleanup_request="$site_state_dir/cleanup.request"
   cleanup_profile_state_dirs=
   cleanup_profile_artifact_roots=
   if [[ "$service_profile" == production-static || "$service_profile" == production-paired || \
@@ -324,7 +323,6 @@ PY
   systemd_dir=/etc/systemd/system
   unit_tmp="$systemd_dir/ikpk-site-housekeeping.service.new.$$"
   timer_tmp="$systemd_dir/ikpk-site-housekeeping.timer.new.$$"
-  path_tmp="$systemd_dir/ikpk-site-housekeeping.path.new.$$"
   cat >"$unit_tmp" <<EOF
 [Unit]
 Description=Clean expired IKPK static site releases
@@ -365,22 +363,15 @@ WantedBy=timers.target
 EOF
   chmod 0644 "$timer_tmp"
   mv -f -- "$timer_tmp" "$systemd_dir/ikpk-site-housekeeping.timer"
-  cat >"$path_tmp" <<EOF
-[Unit]
-Description=Start IKPK release housekeeping after CMS publication success
-
-[Path]
-PathExists=$site_cleanup_request
-Unit=ikpk-site-housekeeping.service
-
-[Install]
-WantedBy=multi-user.target
-EOF
-  chmod 0644 "$path_tmp"
-  mv -f -- "$path_tmp" "$systemd_dir/ikpk-site-housekeeping.path"
+  # Older versions enabled a level-triggered PathExists unit. Stop and disable
+  # it before removing the unit file so a pending request cannot hot-loop.
+  if [[ -e "$systemd_dir/ikpk-site-housekeeping.path" ]]; then
+    systemctl disable --now ikpk-site-housekeeping.path
+    rm -f -- "$systemd_dir/ikpk-site-housekeeping.path"
+  fi
   systemctl daemon-reload
   if (( ! INSTALL_DISABLED )); then
-    systemctl enable --now ikpk-site-housekeeping.path ikpk-site-housekeeping.timer
+    systemctl enable --now ikpk-site-housekeeping.timer
   fi
 fi
 echo "installed rehearsal host entrypoint: $SBIN/ikpk-rehearsal"
