@@ -408,6 +408,116 @@ class OperatorAdmissionTests(unittest.TestCase):
                                              cms_artifact=b"cms tar payload")
         self._assert_capacity_helpers_not_called(local_space, target_space)
 
+    def test_staging194_paired_cms_update_installs_exact_ci_helper_before_host_admission(self):
+        """The first paired CMS command must not fence a host running stale helper code."""
+        order = []
+        admission = {"sourceSha": SHA, "runId": 123, "attempt": 2,
+                     "workflow": "Tests", "conclusion": "success"}
+        helper = {"artifactId": 987, "runId": 123, "attempt": 2,
+                  "archiveSha256": "b" * 64, "payloadSha256": "c" * 64}
+        args = SimpleNamespace(profile="staging194", host=staging193.TARGET_HOST,
+            command="cms-update", operation_id="staging194-helper-paired", source_sha=SHA,
+            backup_dir=None, release_tag=None)
+
+        def fetch_helper(provenance, source_sha):
+            order.append("fetch-helper")
+            self.assertEqual(source_sha, SHA)
+            self.assertEqual((provenance["sourceSha"], provenance["runId"], provenance["attempt"]),
+                             (SHA, 123, 2))
+            provenance["hostHelperArtifact"] = dict(helper)
+            return b"verified helper"
+
+        def fetch_cms(provenance, source_sha):
+            order.append("fetch-cms")
+            provenance["cmsArtifact"] = {"artifactId": 88, "runId": 123, "attempt": 2,
+                "archiveSha256": "d" * 64, "payloadSha256": "e" * 64}
+            return b"verified cms"
+
+        def ssh(arguments, **_kwargs):
+            order.append(arguments[0])
+            return json.dumps({"phase": "cms-activated"}).encode()
+
+        archived = []
+        def archive(source_sha, provenance, *, cms_artifact):
+            archived.append(dict(provenance))
+            return b"source archive", "a" * 64
+
+        with patch.object(staging193, "_check_target_space", side_effect=lambda *_a, **_k:
+                          order.append("target-preflight") or {"filesystems": []}), \
+             patch.object(staging193, "_check_local_space", side_effect=lambda *_a, **_k:
+                          order.append("local-preflight") or []), \
+             patch.object(staging193, "validate_sha_and_ci", side_effect=lambda *_a:
+                          order.append("admission") or dict(admission)), \
+             patch.object(staging193, "fetch_cms_candidate_artifact", side_effect=fetch_cms), \
+             patch.object(staging193, "fetch_host_helper_artifact", side_effect=fetch_helper), \
+             patch.object(staging193, "install_staging194_host_helper", side_effect=lambda *_a:
+                          order.append("install-helper"), create=True) as install, \
+             patch.object(staging193, "make_archive", side_effect=archive), \
+             patch.object(staging193, "ssh_remote", side_effect=ssh):
+            staging193.invoke(args)
+
+        self.assertEqual(order, ["target-preflight", "local-preflight", "admission", "fetch-cms",
+                                 "fetch-helper", "install-helper", "cms-update"])
+        install.assert_called_once_with(b"verified helper", helper["payloadSha256"])
+        self.assertEqual(archived[0]["hostHelperArtifact"], helper)
+        self.assertEqual(archived[0]["runId"], helper["runId"])
+        self.assertEqual(archived[0]["attempt"], helper["attempt"])
+
+    def test_staging194_paired_helper_rejection_stops_before_install_or_host_fence(self):
+        args = SimpleNamespace(profile="staging194", host=staging193.TARGET_HOST,
+            command="cms-update", operation_id="staging194-helper-rejected", source_sha=SHA,
+            backup_dir=None, release_tag=None)
+        with patch.object(staging193, "_check_target_space", return_value={"filesystems": []}), \
+             patch.object(staging193, "_check_local_space", return_value=[]), \
+             patch.object(staging193, "validate_sha_and_ci",
+                          return_value={"sourceSha": SHA, "runId": 123, "attempt": 2}), \
+             patch.object(staging193, "fetch_cms_candidate_artifact", return_value=b"cms"), \
+             patch.object(staging193, "fetch_host_helper_artifact",
+                          side_effect=staging193.Refusal("host helper artifact is not bound to exact successful CI")), \
+             patch.object(staging193, "make_archive", return_value=(b"source archive", "a" * 64)), \
+             patch.object(staging193, "install_staging194_host_helper", create=True) as install, \
+             patch.object(staging193, "ssh_remote", return_value=json.dumps({"phase": "cms-activated"}).encode()) as remote:
+            with self.assertRaisesRegex(staging193.Refusal, "not bound to exact successful CI"):
+                staging193.invoke(args)
+        install.assert_not_called()
+        remote.assert_not_called()
+
+    def test_staging194_paired_helper_install_failure_stops_before_host_fence(self):
+        args = SimpleNamespace(profile="staging194", host=staging193.TARGET_HOST,
+            command="cms-update", operation_id="staging194-helper-install-failure", source_sha=SHA,
+            backup_dir=None, release_tag=None)
+        provenance = {"sourceSha": SHA, "runId": 123, "attempt": 2}
+        def attach_helper(evidence, _sha):
+            evidence["hostHelperArtifact"] = {"artifactId": 987, "runId": 123, "attempt": 2,
+                "archiveSha256": "b" * 64, "payloadSha256": "c" * 64}
+            return b"verified helper"
+        with patch.object(staging193, "_check_target_space", return_value={"filesystems": []}), \
+             patch.object(staging193, "_check_local_space", return_value=[]), \
+             patch.object(staging193, "validate_sha_and_ci", return_value=provenance), \
+             patch.object(staging193, "fetch_cms_candidate_artifact", return_value=b"cms"), \
+             patch.object(staging193, "fetch_host_helper_artifact", side_effect=attach_helper), \
+             patch.object(staging193, "make_archive", return_value=(b"archive", "a" * 64)), \
+             patch.object(staging193, "install_staging194_host_helper",
+                          side_effect=staging193.Refusal("helper config is incompatible"), create=True) as install, \
+             patch.object(staging193, "ssh_remote", return_value=json.dumps({"phase": "cms-activated"}).encode()) as remote:
+            with self.assertRaisesRegex(staging193.Refusal, "helper config is incompatible"):
+                staging193.invoke(args)
+        install.assert_called_once_with(b"verified helper", "c" * 64)
+        remote.assert_not_called()
+
+    def test_staging194_recovery_does_not_refetch_or_reinstall_host_helper(self):
+        args = SimpleNamespace(profile="staging194", host=staging193.TARGET_HOST,
+            command="recover", operation_id="staging194-helper-recovery", backup_dir=None)
+        with tempfile.TemporaryDirectory(prefix="ikpk-staging194-helper-recovery-") as temporary, \
+             patch.object(staging193, "backup_root", return_value=Path(temporary)), \
+             patch.object(staging193, "ssh_remote", return_value=json.dumps({"phase": "recovered"}).encode()) as remote, \
+             patch.object(staging193, "fetch_host_helper_artifact") as fetch, \
+             patch.object(staging193, "install_staging194_host_helper", create=True) as install:
+            staging193.invoke(args)
+        self.assertEqual(remote.call_args.args[0], ["recover", "--operation-id", args.operation_id])
+        fetch.assert_not_called()
+        install.assert_not_called()
+
     def test_staging194_rechecks_admission_after_backup_before_second_cms_command(self):
         admitted = {"sourceSha": SHA, "runId": 123, "attempt": 1}
         changed = {"sourceSha": SHA, "runId": 124, "attempt": 2}
