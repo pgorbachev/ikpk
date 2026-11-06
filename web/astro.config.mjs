@@ -147,6 +147,10 @@ export default defineConfig({
   // $uri/ — иначе он редиректит на вариант со слэшем и смысл теряется.
   trailingSlash: 'never',
   vite: {
+    // The paired CMS worker builds from a workspace while its node_modules
+    // symlink targets a read-only release under systemd ProtectSystem=strict.
+    // Keep Vite's mutable dependency cache in that writable workspace.
+    cacheDir: join(webRoot, '.vite-cache'),
     build: {
       // Vite 8 минифицирует CSS через lightningcss, который по умолчанию
       // переписывает медиазапросы в range-синтаксис: (max-width:640px) →
