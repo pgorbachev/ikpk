@@ -76,6 +76,44 @@ def backup_archive(operation_id="operator-test"):
 
 
 class RehearsalHostFilesystemTests(unittest.TestCase):
+    def test_staging194_cleanup_dispatch_does_not_require_private_tmp_source(self):
+        config = {"profile": "staging194", "temporaryRoot": "/var/tmp/ikpk-staging194",
+                  "stateDir": "/var/lib/ikpk-rehearsal/staging194",
+                  "siteRefreshState": "/var/lib/ikpk-cms-prototype193/staging/site-refresh194/state/state.json",
+                  "publicationLock": "/var/www/ikpk/.publication.lock",
+                  "sitePublicationMarker": str(rehearsal_host.SITE_PUBLICATION_MARKER_DIR /
+                                                rehearsal_host.SITE_PUBLICATION_MARKER)}
+        state = SimpleNamespace(lock=lambda: nullcontext(), read_journal_for_cleanup=lambda: [])
+        state_class = rehearsal_host.RehearsalState
+
+        class StateFactory:
+            _unfinished_operation_ids = staticmethod(state_class._unfinished_operation_ids)
+
+            def __new__(cls, *_args, **_kwargs):
+                return state
+
+        args = Namespace(profile="staging194", action="cleanup-site")
+        with patch.object(rehearsal_host.os, "geteuid", return_value=0), \
+                patch.object(rehearsal_host, "_root_config", return_value=config), \
+                patch.object(rehearsal_host, "_select_cleanup_profile",
+                             return_value=(config, "staging194", None)), \
+                patch.object(rehearsal_host, "_configure_profile_temp",
+                             side_effect=AssertionError("cleanup must not require host /var/tmp")) as configure_temp, \
+                patch.object(rehearsal_host, "_destination_publication_lock", return_value=nullcontext()), \
+                patch.object(rehearsal_host, "RehearsalState", StateFactory), \
+                patch.object(rehearsal_host, "_read_site_publication_marker", return_value=None), \
+                patch.object(rehearsal_host, "_assert_site_refresh_idle"), \
+                patch.object(rehearsal_host, "_assert_site_publication_admission"), \
+                patch.object(rehearsal_host, "_consume_site_cleanup_request") as consume, \
+                patch.object(rehearsal_host, "_cleanup_site_releases",
+                             return_value={"removedReleases": [], "retainedLegacy": []}) as cleanup:
+            result = rehearsal_host.dispatch(args)
+
+        self.assertEqual(result, {"status": "succeeded", "removedReleases": [], "retainedLegacy": []})
+        configure_temp.assert_not_called()
+        consume.assert_called_once_with(config)
+        cleanup.assert_called_once_with(config, state, None)
+
     def test_cleanup_selects_journal_for_marker_profile_in_both_production_directions(self):
         profiles = {
             "production-static": {"sitePublicationMarker": str(rehearsal_host.SITE_PUBLICATION_MARKER_DIR /

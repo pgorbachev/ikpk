@@ -123,6 +123,9 @@ class InstalledEntrypointTests(unittest.TestCase):
 
     def test_housekeeping_unit_allows_stale_pointer_parent_without_requiring_prod_lock_on_194(self):
         installer = (ROOT / "scripts/install-rehearsal-host.sh").read_text(encoding="utf-8")
+        self.assertIn('ExecStart=$SBIN/ikpk-rehearsal --profile $service_profile cleanup-site', installer)
+        self.assertIn("ProtectSystem=strict", installer)
+        self.assertIn("PrivateTmp=yes", installer)
         self.assertIn("ReadWritePaths=/var/www/ikpk $site_state_dir $state_dir", installer)
         self.assertIn("$cleanup_backup_root", installer)
         self.assertIn("$cleanup_profile_artifact_roots", installer)

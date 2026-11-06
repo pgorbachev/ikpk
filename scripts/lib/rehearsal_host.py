@@ -4981,7 +4981,11 @@ def dispatch(args: argparse.Namespace) -> dict[str, Any]:
     cleanup_marker_snapshot = None
     if args.action == "cleanup-site":
         config, profile, cleanup_marker_snapshot = _select_cleanup_profile(config, profile)
-    _configure_profile_temp(config)
+    # cleanup-site writes only to explicitly configured state/marker paths; its
+    # systemd unit uses PrivateTmp, so the host's shared staging temp root is
+    # intentionally not visible or needed here.
+    if args.action != "cleanup-site":
+        _configure_profile_temp(config)
     if profile == "production-static" and args.action not in (
             "static-main", "static-main-recover", "export-static-main", "status", "cleanup-site"):
         raise HostFailure("production-static permits only static-main publication and recovery")
