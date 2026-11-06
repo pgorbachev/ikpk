@@ -66,6 +66,74 @@ def canonical_ci_capture(selected_sha: str, main_sha: str, *, ancestor: bool = T
 
 
 class Staging194PairedAdmissionRedTests(unittest.TestCase):
+    def test_cli_accepts_successful_idle_status_as_a_new_operation_without_source_sha(self):
+        with patch.object(operator, "ssh_remote", return_value=json.dumps({
+                "operationId": "new-staging-operation", "phase": "idle"}).encode()) as status, \
+                patch.object(operator, "capture", return_value=MAIN_SHA) as capture, \
+                patch.object(operator, "invoke") as invoke:
+            result = operator.main(["cms-update", "--operation-id", "new-staging-operation"])
+
+        self.assertEqual(result, 0)
+        status.assert_called_once_with(["status", "--operation-id", "new-staging-operation"])
+        capture.assert_called_once_with(["gh", "api", f"repos/{operator.CANONICAL_REPOSITORY}/git/ref/heads/main",
+                                         "--jq", ".object.sha"])
+        self.assertEqual(invoke.call_args.args[0].source_sha, MAIN_SHA)
+
+    def test_cli_without_source_sha_still_refuses_non_idle_successful_status(self):
+        for phase in ("acquiring", "fenced", "cms-activated", "committed", "recovered", None):
+            with self.subTest(phase=phase), \
+                    patch.object(operator, "ssh_remote", return_value=json.dumps({"phase": phase}).encode()), \
+                    patch.object(operator, "capture") as capture, \
+                    patch.object(operator, "invoke") as invoke:
+                result = operator.main(["cms-update", "--operation-id", "existing-staging-operation"])
+
+            self.assertEqual(result, 2)
+            capture.assert_not_called()
+            invoke.assert_not_called()
+
+    def test_cli_without_source_sha_requires_idle_status_for_the_requested_operation_id(self):
+        with patch.object(operator, "ssh_remote", return_value=json.dumps({
+                "operationId": "different-operation", "phase": "idle"}).encode()), \
+                patch.object(operator, "capture") as capture, \
+                patch.object(operator, "invoke") as invoke:
+            result = operator.main(["cms-update", "--operation-id", "requested-operation"])
+
+        self.assertEqual(result, 2)
+        capture.assert_not_called()
+        invoke.assert_not_called()
+
+    def test_cli_without_source_sha_does_not_treat_a_similar_status_refusal_as_fresh(self):
+        refusal = "operation has no maintenance marker or terminal journal record; another lock is held"
+        with patch.object(operator, "ssh_remote", side_effect=operator.Refusal(refusal)), \
+                patch.object(operator, "capture") as capture, \
+                patch.object(operator, "invoke") as invoke:
+            result = operator.main(["cms-update", "--operation-id", "ambiguous-staging-operation"])
+
+        self.assertEqual(result, 2)
+        capture.assert_not_called()
+        invoke.assert_not_called()
+
+    def test_cli_without_source_sha_accepts_only_exact_wrapped_legacy_status_refusal(self):
+        legacy = "operation has no maintenance marker or terminal journal record"
+        wrapped = f"host operation failed (2): ikpk-rehearsal: {legacy}"
+        with patch.object(operator, "ssh_remote", side_effect=operator.Refusal(wrapped)), \
+                patch.object(operator, "capture", return_value=MAIN_SHA) as capture, \
+                patch.object(operator, "invoke") as invoke:
+            result = operator.main(["cms-update", "--operation-id", "wrapped-fresh-operation"])
+
+        self.assertEqual(result, 0)
+        capture.assert_called_once()
+        self.assertEqual(invoke.call_args.args[0].source_sha, MAIN_SHA)
+
+        with patch.object(operator, "ssh_remote", side_effect=operator.Refusal(wrapped + "; retry later")), \
+                patch.object(operator, "capture") as capture, \
+                patch.object(operator, "invoke") as invoke:
+            result = operator.main(["cms-update", "--operation-id", "wrapped-ambiguous-operation"])
+
+        self.assertEqual(result, 2)
+        capture.assert_not_called()
+        invoke.assert_not_called()
+
     def test_cli_defaults_only_new_staging_cms_update_to_exact_main_ref(self):
         with patch.object(operator, "ssh_remote",
                           side_effect=operator.Refusal("operation has no maintenance marker or terminal journal record")) as status, \

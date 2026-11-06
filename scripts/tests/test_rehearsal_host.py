@@ -76,6 +76,108 @@ def backup_archive(operation_id="operator-test"):
 
 
 class RehearsalHostFilesystemTests(unittest.TestCase):
+    def test_cleanup_dispatch_loads_real_staging_config_without_visible_shared_temp(self):
+        template = json.loads((ROOT / "scripts/staging193-rehearsal.json").read_text(encoding="utf-8"))
+        original_validator = rehearsal_host._validate_staging194_temporary_root
+
+        def private_tmp_validator(config, *, check_filesystem=True):
+            if check_filesystem:
+                raise rehearsal_host.HostFailure("staging temp is not visible in this service")
+            return original_validator(config, check_filesystem=False)
+
+        with tempfile.TemporaryDirectory(prefix="ikpk-cleanup-private-tmp-dispatch-") as temporary:
+            root = Path(temporary)
+            template["stateDir"] = str(root / "state")
+            Path(template["stateDir"]).mkdir()
+            config_path = root / "rehearsal.json"
+            config_path.write_text(json.dumps(template), encoding="utf-8")
+            original_lstat = Path.lstat
+
+            def root_owned_config_lstat(path):
+                if Path(path) == config_path:
+                    return SimpleNamespace(st_mode=stat.S_IFREG | 0o600, st_uid=0, st_nlink=1)
+                return original_lstat(path)
+
+            common_patches = (
+                patch.object(rehearsal_host, "CONFIG_PATH", config_path),
+                patch.object(rehearsal_host.os, "geteuid", return_value=0),
+                patch.object(rehearsal_host, "_validate_staging194_temporary_root",
+                             side_effect=private_tmp_validator),
+                patch.object(Path, "lstat", autospec=True, side_effect=root_owned_config_lstat),
+            )
+            with common_patches[0], common_patches[1], common_patches[2], common_patches[3], \
+                    patch.object(rehearsal_host, "_destination_publication_lock", return_value=nullcontext()), \
+                    patch.object(rehearsal_host, "_read_site_publication_marker", return_value=None), \
+                    patch.object(rehearsal_host, "_assert_site_refresh_idle"), \
+                    patch.object(rehearsal_host, "_assert_site_publication_admission"), \
+                    patch.object(rehearsal_host, "_consume_site_cleanup_request"), \
+                    patch.object(rehearsal_host, "_cleanup_site_releases",
+                                 return_value={"removedReleases": [], "retainedLegacy": []}):
+                result = rehearsal_host.dispatch(Namespace(profile="staging194", action="cleanup-site"))
+
+            self.assertEqual(result, {"status": "succeeded", "removedReleases": [], "retainedLegacy": []})
+
+            with common_patches[0], common_patches[1], common_patches[2], common_patches[3], \
+                    patch.object(rehearsal_host, "_configure_profile_temp"):
+                with self.assertRaisesRegex(rehearsal_host.HostFailure, "not visible"):
+                    rehearsal_host.dispatch(Namespace(profile="staging194", action="status",
+                                                       operation_id="ordinary-command"))
+
+            template["temporaryRoot"] = "/var/tmp/not-the-fixed-staging-root"
+            config_path.write_text(json.dumps(template), encoding="utf-8")
+            with common_patches[0], common_patches[1], common_patches[2], common_patches[3], \
+                    patch.object(rehearsal_host, "_destination_publication_lock", return_value=nullcontext()):
+                with self.assertRaisesRegex(rehearsal_host.HostFailure, "fixed host path"):
+                    rehearsal_host.dispatch(Namespace(profile="staging194", action="cleanup-site"))
+
+    def test_staging194_status_reports_idle_only_for_a_clean_fresh_operation(self):
+        def status_for(root: Path, operation_id: str, marker=None):
+            state_dir = root / "state"
+            state_dir.mkdir(exist_ok=True)
+            config = {"profile": "staging194", "stateDir": str(state_dir),
+                      "maintenanceFlag": str(root / "maintenance.flag")}
+            args = Namespace(profile="staging194", action="status", operation_id=operation_id)
+            with patch.object(rehearsal_host.os, "geteuid", return_value=0), \
+                    patch.object(rehearsal_host, "_root_config", return_value=config), \
+                    patch.object(rehearsal_host, "_configure_profile_temp"), \
+                    patch.object(rehearsal_host, "_destination_publication_lock", return_value=nullcontext()), \
+                    patch.object(rehearsal_host, "_read_site_publication_marker", return_value=marker):
+                return rehearsal_host.dispatch(args)
+
+        with tempfile.TemporaryDirectory(prefix="ikpk-status-fresh-") as temporary:
+            root = Path(temporary)
+            result = status_for(root, "fresh-deploy")
+            self.assertEqual(result, {"operationId": "fresh-deploy", "phase": "idle"})
+            state = RehearsalState(root / "state")
+            self.assertFalse(state.marker_path.exists())
+            self.assertFalse(state.journal_path.exists())
+
+        for operation_id, row_operation_id, site_marker, maintenance_flag in (
+            ("same-op", "same-op", None, False),
+            ("new-op", "unfinished-other", None, False),
+            ("fresh-with-site-marker", None,
+             {"version": 1, "operationId": "other-site-operation", "phase": "active"}, False),
+            ("fresh-with-maintenance-flag", None, None, True),
+        ):
+            with self.subTest(operation=operation_id), tempfile.TemporaryDirectory(
+                    prefix="ikpk-status-not-fresh-") as temporary:
+                root = Path(temporary)
+                state_dir = root / "state"
+                state_dir.mkdir()
+                if maintenance_flag:
+                    (root / "maintenance.flag").write_text("fenced\n", encoding="utf-8")
+                if row_operation_id:
+                    state = RehearsalState(state_dir)
+                    state.begin(row_operation_id, "a" * 40, {"cmsPath": "/releases/old"})
+                    state.marker_path.unlink()
+                if site_marker:
+                    with self.assertRaisesRegex(rehearsal_host.HostFailure,
+                                                "site publication marker exists"):
+                        status_for(root, operation_id, site_marker)
+                else:
+                    with self.assertRaises(rehearsal_host.RehearsalRefusal):
+                        status_for(root, operation_id, site_marker)
+
     def test_staging194_cleanup_dispatch_does_not_require_private_tmp_source(self):
         config = {"profile": "staging194", "temporaryRoot": "/var/tmp/ikpk-staging194",
                   "stateDir": "/var/lib/ikpk-rehearsal/staging194",

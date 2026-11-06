@@ -88,6 +88,34 @@ class InstalledEntrypointTests(unittest.TestCase):
             self.assertEqual(json.loads(config_path.read_text()), current)
             self.assertFalse(list(root.glob("*.bak")))
 
+    def test_existing_staging194_config_may_omit_defaulted_cms_environment_file_without_rewrite(self):
+        with tempfile.TemporaryDirectory(prefix="ikpk-staging194-existing-config-default-") as temporary:
+            root = Path(temporary)
+            template = {"profile": "staging194", "allowedSourceRef": "refs/heads/main",
+                        "cmsUser": "cms", "cmsEnvironmentFile": "/etc/ikpk-cms/site-build-current194.env"}
+            current = dict(template)
+            current.pop("cmsEnvironmentFile")
+            template_path, config_path = root / "template.json", root / "rehearsal.json"
+            template_path.write_text(json.dumps(template), encoding="utf-8")
+            original = json.dumps(current, indent=2).encode("utf-8") + b"\n"
+            config_path.write_bytes(original)
+
+            rehearsal_config.check(str(config_path), str(template_path))
+
+            self.assertEqual(config_path.read_bytes(), original)
+            self.assertFalse(list(root.glob("*.bak")))
+
+            production_template = {"profile": "production-paired", "cmsUser": "cms",
+                                   "cmsEnvironmentFile": "/etc/ikpk-cms/trial.env"}
+            production_config = {key: value for key, value in production_template.items()
+                                 if key != "cmsEnvironmentFile"}
+            production_template_path = root / "production-template.json"
+            production_config_path = root / "production.json"
+            production_template_path.write_text(json.dumps(production_template), encoding="utf-8")
+            production_config_path.write_text(json.dumps(production_config), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "unrelated differences"):
+                rehearsal_config.check(str(production_config_path), str(production_template_path))
+
     def test_staging194_migration_replace_failure_preserves_compatible_dev_config(self):
         with tempfile.TemporaryDirectory(prefix="ikpk-rehearsal-config-atomic-failure-") as temporary:
             root = Path(temporary)

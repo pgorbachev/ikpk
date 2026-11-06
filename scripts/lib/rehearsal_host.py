@@ -456,7 +456,8 @@ def _staging194_current_cms_source_sha(config: dict[str, Any], state: RehearsalS
         return None
 
 
-def _root_config(path: Path, expected_profile: str = "staging194") -> dict[str, Any]:
+def _root_config(path: Path, expected_profile: str = "staging194", *,
+                 validate_temporary_root: bool = True) -> dict[str, Any]:
     try:
         info = path.lstat()
     except OSError as error:
@@ -519,7 +520,7 @@ def _root_config(path: Path, expected_profile: str = "staging194") -> dict[str, 
     if profile != expected_profile:
         raise HostFailure("host config does not match the selected fixed profile")
     if profile == "staging194":
-        _validate_staging194_temporary_root(data)
+        _validate_staging194_temporary_root(data, check_filesystem=validate_temporary_root)
     if profile in ("initial-prod", "production-static", "production-paired"):
         endpoint = data.get("paymentEndpointProd")
         try:
@@ -534,10 +535,12 @@ def _root_config(path: Path, expected_profile: str = "staging194") -> dict[str, 
     return data
 
 
-def _validate_staging194_temporary_root(config: dict[str, Any]) -> Path:
+def _validate_staging194_temporary_root(config: dict[str, Any], *, check_filesystem: bool = True) -> Path:
     """Return the fixed shared temp directory only when its ownership is safe."""
     if config.get("temporaryRoot") != str(STAGING194_TEMPORARY_ROOT):
         raise HostFailure("staging194 temporaryRoot must use the fixed host path")
+    if not check_filesystem:
+        return STAGING194_TEMPORARY_ROOT
     try:
         cms_user = pwd.getpwnam(config["cmsUser"])
         for directory in (Path("/"), Path("/var"), STAGING194_TEMPORARY_ROOT.parent):
@@ -4949,6 +4952,24 @@ def _recover(config: dict[str, Any], state: RehearsalState, operation_id: str,
     return {"operationId": operation_id, "phase": "recovered", "restoredPair": old_pair}
 
 
+def _status_or_idle_if_fresh(state: RehearsalState, operation_id: str,
+                            config: dict[str, Any]) -> dict[str, Any]:
+    try:
+        return state.phase(operation_id)
+    except RehearsalRefusal as error:
+        if str(error) != "operation has no maintenance marker or terminal journal record":
+            raise
+        history = state.read_journal_for_cleanup(validate_history=True)
+        if (state._read_marker() is not None
+                or any(row.get("operationId") == operation_id for row in history)
+                or state._unfinished_operation_ids(history)
+                or os.path.lexists(config["maintenanceFlag"])):
+            raise
+        if _read_site_publication_marker(config) is not None:
+            raise HostFailure("site publication marker exists; operation status is unknown")
+        return {"operationId": operation_id, "phase": "idle"}
+
+
 def dispatch(args: argparse.Namespace) -> dict[str, Any]:
     if os.geteuid() != 0:
         raise HostFailure("host command must run through the installed root-owned entrypoint")
@@ -4977,7 +4998,9 @@ def dispatch(args: argparse.Namespace) -> dict[str, Any]:
     config_path = (INITIAL_PROD_CONFIG_PATH if profile == "initial-prod" else
                    PRODUCTION_STATIC_CONFIG_PATH if profile == "production-static" else
                    PRODUCTION_PAIRED_CONFIG_PATH if profile == "production-paired" else CONFIG_PATH)
-    config = _root_config(config_path, expected_profile=profile)
+    config = (_root_config(config_path, expected_profile=profile, validate_temporary_root=False)
+              if args.action == "cleanup-site" else
+              _root_config(config_path, expected_profile=profile))
     cleanup_marker_snapshot = None
     if args.action == "cleanup-site":
         config, profile, cleanup_marker_snapshot = _select_cleanup_profile(config, profile)
@@ -5234,6 +5257,8 @@ def dispatch(args: argparse.Namespace) -> dict[str, Any]:
                 start = next((row for row in state._operation_rows(args.operation_id) if row.get("record") == "start"), None)
                 if start and isinstance(start.get("oldPair"), dict):
                     phase["oldPair"] = start["oldPair"]
+            elif profile == "staging194":
+                phase = _status_or_idle_if_fresh(state, args.operation_id, config)
             else:
                 phase = state.phase(args.operation_id)
             return phase
