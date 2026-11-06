@@ -585,7 +585,8 @@ try:
                     or any(not (member.isfile() or member.isdir()) for member in members)):
                 raise SystemExit("host helper archive contents differ from the admitted package")
             bundle.extractall(os.path.join(temporary, "payload"))
-        subprocess.run(["bash", os.path.join(temporary, "payload/scripts/install-rehearsal-host.sh")], check=True)
+        subprocess.run(["bash", os.path.join(temporary, "payload/scripts/install-rehearsal-host.sh"),
+                        "--staging193-existing-config"], check=True)
         subprocess.run(["/usr/local/sbin/ikpk-rehearsal", "--profile", "staging194", "validate-config"], check=True)
         with open(config_path, "rb") as stream:
             if stream.read() != config_before:

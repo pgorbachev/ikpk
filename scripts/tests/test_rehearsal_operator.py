@@ -1659,11 +1659,16 @@ class Staging194HostHelperInstallTests(unittest.TestCase):
                         install_command.index("install-rehearsal-host.sh"))
         self.assertIn(digest, install_command)
         self.assertIn("LOCK_NB", install_command)
+        self.assertLess(install_command.index("fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)"),
+                        install_command.index("--staging193-existing-config"))
+        self.assertLess(install_command.index("--staging193-existing-config"),
+                        install_command.index("for fd in reversed(fds)"))
         self.assertIn("staging194 lock inode changed during helper installation", install_command)
         self.assertIn("recover with the previous operation ID, then use a new operation ID", install_command)
-        self.assertFalse(any(option in install_command for option in
-                             ("--staging193-config", "--initial-prod-config",
-                              "--production-static-config", "--production-paired-config")))
+        self.assertIn('--staging193-existing-config"], check=True)', install_command)
+        self.assertNotIn("--initial-prod-config", install_command)
+        self.assertNotIn("--production-static-config", install_command)
+        self.assertNotIn("--production-paired-config", install_command)
 
     def test_remote_digest_failure_stops_before_installer(self):
         payload = b"transferred helper bytes"

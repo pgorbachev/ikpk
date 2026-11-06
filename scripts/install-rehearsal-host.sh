@@ -5,15 +5,17 @@ ROOT=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 PREFIX=/usr/local
 INSTALL_CONFIG_PROFILE=
 INSTALL_DISABLED=0
+INSTALL_EXISTING_CONFIG_ONLY=0
 while (($#)); do
   case "$1" in
     --prefix) PREFIX=${2:?missing prefix}; shift 2 ;;
     --install-disabled) INSTALL_DISABLED=1; shift ;;
     --staging193-config) INSTALL_CONFIG_PROFILE=staging193; shift ;;
+    --staging193-existing-config) INSTALL_CONFIG_PROFILE=staging193; INSTALL_EXISTING_CONFIG_ONLY=1; shift ;;
     --initial-prod-config) INSTALL_CONFIG_PROFILE=initial-prod; shift ;;
     --production-static-config) INSTALL_CONFIG_PROFILE=production-static; shift ;;
     --production-paired-config) INSTALL_CONFIG_PROFILE=production-paired; shift ;;
-    *) echo "usage: $0 [--prefix ABSOLUTE-PREFIX] [--install-disabled] [--staging193-config|--initial-prod-config|--production-static-config|--production-paired-config]" >&2; exit 2 ;;
+    *) echo "usage: $0 [--prefix ABSOLUTE-PREFIX] [--install-disabled] [--staging193-config|--staging193-existing-config|--initial-prod-config|--production-static-config|--production-paired-config]" >&2; exit 2 ;;
   esac
 done
 [[ "$PREFIX" = /* && "$PREFIX" != / ]] || { echo 'prefix must be an absolute non-root path' >&2; exit 2; }
@@ -79,6 +81,9 @@ if [[ -n "$INSTALL_CONFIG_PROFILE" ]]; then
     PYTHONPATH="$ROOT/scripts/lib" python3 "$ROOT/scripts/lib/rehearsal_config.py" check "$CONFIG" "$TEMPLATE" || {
       echo 'existing rehearsal config is incompatible; refusing installation before helper writes' >&2; exit 2;
     }
+  elif (( INSTALL_EXISTING_CONFIG_ONLY )); then
+    echo 'existing rehearsal config is required for helper refresh; refusing installation before helper writes' >&2
+    exit 2
   fi
 fi
 
@@ -188,7 +193,7 @@ if [[ -n "$INSTALL_CONFIG_PROFILE" ]]; then
   install -d -o root -g root -m 0755 "$CONFIG_DIR"
   if [[ -e "$CONFIG" || -L "$CONFIG" ]]; then
     [[ -f "$CONFIG" && ! -L "$CONFIG" ]] || { echo 'existing rehearsal config is not a regular file' >&2; exit 2; }
-    if ! cmp -s "$CONFIG" "$TEMPLATE"; then
+    if ! cmp -s "$CONFIG" "$TEMPLATE" && (( ! INSTALL_EXISTING_CONFIG_ONLY )); then
       PYTHONPATH="$ROOT/scripts/lib" python3 "$ROOT/scripts/lib/rehearsal_config.py" migrate "$CONFIG" "$TEMPLATE" || {
         echo 'existing rehearsal config migration failed; CMS/site data was not changed; inspect config/backup and rerun the installer after correcting the filesystem error' >&2; exit 2;
       }
