@@ -3822,14 +3822,16 @@ class Staging194PairedSourceEnvironmentTests(unittest.TestCase):
                       "writerUnits": [], "cmsHealthUrl": "http://127.0.0.1:1338/_health",
                       "siteHealthUrl": "https://194.226.99.10/"}
             source_env_at_start = []
+            effective_env_checks = []
 
             def run_command(argv, **_kwargs):
                 if argv[:3] == ["/usr/bin/systemctl", "show", "--property=EnvironmentFiles"]:
+                    effective_env_checks.append(argv)
                     return subprocess.CompletedProcess(argv, 0,
                         "/etc/ikpk-cms/first.env (ignore_errors=no) /etc/ikpk-cms/second.env (ignore_errors=no) "
                         f"{env_file} (ignore_errors=no)", "")
                 if argv == ["/usr/bin/systemctl", "start", config["cmsUnit"]]:
-                    source_env_at_start.append(env_file.read_text(encoding="utf-8"))
+                    source_env_at_start.append(env_file.read_text(encoding="utf-8") if env_file.exists() else None)
                 return subprocess.CompletedProcess(argv, 0, "", "")
 
             real_lstat = Path.lstat
@@ -3860,21 +3862,27 @@ class Staging194PairedSourceEnvironmentTests(unittest.TestCase):
                 "IKPK_BUILD_WORKSPACE": prior_workspace, "IKPK_INSTALLED_COMMIT": prior_sha})
 
             # Legacy journal entries predate CMS source environment snapshots;
-            # they must reopen using the still-installed old env unchanged.
+            # they must recover even if the newer source env is unavailable.
             State.rows[0]["oldPair"].pop("cmsSourceEnvironment")
             source_env_at_start.clear()
+            effective_env_checks.clear()
+            env_file.unlink()
             with patch.object(rehearsal_host, "_set_flag"), \
                  patch.object(rehearsal_host, "_write_gate"), \
-                 patch.object(Path, "lstat", root_owned_environment), \
-                 patch.object(rehearsal_host, "_assert_staging194_workspace_ready"), \
-                 patch.object(rehearsal_host, "_assert_staging194_process_source_env"), \
+                 patch.object(rehearsal_host, "_staging194_cms_source_env",
+                              side_effect=AssertionError("legacy recovery must not require source env")), \
+                 patch.object(rehearsal_host, "_assert_staging194_workspace_ready",
+                              side_effect=AssertionError("legacy recovery must not require source workspace")), \
+                 patch.object(rehearsal_host, "_assert_staging194_process_source_env",
+                              side_effect=AssertionError("legacy recovery must not require source process env")), \
                  patch.object(rehearsal_host, "_wait_health"), \
                  patch.object(rehearsal_host, "_service_pid", return_value=123), \
                  patch.object(rehearsal_host, "_database_process_proof", return_value={}), \
                  patch.object(rehearsal_host, "run", side_effect=run_command):
                 legacy_result = rehearsal_host._recover(config, State(), operation_id)
             self.assertEqual(legacy_result["phase"], "recovered")
-            self.assertEqual(source_env_at_start, [expected])
+            self.assertEqual(source_env_at_start, [None])
+            self.assertEqual(effective_env_checks, [])
 
 
 if __name__ == "__main__":

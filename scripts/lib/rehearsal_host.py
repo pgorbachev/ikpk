@@ -4746,9 +4746,9 @@ def _recover(config: dict[str, Any], state: RehearsalState, operation_id: str,
     already_recovered = state._is_recovered(operation_id)
     staging194_previous_environment = None
     if config.get("profile") == "staging194":
-        _assert_staging194_source_env_effective(config)
-        current_source_environment = _staging194_cms_source_env(config)
         if "cmsSourceEnvironment" in old_pair:
+            _assert_staging194_source_env_effective(config)
+            _staging194_cms_source_env(config)
             journaled_environment = old_pair["cmsSourceEnvironment"]
             if (not isinstance(journaled_environment, dict)
                     or not set(STAGING194_CMS_SOURCE_ENV_KEYS).issubset(journaled_environment)):
@@ -4758,11 +4758,7 @@ def _recover(config: dict[str, Any], state: RehearsalState, operation_id: str,
             if any(not isinstance(value, str) or not value or "\n" in value or "\r" in value
                    for value in staging194_previous_environment.values()):
                 raise HostFailure("operation journal has invalid staging194 source environment values")
-        else:
-            # Legacy operations did not modify this file; keep its current values.
-            staging194_previous_environment = {
-                key: current_source_environment[key] for key in STAGING194_CMS_SOURCE_ENV_KEYS}
-        _assert_staging194_workspace_ready(config, staging194_previous_environment["IKPK_BUILD_WORKSPACE"])
+            _assert_staging194_workspace_ready(config, staging194_previous_environment["IKPK_BUILD_WORKSPACE"])
     paired_uploads = None
     if config.get("profile") == "production-paired":
         paired_uploads = next((Path(item["path"]).resolve(strict=True) for item in config.get("mediaRoots", [])
@@ -4788,7 +4784,7 @@ def _recover(config: dict[str, Any], state: RehearsalState, operation_id: str,
                 _write_staging194_cms_source_env(config, staging194_previous_environment)
         run(["/usr/bin/systemctl", "start", config["cmsUnit"]], timeout=120)
         _wait_health(config["cmsHealthUrl"], 1200)
-        if config.get("profile") == "staging194":
+        if config.get("profile") == "staging194" and staging194_previous_environment is not None:
             _assert_staging194_process_source_env(config, staging194_previous_environment)
         _database_process_proof(_service_pid(config["cmsUnit"]), live)
         if str(_current_target(Path(config["currentCms"]))) != old_pair["cmsPath"]:
