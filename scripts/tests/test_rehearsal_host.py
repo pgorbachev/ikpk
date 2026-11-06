@@ -607,7 +607,8 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
                 (release / "release.json").write_text(json.dumps({"commit": source_sha,
                     "operationId": operation_id, "snapshotId": "snap:retry", "staticTreeSha256": digest}),
                     encoding="utf-8")
-                config = {"profile": host_profile, "staticReleaseRoot": str(static_root)}
+                config = {"profile": host_profile, "releaseRoot": str(root / "releases"),
+                          "staticReleaseRoot": str(static_root)}
 
                 class State:
                     def phase(self, _operation_id):
@@ -628,10 +629,11 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
                 if host_profile == "staging194":
                     (capture / "manifest.json").write_text(json.dumps({"operationId": operation_id,
                         "sourceSha": source_sha, "profile": "production-static"}), encoding="utf-8")
-                    with self.assertRaisesRegex(rehearsal_host.HostFailure,
-                            "retained static candidate differs from its sealed operation capture"):
-                        rehearsal_host._static_publish(config, State(), Namespace(
-                            operation_id=operation_id, source_sha=source_sha, browser_digest=None))
+                    with patch.object(rehearsal_host, "_verify_fence"):
+                        with self.assertRaisesRegex(rehearsal_host.HostFailure,
+                                "retained static candidate differs from its sealed operation capture"):
+                            rehearsal_host._static_publish(config, State(), Namespace(
+                                operation_id=operation_id, source_sha=source_sha, browser_digest=None))
                     build.assert_not_called()
 
     def test_initial_prod_config_template_binds_real_profile_and_all_writer_routes(self):
