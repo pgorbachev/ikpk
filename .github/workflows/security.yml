@@ -134,3 +134,32 @@ jobs:
           echo "CMS runtime audit is report-only (this job does not gate the PR)."
           echo "@strapi/strapi ${strapi_version}; prod-tree advisories in this run: ${counts}"
           echo "Local script cms/npm run audit:prod uses --audit-level=critical; see AGENTS.md for when its red result blocks a task."
+
+  codeql-analysis:
+    name: CodeQL analysis (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+    strategy:
+      fail-fast: false
+      matrix:
+        language:
+          - javascript-typescript
+          - python
+          - actions
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@8498dc4c2b27cdd99baf0f87955b29ebbf30c78d # v4.39.1
+        with:
+          languages: ${{ matrix.language }}
+          queries: security-extended
+      - name: Analyze
+        uses: github/codeql-action/analyze@8498dc4c2b27cdd99baf0f87955b29ebbf30c78d # v4.39.1
+        with:
+          category: /language:${{ matrix.language }}
