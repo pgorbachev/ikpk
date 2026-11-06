@@ -139,31 +139,50 @@ class InstalledEntrypointTests(unittest.TestCase):
         self.assertIn("the 194 transport serialize through", installer)
         self.assertIn("Do not require that prod-only inode on 194", installer)
 
-    def test_install_disabled_skips_housekeeping_activation_but_default_enables_units(self):
+    def test_housekeeping_keeps_timer_retry_without_activating_level_trigger_path(self):
         installer = (ROOT / "scripts/install-rehearsal-host.sh").read_text(encoding="utf-8")
         self.assertIn("INSTALL_DISABLED=0", installer)
         self.assertIn("--install-disabled) INSTALL_DISABLED=1; shift ;;", installer)
         self.assertIn("[--install-disabled]", installer)
+        self.assertIn("--staging193-existing-config)", installer)
+        self.assertIn('elif (( INSTALL_EXISTING_CONFIG_ONLY )); then', installer)
+        self.assertIn('if ! cmp -s "$CONFIG" "$TEMPLATE" && (( ! INSTALL_EXISTING_CONFIG_ONLY )); then', installer)
+        self.assertIn('if (( INSTALL_EXISTING_CONFIG_ONLY )); then\n      echo \'existing rehearsal config disappeared during helper refresh; refusing to create it\'', installer)
         start = installer.index("  systemctl daemon-reload")
         end = installer.index("\nfi\necho \"installed rehearsal host entrypoint", start)
         activation = "\n".join(line[2:] for line in installer[start:end].splitlines())
-        self.assertLess(installer.index('mv -f -- "$path_tmp" "$systemd_dir/ikpk-site-housekeeping.path"'), start)
+        self.assertNotIn("PathExists=", installer)
+        stop_path = installer.index('systemctl stop ikpk-site-housekeeping.path')
+        stop_timer = installer.index('systemctl stop ikpk-site-housekeeping.timer')
+        stop_service = installer.index('systemctl stop ikpk-site-housekeeping.service')
+        disable = installer.index('systemctl disable ikpk-site-housekeeping.path')
+        timer_enable = installer.index('systemctl enable --now ikpk-site-housekeeping.timer')
+        self.assertLess(stop_path, stop_timer)
+        self.assertLess(stop_timer, stop_service)
+        self.assertLess(stop_service, disable)
+        self.assertLess(disable, installer.index('install -m 0644 "$ROOT/scripts/lib/rehearsal_state.py"'))
+        self.assertLess(disable, installer.index('cat >"$SBIN/ikpk-rehearsal"'))
+        self.assertGreater(timer_enable, installer.index('cat >"$SBIN/ikpk-rehearsal"'))
+        self.assertIn('rm -f -- "$systemd_dir/ikpk-site-housekeeping.path"', installer)
+        self.assertIn("OnUnitActiveSec=10min", installer)
+        self.assertNotIn("enable --now ikpk-site-housekeeping.path", activation)
 
         with tempfile.TemporaryDirectory(prefix="ikpk-housekeeping-systemctl-") as temporary:
             root = Path(temporary)
             stub = root / "systemctl"
             stub.write_text(
-                "#!/usr/bin/env bash\nprintf '%s\\n' \"$*\" >> \"$SYSTEMCTL_CALLS\"\n",
+                "#!/usr/bin/env bash\nprintf '%s\\n' \"$*\" >> \"$SYSTEMCTL_CALLS\"\n"
+                "[[ \"${SYSTEMCTL_FAIL:-}\" != \"$*\" ]] || exit 42\n",
                 encoding="utf-8",
             )
             stub.chmod(0o755)
             for disabled, expected in (
                 (1, ["daemon-reload"]),
-                (0, ["daemon-reload", "enable --now ikpk-site-housekeeping.path ikpk-site-housekeeping.timer"]),
+                (0, ["daemon-reload", "enable --now ikpk-site-housekeeping.timer"]),
             ):
                 calls = root / f"calls-{disabled}"
                 run = subprocess.run(
-                    ["bash", "-c", f"INSTALL_DISABLED={disabled}\n{activation}"],
+                    ["bash", "-c", f"set -e\nINSTALL_DISABLED={disabled}\nsystemd_dir={root}\n{activation}"],
                     env={**os.environ, "PATH": str(root) + os.pathsep + os.environ["PATH"],
                          "SYSTEMCTL_CALLS": str(calls)},
                     text=True,
@@ -172,6 +191,240 @@ class InstalledEntrypointTests(unittest.TestCase):
                 )
                 self.assertEqual(run.returncode, 0, run.stderr)
                 self.assertEqual(calls.read_text(encoding="utf-8").splitlines(), expected)
+
+            # Execute the installer's actual stop/disable preflight followed by
+            # its helper writes. Failures before the write leave old bytes intact.
+            systemd_dir = root / "systemd"
+            systemd_dir.mkdir()
+            old_path = systemd_dir / "ikpk-site-housekeeping.path"
+            old_path.write_bytes(b"legacy PathExists unit\n")
+            old_timer = systemd_dir / "ikpk-site-housekeeping.timer"
+            old_timer.write_bytes(b"existing ten-minute retry timer\n")
+            old_service = systemd_dir / "ikpk-site-housekeeping.service"
+            old_service.write_bytes(b"existing cleanup service\n")
+            prefix = root / "prefix"
+            installed_lib = prefix / "lib/ikpk-rehearsal"
+            installed_sbin = prefix / "sbin"
+            installed_lib.mkdir(parents=True)
+            installed_sbin.mkdir(parents=True)
+            original = {
+                installed_lib / name: f"old {name}\n".encode()
+                for name in ("rehearsal_state.py", "housekeeping_journal.py", "rehearsal_host.py")
+            }
+            original[installed_sbin / "ikpk-rehearsal"] = b"old launcher\n"
+            for path, content in original.items():
+                path.write_bytes(content)
+            guard_start = installer.index("HOUSEKEEPING_TRANSITION=0")
+            guard_end = installer.index('\nLIB="$PREFIX/lib/ikpk-rehearsal"', guard_start)
+            writes_start = guard_end + 1
+            writes_end = installer.index('\nif [[ -n "$INSTALL_CONFIG_PROFILE" ]]; then', writes_start)
+            preflight = installer[guard_start:guard_end].replace(
+                "systemd_dir=/etc/systemd/system", f"systemd_dir={systemd_dir}")
+            install_fragment = (
+                "set -e\n"
+                f"ROOT={ROOT}\nPREFIX={prefix}\nINSTALL_CONFIG_PROFILE=staging193\n"
+                f"{preflight}\n{installer[writes_start:writes_end]}\n"
+            )
+            stub = root / "systemctl"
+            stub.write_text(
+                "#!/usr/bin/env bash\nprintf '%s\\n' \"$*\" >> \"$SYSTEMCTL_CALLS\"\n"
+                "[[ \"${SYSTEMCTL_FAIL:-}\" != \"$*\" ]] || exit 42\n",
+                encoding="utf-8",
+            )
+            stub.chmod(0o755)
+            absent_systemd = root / "fresh-systemd"
+            absent_systemd.mkdir()
+            absent_fragment = installer[guard_start:guard_end].replace(
+                "systemd_dir=/etc/systemd/system", f"systemd_dir={absent_systemd}")
+            absent_calls = root / "calls-absent-unit"
+            absent = subprocess.run(
+                ["bash", "-c", f"set -e\nPREFIX={prefix}\nINSTALL_CONFIG_PROFILE=staging193\n{absent_fragment}"],
+                env={**os.environ, "PATH": str(root) + os.pathsep + os.environ["PATH"],
+                     "SYSTEMCTL_CALLS": str(absent_calls)},
+                text=True, capture_output=True, check=False,
+            )
+            self.assertEqual(absent.returncode, 0, absent.stderr)
+            self.assertFalse(absent_calls.exists(), "fresh install must skip disable for an absent unit")
+
+            incomplete_systemd = root / "incomplete-systemd"
+            incomplete_systemd.mkdir()
+            incomplete_path = incomplete_systemd / "ikpk-site-housekeeping.path"
+            incomplete_path.write_bytes(b"legacy PathExists unit\n")
+            incomplete_fragment = installer[guard_start:guard_end].replace(
+                "systemd_dir=/etc/systemd/system", f"systemd_dir={incomplete_systemd}")
+            incomplete_calls = root / "calls-incomplete-units"
+            run = subprocess.run(
+                ["bash", "-c", f"set -e\nPREFIX={prefix}\nINSTALL_CONFIG_PROFILE=staging193\n{incomplete_fragment}\n{installer[writes_start:writes_end]}"],
+                env={**os.environ, "PATH": str(root) + os.pathsep + os.environ["PATH"],
+                     "SYSTEMCTL_CALLS": str(incomplete_calls)},
+                text=True, capture_output=True, check=False,
+            )
+            self.assertEqual(run.returncode, 2, run.stderr)
+            self.assertFalse(incomplete_calls.exists())
+            self.assertEqual(incomplete_path.read_bytes(), b"legacy PathExists unit\n")
+            for path, content in original.items():
+                self.assertEqual(path.read_bytes(), content, path.name)
+
+            # An isolated prefix is not a host install, even if the host has an
+            # old unit file. It must not call systemctl or alter that unit.
+            isolated_prefix = root / "isolated-prefix"
+            isolated_systemd = root / "isolated-systemd"
+            isolated_systemd.mkdir()
+            isolated_unit = isolated_systemd / "ikpk-site-housekeeping.path"
+            isolated_unit.write_bytes(b"host unit must remain untouched\n")
+            isolated_fragment = installer[guard_start:guard_end].replace(
+                "systemd_dir=/etc/systemd/system", f"systemd_dir={isolated_systemd}")
+            isolated_calls = root / "calls-isolated-prefix"
+            isolated = subprocess.run(
+                ["bash", "-c", f"set -e\nPREFIX={isolated_prefix}\nINSTALL_CONFIG_PROFILE=\n{isolated_fragment}"],
+                env={**os.environ, "PATH": str(root) + os.pathsep + os.environ["PATH"],
+                     "SYSTEMCTL_CALLS": str(isolated_calls)},
+                text=True, capture_output=True, check=False,
+            )
+            self.assertEqual(isolated.returncode, 0, isolated.stderr)
+            self.assertFalse(isolated_calls.exists(), "isolated prefix must not invoke host systemctl")
+            self.assertEqual(isolated_unit.read_bytes(), b"host unit must remain untouched\n")
+
+            host_prefix = root / "host-prefix"
+            host_prefix.mkdir()
+            stub.write_text(
+                "#!/usr/bin/env bash\nprintf '%s\\n' \"$*\" >> \"$SYSTEMCTL_CALLS\"\n"
+                "[[ \"${SYSTEMCTL_FAIL:-}\" != \"$*\" ]] || exit 42\n",
+                encoding="utf-8",
+            )
+            stub.chmod(0o755)
+            host_scope_fragment = installer[guard_start:guard_end].replace(
+                "systemd_dir=/etc/systemd/system", f"systemd_dir={isolated_systemd}").replace(
+                    '"$PREFIX" -ef /usr/local', f'"$PREFIX" -ef {host_prefix}')
+            for index, alias in enumerate((str(host_prefix), str(host_prefix) + "/",
+                                           str(host_prefix) + "/.")):
+                isolated_unit.write_bytes(b"legacy host unit\n")
+                (isolated_systemd / "ikpk-site-housekeeping.timer").write_bytes(b"existing retry timer\n")
+                alias_calls = root / f"calls-host-prefix-alias-{index}"
+                run = subprocess.run(
+                    ["bash", "-c", f"set -e\nPREFIX={alias}\nINSTALL_CONFIG_PROFILE=\n{host_scope_fragment}"],
+                    env={**os.environ, "PATH": str(root) + os.pathsep + os.environ["PATH"],
+                         "SYSTEMCTL_CALLS": str(alias_calls)},
+                    text=True, capture_output=True, check=False,
+                )
+                self.assertEqual(run.returncode, 2, run.stderr)
+                self.assertFalse(alias_calls.exists(), "host refresh without a profile must refuse before systemctl")
+                self.assertEqual(isolated_unit.read_bytes(), b"legacy host unit\n")
+
+            calls = root / "calls-disable-failure"
+            run = subprocess.run(
+                ["bash", "-c", install_fragment],
+                env={**os.environ, "PATH": str(root) + os.pathsep + os.environ["PATH"],
+                     "SYSTEMCTL_CALLS": str(calls),
+                     "SYSTEMCTL_FAIL": "disable ikpk-site-housekeeping.path"},
+                text=True, capture_output=True, check=False,
+            )
+            self.assertEqual(run.returncode, 42, run.stderr)
+            self.assertEqual(old_path.read_bytes(), b"legacy PathExists unit\n")
+            self.assertEqual(old_timer.read_bytes(), b"existing ten-minute retry timer\n")
+            self.assertEqual(old_service.read_bytes(), b"existing cleanup service\n")
+            self.assertEqual(calls.read_text(encoding="utf-8").splitlines(),
+                             ["stop ikpk-site-housekeeping.path", "stop ikpk-site-housekeeping.timer",
+                              "stop ikpk-site-housekeeping.service", "disable ikpk-site-housekeeping.path"])
+            self.assertIn("preserve cleanup.request; under the publication and operation locks", run.stderr)
+            for path, content in original.items():
+                self.assertEqual(path.read_bytes(), content, path.name)
+
+            calls = root / "calls-timer-enable-failure"
+            trap_setup_end = installer.index('if [[ -z "$INSTALL_CONFIG_PROFILE"', guard_start)
+            trap_setup = installer[guard_start:trap_setup_end]
+            run = subprocess.run(
+                ["bash", "-c", f"set -e\nINSTALL_DISABLED=0\n{trap_setup}\nHOUSEKEEPING_TRANSITION=1\n{activation}"],
+                env={**os.environ, "PATH": str(root) + os.pathsep + os.environ["PATH"],
+                     "SYSTEMCTL_CALLS": str(calls),
+                     "SYSTEMCTL_FAIL": "enable --now ikpk-site-housekeeping.timer"},
+                text=True, capture_output=True, check=False,
+            )
+            self.assertEqual(run.returncode, 42, run.stderr)
+            self.assertEqual(calls.read_text(encoding="utf-8").splitlines(),
+                             ["daemon-reload", "enable --now ikpk-site-housekeeping.timer"])
+            self.assertIn("preserve cleanup.request; under the publication and operation locks", run.stderr)
+
+            # Rerunning after a failed transition stops the remaining legacy
+            # units, replaces the helper, and leaves timer activation last.
+            calls = root / "calls-recovery-rerun"
+            run = subprocess.run(
+                ["bash", "-c", install_fragment],
+                env={**os.environ, "PATH": str(root) + os.pathsep + os.environ["PATH"],
+                     "SYSTEMCTL_CALLS": str(calls)},
+                text=True, capture_output=True, check=False,
+            )
+            self.assertEqual(run.returncode, 0, run.stderr)
+            self.assertFalse(old_path.exists())
+            self.assertNotEqual(installed_sbin.joinpath("ikpk-rehearsal").read_bytes(),
+                                b"old launcher\n")
+            self.assertEqual(calls.read_text(encoding="utf-8").splitlines(),
+                             ["stop ikpk-site-housekeeping.path", "stop ikpk-site-housekeeping.timer",
+                              "stop ikpk-site-housekeeping.service", "disable ikpk-site-housekeeping.path"])
+            calls = root / "calls-recovery-timer"
+            run = subprocess.run(
+                ["bash", "-c", "set -e\nINSTALL_DISABLED=0\nsystemd_dir=/etc/systemd/system\n" + activation],
+                env={**os.environ, "PATH": str(root) + os.pathsep + os.environ["PATH"],
+                     "SYSTEMCTL_CALLS": str(calls)},
+                text=True, capture_output=True, check=False,
+            )
+            self.assertEqual(run.returncode, 0, run.stderr)
+            self.assertEqual(calls.read_text(encoding="utf-8").splitlines(),
+                             ["daemon-reload", "enable --now ikpk-site-housekeeping.timer"])
+
+            old_path.write_bytes(b"legacy PathExists unit\n")
+            calls = root / "calls-install-disabled-transition"
+            disabled_install = install_fragment.replace(
+                "INSTALL_CONFIG_PROFILE=staging193", "INSTALL_CONFIG_PROFILE=staging193\nINSTALL_DISABLED=1")
+            run = subprocess.run(
+                ["bash", "-c", disabled_install + "\n" + activation],
+                env={**os.environ, "PATH": str(root) + os.pathsep + os.environ["PATH"],
+                     "SYSTEMCTL_CALLS": str(calls)},
+                text=True, capture_output=True, check=False,
+            )
+            self.assertEqual(run.returncode, 0, run.stderr)
+            disabled_calls = calls.read_text(encoding="utf-8").splitlines()
+            self.assertEqual(disabled_calls, [
+                "stop ikpk-site-housekeeping.path", "stop ikpk-site-housekeeping.timer",
+                "disable ikpk-site-housekeeping.timer", "stop ikpk-site-housekeeping.service",
+                "disable ikpk-site-housekeeping.path", "daemon-reload",
+            ])
+            self.assertNotIn("enable --now ikpk-site-housekeeping.timer", disabled_calls)
+            self.assertFalse(old_path.exists())
+
+            # A prior interrupted install may already have removed the path
+            # unit. Disabled mode must still stop and disable an existing timer.
+            calls = root / "calls-install-disabled-without-path"
+            run = subprocess.run(
+                ["bash", "-c", disabled_install + "\n" + activation],
+                env={**os.environ, "PATH": str(root) + os.pathsep + os.environ["PATH"],
+                     "SYSTEMCTL_CALLS": str(calls)},
+                text=True, capture_output=True, check=False,
+            )
+            self.assertEqual(run.returncode, 0, run.stderr)
+            disabled_without_path_calls = calls.read_text(encoding="utf-8").splitlines()
+            self.assertEqual(disabled_without_path_calls, [
+                "stop ikpk-site-housekeeping.timer", "disable ikpk-site-housekeeping.timer",
+                "stop ikpk-site-housekeeping.service", "daemon-reload",
+            ])
+            self.assertNotIn("enable --now ikpk-site-housekeeping.timer", disabled_without_path_calls)
+            self.assertFalse(old_path.exists())
+
+
+            # Recheck at the write site: disappearance after preflight must not
+            # fall through to the ordinary template creation path.
+            config_start = installer.index('if [[ -e "$CONFIG" || -L "$CONFIG" ]]; then',
+                                            installer.index('installed_config=0'))
+            config_end = installer.index('\n  python3 - "$TEMPLATE" <<\'PY\'', config_start)
+            config_block = installer[config_start:config_end]
+            absent_config = root / "config-disappeared.json"
+            run = subprocess.run(
+                ["bash", "-c", f"set -e\nCONFIG={absent_config}\nTEMPLATE={ROOT}/scripts/staging193-rehearsal.json\nINSTALL_EXISTING_CONFIG_ONLY=1\n{config_block}"],
+                text=True, capture_output=True, check=False,
+            )
+            self.assertEqual(run.returncode, 2, run.stderr)
+            self.assertFalse(absent_config.exists())
+            self.assertFalse(list(root.glob("config-disappeared.json.new.*")))
 
     def test_staging193_config_uses_staging194_helper_validation_profile(self):
         installer = (ROOT / "scripts/install-rehearsal-host.sh").read_text(encoding="utf-8")

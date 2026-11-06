@@ -13,6 +13,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
+from scripts.lib import rehearsal_host
 from scripts.rehearsal import staging193
 
 
@@ -407,6 +408,152 @@ class OperatorAdmissionTests(unittest.TestCase):
         make_archive.assert_called_once_with(SHA, {"sourceSha": SHA, "runId": 123, "attempt": 1},
                                              cms_artifact=b"cms tar payload")
         self._assert_capacity_helpers_not_called(local_space, target_space)
+
+    def test_staging194_paired_cms_update_installs_exact_ci_helper_before_host_admission(self):
+        """The first paired CMS command must not fence a host running stale helper code."""
+        order = []
+        admission = {"sourceSha": SHA, "runId": 123, "attempt": 2,
+                     "workflow": "Tests", "conclusion": "success"}
+        helper = {"artifactId": 987, "runId": 123, "attempt": 2,
+                  "archiveSha256": "b" * 64, "payloadSha256": "c" * 64}
+        args = SimpleNamespace(profile="staging194", host=staging193.TARGET_HOST,
+            command="cms-update", operation_id="staging194-helper-paired", source_sha=SHA,
+            backup_dir=None, release_tag=None, install_host_helper=True)
+
+        def fetch_helper(provenance, source_sha):
+            order.append("fetch-helper")
+            self.assertEqual(source_sha, SHA)
+            self.assertEqual((provenance["sourceSha"], provenance["runId"], provenance["attempt"]),
+                             (SHA, 123, 2))
+            provenance["hostHelperArtifact"] = dict(helper)
+            return b"verified helper"
+
+        def fetch_cms(provenance, source_sha):
+            order.append("fetch-cms")
+            provenance["cmsArtifact"] = {"artifactId": 88, "runId": 123, "attempt": 2,
+                "archiveSha256": "d" * 64, "payloadSha256": "e" * 64}
+            return b"verified cms"
+
+        remote_calls = []
+        def ssh(arguments, **_kwargs):
+            order.append(arguments[0])
+            remote_calls.append(list(arguments))
+            return json.dumps({"phase": "idle" if arguments[0] == "status" else "cms-activated"}).encode()
+
+        archived = []
+        def archive(source_sha, provenance, *, cms_artifact):
+            archived.append(dict(provenance))
+            return b"source archive", "a" * 64
+
+        with patch.object(staging193, "_check_target_space", side_effect=lambda *_a, **_k:
+                          order.append("target-preflight") or {"filesystems": []}), \
+             patch.object(staging193, "_check_local_space", side_effect=lambda *_a, **_k:
+                          order.append("local-preflight") or []), \
+             patch.object(staging193, "validate_sha_and_ci", side_effect=lambda *_a:
+                          order.append("admission") or dict(admission)), \
+             patch.object(staging193, "fetch_cms_candidate_artifact", side_effect=fetch_cms), \
+             patch.object(staging193, "fetch_host_helper_artifact", side_effect=fetch_helper), \
+             patch.object(staging193, "_host_helper_runtime_identity", return_value="f" * 64), \
+             patch.object(staging193, "install_staging194_host_helper", side_effect=lambda *_a:
+                          order.append("install-helper"), create=True) as install, \
+             patch.object(staging193, "make_archive", side_effect=archive), \
+             patch.object(staging193, "ssh_remote", side_effect=ssh):
+            staging193.invoke(args)
+
+        self.assertEqual(order, ["target-preflight", "local-preflight", "admission", "fetch-cms",
+                                 "status", "fetch-helper", "install-helper", "cms-update"])
+        install.assert_called_once_with(b"verified helper", helper["payloadSha256"])
+        self.assertEqual(archived[0]["hostHelperArtifact"], helper)
+        self.assertEqual(archived[0]["runId"], helper["runId"])
+        self.assertEqual(archived[0]["attempt"], helper["attempt"])
+        self.assertEqual(archived[0]["hostHelperRuntimeIdentity"], "f" * 64)
+        self.assertIn("--expected-host-helper-identity", remote_calls[-1])
+        self.assertIn("f" * 64, remote_calls[-1])
+
+    def test_staging194_paired_helper_rejection_stops_before_install_or_host_fence(self):
+        args = SimpleNamespace(profile="staging194", host=staging193.TARGET_HOST,
+            command="cms-update", operation_id="staging194-helper-rejected", source_sha=SHA,
+            backup_dir=None, release_tag=None, install_host_helper=True)
+        with patch.object(staging193, "_check_target_space", return_value={"filesystems": []}), \
+             patch.object(staging193, "_check_local_space", return_value=[]), \
+             patch.object(staging193, "validate_sha_and_ci",
+                          return_value={"sourceSha": SHA, "runId": 123, "attempt": 2}), \
+             patch.object(staging193, "fetch_cms_candidate_artifact", return_value=b"cms"), \
+             patch.object(staging193, "fetch_host_helper_artifact",
+                          side_effect=staging193.Refusal("host helper artifact is not bound to exact successful CI")), \
+             patch.object(staging193, "make_archive", return_value=(b"source archive", "a" * 64)), \
+             patch.object(staging193, "install_staging194_host_helper", create=True) as install, \
+             patch.object(staging193, "ssh_remote", return_value=json.dumps({"phase": "idle"}).encode()) as remote:
+            with self.assertRaisesRegex(staging193.Refusal, "not bound to exact successful CI"):
+                staging193.invoke(args)
+        install.assert_not_called()
+        self.assertEqual(remote.call_args.args[0], ["status", "--operation-id", args.operation_id])
+
+    def test_staging194_paired_helper_install_failure_stops_before_host_fence(self):
+        args = SimpleNamespace(profile="staging194", host=staging193.TARGET_HOST,
+            command="cms-update", operation_id="staging194-helper-install-failure", source_sha=SHA,
+            backup_dir=None, release_tag=None, install_host_helper=True)
+        provenance = {"sourceSha": SHA, "runId": 123, "attempt": 2}
+        def attach_helper(evidence, _sha):
+            evidence["hostHelperArtifact"] = {"artifactId": 987, "runId": 123, "attempt": 2,
+                "archiveSha256": "b" * 64, "payloadSha256": "c" * 64}
+            return b"verified helper"
+        with patch.object(staging193, "_check_target_space", return_value={"filesystems": []}), \
+             patch.object(staging193, "_check_local_space", return_value=[]), \
+             patch.object(staging193, "validate_sha_and_ci", return_value=provenance), \
+             patch.object(staging193, "fetch_cms_candidate_artifact", return_value=b"cms"), \
+             patch.object(staging193, "fetch_host_helper_artifact", side_effect=attach_helper), \
+             patch.object(staging193, "_host_helper_runtime_identity", return_value="f" * 64), \
+             patch.object(staging193, "make_archive", return_value=(b"archive", "a" * 64)), \
+             patch.object(staging193, "install_staging194_host_helper",
+                          side_effect=staging193.Refusal("helper config is incompatible"), create=True) as install, \
+             patch.object(staging193, "ssh_remote", side_effect=lambda command, **_kw:
+                          json.dumps({"phase": "idle" if command[0] == "status" else "cms-activated"}).encode()) as remote:
+            with self.assertRaisesRegex(staging193.Refusal, "helper config is incompatible"):
+                staging193.invoke(args)
+        install.assert_called_once_with(b"verified helper", "c" * 64)
+        self.assertEqual(remote.call_args.args[0], ["status", "--operation-id", args.operation_id])
+
+    def test_staging194_recovery_does_not_refetch_or_reinstall_host_helper(self):
+        args = SimpleNamespace(profile="staging194", host=staging193.TARGET_HOST,
+            command="recover", operation_id="staging194-helper-recovery", backup_dir=None)
+        with tempfile.TemporaryDirectory(prefix="ikpk-staging194-helper-recovery-") as temporary, \
+             patch.object(staging193, "backup_root", return_value=Path(temporary)), \
+             patch.object(staging193, "ssh_remote", return_value=json.dumps({"phase": "recovered"}).encode()) as remote, \
+             patch.object(staging193, "fetch_host_helper_artifact") as fetch, \
+             patch.object(staging193, "install_staging194_host_helper", create=True) as install:
+            staging193.invoke(args)
+        self.assertEqual(remote.call_args.args[0], ["recover", "--operation-id", args.operation_id])
+        fetch.assert_not_called()
+        install.assert_not_called()
+
+    def test_staging194_same_id_cms_resume_verifies_helper_without_reinstalling(self):
+        args = SimpleNamespace(profile="staging194", host=staging193.TARGET_HOST,
+            command="cms-update", operation_id="staging194-helper-resume", source_sha=SHA,
+            backup_dir=None, release_tag=None, install_host_helper=True)
+        provenance = {"sourceSha": SHA, "runId": 123, "attempt": 2}
+        helper = {"artifactId": 987, "runId": 123, "attempt": 2,
+                  "archiveSha256": "b" * 64, "payloadSha256": "c" * 64}
+
+        def attach_helper(evidence, _sha):
+            evidence["hostHelperArtifact"] = dict(helper)
+            return b"verified helper"
+
+        def remote(command, **_kwargs):
+            phase = "fenced" if command[0] == "status" else "cms-activated"
+            return json.dumps({"phase": phase}).encode()
+
+        with patch.object(staging193, "_check_target_space", return_value={"filesystems": []}), \
+             patch.object(staging193, "_check_local_space", return_value=[]), \
+             patch.object(staging193, "validate_sha_and_ci", return_value=provenance), \
+             patch.object(staging193, "fetch_cms_candidate_artifact", return_value=b"cms"), \
+             patch.object(staging193, "fetch_host_helper_artifact", side_effect=attach_helper), \
+             patch.object(staging193, "_host_helper_runtime_identity", return_value="f" * 64), \
+             patch.object(staging193, "make_archive", return_value=(b"archive", "a" * 64)), \
+             patch.object(staging193, "install_staging194_host_helper") as install, \
+             patch.object(staging193, "ssh_remote", side_effect=remote):
+            staging193.invoke(args)
+        install.assert_not_called()
 
     def test_staging194_rechecks_admission_after_backup_before_second_cms_command(self):
         admitted = {"sourceSha": SHA, "runId": 123, "attempt": 1}
@@ -1358,6 +1505,128 @@ class Staging194HostHelperInstallTests(unittest.TestCase):
         self.assertEqual(result, 0)
         self.assertTrue(observed[0].install_host_helper)
 
+    def test_cms_update_exposes_the_staging194_host_helper_opt_in(self):
+        observed = []
+        with patch.object(staging193, "invoke", side_effect=lambda args: observed.append(args)):
+            result = staging193.main(["--profile", "staging194", "cms-update", "--host",
+                staging193.TARGET_HOST, "--operation-id", "paired-helper-cli", "--source-sha", SHA,
+                "--install-host-helper"])
+        self.assertEqual(result, 0)
+        self.assertTrue(observed[0].install_host_helper)
+
+    def test_staging_launcher_prelocks_every_host_action_that_uses_the_destination_lock(self):
+        import ast
+        import fcntl
+        installer = (Path(__file__).resolve().parents[1] / "install-rehearsal-host.sh").read_text()
+        launcher = installer.split('cat >"$SBIN/ikpk-rehearsal" <<EOF\n', 1)[1].split("\nEOF", 1)[0]
+        self.assertLess(launcher.index("fcntl.flock(fd"), launcher.index("from rehearsal_host import main"))
+        self.assertIn("main(publication_lock_fd=publication_lock_fd)", launcher)
+        parsed_launcher = ast.parse(launcher)
+        actions_assignment = next(node for node in parsed_launcher.body
+                                   if isinstance(node, ast.Assign)
+                                   and any(isinstance(target, ast.Name) and target.id == "locked_actions"
+                                           for target in node.targets))
+        self.assertEqual(ast.literal_eval(actions_assignment.value), rehearsal_host.DESTINATION_LOCKED_ACTIONS)
+        self.assertIn('if profile == "staging194" and action in locked_actions:', launcher)
+
+        classification = launcher[launcher.index('profile = "staging194"'):
+                                   launcher.index('if profile == "staging194" and action in locked_actions:')]
+        def select(argv):
+            state = {"argv": argv, "fcntl": fcntl}
+            exec(compile(classification, "paired-launcher-selection", "exec"), state)
+            return state["profile"], state["action"], state["locked_actions"], state["lock_mode"]
+
+        action_lock_modes = {}
+        for action in rehearsal_host.DESTINATION_LOCKED_ACTIONS:
+            profile, selected_action, _locked, lock_mode = select(["--profile", "staging194", action])
+            self.assertEqual((profile, selected_action), ("staging194", action))
+            action_lock_modes[action] = lock_mode
+        for arguments in (["--profile=staging194", "recover"], ["--prof", "staging194", "cleanup-site"]):
+            self.assertEqual(select(arguments)[0], "staging194")
+        self.assertEqual(select(["--profile", "staging194", "cms-update", "--pro", "payload"])[:2],
+                         ("staging194", "cms-update"))
+        for arguments in (["--profile", "staging194", "status"],
+                          ["--profile", "staging194", "space-preflight"],
+                          ["--profile", "staging194", "validate-config"],
+                          ["--profile", "production-static", "static-main"],
+                          ["--prof", "production-paired", "cms-update"]):
+            profile, action, locked_actions, _lock_mode = select(arguments)
+            self.assertFalse(profile == "staging194" and action in locked_actions, arguments)
+
+        with tempfile.TemporaryDirectory(prefix="ikpk-helper-import-lock-") as temporary:
+            root = Path(temporary)
+            lock_path = root / "publication.lock"
+            module_path = root / "loaded_helper.py"
+            lock_path.touch(mode=0o600)
+            module_path.write_text('generation = "A"\n')
+            child_code = (
+                "import fcntl, importlib.util, os, sys, time; "
+                "fd=os.open(sys.argv[1], os.O_RDWR); fcntl.flock(fd, fcntl.LOCK_EX); "
+                "spec=importlib.util.spec_from_file_location('loaded_helper', sys.argv[2]); "
+                "module=importlib.util.module_from_spec(spec); spec.loader.exec_module(module); "
+                "print(module.generation, flush=True); time.sleep(0.25); print(module.generation, flush=True)"
+            )
+            child = subprocess.Popen(["python3", "-c", child_code, str(lock_path), str(module_path)],
+                                     stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            self.assertEqual(child.stdout.readline().strip(), "A")
+            replacement_fd = os.open(lock_path, os.O_RDWR)
+            try:
+                with self.assertRaises(BlockingIOError):
+                    fcntl.flock(replacement_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            finally:
+                os.close(replacement_fd)
+            stdout, stderr = child.communicate(timeout=5)
+            self.assertEqual(child.returncode, 0, stderr)
+            self.assertEqual(stdout.splitlines(), ["A"])
+            replacement_fd = os.open(lock_path, os.O_RDWR)
+            try:
+                fcntl.flock(replacement_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                module_path.write_text('generation = "B"\n')
+            finally:
+                os.close(replacement_fd)
+            self.assertIn('"B"', module_path.read_text())
+
+            cleanup_mode = select(["--profile", "staging194", "cleanup-site"])[3]
+            held_fd = os.open(lock_path, os.O_RDWR)
+            fcntl.flock(held_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            cleanup_request = Path(temporary) / "cleanup.request"
+            cleanup_request.write_text('{"version":1,"releaseId":"stale"}')
+            releases = Path(temporary) / "releases"
+            releases.mkdir()
+            (releases / "stale").write_text("keep until lock is acquired")
+            before_request = cleanup_request.read_bytes()
+            before_releases = {item.name: item.read_bytes() for item in releases.iterdir()}
+            cleanup_code = (
+                "import fcntl, os, sys\nfd=os.open(sys.argv[1], os.O_RDWR)\n"
+                "try: fcntl.flock(fd, int(sys.argv[2]))\n"
+                "except BlockingIOError: print('busy', flush=True); raise SystemExit(3)\n"
+                "print('acquired', flush=True)"
+            )
+            try:
+                cleanup = subprocess.run(
+                    ["python3", "-c", cleanup_code, str(lock_path), str(cleanup_mode)],
+                    stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=2,
+                    check=False)
+                self.assertEqual(cleanup.returncode, 3, cleanup.stderr)
+                self.assertEqual(cleanup.stdout.strip(), "busy")
+                self.assertEqual(cleanup_request.read_bytes(), before_request)
+                self.assertEqual({item.name: item.read_bytes() for item in releases.iterdir()}, before_releases)
+            finally:
+                fcntl.flock(held_fd, fcntl.LOCK_UN)
+                os.close(held_fd)
+            manual = os.open(lock_path, os.O_RDWR)
+            try:
+                fcntl.flock(manual, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                cleanup_request.unlink()
+                (releases / "stale").unlink()
+            finally:
+                os.close(manual)
+            self.assertFalse(cleanup_request.exists())
+            self.assertEqual(list(releases.iterdir()), [])
+            self.assertEqual(action_lock_modes,
+                             {action: fcntl.LOCK_EX | fcntl.LOCK_NB
+                              for action in rehearsal_host.DESTINATION_LOCKED_ACTIONS})
+
     def test_helper_install_transfers_and_verifies_bytes_before_running_existing_installer(self):
         payload = b"verified host helper archive"
         digest = hashlib.sha256(payload).hexdigest()
@@ -1390,11 +1659,16 @@ class Staging194HostHelperInstallTests(unittest.TestCase):
                         install_command.index("install-rehearsal-host.sh"))
         self.assertIn(digest, install_command)
         self.assertIn("LOCK_NB", install_command)
+        self.assertLess(install_command.index("fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)"),
+                        install_command.index("--staging193-existing-config"))
+        self.assertLess(install_command.index("--staging193-existing-config"),
+                        install_command.index("for fd in reversed(fds)"))
         self.assertIn("staging194 lock inode changed during helper installation", install_command)
         self.assertIn("recover with the previous operation ID, then use a new operation ID", install_command)
-        self.assertFalse(any(option in install_command for option in
-                             ("--staging193-config", "--initial-prod-config",
-                              "--production-static-config", "--production-paired-config")))
+        self.assertIn('--staging193-existing-config"], check=True)', install_command)
+        self.assertNotIn("--initial-prod-config", install_command)
+        self.assertNotIn("--production-static-config", install_command)
+        self.assertNotIn("--production-paired-config", install_command)
 
     def test_remote_digest_failure_stops_before_installer(self):
         payload = b"transferred helper bytes"

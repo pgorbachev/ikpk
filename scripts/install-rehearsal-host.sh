@@ -5,15 +5,17 @@ ROOT=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 PREFIX=/usr/local
 INSTALL_CONFIG_PROFILE=
 INSTALL_DISABLED=0
+INSTALL_EXISTING_CONFIG_ONLY=0
 while (($#)); do
   case "$1" in
     --prefix) PREFIX=${2:?missing prefix}; shift 2 ;;
     --install-disabled) INSTALL_DISABLED=1; shift ;;
     --staging193-config) INSTALL_CONFIG_PROFILE=staging193; shift ;;
+    --staging193-existing-config) INSTALL_CONFIG_PROFILE=staging193; INSTALL_EXISTING_CONFIG_ONLY=1; shift ;;
     --initial-prod-config) INSTALL_CONFIG_PROFILE=initial-prod; shift ;;
     --production-static-config) INSTALL_CONFIG_PROFILE=production-static; shift ;;
     --production-paired-config) INSTALL_CONFIG_PROFILE=production-paired; shift ;;
-    *) echo "usage: $0 [--prefix ABSOLUTE-PREFIX] [--install-disabled] [--staging193-config|--initial-prod-config|--production-static-config|--production-paired-config]" >&2; exit 2 ;;
+    *) echo "usage: $0 [--prefix ABSOLUTE-PREFIX] [--install-disabled] [--staging193-config|--staging193-existing-config|--initial-prod-config|--production-static-config|--production-paired-config]" >&2; exit 2 ;;
   esac
 done
 [[ "$PREFIX" = /* && "$PREFIX" != / ]] || { echo 'prefix must be an absolute non-root path' >&2; exit 2; }
@@ -79,6 +81,52 @@ if [[ -n "$INSTALL_CONFIG_PROFILE" ]]; then
     PYTHONPATH="$ROOT/scripts/lib" python3 "$ROOT/scripts/lib/rehearsal_config.py" check "$CONFIG" "$TEMPLATE" || {
       echo 'existing rehearsal config is incompatible; refusing installation before helper writes' >&2; exit 2;
     }
+  elif (( INSTALL_EXISTING_CONFIG_ONLY )); then
+    echo 'existing rehearsal config is required for helper refresh; refusing installation before helper writes' >&2
+    exit 2
+  fi
+fi
+
+# Stop the legacy level-triggered cleanup unit before replacing any helper
+# files it can invoke. The staging194 installer wrapper holds the existing
+# publication and operation locks around this installer call.
+HOUSEKEEPING_TRANSITION=0
+report_paused_housekeeping() {
+  local status=$?
+  if (( status != 0 && HOUSEKEEPING_TRANSITION )); then
+    echo 'host helper installation incomplete; preserve cleanup.request; under the publication and operation locks, check the installed helper and restore it from a verified CI artifact if needed' >&2
+  fi
+}
+trap report_paused_housekeeping EXIT
+systemd_dir=/etc/systemd/system
+if [[ -z "$INSTALL_CONFIG_PROFILE" && "$PREFIX" -ef /usr/local \
+      && -e "$systemd_dir/ikpk-site-housekeeping.path" ]]; then
+  echo 'host helper refresh with a legacy path unit requires --staging193-existing-config; refusing to replace the helper' >&2
+  exit 2
+fi
+if [[ -n "$INSTALL_CONFIG_PROFILE" ]]; then
+  if [[ -e "$systemd_dir/ikpk-site-housekeeping.path" ]]; then
+    if [[ ! -f "$systemd_dir/ikpk-site-housekeeping.timer" \
+          || ! -f "$systemd_dir/ikpk-site-housekeeping.service" ]]; then
+      echo 'legacy housekeeping units are incomplete; refusing helper replacement before stopping them' >&2
+      exit 2
+    fi
+    HOUSEKEEPING_TRANSITION=1
+    systemctl stop ikpk-site-housekeeping.path
+    systemctl stop ikpk-site-housekeeping.timer
+    if (( INSTALL_DISABLED )); then
+      systemctl disable ikpk-site-housekeeping.timer
+    fi
+    systemctl stop ikpk-site-housekeeping.service
+    systemctl disable ikpk-site-housekeeping.path
+    rm -f -- "$systemd_dir/ikpk-site-housekeeping.path"
+    elif (( INSTALL_DISABLED )) && [[ -e "$systemd_dir/ikpk-site-housekeeping.timer" ]]; then
+      HOUSEKEEPING_TRANSITION=1
+      systemctl stop ikpk-site-housekeeping.timer
+      systemctl disable ikpk-site-housekeeping.timer
+      if [[ -e "$systemd_dir/ikpk-site-housekeeping.service" ]]; then
+        systemctl stop ikpk-site-housekeeping.service
+      fi
   fi
 fi
 
@@ -90,10 +138,70 @@ install -m 0644 "$ROOT/scripts/lib/housekeeping_journal.py" "$LIB/housekeeping_j
 install -m 0644 "$ROOT/scripts/lib/rehearsal_host.py" "$LIB/rehearsal_host.py"
 cat >"$SBIN/ikpk-rehearsal" <<EOF
 #!/usr/bin/env python3
-import sys
+import fcntl, json, os, pwd, stat, sys
 sys.path.insert(0, "$LIB")
+publication_lock_fd = None
+argv = sys.argv[1:]
+profile = "staging194"
+action = None
+index = 0
+while index < len(argv):
+    argument = argv[index]
+    option = argument.split("=", 1)[0]
+    if argument.startswith("--") and "--profile".startswith(option):
+        if "=" in argument:
+            profile = argument.split("=", 1)[1]
+            index += 1
+        elif index + 1 < len(argv):
+            profile = argv[index + 1]
+            index += 2
+        else:
+            break
+    elif argument.startswith("-"):
+        break
+    else:
+        action = argument
+        break
+locked_actions = {
+    "cms-update", "static-publish", "static-main", "static-main-recover",
+    "recover", "restore", "finalize-recover", "cleanup-site",
+    "export-backup", "export-static", "export-static-main",
+}
+lock_mode = fcntl.LOCK_EX | fcntl.LOCK_NB
+if profile == "staging194" and action in locked_actions:
+    lock_path = "/var/www/ikpk/.publication.lock"
+    fd = None
+    try:
+        config_path = "/etc/ikpk/rehearsal.json"
+        with open(config_path, encoding="utf-8") as source:
+            config = json.load(source)
+        if (config.get("profile", "staging194") != "staging194"
+                or config.get("publicationLock") != lock_path):
+            raise RuntimeError("paired helper lock profile is not staging194")
+        expected_uid = pwd.getpwnam(config["cmsUser"]).pw_uid
+        before = os.lstat(lock_path)
+        if (not stat.S_ISREG(before.st_mode) or before.st_nlink != 1
+                or before.st_uid != expected_uid or stat.S_IMODE(before.st_mode) != 0o600):
+            raise RuntimeError("shared publication lock has unsafe type, owner, or mode")
+        fd = os.open(lock_path, os.O_RDWR | getattr(os, "O_NOFOLLOW", 0))
+        opened = os.fstat(fd)
+        if ((opened.st_dev, opened.st_ino) != (before.st_dev, before.st_ino)
+                or not stat.S_ISREG(opened.st_mode) or opened.st_nlink != 1
+                or opened.st_uid != expected_uid or stat.S_IMODE(opened.st_mode) != 0o600):
+            raise RuntimeError("shared publication lock changed while opening")
+        fcntl.flock(fd, lock_mode)
+        named = os.lstat(lock_path)
+        if ((opened.st_dev, opened.st_ino) != (named.st_dev, named.st_ino)
+                or not stat.S_ISREG(named.st_mode) or named.st_nlink != 1
+                or named.st_uid != expected_uid or stat.S_IMODE(named.st_mode) != 0o600):
+            raise RuntimeError("shared publication lock changed after acquisition")
+        publication_lock_fd = fd
+    except (OSError, KeyError, ValueError, RuntimeError) as error:
+        if fd is not None:
+            os.close(fd)
+        raise SystemExit("could not lock staging194 before importing the paired helper") from error
 from rehearsal_host import main
-raise SystemExit(main())
+raise SystemExit(main(publication_lock_fd=publication_lock_fd))
 EOF
 chmod 0755 "$SBIN/ikpk-rehearsal"
 PYTHONDONTWRITEBYTECODE=1 "$SBIN/ikpk-rehearsal" --help >/dev/null
@@ -117,12 +225,16 @@ if [[ -n "$INSTALL_CONFIG_PROFILE" ]]; then
   install -d -o root -g root -m 0755 "$CONFIG_DIR"
   if [[ -e "$CONFIG" || -L "$CONFIG" ]]; then
     [[ -f "$CONFIG" && ! -L "$CONFIG" ]] || { echo 'existing rehearsal config is not a regular file' >&2; exit 2; }
-    if ! cmp -s "$CONFIG" "$TEMPLATE"; then
+    if ! cmp -s "$CONFIG" "$TEMPLATE" && (( ! INSTALL_EXISTING_CONFIG_ONLY )); then
       PYTHONPATH="$ROOT/scripts/lib" python3 "$ROOT/scripts/lib/rehearsal_config.py" migrate "$CONFIG" "$TEMPLATE" || {
         echo 'existing rehearsal config migration failed; CMS/site data was not changed; inspect config/backup and rerun the installer after correcting the filesystem error' >&2; exit 2;
       }
     fi
   else
+    if (( INSTALL_EXISTING_CONFIG_ONLY )); then
+      echo 'existing rehearsal config disappeared during helper refresh; refusing to create it' >&2
+      exit 2
+    fi
     temporary="$CONFIG.new.$$"
     install -o root -g root -m 0600 "$TEMPLATE" "$temporary"
     mv -T -- "$temporary" "$CONFIG"
@@ -248,7 +360,6 @@ with open(sys.argv[1], encoding="utf-8") as source:
     print(os.path.dirname(json.load(source)["siteRefreshState"]))
 PY
 )
-  site_cleanup_request="$site_state_dir/cleanup.request"
   cleanup_profile_state_dirs=
   cleanup_profile_artifact_roots=
   if [[ "$service_profile" == production-static || "$service_profile" == production-paired || \
@@ -264,7 +375,6 @@ PY
   systemd_dir=/etc/systemd/system
   unit_tmp="$systemd_dir/ikpk-site-housekeeping.service.new.$$"
   timer_tmp="$systemd_dir/ikpk-site-housekeeping.timer.new.$$"
-  path_tmp="$systemd_dir/ikpk-site-housekeeping.path.new.$$"
   cat >"$unit_tmp" <<EOF
 [Unit]
 Description=Clean expired IKPK static site releases
@@ -305,22 +415,10 @@ WantedBy=timers.target
 EOF
   chmod 0644 "$timer_tmp"
   mv -f -- "$timer_tmp" "$systemd_dir/ikpk-site-housekeeping.timer"
-  cat >"$path_tmp" <<EOF
-[Unit]
-Description=Start IKPK release housekeeping after CMS publication success
-
-[Path]
-PathExists=$site_cleanup_request
-Unit=ikpk-site-housekeeping.service
-
-[Install]
-WantedBy=multi-user.target
-EOF
-  chmod 0644 "$path_tmp"
-  mv -f -- "$path_tmp" "$systemd_dir/ikpk-site-housekeeping.path"
   systemctl daemon-reload
   if (( ! INSTALL_DISABLED )); then
-    systemctl enable --now ikpk-site-housekeeping.path ikpk-site-housekeeping.timer
+    systemctl enable --now ikpk-site-housekeeping.timer
   fi
+  HOUSEKEEPING_TRANSITION=0
 fi
 echo "installed rehearsal host entrypoint: $SBIN/ikpk-rehearsal"

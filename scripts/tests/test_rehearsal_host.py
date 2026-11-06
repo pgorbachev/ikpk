@@ -14,7 +14,7 @@ import tarfile
 import tempfile
 import unittest
 from argparse import Namespace
-from contextlib import nullcontext
+from contextlib import contextmanager, nullcontext
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -145,6 +145,58 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
                 rehearsal_host.dispatch(Namespace(profile="production-static", action="cleanup-site"))
         consume.assert_not_called()
         cleanup.assert_not_called()
+
+    def test_cleanup_busy_preserves_request_then_dispatch_retries_after_lock_release(self):
+        import fcntl
+        with tempfile.TemporaryDirectory(prefix="ikpk-cleanup-busy-dispatch-") as temporary:
+            root = Path(temporary)
+            state_dir = root / "state"
+            state_dir.mkdir()
+            lock_path = root / "publication.lock"
+            lock_path.touch(mode=0o600)
+            lock_path.chmod(0o600)
+            request = root / "cleanup.request"
+            request_bytes = b'{"version":1,"releaseId":"stale-release"}'
+            request.write_bytes(request_bytes)
+            config = {"profile": "production-static", "stateDir": str(state_dir),
+                      "publicationLock": str(lock_path), "cmsUser": "test-owner",
+                      "siteRefreshState": str(root / "site-refresh.json"),
+                      "sitePublicationMarker": str(rehearsal_host.SITE_PUBLICATION_MARKER_DIR /
+                                                    rehearsal_host.SITE_PUBLICATION_MARKER)}
+            args = Namespace(profile="production-static", action="cleanup-site")
+            owner = type("Account", (), {"pw_uid": os.getuid()})()
+            descriptor = os.open(lock_path, os.O_RDWR)
+            fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            consume = rehearsal_host._consume_site_cleanup_request
+            try:
+                with patch.object(rehearsal_host.os, "geteuid", return_value=0), \
+                     patch.object(rehearsal_host, "_root_config", return_value=config), \
+                     patch.object(rehearsal_host, "_select_cleanup_profile",
+                                  return_value=(config, "production-static", None)), \
+                     patch.object(rehearsal_host, "_configure_profile_temp"), \
+                     patch.object(rehearsal_host, "PRODUCTION_PUBLICATION_LOCK", lock_path), \
+                     patch.object(rehearsal_host.pwd, "getpwnam", return_value=owner), \
+                     patch.object(rehearsal_host, "_read_site_publication_marker", return_value=None), \
+                     patch.object(rehearsal_host, "_assert_site_publication_admission"), \
+                     patch.object(rehearsal_host, "_assert_site_refresh_idle"), \
+                     patch.object(rehearsal_host, "_consume_site_cleanup_request", wraps=consume) as consume_mock, \
+                     patch.object(rehearsal_host, "_cleanup_site_releases",
+                                  return_value={"removed": []}) as cleanup_mock:
+                    with self.assertRaisesRegex(rehearsal_host.HostFailure, "another publisher"):
+                        rehearsal_host.dispatch(args)
+                    self.assertEqual(request.read_bytes(), request_bytes)
+                    consume_mock.assert_not_called()
+                    cleanup_mock.assert_not_called()
+
+                    fcntl.flock(descriptor, fcntl.LOCK_UN)
+                    result = rehearsal_host.dispatch(args)
+                    self.assertEqual(result, {"status": "succeeded", "removed": []})
+                    self.assertFalse(request.exists())
+                    consume_mock.assert_called_once()
+                    cleanup_mock.assert_called_once()
+            finally:
+                fcntl.flock(descriptor, fcntl.LOCK_UN)
+                os.close(descriptor)
 
     def test_cleanup_does_not_auto_remove_a_dead_root_reservation(self):
         with tempfile.TemporaryDirectory(prefix="ikpk-dead-housekeeping-lock-") as temporary:
@@ -2267,6 +2319,88 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
 
 
 class StaticMainAdmissionTests(unittest.TestCase):
+    def test_destination_lock_reuses_the_launcher_descriptor_without_releasing_it(self):
+        import fcntl
+        with tempfile.TemporaryDirectory(prefix="ikpk-prelocked-publication-") as temporary:
+            lock_path = Path(temporary) / "publication.lock"
+            lock_path.touch(mode=0o600)
+            os.chmod(lock_path, 0o600)
+            descriptor = os.open(lock_path, os.O_RDWR)
+            fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            owner = SimpleNamespace(pw_uid=os.getuid())
+            config = {"publicationLock": lock_path, "cmsUser": "test-owner"}
+            with patch.object(rehearsal_host, "PRODUCTION_PUBLICATION_LOCK", lock_path), \
+                 patch.object(rehearsal_host.pwd, "getpwnam", return_value=owner):
+                with rehearsal_host._destination_publication_lock(config, prelocked_fd=descriptor):
+                    self.assertTrue(os.fstat(descriptor))
+                replacement_descriptor = os.open(lock_path, os.O_RDWR)
+                try:
+                    with self.assertRaises(BlockingIOError):
+                        fcntl.flock(replacement_descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                finally:
+                    os.close(replacement_descriptor)
+            os.close(descriptor)
+
+    def test_paired_helper_identity_is_checked_under_destination_lock_before_journal_or_mutation(self):
+        import fcntl
+        with tempfile.TemporaryDirectory(prefix="ikpk-helper-identity-lock-") as temporary:
+            state_dir = Path(temporary) / "state"
+            state_dir.mkdir()
+            lock_path = Path(temporary) / "publication.lock"
+            lock_path.touch(mode=0o600)
+            os.chmod(lock_path, 0o600)
+            descriptor = os.open(lock_path, os.O_RDWR)
+            fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            config = {"stateDir": str(state_dir), "profile": "staging194",
+                      "publicationLock": lock_path, "cmsUser": "test-owner"}
+
+            def runtime_identity():
+                replacement_fd = os.open(lock_path, os.O_RDWR)
+                try:
+                    with self.assertRaises(BlockingIOError):
+                        fcntl.flock(replacement_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                finally:
+                    os.close(replacement_fd)
+                return "0" * 64
+
+            provenance = {"runId": 1, "attempt": 1, "hostHelperArtifact": {
+                "artifactId": 2, "runId": 1, "attempt": 1,
+                "archiveSha256": "b" * 64, "payloadSha256": "c" * 64},
+                "hostHelperRuntimeIdentity": "a" * 64}
+            args = Namespace(profile="staging194", action="cms-update", operation_id="helper-op",
+                source_sha="a" * 40,
+                provenance_b64=base64.b64encode(json.dumps(provenance).encode()).decode(),
+                expected_host_helper_identity="a" * 64,
+                _publication_lock_fd=descriptor)
+            with patch.object(rehearsal_host.os, "geteuid", return_value=0), \
+                 patch.object(rehearsal_host, "_root_config", return_value=config), \
+                 patch.object(rehearsal_host, "_configure_profile_temp"), \
+                 patch.object(rehearsal_host, "PRODUCTION_PUBLICATION_LOCK", lock_path), \
+                 patch.object(rehearsal_host.pwd, "getpwnam", return_value=SimpleNamespace(pw_uid=os.getuid())), \
+                 patch.object(rehearsal_host, "_host_helper_runtime_identity", side_effect=runtime_identity), \
+                 patch.object(RehearsalState, "read_journal_for_cleanup") as read_journal:
+                with self.assertRaisesRegex(rehearsal_host.HostFailure, "identity changed"):
+                    rehearsal_host.dispatch(args)
+            read_journal.assert_not_called()
+            os.close(descriptor)
+
+    def test_old_launcher_without_preimport_lock_fd_refuses_identity_before_config_or_journal(self):
+        identity = "a" * 64
+        provenance = {"runId": 1, "attempt": 1, "hostHelperArtifact": {
+            "artifactId": 2, "runId": 1, "attempt": 1,
+            "archiveSha256": "b" * 64, "payloadSha256": "c" * 64},
+            "hostHelperRuntimeIdentity": identity}
+        encoded = base64.b64encode(json.dumps(provenance).encode()).decode()
+        base_args = ["--profile", "staging194", "cms-update", "--operation-id", "old-launcher",
+                     "--source-sha", "a" * 40, "--provenance-b64", encoded]
+        with patch.object(rehearsal_host.os, "geteuid", return_value=0), \
+             patch.object(rehearsal_host, "_root_config") as root_config:
+            for option in ("--expected-host-helper-identity=" + identity,
+                           "--expected-host-helper-ident=" + identity):
+                with self.subTest(option=option):
+                    self.assertEqual(rehearsal_host.main([*base_args, option]), 2)
+            root_config.assert_not_called()
+
     def test_capture_projection_digest_binds_field_map_and_snapshot_transformer(self):
         import os
         with tempfile.TemporaryDirectory(prefix="ikpk-capture-projection-") as temporary:

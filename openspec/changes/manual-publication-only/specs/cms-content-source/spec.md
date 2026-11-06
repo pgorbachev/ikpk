@@ -100,7 +100,7 @@ Paired staging194 CMS deployment SHALL keep the existing mutually exclusive admi
 - **THEN** the previous CMS and site releases, the current and next-start CMS workspaces, and required rollback targets remain protected until no longer required by the existing recovery contract
 - **AND** update and rollback keep the CMS version and its workspace path consistent
 - **AND** uncertain workspace identity prevents automatic CMS release deletion
-- **AND** publication, release and cleanup use the existing shared lock; successful publication requests existing cleanup, and an interrupted cleanup request remains retryable
+- **AND** publication, deploy, restore and cleanup use the existing shared lock and refuse without site-state changes when it is busy; successful publication requests cleanup, and a busy or interrupted cleanup request remains retryable through the existing timer
 
 #### Scenario: CMS administration configuration differs
 - **WHEN** staging or production needs a different public administration configuration
