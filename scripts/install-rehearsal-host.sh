@@ -90,15 +90,32 @@ fi
 # Stop the legacy level-triggered cleanup unit before replacing any helper
 # files it can invoke. The staging194 installer wrapper holds the existing
 # publication and operation locks around this installer call.
-if [[ -n "$INSTALL_CONFIG_PROFILE" || "$PREFIX" -ef /usr/local ]]; then
-  systemd_dir=/etc/systemd/system
+HOUSEKEEPING_TRANSITION=0
+report_paused_housekeeping() {
+  local status=$?
+  if (( status != 0 && HOUSEKEEPING_TRANSITION )); then
+    echo 'housekeeping installation stopped before timer activation; cleanup.request remains pending; rerun this installer command to finish recovery' >&2
+  fi
+}
+trap report_paused_housekeeping EXIT
+systemd_dir=/etc/systemd/system
+if [[ -z "$INSTALL_CONFIG_PROFILE" && "$PREFIX" -ef /usr/local \
+      && -e "$systemd_dir/ikpk-site-housekeeping.path" ]]; then
+  echo 'host helper refresh with a legacy path unit requires --staging193-existing-config; refusing to replace the helper' >&2
+  exit 2
+fi
+if [[ -n "$INSTALL_CONFIG_PROFILE" ]]; then
   if [[ -e "$systemd_dir/ikpk-site-housekeeping.path" ]]; then
-    if [[ ! -f "$systemd_dir/ikpk-site-housekeeping.timer" || -L "$systemd_dir/ikpk-site-housekeeping.timer" ]]; then
-      echo 'existing housekeeping timer is unavailable; leaving the legacy path unit and helper untouched' >&2
+    if [[ ! -f "$systemd_dir/ikpk-site-housekeeping.timer" \
+          || ! -f "$systemd_dir/ikpk-site-housekeeping.service" ]]; then
+      echo 'legacy housekeeping units are incomplete; refusing helper replacement before stopping them' >&2
       exit 2
     fi
-    systemctl enable --now ikpk-site-housekeeping.timer
-    systemctl disable --now ikpk-site-housekeeping.path
+    HOUSEKEEPING_TRANSITION=1
+    systemctl stop ikpk-site-housekeeping.path
+    systemctl stop ikpk-site-housekeeping.timer
+    systemctl stop ikpk-site-housekeeping.service
+    systemctl disable ikpk-site-housekeeping.path
     rm -f -- "$systemd_dir/ikpk-site-housekeeping.path"
   fi
 fi
@@ -392,5 +409,6 @@ EOF
   if (( ! INSTALL_DISABLED )); then
     systemctl enable --now ikpk-site-housekeeping.timer
   fi
+  HOUSEKEEPING_TRANSITION=0
 fi
 echo "installed rehearsal host entrypoint: $SBIN/ikpk-rehearsal"
