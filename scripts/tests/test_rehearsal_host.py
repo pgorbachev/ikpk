@@ -14,7 +14,7 @@ import tarfile
 import tempfile
 import unittest
 from argparse import Namespace
-from contextlib import contextmanager, nullcontext
+from contextlib import ExitStack, contextmanager, nullcontext
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -1671,6 +1671,92 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
 
             self.assertEqual(events, ["validate-prepared"])
             self.assertEqual(result["phase"], "cms-activated")
+
+    def test_profileless_staging_cms_update_resumes_after_offhost_confirmation(self):
+        with tempfile.TemporaryDirectory(prefix="ikpk-profileless-two-call-cms-update-") as temporary:
+            root = Path(temporary)
+            state_root = root / "state"
+            state_root.mkdir()
+            state = RehearsalState(state_root)
+            for directory in (root / "releases", root / "static", root / "uploads"):
+                directory.mkdir(parents=True)
+            live_db = root / "live.sqlite"
+            live_db.write_bytes(b"live db")
+            env_file = root / "site-build-current194.env"
+            old_workspace = "/opt/ikpk-cms-prototype193/releases/" + "a" * 40 + "-previous-op"
+            old_sha = "a" * 40
+            env_file.write_text(f"IKPK_BUILD_WORKSPACE={old_workspace}\nIKPK_INSTALLED_COMMIT={old_sha}\n")
+            env_file.chmod(0o600)
+            config = {"cmsUnit": "ikpk-cms-prototype193.service", "cmsEnvironmentFile": str(env_file),
+                      "currentCms": str(root / "current-cms"), "currentStatic": str(root / "current-static"),
+                      "cmsDatabase": str(live_db), "mediaRoots": [{"prefix": "/uploads/", "path": str(root / "uploads")}],
+                      "releaseRoot": str(root / "releases"), "backupRoot": str(root / "backups"),
+                      "allowedSourceRef": "refs/heads/main", "writerUnits": [], "writerPrefixes": [],
+                      "preservePrefixes": [], "cmsHealthUrl": "http://127.0.0.1:1338/_health"}
+            operation_id, source_sha = "profileless-two-call", "b" * 40
+            source_root = root / "releases" / f"{source_sha}-{operation_id}"
+            archive = b"admitted-source-archive"
+            artifact = {"artifactId": 17, "payloadSha256": "c" * 64}
+            provenance = {"sourceSha": source_sha, "ref": "refs/heads/main"}
+            base_args = {"operation_id": operation_id, "source_sha": source_sha,
+                         "provenance_b64": base64.b64encode(json.dumps(provenance).encode()).decode(),
+                         "archive_sha256": hashlib.sha256(archive).hexdigest()}
+            host_stdin = type("HostStdin", (), {"buffer": io.BytesIO(archive)})()
+            backup_digest = "d" * 64
+
+            def make_backup(_config, op):
+                directory = Path(config["backupRoot"]) / op
+                directory.mkdir(parents=True, exist_ok=True)
+                (directory / "manifest.json").write_text(json.dumps({"archiveSha256": backup_digest}))
+                return {"archiveSha256": backup_digest}
+
+            real_lstat = Path.lstat
+            def root_owned_environment(path, *args, **kwargs):
+                info = real_lstat(path, *args, **kwargs)
+                if path == env_file:
+                    fields = list(info); fields[4] = 0
+                    return os.stat_result(fields)
+                return info
+
+            def stop_at_migration(*_args, **_kwargs):
+                raise rehearsal_host.HostFailure("test reached confirmed CMS migration")
+
+            patches = (
+                patch.object(rehearsal_host.sys, "stdin", host_stdin),
+                patch.object(Path, "lstat", root_owned_environment),
+                patch.object(rehearsal_host, "_current_target", side_effect=[root / "releases/old-cms", root / "static/old-site"]),
+                patch.object(rehearsal_host, "_cms_payload_sha256", return_value="1" * 64),
+                patch.object(rehearsal_host, "_tree_sha256", return_value="2" * 64),
+                patch.object(rehearsal_host, "_config_sha256", return_value="3" * 64),
+                patch.object(rehearsal_host, "_service_pid", return_value=321),
+                patch.object(rehearsal_host, "_database_process_proof", return_value={"kind": "live"}),
+                patch.object(rehearsal_host, "_validate_paired_ci_workflows"),
+                patch.object(rehearsal_host, "_trusted_cms_artifact", return_value=artifact),
+                patch.object(rehearsal_host, "_extract_source_archive", return_value=source_root),
+                patch.object(rehearsal_host, "_prepare_cms_candidate"),
+                patch.object(rehearsal_host, "_validate_prepared_cms_candidate", return_value=(source_root, source_root / "cms-artifact", root / "deps")),
+                patch.object(rehearsal_host, "_pre_fence_staging194_process"),
+                patch.object(rehearsal_host, "_assert_site_refresh_idle"),
+                patch.object(rehearsal_host, "_write_site_publication_marker"),
+                patch.object(rehearsal_host, "_set_flag"), patch.object(rehearsal_host, "_write_gate"),
+                patch.object(rehearsal_host, "_verify_site_refresh_idle"),
+                patch.object(rehearsal_host, "_stop_writers"), patch.object(rehearsal_host, "_verify_fence"),
+                patch.object(rehearsal_host, "_backup", side_effect=make_backup),
+                patch.object(rehearsal_host, "_preflight_staging194_source"),
+                patch.object(rehearsal_host, "_install_migrated_database", side_effect=stop_at_migration),
+            )
+            with ExitStack() as stack:
+                for patcher in patches:
+                    stack.enter_context(patcher)
+                first = rehearsal_host._cms_update(config, state,
+                    Namespace(**base_args, offhost_sha256=None))
+                self.assertTrue(first["offhostBackupRequired"])
+                with self.assertRaisesRegex(rehearsal_host.HostFailure, "test reached confirmed CMS migration"):
+                    rehearsal_host._cms_update(config, state,
+                        Namespace(**base_args, offhost_sha256=backup_digest))
+                start = next(row for row in state._operation_rows(operation_id) if row.get("record") == "start")
+                self.assertEqual(start["oldPair"]["cmsSourceEnvironment"], {
+                    "IKPK_BUILD_WORKSPACE": old_workspace, "IKPK_INSTALLED_COMMIT": old_sha})
 
     def test_static_build_uses_capture_snapshot_for_prepare_and_build(self):
         with tempfile.TemporaryDirectory(prefix="ikpk-static-capture-env-") as temporary:
