@@ -1625,12 +1625,14 @@ def main(argv: Optional[list[str]] = None) -> int:
             if args.profile != "staging194":
                 raise Refusal("--source-sha is required outside the staging194 profile")
             try:
-                parse_host_json(ssh_remote(["status", "--operation-id", args.operation_id]))
+                status = parse_host_json(ssh_remote(["status", "--operation-id", args.operation_id]))
             except Refusal as error:
-                if "operation has no maintenance marker or terminal journal record" not in str(error):
+                if str(error) != "operation has no maintenance marker or terminal journal record":
                     raise
             else:
-                raise Refusal("--source-sha is required to continue an existing staging194 operation")
+                if (status.get("operationId") != args.operation_id
+                        or status.get("phase") != "idle"):
+                    raise Refusal("--source-sha is required to continue an existing staging194 operation")
             args.source_sha = capture(["gh", "api", f"repos/{CANONICAL_REPOSITORY}/git/ref/heads/main",
                                        "--jq", ".object.sha"])
             if not SHA.fullmatch(args.source_sha):
