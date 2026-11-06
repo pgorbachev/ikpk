@@ -3162,6 +3162,40 @@ def _staging194_stable_cms_payload_sha256(root: Path, uploads: Path) -> str:
     return digest
 
 
+def _ensure_empty_candidate_upload_directory(config: dict[str, Any], artifact_root: Path) -> Path:
+    """Give pre-activation CMS checks an empty writable uploads directory, without media."""
+    if artifact_root.is_symlink() or not artifact_root.is_dir():
+        raise HostFailure("prepared CMS artifact directory is missing or unsafe")
+    public = artifact_root / "public"
+    try:
+        public_info = public.lstat()
+    except OSError as error:
+        raise HostFailure("prepared CMS artifact public directory is missing") from error
+    if not stat.S_ISDIR(public_info.st_mode):
+        raise HostFailure("prepared CMS artifact public path is not a real directory")
+    uploads = public / "uploads"
+    if os.path.lexists(uploads):
+        try:
+            uploads_info = uploads.lstat()
+        except OSError as error:
+            raise HostFailure("prepared CMS artifact uploads path is unavailable") from error
+        if not stat.S_ISDIR(uploads_info.st_mode):
+            raise HostFailure("prepared CMS artifact uploads path must be a real directory")
+        entries = list(uploads.iterdir())
+        if any(item.name != ".gitkeep" or item.is_symlink() or not item.is_file() for item in entries):
+            raise HostFailure("prepared CMS artifact uploads path contains unexpected data")
+    else:
+        code = "import os,sys; os.mkdir(sys.argv[1],0o755)"
+        _run_as_cms(config, artifact_root, ["/usr/bin/python3", "-c", code, str(uploads)], timeout=60)
+        try:
+            uploads_info = uploads.lstat()
+        except OSError as error:
+            raise HostFailure("CMS user could not create the candidate uploads directory") from error
+        if not stat.S_ISDIR(uploads_info.st_mode):
+            raise HostFailure("CMS user candidate uploads path is not a real directory")
+    return uploads
+
+
 def _config_sha256(config: dict[str, Any]) -> str:
     stable_config = dict(config)
     if stable_config.get("profile", "staging194") == "staging194":
@@ -3185,6 +3219,7 @@ def _install_migrated_database(config: dict[str, Any], source_root: Path, operat
     receipt = operation_root / "receipt.json"
     if any(os.path.lexists(path) for path in (candidate, receipt)):
         raise HostFailure("CMS migration candidate already exists; inspect the operation before retrying")
+    _ensure_empty_candidate_upload_directory(config, artifact_dir)
     runner = artifact_dir / "scripts/run-data-migrations.mjs"
     common = ["--operation-id", operation_id, "--source-db", str(live), "--source-cms-root", str(old_cms_root),
               "--candidate-db", str(candidate), "--artifact-dir", str(artifact_dir), "--receipt", str(receipt)]
