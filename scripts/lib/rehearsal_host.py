@@ -2000,9 +2000,13 @@ def _preflight_staging194_source(config: dict[str, Any], workspace: Path,
     if any(not (workspace / part).is_file() for part in ("cms/package.json", "web/package.json")):
         raise HostFailure("staging194 CMS source workspace is incomplete")
     _assert_staging194_source_env_effective(config)
-    current_values = _staging194_cms_source_env(config)
-    _assert_staging194_process_source_env(config, current_values)
+    _staging194_cms_source_env(config)
     _assert_staging194_workspace_ready(config, workspace)
+
+
+def _pre_fence_staging194_process(config: dict[str, Any]) -> None:
+    _assert_staging194_source_env_effective(config)
+    _assert_staging194_process_source_env(config, _staging194_cms_source_env(config))
 
 
 def _assert_staging194_process_source_env(config: dict[str, Any], expected: dict[str, str]) -> None:
@@ -3156,7 +3160,11 @@ def _staging194_stable_cms_payload_sha256(root: Path, uploads: Path) -> str:
 
 
 def _config_sha256(config: dict[str, Any]) -> str:
-    payload = json.dumps(config, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    stable_config = dict(config)
+    if stable_config.get("profile", "staging194") == "staging194":
+        # The source environment path is fixed by profile; older configs omit it.
+        stable_config.pop("cmsEnvironmentFile", None)
+    payload = json.dumps(stable_config, sort_keys=True, separators=(",", ":")).encode("utf-8")
     return sha256_file_bytes(payload)
 
 
@@ -3585,6 +3593,8 @@ def _cms_update(config: dict[str, Any], state: RehearsalState, args: argparse.Na
                       if config.get("profile") == "production-paired" else None)
     if profile in ("staging194", "production-paired"):
         _validate_prepared_cms_candidate(config, source_root, op, provenance)
+    if profile == "staging194" and phase is None:
+        _pre_fence_staging194_process(config)
     if helper_artifact is not None:
         phase = _start_acquisition(config, state, op, sha, cms_artifact=cms_artifact,
             host_helper_artifact=helper_artifact, host_helper_identity=expected_helper_identity)
@@ -4738,7 +4748,6 @@ def _recover(config: dict[str, Any], state: RehearsalState, operation_id: str,
     if config.get("profile") == "staging194":
         _assert_staging194_source_env_effective(config)
         current_source_environment = _staging194_cms_source_env(config)
-        _assert_staging194_process_source_env(config, current_source_environment)
         if "cmsSourceEnvironment" in old_pair:
             journaled_environment = old_pair["cmsSourceEnvironment"]
             if (not isinstance(journaled_environment, dict)

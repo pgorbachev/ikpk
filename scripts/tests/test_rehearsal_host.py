@@ -3572,6 +3572,12 @@ class ProductionPairedManualPreflightTests(unittest.TestCase):
 
 
 class Staging194PairedSourceEnvironmentTests(unittest.TestCase):
+    def test_legacy_config_fingerprint_is_unchanged_by_fixed_environment_default(self):
+        old_config = {"profile": "staging194", "stateDir": "/state"}
+        configured = {**old_config, "cmsEnvironmentFile": "/etc/ikpk-cms/site-build-current194.env"}
+        self.assertEqual(rehearsal_host._config_sha256(old_config),
+                         rehearsal_host._config_sha256(configured))
+
     def test_old_staging_config_gets_fixed_environment_path_without_disk_migration(self):
         template = json.loads((ROOT / "scripts/staging193-rehearsal.json").read_text(encoding="utf-8"))
         template.pop("cmsEnvironmentFile")
@@ -3620,6 +3626,49 @@ class Staging194PairedSourceEnvironmentTests(unittest.TestCase):
                  f"IKPK_BUILD_WORKSPACE={expected['IKPK_BUILD_WORKSPACE']}\0"
                  f"IKPK_INSTALLED_COMMIT={expected['IKPK_INSTALLED_COMMIT']}\0").encode()):
             rehearsal_host._assert_staging194_process_source_env(config, expected)
+
+    def test_workspace_preflight_does_not_require_mainpid_after_cms_stop(self):
+        with tempfile.TemporaryDirectory(prefix="ikpk-staging194-stopped-preflight-") as temporary:
+            root = Path(temporary)
+            sha, operation_id = "a" * 40, "stopped-op"
+            workspace = root / "releases" / f"{sha}-{operation_id}"
+            for relative in ("cms/package.json", "web/package.json"):
+                path = workspace / relative
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text("{}", encoding="utf-8")
+            env_file = root / "site-build-current194.env"
+            env_file.write_text("IKPK_BUILD_WORKSPACE=/old/workspace\nIKPK_INSTALLED_COMMIT=" + "b" * 40 + "\n",
+                                encoding="utf-8")
+            env_file.chmod(0o600)
+            config = {"releaseRoot": str(workspace.parent), "cmsEnvironmentFile": str(env_file),
+                      "cmsUnit": "ikpk-cms-prototype193.service"}
+            effective = ("/etc/first.env (ignore_errors=no) /etc/second.env (ignore_errors=no) "
+                         f"{env_file} (ignore_errors=no)")
+            def run_command(argv, **_kwargs):
+                return subprocess.CompletedProcess(argv, 0, effective, "")
+            real_lstat = Path.lstat
+            def root_owned_environment(path, *args, **kwargs):
+                info = real_lstat(path, *args, **kwargs)
+                if path == env_file:
+                    fields = list(info); fields[4] = 0
+                    return os.stat_result(fields)
+                return info
+            with patch.object(rehearsal_host, "run", side_effect=run_command), \
+                 patch.object(Path, "lstat", root_owned_environment), \
+                 patch.object(rehearsal_host, "_assert_staging194_workspace_ready"), \
+                 patch.object(rehearsal_host, "_service_pid", side_effect=AssertionError("CMS is stopped")):
+                rehearsal_host._preflight_staging194_source(config, workspace, sha, operation_id)
+
+    def test_pre_fence_process_check_requires_running_cms(self):
+        config = {"cmsEnvironmentFile": "/etc/ikpk-cms/site-build-current194.env",
+                  "cmsUnit": "ikpk-cms-prototype193.service"}
+        with patch.object(rehearsal_host, "_assert_staging194_source_env_effective"), \
+             patch.object(rehearsal_host, "_staging194_cms_source_env", return_value={
+                 "IKPK_BUILD_WORKSPACE": "/opt/releases/old", "IKPK_INSTALLED_COMMIT": "a" * 40}), \
+             patch.object(rehearsal_host, "_assert_staging194_process_source_env",
+                          side_effect=rehearsal_host.HostFailure("CMS has no MainPID")):
+            with self.assertRaisesRegex(rehearsal_host.HostFailure, "no MainPID"):
+                rehearsal_host._pre_fence_staging194_process(config)
 
     def test_old_pair_journals_the_two_installed_source_environment_values(self):
         with tempfile.TemporaryDirectory(prefix="ikpk-staging194-source-env-baseline-") as temporary:
