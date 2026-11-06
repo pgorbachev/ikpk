@@ -3572,11 +3572,54 @@ class ProductionPairedManualPreflightTests(unittest.TestCase):
 
 
 class Staging194PairedSourceEnvironmentTests(unittest.TestCase):
+    def test_old_staging_config_gets_fixed_environment_path_without_disk_migration(self):
+        template = json.loads((ROOT / "scripts/staging193-rehearsal.json").read_text(encoding="utf-8"))
+        template.pop("cmsEnvironmentFile")
+        with tempfile.TemporaryDirectory(prefix="ikpk-staging194-old-config-") as temporary:
+            config_path = Path(temporary) / "rehearsal.json"
+            config_path.write_text(json.dumps(template), encoding="utf-8")
+            real_lstat = Path.lstat
+
+            def root_owned_config(path, *args, **kwargs):
+                info = real_lstat(path, *args, **kwargs)
+                if path == config_path:
+                    fields = list(info); fields[4] = 0
+                    return os.stat_result(fields)
+                return info
+
+            with patch.object(Path, "lstat", root_owned_config), \
+                 patch.object(rehearsal_host, "_validate_staging194_temporary_root"):
+                loaded = rehearsal_host._root_config(config_path)
+
+            self.assertEqual(loaded["cmsEnvironmentFile"], "/etc/ikpk-cms/site-build-current194.env")
+            self.assertNotIn("cmsEnvironmentFile", json.loads(config_path.read_text(encoding="utf-8")))
+
     def test_staging194_profile_binds_the_existing_source_environment_file(self):
         template = json.loads((ROOT / "scripts/staging193-rehearsal.json").read_text(encoding="utf-8"))
 
         self.assertEqual(template.get("cmsEnvironmentFile"),
                          "/etc/ikpk-cms/site-build-current194.env")
+
+    def test_effective_environment_file_must_be_last_and_process_must_use_source_values(self):
+        config = {"cmsEnvironmentFile": "/etc/ikpk-cms/site-build-current194.env",
+                  "cmsUnit": "ikpk-cms-prototype193.service"}
+        good = ("/etc/ikpk-cms/one.env (ignore_errors=no) "
+                "/etc/ikpk-cms/two.env (ignore_errors=no) "
+                "/etc/ikpk-cms/site-build-current194.env (ignore_errors=no)")
+        with patch.object(rehearsal_host, "run", return_value=subprocess.CompletedProcess([], 0, good, "")):
+            rehearsal_host._assert_staging194_source_env_effective(config)
+        wrong = good.replace("site-build-current194.env (ignore_errors=no)", "other.env (ignore_errors=no)")
+        with patch.object(rehearsal_host, "run", return_value=subprocess.CompletedProcess([], 0, wrong, "")):
+            with self.assertRaisesRegex(rehearsal_host.HostFailure, "last of the three"):
+                rehearsal_host._assert_staging194_source_env_effective(config)
+
+        expected = {"IKPK_BUILD_WORKSPACE": "/opt/releases/" + "a" * 40 + "-op",
+                    "IKPK_INSTALLED_COMMIT": "a" * 40}
+        with patch.object(rehearsal_host, "_service_pid", return_value=987), \
+             patch.object(Path, "read_bytes", return_value=(
+                 f"IKPK_BUILD_WORKSPACE={expected['IKPK_BUILD_WORKSPACE']}\0"
+                 f"IKPK_INSTALLED_COMMIT={expected['IKPK_INSTALLED_COMMIT']}\0").encode()):
+            rehearsal_host._assert_staging194_process_source_env(config, expected)
 
     def test_old_pair_journals_the_two_installed_source_environment_values(self):
         with tempfile.TemporaryDirectory(prefix="ikpk-staging194-source-env-baseline-") as temporary:
@@ -3590,6 +3633,7 @@ class Staging194PairedSourceEnvironmentTests(unittest.TestCase):
             old_sha = "a" * 40
             env_file.write_text(f"IKPK_BUILD_WORKSPACE={old_workspace}\nIKPK_INSTALLED_COMMIT={old_sha}\n",
                                 encoding="utf-8")
+            env_file.chmod(0o600)
             config = {"profile": "staging194", "cmsUnit": "ikpk-cms-prototype193.service",
                       "cmsEnvironmentFile": str(env_file), "currentCms": str(root / "current-cms"),
                       "currentStatic": str(root / "current-static"), "cmsDatabase": str(database),
@@ -3627,9 +3671,16 @@ class Staging194PairedSourceEnvironmentTests(unittest.TestCase):
             (source_root / "cms/package.json").write_text("{}", encoding="utf-8")
             (source_root / "web/package.json").write_text("{}", encoding="utf-8")
             (source_root / ".ikpk-rehearsal-ci.json").write_text("{}", encoding="utf-8")
+            for relative in ("web/node_modules/astro/package.json", "web/node_modules/tsx/package.json",
+                             "cms/scripts/capture-staging194.py", "scripts/lib/seal-staging193-capture.mjs",
+                             "scripts/lib/staging193-capture-bundle.mjs", "scripts/lib/server-capture-sqlite.mjs"):
+                path = source_root / relative
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text("ready", encoding="utf-8")
             env_file = root / "site-build-current194.env"
             env_file.write_text("IKPK_BUILD_WORKSPACE=/old/workspace\nIKPK_INSTALLED_COMMIT=" + "a" * 40 + "\n",
                                 encoding="utf-8")
+            env_file.chmod(0o600)
             live_database = root / "live.sqlite"
             live_database.write_bytes(b"old database")
             capture = root / "capture"
@@ -3641,9 +3692,30 @@ class Staging194PairedSourceEnvironmentTests(unittest.TestCase):
                       "cmsDatabase": str(live_database), "currentCms": str(root / "current-cms"),
                       "releaseRoot": str(root / "releases"), "cmsUnit": "ikpk-cms-prototype193.service",
                       "cmsHealthUrl": "http://127.0.0.1:1338/_health"}
-            complete = lambda *args, **_kwargs: subprocess.CompletedProcess(args, 0, "", "")
+            effective_files = ("/etc/ikpk-cms/first.env (ignore_errors=no) "
+                               "/etc/ikpk-cms/second.env (ignore_errors=no) "
+                               f"{env_file} (ignore_errors=no)")
+            def complete(*args, **_kwargs):
+                stdout = effective_files if (args[0][0] == "/usr/bin/systemctl"
+                    and any("EnvironmentFiles" in arg for arg in args[0])) else ""
+                return subprocess.CompletedProcess(args[0], 0, stdout, "")
+
+            readiness_calls = []
+            process_env_checks = []
+            real_lstat = Path.lstat
+            def root_owned_environment(path, *args, **kwargs):
+                info = real_lstat(path, *args, **kwargs)
+                if path == env_file:
+                    fields = list(info); fields[4] = 0
+                    return os.stat_result(fields)
+                return info
             with patch.object(rehearsal_host, "_trusted_cms_artifact", return_value=artifact), \
+                 patch.object(Path, "lstat", root_owned_environment), \
+                 patch.object(rehearsal_host.os, "fchown"), \
                  patch.object(rehearsal_host, "_verify_cms_artifact_bytes"), \
+                 patch.object(rehearsal_host, "_run_as_cms", side_effect=lambda *args, **kwargs: readiness_calls.append(args)), \
+                 patch.object(rehearsal_host, "_assert_staging194_process_source_env",
+                              side_effect=lambda *args: process_env_checks.append(args)), \
                  patch.object(rehearsal_host, "_assert_no_database_handles"), \
                  patch.object(rehearsal_host, "_copy_atomic"), \
                  patch.object(rehearsal_host, "_switch_pointer"), \
@@ -3656,6 +3728,9 @@ class Staging194PairedSourceEnvironmentTests(unittest.TestCase):
 
             self.assertEqual(env_file.read_text(encoding="utf-8"),
                 f"IKPK_BUILD_WORKSPACE={source_root}\nIKPK_INSTALLED_COMMIT={source_sha}\n")
+            self.assertEqual(len(readiness_calls), 1)
+            self.assertEqual(process_env_checks[-1][1], {
+                "IKPK_BUILD_WORKSPACE": str(source_root), "IKPK_INSTALLED_COMMIT": source_sha})
 
     def test_recovery_restores_source_environment_before_reopening_old_cms(self):
         with tempfile.TemporaryDirectory(prefix="ikpk-staging194-source-env-recover-") as temporary:
@@ -3672,6 +3747,7 @@ class Staging194PairedSourceEnvironmentTests(unittest.TestCase):
             prior_sha = "a" * 40
             env_file.write_text("IKPK_BUILD_WORKSPACE=/opt/ikpk-cms-prototype193/releases/" + "b" * 40 +
                                 "-new-op\nIKPK_INSTALLED_COMMIT=" + "b" * 40 + "\n", encoding="utf-8")
+            env_file.chmod(0o600)
             prior_environment = {key: None for key in rehearsal_host.PAIRED_CMS_ENV_KEYS}
             prior_environment.update({"IKPK_BUILD_WORKSPACE": prior_workspace,
                                       "IKPK_INSTALLED_COMMIT": prior_sha})
@@ -3699,12 +3775,28 @@ class Staging194PairedSourceEnvironmentTests(unittest.TestCase):
             source_env_at_start = []
 
             def run_command(argv, **_kwargs):
+                if argv[:3] == ["/usr/bin/systemctl", "show", "--property=EnvironmentFiles"]:
+                    return subprocess.CompletedProcess(argv, 0,
+                        "/etc/ikpk-cms/first.env (ignore_errors=no) /etc/ikpk-cms/second.env (ignore_errors=no) "
+                        f"{env_file} (ignore_errors=no)", "")
                 if argv == ["/usr/bin/systemctl", "start", config["cmsUnit"]]:
                     source_env_at_start.append(env_file.read_text(encoding="utf-8"))
                 return subprocess.CompletedProcess(argv, 0, "", "")
 
+            real_lstat = Path.lstat
+            def root_owned_environment(path, *args, **kwargs):
+                info = real_lstat(path, *args, **kwargs)
+                if path == env_file:
+                    fields = list(info); fields[4] = 0
+                    return os.stat_result(fields)
+                return info
+
             with patch.object(rehearsal_host, "_set_flag"), \
                  patch.object(rehearsal_host, "_write_gate"), \
+                 patch.object(Path, "lstat", root_owned_environment), \
+                 patch.object(rehearsal_host.os, "fchown"), \
+                 patch.object(rehearsal_host, "_assert_staging194_workspace_ready"), \
+                 patch.object(rehearsal_host, "_assert_staging194_process_source_env") as process_env_check, \
                  patch.object(rehearsal_host, "_wait_health"), \
                  patch.object(rehearsal_host, "_service_pid", return_value=123), \
                  patch.object(rehearsal_host, "_database_process_proof", return_value={}), \
@@ -3715,6 +3807,25 @@ class Staging194PairedSourceEnvironmentTests(unittest.TestCase):
             self.assertEqual(result["phase"], "recovered")
             self.assertEqual(source_env_at_start, [expected])
             self.assertEqual(env_file.read_text(encoding="utf-8"), expected)
+            self.assertEqual(process_env_check.call_args.args[1], {
+                "IKPK_BUILD_WORKSPACE": prior_workspace, "IKPK_INSTALLED_COMMIT": prior_sha})
+
+            # Legacy journal entries predate CMS source environment snapshots;
+            # they must reopen using the still-installed old env unchanged.
+            State.rows[0]["oldPair"].pop("cmsSourceEnvironment")
+            source_env_at_start.clear()
+            with patch.object(rehearsal_host, "_set_flag"), \
+                 patch.object(rehearsal_host, "_write_gate"), \
+                 patch.object(Path, "lstat", root_owned_environment), \
+                 patch.object(rehearsal_host, "_assert_staging194_workspace_ready"), \
+                 patch.object(rehearsal_host, "_assert_staging194_process_source_env"), \
+                 patch.object(rehearsal_host, "_wait_health"), \
+                 patch.object(rehearsal_host, "_service_pid", return_value=123), \
+                 patch.object(rehearsal_host, "_database_process_proof", return_value={}), \
+                 patch.object(rehearsal_host, "run", side_effect=run_command):
+                legacy_result = rehearsal_host._recover(config, State(), operation_id)
+            self.assertEqual(legacy_result["phase"], "recovered")
+            self.assertEqual(source_env_at_start, [expected])
 
 
 if __name__ == "__main__":

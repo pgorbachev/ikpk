@@ -46,6 +46,7 @@ INITIAL_PROD_PAYMENT_ENDPOINT = "https://ikpk.su/api"
 INITIAL_PROD_CHAT_LOADER_SRC = "https://cdn-ru.bitrix24.ru/b35315886/crm/site_button/loader_2_siutnh.js"
 STAGING194_CHAT_LOADER_SRC = INITIAL_PROD_CHAT_LOADER_SRC
 INITIAL_PROD_CMS_ENV_FILE = Path("/etc/ikpk-cms/trial.env")
+STAGING194_CMS_ENV_FILE = Path("/etc/ikpk-cms/site-build-current194.env")
 PRODUCTION_PUBLICATION_LOCK = Path("/var/www/ikpk/.publication.lock")
 STAGING194_TEMPORARY_ROOT = Path("/var/tmp/ikpk-staging194")
 PRODUCTION_PAIRED_WORKSPACE_ROOT = Path("/var/lib/ikpk-site-build/production-paired")
@@ -466,6 +467,9 @@ def _root_config(path: Path, expected_profile: str = "staging194") -> dict[str, 
         data = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError) as error:
         raise HostFailure("host config is not valid JSON") from error
+    if data.get("profile", "staging194") == "staging194":
+        # Backward-compatible in-memory default; never rewrite the installed config.
+        data.setdefault("cmsEnvironmentFile", str(STAGING194_CMS_ENV_FILE))
     _maintenance_banner(data)
     missing = REQUIRED_CONFIG - data.keys()
     if missing:
@@ -562,7 +566,7 @@ def _validate_target_binding(data: dict[str, Any]) -> None:
         if (data.get("siteRefreshState") != "/var/lib/ikpk-cms-prototype193/staging/site-refresh194/state/state.json"
                 or data.get("publicationLock") != str(PRODUCTION_PUBLICATION_LOCK)
                 or data.get("sitePublicationMarker") != "/var/lib/ikpk-rehearsal/site-publication/host-publication.json"
-                or data.get("cmsEnvironmentFile") != "/etc/ikpk-cms/site-build-current194.env"):
+                or data.get("cmsEnvironmentFile") != str(STAGING194_CMS_ENV_FILE)):
             raise HostFailure("staging194 site publication coordination paths are not fixed")
         if data["cmsHealthUrl"] != "http://127.0.0.1:1338/_health":
             raise HostFailure("CMS health check must remain bound to the local staging194 service")
@@ -1835,13 +1839,14 @@ PAIRED_CMS_ENV_KEYS = ("IKPK_BUILD_WORKSPACE", "IKPK_INSTALLED_COMMIT", "INITIAL
 STAGING194_CMS_SOURCE_ENV_KEYS = ("IKPK_BUILD_WORKSPACE", "IKPK_INSTALLED_COMMIT")
 
 
-def _read_cms_environment_values(path: Path, keys: tuple[str, ...]) -> dict[str, Optional[str]]:
+def _paired_cms_source_env(config: dict[str, Any]) -> dict[str, Optional[str]]:
+    path = Path(config["cmsEnvironmentFile"])
     info = path.lstat()
     if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1 or info.st_uid != 0:
         raise HostFailure("paired CMS environment file is not a regular unlinked file")
     text = path.read_text(encoding="utf-8")
-    values: dict[str, Optional[str]] = {key: None for key in keys}
-    for key in keys:
+    values: dict[str, Optional[str]] = {key: None for key in PAIRED_CMS_ENV_KEYS}
+    for key in PAIRED_CMS_ENV_KEYS:
         matches = re.findall(rf"^(?:export\s+)?{re.escape(key)}=(.*)$", text, re.MULTILINE)
         if len(matches) > 1:
             raise HostFailure(f"paired CMS environment repeats {key}")
@@ -1850,10 +1855,9 @@ def _read_cms_environment_values(path: Path, keys: tuple[str, ...]) -> dict[str,
     return values
 
 
-def _write_cms_environment_values(config: dict[str, Any], values: dict[str, Optional[str]],
-                                  keys: tuple[str, ...]) -> None:
-    if set(values) != set(keys):
-        raise HostFailure("CMS environment update has an unexpected key set")
+def _write_paired_cms_source_env(config: dict[str, Any], values: dict[str, Optional[str]]) -> None:
+    if set(values) != set(PAIRED_CMS_ENV_KEYS):
+        raise HostFailure("paired CMS environment update may change only the two source-version keys")
     path = Path(config["cmsEnvironmentFile"])
     info = path.lstat()
     if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
@@ -1865,7 +1869,7 @@ def _write_cms_environment_values(config: dict[str, Any], values: dict[str, Opti
     output = []
     seen = set()
     for line in text.splitlines(keepends=True):
-        matched = next((key for key in keys
+        matched = next((key for key in PAIRED_CMS_ENV_KEYS
                         if re.match(rf"^(?:export\s+)?{re.escape(key)}=", line)), None)
         if matched is None:
             output.append(line)
@@ -1902,20 +1906,121 @@ def _write_cms_environment_values(config: dict[str, Any], values: dict[str, Opti
             pass
 
 
-def _paired_cms_source_env(config: dict[str, Any]) -> dict[str, Optional[str]]:
-    return _read_cms_environment_values(Path(config["cmsEnvironmentFile"]), PAIRED_CMS_ENV_KEYS)
-
-
 def _staging194_cms_source_env(config: dict[str, Any]) -> dict[str, Optional[str]]:
-    return _read_cms_environment_values(Path(config["cmsEnvironmentFile"]), STAGING194_CMS_SOURCE_ENV_KEYS)
-
-
-def _write_paired_cms_source_env(config: dict[str, Any], values: dict[str, Optional[str]]) -> None:
-    _write_cms_environment_values(config, values, PAIRED_CMS_ENV_KEYS)
+    path = Path(config["cmsEnvironmentFile"])
+    info = path.lstat()
+    if (not stat.S_ISREG(info.st_mode) or info.st_nlink != 1 or info.st_uid != 0
+            or stat.S_IMODE(info.st_mode) != 0o600):
+        raise HostFailure("staging194 source environment must be a root-owned 0600 regular file")
+    try:
+        lines = path.read_bytes().splitlines()
+    except OSError as error:
+        raise HostFailure("staging194 source environment is unreadable") from error
+    if len(lines) != len(STAGING194_CMS_SOURCE_ENV_KEYS):
+        raise HostFailure("staging194 source environment must contain exactly two assignments")
+    values: dict[str, Optional[str]] = {}
+    for line in lines:
+        match = re.fullmatch(rb"(IKPK_BUILD_WORKSPACE|IKPK_INSTALLED_COMMIT)=([^\s]+)", line)
+        if not match:
+            raise HostFailure("staging194 source environment has an unsupported assignment layout")
+        key = match.group(1).decode("ascii")
+        if key in values:
+            raise HostFailure("staging194 source environment repeats a source key")
+        values[key] = match.group(2).decode("utf-8")
+    if set(values) != set(STAGING194_CMS_SOURCE_ENV_KEYS):
+        raise HostFailure("staging194 source environment must contain both source keys")
+    return values
 
 
 def _write_staging194_cms_source_env(config: dict[str, Any], values: dict[str, Optional[str]]) -> None:
-    _write_cms_environment_values(config, values, STAGING194_CMS_SOURCE_ENV_KEYS)
+    if set(values) != set(STAGING194_CMS_SOURCE_ENV_KEYS):
+        raise HostFailure("staging194 source environment update must contain exactly two keys")
+    for key, value in values.items():
+        if not isinstance(value, str) or not value or "\n" in value or "\r" in value:
+            raise HostFailure(f"invalid staging194 source environment value for {key}")
+    path = Path(config["cmsEnvironmentFile"])
+    _staging194_cms_source_env(config)  # Validate owner, mode, inode count, and exact layout before replace.
+    info = path.lstat()
+    fd, temporary = tempfile.mkstemp(prefix=f".{path.name}.", dir=str(path.parent))
+    try:
+        os.fchmod(fd, 0o600)
+        os.fchown(fd, info.st_uid, info.st_gid)
+        with os.fdopen(fd, "wb") as target:
+            for key in STAGING194_CMS_SOURCE_ENV_KEYS:
+                target.write(key.encode("ascii") + b"=" + values[key].encode("utf-8") + b"\n")
+            target.flush()
+            os.fsync(target.fileno())
+        os.replace(temporary, path)
+        directory_fd = os.open(path.parent, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+        try:
+            os.fsync(directory_fd)
+        finally:
+            os.close(directory_fd)
+    finally:
+        try:
+            os.unlink(temporary)
+        except FileNotFoundError:
+            pass
+
+
+def _assert_staging194_source_env_effective(config: dict[str, Any]) -> None:
+    expected = str(Path(config["cmsEnvironmentFile"]))
+    output = run(["/usr/bin/systemctl", "show", "--property=EnvironmentFiles", "--value",
+                  config["cmsUnit"]]).stdout.strip()
+    pattern = r"(?<!\S)(-?/[A-Za-z0-9_./-]+) \(ignore_errors=(?:yes|no)\)"
+    entries = re.findall(pattern, output)
+    if re.sub(pattern, "", output).strip() or len(entries) != 3 or entries[-1].removeprefix("-") != expected:
+        raise HostFailure("staging194 source environment is not the last of the three effective unit files")
+
+
+def _assert_staging194_workspace_ready(config: dict[str, Any], workspace: str | Path) -> None:
+    workspace_path = Path(workspace)
+    if not workspace_path.is_absolute() or workspace_path.is_symlink() or not workspace_path.is_dir():
+        raise HostFailure("staging194 source workspace is unavailable")
+    required = (
+        "web/node_modules/astro/package.json", "web/node_modules/tsx/package.json",
+        "cms/scripts/capture-staging194.py", "scripts/lib/seal-staging193-capture.mjs",
+        "scripts/lib/staging193-capture-bundle.mjs", "scripts/lib/server-capture-sqlite.mjs",
+    )
+    code = ("import os,sys; root=sys.argv[1]; files=sys.argv[2:]; "
+            "sys.exit(0 if all(os.path.isfile(os.path.join(root,p)) and "
+            "os.access(os.path.join(root,p), os.R_OK) for p in files) else 1)")
+    _run_as_cms(config, workspace_path, ["/usr/bin/python3", "-c", code,
+                 str(workspace_path), *required], timeout=60, read_only_path=workspace_path)
+
+
+def _preflight_staging194_source(config: dict[str, Any], workspace: Path,
+                                 source_sha: str, operation_id: Optional[str] = None) -> None:
+    release_root = Path(config["releaseRoot"]).absolute()
+    workspace = workspace.absolute()
+    expected_name = (rf"{re.escape(source_sha)}-{re.escape(operation_id)}" if operation_id is not None
+                     else rf"{re.escape(source_sha)}-[A-Za-z0-9][A-Za-z0-9._-]{{0,127}}")
+    if workspace.parent != release_root or not re.fullmatch(expected_name, workspace.name):
+        raise HostFailure("staging194 CMS source workspace is not the versioned admitted release")
+    if any(not (workspace / part).is_file() for part in ("cms/package.json", "web/package.json")):
+        raise HostFailure("staging194 CMS source workspace is incomplete")
+    _assert_staging194_source_env_effective(config)
+    current_values = _staging194_cms_source_env(config)
+    _assert_staging194_process_source_env(config, current_values)
+    _assert_staging194_workspace_ready(config, workspace)
+
+
+def _assert_staging194_process_source_env(config: dict[str, Any], expected: dict[str, str]) -> None:
+    pid = _service_pid(config["cmsUnit"])
+    try:
+        entries = Path(f"/proc/{pid}/environ").read_bytes().split(b"\0")
+    except OSError as error:
+        raise HostFailure("cannot read staging194 CMS process source environment") from error
+    found = {}
+    for entry in entries:
+        for key in STAGING194_CMS_SOURCE_ENV_KEYS:
+            prefix = key.encode("ascii") + b"="
+            if entry.startswith(prefix):
+                if key in found:
+                    raise HostFailure("staging194 CMS process repeats a source environment key")
+                found[key] = entry[len(prefix):].decode("utf-8", errors="strict")
+    if found != expected:
+        raise HostFailure("staging194 CMS process source environment differs from the effective file")
 
 
 def _site_refresh_worker_pids(proc_root: Path = Path("/proc")) -> set[int]:
@@ -3135,17 +3240,14 @@ def _activate_cms(config: dict[str, Any], cms_release: Path, candidate_db: Path,
         if source_root is None or source_sha is None or not SHA_RE.fullmatch(source_sha):
             raise HostFailure("staging194 CMS activation lacks its admitted source workspace")
         workspace = source_root.absolute()
-        release_root = Path(config["releaseRoot"]).absolute()
-        if (workspace.parent != release_root
-                or not re.fullmatch(rf"{re.escape(source_sha)}-[A-Za-z0-9][A-Za-z0-9._-]{{0,127}}",
-                                    workspace.name)):
-            raise HostFailure("staging194 CMS source workspace is not the versioned admitted release")
-        if any(not (workspace / part).is_file() for part in ("cms/package.json", "web/package.json")):
-            raise HostFailure("staging194 CMS source workspace is incomplete")
+        _preflight_staging194_source(config, workspace, source_sha)
         _write_staging194_cms_source_env(config, {
             "IKPK_BUILD_WORKSPACE": str(workspace), "IKPK_INSTALLED_COMMIT": source_sha})
     run(["/usr/bin/systemctl", "start", config["cmsUnit"]], timeout=120)
     _wait_health(config["cmsHealthUrl"])
+    if config.get("profile") == "staging194":
+        _assert_staging194_process_source_env(config, {
+            "IKPK_BUILD_WORKSPACE": str(workspace), "IKPK_INSTALLED_COMMIT": source_sha})
     proof = _database_process_proof(_service_pid(config["cmsUnit"]), live)
     inventory = json.loads((capture / "media-manifest.json").read_text(encoding="utf-8")).get("media")
     if not isinstance(inventory, list) or not inventory:
@@ -3504,6 +3606,8 @@ def _cms_update(config: dict[str, Any], state: RehearsalState, args: argparse.Na
     start = next((row for row in state._operation_rows(op) if row.get("record") == "start"), None)
     if not start or not isinstance(start.get("oldPair", {}).get("cmsPath"), str):
         raise HostFailure("operation journal has no recorded old CMS release for migration provenance")
+    if profile == "staging194":
+        _preflight_staging194_source(config, source_root, sha, op)
     old_cms_root = Path(start["oldPair"]["cmsPath"])
     candidate_db, cms_release, cms_payload_sha = _install_migrated_database(config, source_root, op, old_cms_root)
     capture = _create_capture_bundle(config, op, sha, source_root, candidate_db)
@@ -4630,6 +4734,26 @@ def _recover(config: dict[str, Any], state: RehearsalState, operation_id: str,
     old_pair = _effective_old_pair(state, operation_id)
     live = Path(config["cmsDatabase"]).resolve(strict=True)
     already_recovered = state._is_recovered(operation_id)
+    staging194_previous_environment = None
+    if config.get("profile") == "staging194":
+        _assert_staging194_source_env_effective(config)
+        current_source_environment = _staging194_cms_source_env(config)
+        _assert_staging194_process_source_env(config, current_source_environment)
+        if "cmsSourceEnvironment" in old_pair:
+            journaled_environment = old_pair["cmsSourceEnvironment"]
+            if (not isinstance(journaled_environment, dict)
+                    or not set(STAGING194_CMS_SOURCE_ENV_KEYS).issubset(journaled_environment)):
+                raise HostFailure("operation journal has an invalid prior staging194 source environment")
+            staging194_previous_environment = {
+                key: journaled_environment[key] for key in STAGING194_CMS_SOURCE_ENV_KEYS}
+            if any(not isinstance(value, str) or not value or "\n" in value or "\r" in value
+                   for value in staging194_previous_environment.values()):
+                raise HostFailure("operation journal has invalid staging194 source environment values")
+        else:
+            # Legacy operations did not modify this file; keep its current values.
+            staging194_previous_environment = {
+                key: current_source_environment[key] for key in STAGING194_CMS_SOURCE_ENV_KEYS}
+        _assert_staging194_workspace_ready(config, staging194_previous_environment["IKPK_BUILD_WORKSPACE"])
     paired_uploads = None
     if config.get("profile") == "production-paired":
         paired_uploads = next((Path(item["path"]).resolve(strict=True) for item in config.get("mediaRoots", [])
@@ -4651,14 +4775,12 @@ def _recover(config: dict[str, Any], state: RehearsalState, operation_id: str,
                 raise HostFailure("operation journal lacks the prior CMS source environment")
             _write_paired_cms_source_env(config, previous_environment)
         elif config.get("profile") == "staging194":
-            previous_environment = old_pair.get("cmsSourceEnvironment")
-            if (not isinstance(previous_environment, dict)
-                    or not set(STAGING194_CMS_SOURCE_ENV_KEYS).issubset(previous_environment)):
-                raise HostFailure("operation journal lacks the prior staging194 CMS source environment")
-            _write_staging194_cms_source_env(config, {
-                key: previous_environment[key] for key in STAGING194_CMS_SOURCE_ENV_KEYS})
+            if "cmsSourceEnvironment" in old_pair:
+                _write_staging194_cms_source_env(config, staging194_previous_environment)
         run(["/usr/bin/systemctl", "start", config["cmsUnit"]], timeout=120)
         _wait_health(config["cmsHealthUrl"], 1200)
+        if config.get("profile") == "staging194":
+            _assert_staging194_process_source_env(config, staging194_previous_environment)
         _database_process_proof(_service_pid(config["cmsUnit"]), live)
         if str(_current_target(Path(config["currentCms"]))) != old_pair["cmsPath"]:
             raise HostFailure("old CMS release is not selected during recovery reopen")
