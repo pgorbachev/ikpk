@@ -583,8 +583,8 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
 
     def test_browser_retry_reuses_retained_static_candidate_and_sealed_capture(self):
         for host_profile, capture_profile in (("production-paired", "production-static"),
-                                              ("staging194", "staging194")):
-            with self.subTest(host_profile=host_profile), tempfile.TemporaryDirectory(
+                                              ("staging194", None)):
+            with self.subTest(host_profile=host_profile, capture_profile=capture_profile), tempfile.TemporaryDirectory(
                     prefix="ikpk-browser-retry-") as temporary:
                 root = Path(temporary)
                 source_sha, operation_id = "a" * 40, "browser-retry"
@@ -595,8 +595,10 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
                     "captureId": operation_id}}), encoding="utf-8")
                 capture = source / ".staging193-rehearsal" / operation_id / "capture"
                 capture.mkdir(parents=True)
-                (capture / "manifest.json").write_text(json.dumps({"operationId": operation_id,
-                    "sourceSha": source_sha, "profile": capture_profile}), encoding="utf-8")
+                capture_manifest = {"operationId": operation_id, "sourceSha": source_sha}
+                if capture_profile is not None:
+                    capture_manifest["profile"] = capture_profile
+                (capture / "manifest.json").write_text(json.dumps(capture_manifest), encoding="utf-8")
                 static_root = root / "static"
                 release = static_root / f"{source_sha}-{operation_id}"
                 release.mkdir(parents=True)
@@ -605,7 +607,8 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
                 (release / "release.json").write_text(json.dumps({"commit": source_sha,
                     "operationId": operation_id, "snapshotId": "snap:retry", "staticTreeSha256": digest}),
                     encoding="utf-8")
-                config = {"profile": host_profile, "staticReleaseRoot": str(static_root)}
+                config = {"profile": host_profile, "releaseRoot": str(root / "releases"),
+                          "staticReleaseRoot": str(static_root)}
 
                 class State:
                     def phase(self, _operation_id):
@@ -623,6 +626,15 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
                 self.assertEqual(retry["staticTreeSha256"], digest)
                 self.assertEqual(retry["snapshotId"], "snap:retry")
                 build.assert_not_called()
+                if host_profile == "staging194":
+                    (capture / "manifest.json").write_text(json.dumps({"operationId": operation_id,
+                        "sourceSha": source_sha, "profile": "production-static"}), encoding="utf-8")
+                    with patch.object(rehearsal_host, "_verify_fence"):
+                        with self.assertRaisesRegex(rehearsal_host.HostFailure,
+                                "retained static candidate differs from its sealed operation capture"):
+                            rehearsal_host._static_publish(config, State(), Namespace(
+                                operation_id=operation_id, source_sha=source_sha, browser_digest=None))
+                    build.assert_not_called()
 
     def test_initial_prod_config_template_binds_real_profile_and_all_writer_routes(self):
         config = json.loads((ROOT / "scripts/initial-prod-rehearsal.json").read_text(encoding="utf-8"))
