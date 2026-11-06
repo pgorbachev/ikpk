@@ -94,7 +94,7 @@ HOUSEKEEPING_TRANSITION=0
 report_paused_housekeeping() {
   local status=$?
   if (( status != 0 && HOUSEKEEPING_TRANSITION )); then
-    echo 'housekeeping installation stopped before timer activation; cleanup.request remains pending; rerun this installer command to finish recovery' >&2
+    echo 'host helper installation incomplete; preserve cleanup.request; under the publication and operation locks, check the installed helper and restore it from a verified CI artifact if needed' >&2
   fi
 }
 trap report_paused_housekeeping EXIT
@@ -114,9 +114,19 @@ if [[ -n "$INSTALL_CONFIG_PROFILE" ]]; then
     HOUSEKEEPING_TRANSITION=1
     systemctl stop ikpk-site-housekeeping.path
     systemctl stop ikpk-site-housekeeping.timer
+    if (( INSTALL_DISABLED )); then
+      systemctl disable ikpk-site-housekeeping.timer
+    fi
     systemctl stop ikpk-site-housekeeping.service
     systemctl disable ikpk-site-housekeeping.path
     rm -f -- "$systemd_dir/ikpk-site-housekeeping.path"
+    elif (( INSTALL_DISABLED )) && [[ -e "$systemd_dir/ikpk-site-housekeeping.timer" ]]; then
+      HOUSEKEEPING_TRANSITION=1
+      systemctl stop ikpk-site-housekeeping.timer
+      systemctl disable ikpk-site-housekeeping.timer
+      if [[ -e "$systemd_dir/ikpk-site-housekeeping.service" ]]; then
+        systemctl stop ikpk-site-housekeeping.service
+      fi
   fi
 fi
 

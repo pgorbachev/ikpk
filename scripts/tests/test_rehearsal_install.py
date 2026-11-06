@@ -326,7 +326,7 @@ class InstalledEntrypointTests(unittest.TestCase):
             self.assertEqual(calls.read_text(encoding="utf-8").splitlines(),
                              ["stop ikpk-site-housekeeping.path", "stop ikpk-site-housekeeping.timer",
                               "stop ikpk-site-housekeeping.service", "disable ikpk-site-housekeeping.path"])
-            self.assertIn("cleanup.request remains pending; rerun this installer command", run.stderr)
+            self.assertIn("preserve cleanup.request; under the publication and operation locks", run.stderr)
             for path, content in original.items():
                 self.assertEqual(path.read_bytes(), content, path.name)
 
@@ -343,7 +343,7 @@ class InstalledEntrypointTests(unittest.TestCase):
             self.assertEqual(run.returncode, 42, run.stderr)
             self.assertEqual(calls.read_text(encoding="utf-8").splitlines(),
                              ["daemon-reload", "enable --now ikpk-site-housekeeping.timer"])
-            self.assertIn("cleanup.request remains pending; rerun this installer command", run.stderr)
+            self.assertIn("preserve cleanup.request; under the publication and operation locks", run.stderr)
 
             # Rerunning after a failed transition stops the remaining legacy
             # units, replaces the helper, and leaves timer activation last.
@@ -371,6 +371,44 @@ class InstalledEntrypointTests(unittest.TestCase):
             self.assertEqual(run.returncode, 0, run.stderr)
             self.assertEqual(calls.read_text(encoding="utf-8").splitlines(),
                              ["daemon-reload", "enable --now ikpk-site-housekeeping.timer"])
+
+            old_path.write_bytes(b"legacy PathExists unit\n")
+            calls = root / "calls-install-disabled-transition"
+            disabled_install = install_fragment.replace(
+                "INSTALL_CONFIG_PROFILE=staging193", "INSTALL_CONFIG_PROFILE=staging193\nINSTALL_DISABLED=1")
+            run = subprocess.run(
+                ["bash", "-c", disabled_install + "\n" + activation],
+                env={**os.environ, "PATH": str(root) + os.pathsep + os.environ["PATH"],
+                     "SYSTEMCTL_CALLS": str(calls)},
+                text=True, capture_output=True, check=False,
+            )
+            self.assertEqual(run.returncode, 0, run.stderr)
+            disabled_calls = calls.read_text(encoding="utf-8").splitlines()
+            self.assertEqual(disabled_calls, [
+                "stop ikpk-site-housekeeping.path", "stop ikpk-site-housekeeping.timer",
+                "disable ikpk-site-housekeeping.timer", "stop ikpk-site-housekeeping.service",
+                "disable ikpk-site-housekeeping.path", "daemon-reload",
+            ])
+            self.assertNotIn("enable --now ikpk-site-housekeeping.timer", disabled_calls)
+            self.assertFalse(old_path.exists())
+
+            # A prior interrupted install may already have removed the path
+            # unit. Disabled mode must still stop and disable an existing timer.
+            calls = root / "calls-install-disabled-without-path"
+            run = subprocess.run(
+                ["bash", "-c", disabled_install + "\n" + activation],
+                env={**os.environ, "PATH": str(root) + os.pathsep + os.environ["PATH"],
+                     "SYSTEMCTL_CALLS": str(calls)},
+                text=True, capture_output=True, check=False,
+            )
+            self.assertEqual(run.returncode, 0, run.stderr)
+            disabled_without_path_calls = calls.read_text(encoding="utf-8").splitlines()
+            self.assertEqual(disabled_without_path_calls, [
+                "stop ikpk-site-housekeeping.timer", "disable ikpk-site-housekeeping.timer",
+                "stop ikpk-site-housekeeping.service", "daemon-reload",
+            ])
+            self.assertNotIn("enable --now ikpk-site-housekeeping.timer", disabled_without_path_calls)
+            self.assertFalse(old_path.exists())
 
 
             # Recheck at the write site: disappearance after preflight must not
