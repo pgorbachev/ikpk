@@ -1324,6 +1324,76 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
             with self.assertRaisesRegex(rehearsal_host.HostFailure, "CI CMS artifact bytes differ"):
                 rehearsal_host._verify_cms_artifact_bytes(source, artifact, evidence)
 
+    def test_ci_artifact_verifier_allows_only_owned_root_strapi_updater_after_migration(self):
+        with tempfile.TemporaryDirectory(prefix="ikpk-ci-updater-artifact-") as temporary:
+            root = Path(temporary)
+            source = (root / ("c" * 40 + "-updater-op")).resolve()
+            source.mkdir()
+            members = {
+                "package.json": b'{"name":"cms"}',
+                "package-lock.json": b'{"lockfileVersion":3}',
+                "tsconfig.json": b'{}',
+                "dist/config/database.js": b"database config",
+                "database/.migrations-expected": b"v1",
+                "scripts/run-data-migrations.mjs": b"migration runner",
+            }
+            payload_buffer = io.BytesIO()
+            with tarfile.open(fileobj=payload_buffer, mode="w:gz") as archive:
+                for name, data in members.items():
+                    info = tarfile.TarInfo(name); info.size = len(data)
+                    archive.addfile(info, io.BytesIO(data))
+            payload = payload_buffer.getvalue()
+            (source / ".ikpk-cms-artifact.tar.gz").write_bytes(payload)
+            evidence = {"artifactId": 101, "runId": 17, "attempt": 1,
+                        "archiveSha256": "f" * 64, "payloadSha256": sha(payload)}
+            artifact = rehearsal_host._extract_ci_cms_artifact(
+                {"cmsUser": getpass.getuser()}, source, "updater-op", evidence)
+            rehearsal_host._verify_cms_artifact_bytes(source, artifact, evidence)
+            updater = artifact / ".strapi-updater.json"
+            updater.write_text('{"ignoredVersion":"test"}', encoding="utf-8")
+            updater.chmod(0o600)
+            cms_uid = os.getuid()
+
+            with self.assertRaisesRegex(rehearsal_host.HostFailure, "files outside its admitted payload"):
+                rehearsal_host._verify_cms_artifact_bytes(source, artifact, evidence)
+            rehearsal_host._verify_cms_artifact_bytes(source, artifact, evidence,
+                allow_runtime_updater=True, cms_uid=cms_uid)
+
+            updater.unlink()
+            nested = artifact / "dist/.strapi-updater.json"
+            nested.write_text("{}", encoding="utf-8")
+            with self.assertRaisesRegex(rehearsal_host.HostFailure, "files outside its admitted payload"):
+                rehearsal_host._verify_cms_artifact_bytes(source, artifact, evidence,
+                    allow_runtime_updater=True, cms_uid=cms_uid)
+            nested.unlink()
+
+            updater.symlink_to(artifact / "package.json")
+            with self.assertRaisesRegex(rehearsal_host.HostFailure, "runtime Strapi updater"):
+                rehearsal_host._verify_cms_artifact_bytes(source, artifact, evidence,
+                    allow_runtime_updater=True, cms_uid=cms_uid)
+            updater.unlink()
+
+            os.link(artifact / "package.json", updater)
+            with self.assertRaisesRegex(rehearsal_host.HostFailure, "unsafe file|runtime Strapi updater"):
+                rehearsal_host._verify_cms_artifact_bytes(source, artifact, evidence,
+                    allow_runtime_updater=True, cms_uid=cms_uid)
+            updater.unlink()
+
+            updater.write_text("{}", encoding="utf-8")
+            updater.chmod(0o600)
+            with self.assertRaisesRegex(rehearsal_host.HostFailure, "runtime Strapi updater"):
+                rehearsal_host._verify_cms_artifact_bytes(source, artifact, evidence,
+                    allow_runtime_updater=True, cms_uid=cms_uid + 1)
+            updater.chmod(0o644)
+            with self.assertRaisesRegex(rehearsal_host.HostFailure, "runtime Strapi updater"):
+                rehearsal_host._verify_cms_artifact_bytes(source, artifact, evidence,
+                    allow_runtime_updater=True, cms_uid=cms_uid)
+            updater.chmod(0o600)
+            (artifact / "dist/config/database.js").write_bytes(b"changed admitted bytes")
+            with self.assertRaisesRegex(rehearsal_host.HostFailure, "CI CMS artifact bytes differ"):
+                rehearsal_host._verify_cms_artifact_bytes(source, artifact, evidence,
+                    allow_runtime_updater=True, cms_uid=cms_uid)
+
     def test_ci_cms_artifact_rejects_dependency_and_upload_payload_paths(self):
         for name in ("node_modules/strapi.js", "public/uploads/live.jpg"):
             payload_buffer = io.BytesIO()
@@ -1498,12 +1568,17 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
                 self.assertEqual(list(uploads.iterdir()), [], "migration must not see or copy real media")
                 self.assertEqual(uploads.stat().st_uid, user.pw_uid)
                 self.assertEqual(stat.S_IMODE(uploads.stat().st_mode), 0o755)
-                self.assertEqual(rehearsal_host._cms_payload_sha256(artifact, external_uploads), artifact_digest,
-                                 "the staging directory must not alter verified CMS artifact payload bytes")
                 if argv[2] == "prepare":
+                    self.assertEqual(rehearsal_host._cms_payload_sha256(artifact, external_uploads), artifact_digest,
+                                     "the staging directory must not alter verified CMS artifact payload bytes")
                     candidate = Path(argv[argv.index("--candidate-db") + 1])
                     sqlite3.connect(candidate).close()
+                    updater_fd = os.open(artifact / ".strapi-updater.json",
+                        os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+                    os.close(updater_fd)
                     return ""
+                self.assertTrue((artifact / ".strapi-updater.json").is_file(),
+                                "runner status follows Strapi's prepare-time updater file")
                 return json.dumps({"phase": "prepared", "passed": True})
 
             with patch.object(rehearsal_host, "_validate_prepared_cms_candidate",
@@ -1773,6 +1848,92 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
 
             self.assertEqual(events, ["validate-prepared"])
             self.assertEqual(result["phase"], "cms-activated")
+
+    def test_cms_activated_resume_verifies_only_journaled_runtime_updater(self):
+        source_sha, operation_id = "a" * 40, "activated-updater-resume"
+        artifact = {"artifactId": 9, "runId": 7, "attempt": 1,
+                    "archiveSha256": "b" * 64, "payloadSha256": "c" * 64}
+        provenance = {"sourceSha": source_sha, "ref": "refs/heads/main", "runId": 7,
+                      "attempt": 1, "cmsArtifact": artifact}
+
+        class State:
+            def phase(self, _operation_id):
+                return {"phase": "cms-activated", "sourceSha": source_sha}
+            def _operation_rows(self, _operation_id):
+                return [{"record": "start", "sourceSha": source_sha, "cmsArtifact": artifact}]
+
+        root = Path("/tmp/unused-updater-resume")
+        config = {"profile": "staging194", "allowedSourceRef": "refs/heads/main",
+                  "cmsUnit": "ikpk-cms-prototype193.service", "cmsDatabase": str(root / "live.sqlite"),
+                  "cmsHealthUrl": "http://127.0.0.1:1338/_health", "backupRoot": str(root / "backups")}
+        args = Namespace(operation_id=operation_id, source_sha=source_sha,
+                         provenance_b64=base64.b64encode(json.dumps(provenance).encode()).decode(),
+                         offhost_sha256=None)
+        with patch.object(rehearsal_host, "_validate_paired_ci_workflows"), \
+             patch.object(rehearsal_host, "_trusted_cms_artifact", return_value=artifact), \
+             patch.object(rehearsal_host, "_candidate_root", return_value=root / "candidate"), \
+             patch.object(rehearsal_host, "_validate_prepared_cms_candidate",
+                          return_value=(root / "candidate", root / "artifact", root / "deps")) as validate, \
+             patch.object(rehearsal_host, "_backup_manifest", return_value={"archiveSha256": "d" * 64}), \
+             patch.object(rehearsal_host, "_verify_fence"), \
+             patch.object(rehearsal_host, "_wait_health"), \
+             patch.object(rehearsal_host, "_service_pid", return_value=123), \
+             patch.object(rehearsal_host, "_database_process_proof", return_value={"kind": "live"}):
+            result = rehearsal_host._cms_update(config, State(), args)
+        self.assertTrue(result["offhostBackupRequired"])
+        self.assertIs(validate.call_args.kwargs["allow_runtime_updater"], True)
+
+    def test_successful_migration_is_the_only_nonjournaled_verifier_allow_point(self):
+        source_sha, operation_id = "a" * 40, "post-migration-updater"
+        evidence = {"artifactId": 11, "runId": 8, "attempt": 1,
+                    "archiveSha256": "b" * 64, "payloadSha256": "c" * 64}
+        provenance = {"sourceSha": source_sha, "ref": "refs/heads/main", "runId": 8,
+                      "attempt": 1, "cmsArtifact": evidence}
+        temporary = tempfile.TemporaryDirectory(prefix="ikpk-post-migration-updater-")
+        self.addCleanup(temporary.cleanup)
+        root = Path(temporary.name)
+        old_pair = {"cmsPath": "/opt/old-cms", "cmsSourceEnvironment": {
+            "IKPK_BUILD_WORKSPACE": "/opt/old-release", "IKPK_INSTALLED_COMMIT": "d" * 40}}
+
+        class State:
+            def phase(self, _operation_id):
+                return {"phase": "fenced", "sourceSha": source_sha}
+            def _operation_rows(self, _operation_id):
+                return [{"record": "start", "sourceSha": source_sha,
+                         "oldPair": old_pair, "cmsArtifact": evidence}]
+            def mark_cms_activated(self, _operation_id):
+                self.activated = True
+
+        config = {"profile": "staging194", "allowedSourceRef": "refs/heads/main",
+                  "cmsUnit": "ikpk-cms-prototype193.service", "cmsDatabase": str(root / "live.sqlite"),
+                  "cmsHealthUrl": "http://127.0.0.1:1338/_health", "backupRoot": str(root / "backups")}
+        backup_root = Path(config["backupRoot"]) / operation_id
+        backup_root.mkdir(parents=True)
+        (backup_root / "manifest.json").write_text("{}", encoding="utf-8")
+        args = Namespace(operation_id=operation_id, source_sha=source_sha,
+                         provenance_b64=base64.b64encode(json.dumps(provenance).encode()).decode(),
+                         archive_sha256=None, offhost_sha256="d" * 64)
+        validate_results = []
+        with patch.object(rehearsal_host, "_validate_paired_ci_workflows"), \
+             patch.object(rehearsal_host, "_trusted_cms_artifact", return_value=evidence), \
+             patch.object(rehearsal_host, "_candidate_root", return_value=root / "candidate"), \
+             patch.object(rehearsal_host, "_validate_prepared_cms_candidate",
+                          side_effect=lambda *a, **kw: validate_results.append(kw.get("allow_runtime_updater", False))
+                          or (root / "candidate", root / "artifact", root / "deps")), \
+             patch.object(rehearsal_host, "_start_acquisition", return_value={"phase": "fenced"}), \
+             patch.object(rehearsal_host, "_backup_manifest", return_value={"archiveSha256": "d" * 64}), \
+             patch.object(rehearsal_host, "_preflight_staging194_source"), \
+             patch.object(rehearsal_host, "_install_migrated_database",
+                          return_value=(root / "candidate.db", root / "artifact", "e" * 64)), \
+             patch.object(rehearsal_host, "_create_capture_bundle", return_value=root / "capture"), \
+             patch.object(rehearsal_host, "_activate_cms", return_value={"kind": "live"}) as activate, \
+             patch.object(rehearsal_host, "_wait_health"), \
+             patch.object(rehearsal_host, "_verify_fence"):
+            result = rehearsal_host._cms_update(config, State(), args)
+
+        self.assertEqual(result["phase"], "cms-activated")
+        self.assertEqual(validate_results, [False, False, False, True])
+        self.assertEqual(activate.call_args.kwargs["cms_artifact"], evidence)
 
     def test_profileless_staging_cms_update_resumes_after_offhost_confirmation(self):
         with tempfile.TemporaryDirectory(prefix="ikpk-profileless-two-call-cms-update-") as temporary:
@@ -4160,7 +4321,7 @@ class Staging194PairedSourceEnvironmentTests(unittest.TestCase):
             (capture / "media-manifest.json").write_text(json.dumps({"media": [
                 {"url": "/uploads/photo.jpg", "originalName": "photo.jpg"}]}), encoding="utf-8")
             artifact = {"artifactId": 7, "payloadSha256": "e" * 64}
-            config = {"cmsEnvironmentFile": str(env_file),
+            config = {"cmsEnvironmentFile": str(env_file), "cmsUser": getpass.getuser(),
                       "cmsDatabase": str(live_database), "currentCms": str(root / "current-cms"),
                       "releaseRoot": str(root / "releases"), "cmsUnit": "ikpk-cms-prototype193.service",
                       "cmsHealthUrl": "http://127.0.0.1:1338/_health"}
@@ -4184,7 +4345,7 @@ class Staging194PairedSourceEnvironmentTests(unittest.TestCase):
             with patch.object(rehearsal_host, "_trusted_cms_artifact", return_value=artifact), \
                  patch.object(Path, "lstat", root_owned_environment), \
                  patch.object(rehearsal_host.os, "fchown"), \
-                 patch.object(rehearsal_host, "_verify_cms_artifact_bytes"), \
+                 patch.object(rehearsal_host, "_verify_cms_artifact_bytes") as verify_artifact, \
                  patch.object(rehearsal_host, "_run_as_cms", side_effect=lambda *args, **kwargs: readiness_calls.append(args)), \
                  patch.object(rehearsal_host, "_assert_staging194_process_source_env",
                               side_effect=lambda *args: process_env_checks.append(args)), \
@@ -4203,6 +4364,8 @@ class Staging194PairedSourceEnvironmentTests(unittest.TestCase):
             self.assertEqual(len(readiness_calls), 1)
             self.assertEqual(process_env_checks[-1][1], {
                 "IKPK_BUILD_WORKSPACE": str(source_root), "IKPK_INSTALLED_COMMIT": source_sha})
+            self.assertIs(verify_artifact.call_args.kwargs["allow_runtime_updater"], True)
+            self.assertEqual(verify_artifact.call_args.kwargs["cms_uid"], os.getuid())
 
     def test_recovery_restores_source_environment_before_reopening_old_cms(self):
         with tempfile.TemporaryDirectory(prefix="ikpk-staging194-source-env-recover-") as temporary:
