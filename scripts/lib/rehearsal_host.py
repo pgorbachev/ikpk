@@ -3593,6 +3593,11 @@ def _cms_update(config: dict[str, Any], state: RehearsalState, args: argparse.Na
                       if config.get("profile") == "production-paired" else None)
     if profile in ("staging194", "production-paired"):
         _validate_prepared_cms_candidate(config, source_root, op, provenance)
+    if profile == "staging194" and phase is not None:
+        resumed_start = next((row for row in state._operation_rows(op) if row.get("record") == "start"), None)
+        resumed_old_pair = resumed_start.get("oldPair") if resumed_start else None
+        if not isinstance(resumed_old_pair, dict) or "cmsSourceEnvironment" not in resumed_old_pair:
+            raise HostFailure("legacy staging194 operation lacks a source environment snapshot; recover it before activation")
     if profile == "staging194" and phase is None:
         _pre_fence_staging194_process(config)
     if helper_artifact is not None:
@@ -3617,8 +3622,6 @@ def _cms_update(config: dict[str, Any], state: RehearsalState, args: argparse.Na
     if not start or not isinstance(start.get("oldPair", {}).get("cmsPath"), str):
         raise HostFailure("operation journal has no recorded old CMS release for migration provenance")
     if profile == "staging194":
-        if "cmsSourceEnvironment" not in start.get("oldPair", {}):
-            raise HostFailure("legacy staging194 operation lacks a source environment snapshot; recover it before activation")
         _preflight_staging194_source(config, source_root, sha, op)
     old_cms_root = Path(start["oldPair"]["cmsPath"])
     candidate_db, cms_release, cms_payload_sha = _install_migrated_database(config, source_root, op, old_cms_root)

@@ -3611,8 +3611,12 @@ class Staging194PairedSourceEnvironmentTests(unittest.TestCase):
                  patch.object(rehearsal_host, "_candidate_root", return_value=source_root), \
                  patch.object(rehearsal_host, "_validate_prepared_cms_candidate",
                               return_value=(source_root, source_root / "artifact", source_root / "deps")), \
-                 patch.object(rehearsal_host, "_start_acquisition", return_value=state.phase(operation_id)), \
-                 patch.object(rehearsal_host, "_backup_manifest", return_value={"archiveSha256": "c" * 64}), \
+                 patch.object(rehearsal_host, "_start_acquisition",
+                              side_effect=AssertionError("legacy continuation must refuse before acquisition")), \
+                 patch.object(rehearsal_host, "_backup_manifest",
+                              side_effect=AssertionError("legacy continuation must refuse before backup")), \
+                 patch.object(rehearsal_host, "_backup",
+                              side_effect=AssertionError("legacy continuation must refuse before backup")), \
                  patch.object(rehearsal_host, "_preflight_staging194_source",
                               side_effect=AssertionError("legacy journal must refuse before new env preflight")), \
                  patch.object(rehearsal_host, "_install_migrated_database",
