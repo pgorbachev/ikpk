@@ -1484,6 +1484,11 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
 
             def run_as_cms(_config, cwd, argv, **_kwargs):
                 uploads = Path(cwd) / "public/uploads"
+                if argv[0] == "/usr/bin/python3":
+                    self.assertEqual(argv[1], "-c")
+                    self.assertEqual(argv[3], str(uploads))
+                    uploads.mkdir(mode=0o755)
+                    return ""
                 accessible = (uploads.is_dir() and not uploads.is_symlink()
                               and os.access(uploads, os.R_OK | os.W_OK | os.X_OK))
                 observed.append((argv[2], accessible, list(uploads.iterdir()) if uploads.is_dir() else None))
@@ -1503,6 +1508,8 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
                               return_value=(source, artifact, dependencies)), \
                  patch.object(rehearsal_host.pwd, "getpwnam", return_value=user), \
                  patch.object(rehearsal_host, "_run_as_cms", side_effect=run_as_cms), \
+                 patch.object(rehearsal_host.os, "chown", side_effect=AssertionError("do not chown by path")), \
+                 patch.object(rehearsal_host.os, "chmod", side_effect=AssertionError("do not chmod by path")), \
                  patch.object(rehearsal_host, "_assert_no_database_handles"):
                 _candidate, _artifact, digest = rehearsal_host._install_migrated_database(
                     config, source, "uploads-op", root / "old-cms")
@@ -1511,6 +1518,44 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
             self.assertTrue((artifact / "public/uploads").is_symlink())
             self.assertEqual((external_uploads / "existing-media.jpg").read_bytes(), b"preserved")
             self.assertEqual(len(digest), 64)
+
+    def test_candidate_upload_directory_preserves_existing_gitkeep_placeholder(self):
+        with tempfile.TemporaryDirectory(prefix="ikpk-cms-uploads-placeholder-") as temporary:
+            root = Path(temporary)
+            artifact = root / "artifact"
+            uploads = artifact / "public/uploads"
+            uploads.mkdir(parents=True)
+            placeholder = uploads / ".gitkeep"
+            placeholder.write_bytes(b"")
+            config = {"cmsUser": getpass.getuser()}
+            with patch.object(rehearsal_host, "_run_as_cms",
+                              side_effect=AssertionError("existing accepted placeholder needs no mutation")):
+                self.assertEqual(rehearsal_host._ensure_empty_candidate_upload_directory(config, artifact), uploads)
+            self.assertEqual(placeholder.read_bytes(), b"")
+
+    def test_existing_migration_candidate_refuses_before_upload_directory_mutation(self):
+        with tempfile.TemporaryDirectory(prefix="ikpk-cms-uploads-retry-guard-") as temporary:
+            root = Path(temporary)
+            source = root / "source"
+            artifact = source / "migration/cms-artifact"
+            (artifact / "public").mkdir(parents=True)
+            (artifact / "scripts").mkdir()
+            dependencies = root / "deps/node_modules"
+            dependencies.mkdir(parents=True)
+            live_database = root / "live.sqlite"
+            sqlite3.connect(live_database).close()
+            candidate = artifact.parent / "candidate.db"
+            candidate.write_bytes(b"existing partial candidate")
+            config = {"cmsDatabase": str(live_database), "cmsUser": getpass.getuser(),
+                      "mediaRoots": [{"prefix": "/uploads/", "path": str(root)}]}
+            with patch.object(rehearsal_host, "_validate_prepared_cms_candidate",
+                              return_value=(source, artifact, dependencies)), \
+                 patch.object(rehearsal_host, "_run_as_cms",
+                              side_effect=AssertionError("retry guard must run before CMS commands")):
+                with self.assertRaisesRegex(rehearsal_host.HostFailure, "candidate already exists"):
+                    rehearsal_host._install_migrated_database(config, source, "retry-op", root / "old-cms")
+            self.assertFalse((artifact / "public/uploads").exists())
+            self.assertEqual(candidate.read_bytes(), b"existing partial candidate")
 
     def test_cms_payload_accepts_operation_source_dependencies_and_internal_bin_links(self):
         with tempfile.TemporaryDirectory(prefix="ikpk-cms-node-modules-") as temporary:
