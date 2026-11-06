@@ -847,6 +847,7 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
         data = {"allowedSourceRef": "refs/heads/main", "targetHost": "194.226.99.10",
                 "siteRefreshState": "/var/lib/ikpk-cms-prototype193/staging/site-refresh194/state/state.json",
                 "publicationLock": str(rehearsal_host.PRODUCTION_PUBLICATION_LOCK),
+                "cmsEnvironmentFile": "/etc/ikpk-cms/site-build-current194.env",
                 "sitePublicationMarker": "/var/lib/ikpk-rehearsal/site-publication/host-publication.json",
                 "cmsHealthUrl": "http://127.0.0.1:1338/_health",
                 "siteHealthUrl": "https://194.226.99.10/", "siteBaseUrl": "https://194.226.99.10",

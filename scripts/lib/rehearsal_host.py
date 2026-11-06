@@ -505,7 +505,7 @@ def _root_config(path: Path, expected_profile: str = "staging194") -> dict[str, 
                  "cmsDatabase", "nginxMapFile", "nginxServerGateFile"]
     if profile in ("staging194", "production-static", "production-paired", "initial-prod"):
         path_keys.append("publicationLock")
-    if profile == "production-paired":
+    if profile in ("staging194", "production-paired"):
         path_keys.append("cmsEnvironmentFile")
     path_keys.extend(("siteRefreshState", "sitePublicationMarker"))
     for key in path_keys:
@@ -561,7 +561,8 @@ def _validate_target_binding(data: dict[str, Any]) -> None:
             raise HostFailure("host config is not bound to the staging194 target/source policy")
         if (data.get("siteRefreshState") != "/var/lib/ikpk-cms-prototype193/staging/site-refresh194/state/state.json"
                 or data.get("publicationLock") != str(PRODUCTION_PUBLICATION_LOCK)
-                or data.get("sitePublicationMarker") != "/var/lib/ikpk-rehearsal/site-publication/host-publication.json"):
+                or data.get("sitePublicationMarker") != "/var/lib/ikpk-rehearsal/site-publication/host-publication.json"
+                or data.get("cmsEnvironmentFile") != "/etc/ikpk-cms/site-build-current194.env"):
             raise HostFailure("staging194 site publication coordination paths are not fixed")
         if data["cmsHealthUrl"] != "http://127.0.0.1:1338/_health":
             raise HostFailure("CMS health check must remain bound to the local staging194 service")
@@ -1831,16 +1832,16 @@ def _tree_sha256(root: Path) -> str:
 PAIRED_CMS_ENV_KEYS = ("IKPK_BUILD_WORKSPACE", "IKPK_INSTALLED_COMMIT", "INITIAL_PROD_PROFILE",
                        "DEPLOY_MODE", "PAYMENT_ROLE", "PAYMENT_ENDPOINT_PROD", "DEMO_FORMS",
                        "CHAT_LOADER_SRC", "CHAT_OFFLINE_MESSAGE")
+STAGING194_CMS_SOURCE_ENV_KEYS = ("IKPK_BUILD_WORKSPACE", "IKPK_INSTALLED_COMMIT")
 
 
-def _paired_cms_source_env(config: dict[str, Any]) -> dict[str, Optional[str]]:
-    path = Path(config["cmsEnvironmentFile"])
+def _read_cms_environment_values(path: Path, keys: tuple[str, ...]) -> dict[str, Optional[str]]:
     info = path.lstat()
     if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1 or info.st_uid != 0:
         raise HostFailure("paired CMS environment file is not a regular unlinked file")
     text = path.read_text(encoding="utf-8")
-    values: dict[str, Optional[str]] = {key: None for key in PAIRED_CMS_ENV_KEYS}
-    for key in PAIRED_CMS_ENV_KEYS:
+    values: dict[str, Optional[str]] = {key: None for key in keys}
+    for key in keys:
         matches = re.findall(rf"^(?:export\s+)?{re.escape(key)}=(.*)$", text, re.MULTILINE)
         if len(matches) > 1:
             raise HostFailure(f"paired CMS environment repeats {key}")
@@ -1849,9 +1850,10 @@ def _paired_cms_source_env(config: dict[str, Any]) -> dict[str, Optional[str]]:
     return values
 
 
-def _write_paired_cms_source_env(config: dict[str, Any], values: dict[str, Optional[str]]) -> None:
-    if set(values) != set(PAIRED_CMS_ENV_KEYS):
-        raise HostFailure("paired CMS environment update may change only the two source-version keys")
+def _write_cms_environment_values(config: dict[str, Any], values: dict[str, Optional[str]],
+                                  keys: tuple[str, ...]) -> None:
+    if set(values) != set(keys):
+        raise HostFailure("CMS environment update has an unexpected key set")
     path = Path(config["cmsEnvironmentFile"])
     info = path.lstat()
     if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
@@ -1863,7 +1865,7 @@ def _write_paired_cms_source_env(config: dict[str, Any], values: dict[str, Optio
     output = []
     seen = set()
     for line in text.splitlines(keepends=True):
-        matched = next((key for key in PAIRED_CMS_ENV_KEYS
+        matched = next((key for key in keys
                         if re.match(rf"^(?:export\s+)?{re.escape(key)}=", line)), None)
         if matched is None:
             output.append(line)
@@ -1898,6 +1900,22 @@ def _write_paired_cms_source_env(config: dict[str, Any], values: dict[str, Optio
             os.unlink(temporary)
         except FileNotFoundError:
             pass
+
+
+def _paired_cms_source_env(config: dict[str, Any]) -> dict[str, Optional[str]]:
+    return _read_cms_environment_values(Path(config["cmsEnvironmentFile"]), PAIRED_CMS_ENV_KEYS)
+
+
+def _staging194_cms_source_env(config: dict[str, Any]) -> dict[str, Optional[str]]:
+    return _read_cms_environment_values(Path(config["cmsEnvironmentFile"]), STAGING194_CMS_SOURCE_ENV_KEYS)
+
+
+def _write_paired_cms_source_env(config: dict[str, Any], values: dict[str, Optional[str]]) -> None:
+    _write_cms_environment_values(config, values, PAIRED_CMS_ENV_KEYS)
+
+
+def _write_staging194_cms_source_env(config: dict[str, Any], values: dict[str, Optional[str]]) -> None:
+    _write_cms_environment_values(config, values, STAGING194_CMS_SOURCE_ENV_KEYS)
 
 
 def _site_refresh_worker_pids(proc_root: Path = Path("/proc")) -> set[int]:
@@ -2103,7 +2121,9 @@ def _old_pair(config: dict[str, Any]) -> dict[str, Any]:
             "databaseSha256": sha256_file(database), "staticTreeSha256": _tree_sha256(static),
             "configSha256": _config_sha256(config),
             "cmsDatabaseProof": db_proof}
-    if config.get("profile") == "production-paired":
+    if config.get("profile") == "staging194":
+        result["cmsSourceEnvironment"] = _staging194_cms_source_env(config)
+    elif config.get("profile") == "production-paired":
         result["cmsSourceEnvironment"] = _paired_cms_source_env(config)
         result["mediaStateSha256"] = _media_state_sha256(_media_inventory(config))
     return result
@@ -3111,6 +3131,19 @@ def _activate_cms(config: dict[str, Any], cms_release: Path, candidate_db: Path,
             "INITIAL_PROD_PROFILE": "1", "DEPLOY_MODE": "prod", "PAYMENT_ROLE": "prod",
             "PAYMENT_ENDPOINT_PROD": payment_endpoint, "DEMO_FORMS": None,
             "CHAT_LOADER_SRC": chat_loader, "CHAT_OFFLINE_MESSAGE": None})
+    elif config.get("profile") == "staging194":
+        if source_root is None or source_sha is None or not SHA_RE.fullmatch(source_sha):
+            raise HostFailure("staging194 CMS activation lacks its admitted source workspace")
+        workspace = source_root.absolute()
+        release_root = Path(config["releaseRoot"]).absolute()
+        if (workspace.parent != release_root
+                or not re.fullmatch(rf"{re.escape(source_sha)}-[A-Za-z0-9][A-Za-z0-9._-]{{0,127}}",
+                                    workspace.name)):
+            raise HostFailure("staging194 CMS source workspace is not the versioned admitted release")
+        if any(not (workspace / part).is_file() for part in ("cms/package.json", "web/package.json")):
+            raise HostFailure("staging194 CMS source workspace is incomplete")
+        _write_staging194_cms_source_env(config, {
+            "IKPK_BUILD_WORKSPACE": str(workspace), "IKPK_INSTALLED_COMMIT": source_sha})
     run(["/usr/bin/systemctl", "start", config["cmsUnit"]], timeout=120)
     _wait_health(config["cmsHealthUrl"])
     proof = _database_process_proof(_service_pid(config["cmsUnit"]), live)
@@ -4617,6 +4650,13 @@ def _recover(config: dict[str, Any], state: RehearsalState, operation_id: str,
             if not isinstance(previous_environment, dict) or set(previous_environment) != set(PAIRED_CMS_ENV_KEYS):
                 raise HostFailure("operation journal lacks the prior CMS source environment")
             _write_paired_cms_source_env(config, previous_environment)
+        elif config.get("profile") == "staging194":
+            previous_environment = old_pair.get("cmsSourceEnvironment")
+            if (not isinstance(previous_environment, dict)
+                    or not set(STAGING194_CMS_SOURCE_ENV_KEYS).issubset(previous_environment)):
+                raise HostFailure("operation journal lacks the prior staging194 CMS source environment")
+            _write_staging194_cms_source_env(config, {
+                key: previous_environment[key] for key in STAGING194_CMS_SOURCE_ENV_KEYS})
         run(["/usr/bin/systemctl", "start", config["cmsUnit"]], timeout=120)
         _wait_health(config["cmsHealthUrl"], 1200)
         _database_process_proof(_service_pid(config["cmsUnit"]), live)
