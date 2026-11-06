@@ -2663,7 +2663,9 @@ def _cms_tar_members(payload: bytes) -> tuple[tarfile.TarFile, list[tarfile.TarI
     return archive, members
 
 
-def _verify_cms_artifact_bytes(source_root: Path, artifact: Path, expected: dict[str, Any]) -> bytes:
+def _verify_cms_artifact_bytes(source_root: Path, artifact: Path, expected: dict[str, Any], *,
+                               allow_runtime_updater: bool = False,
+                               cms_uid: Optional[int] = None) -> bytes:
     archive_path = source_root / ".ikpk-cms-artifact.tar.gz"
     try:
         if source_root.is_symlink() or source_root.resolve(strict=True) != source_root:
@@ -2688,6 +2690,8 @@ def _verify_cms_artifact_bytes(source_root: Path, artifact: Path, expected: dict
         raise HostFailure("CI CMS artifact archive is missing or unreadable") from error
     if sha256_file_bytes(payload) != expected["payloadSha256"]:
         raise HostFailure("CI CMS artifact payload digest differs from trusted provenance")
+    if allow_runtime_updater and (type(cms_uid) is not int or cms_uid < 0):
+        raise HostFailure("runtime Strapi updater verification requires the CMS service UID")
     tar, members = _cms_tar_members(payload)
     try:
         if artifact.is_symlink() or not artifact.is_dir():
@@ -2725,9 +2729,15 @@ def _verify_cms_artifact_bytes(source_root: Path, artifact: Path, expected: dict
                 continue
             if relative == "public/uploads":
                 continue
+            info = path.lstat()
+            if (allow_runtime_updater and relative == ".strapi-updater.json"
+                    and relative not in expected_paths):
+                if (not stat.S_ISREG(info.st_mode) or info.st_nlink != 1 or info.st_uid != cms_uid
+                        or stat.S_IMODE(info.st_mode) != 0o600):
+                    raise HostFailure("runtime Strapi updater file is not a CMS-owned single-link regular file")
+                continue
             if relative not in expected_paths:
                 raise HostFailure("prepared CI CMS artifact has files outside its admitted payload")
-            info = path.lstat()
             if stat.S_ISLNK(info.st_mode):
                 raise HostFailure("prepared CI CMS artifact contains an unexpected symlink")
         required = ("package.json", "package-lock.json", "tsconfig.json", "dist/config/database.js",
@@ -2831,7 +2841,8 @@ def _has_main_release_admission(provenance: dict[str, Any], source_sha: str) -> 
 
 
 def _validate_prepared_cms_candidate(config: dict[str, Any], source_root: Path, operation_id: str,
-                                     provenance: Optional[dict[str, Any]] = None) -> tuple[Path, Path, Path]:
+                                     provenance: Optional[dict[str, Any]] = None, *,
+                                     allow_runtime_updater: bool = False) -> tuple[Path, Path, Path]:
     marker = source_root / ".ikpk-rehearsal-ci.json"
     try:
         admitted = json.loads(marker.read_text(encoding="utf-8"))
@@ -2858,7 +2869,9 @@ def _validate_prepared_cms_candidate(config: dict[str, Any], source_root: Path, 
         raise HostFailure("prepared CMS artifact is missing or unsafe")
     if config.get("profile", "staging194") in ("staging194", "production-paired"):
         evidence = _trusted_cms_artifact(admitted)
-        _verify_cms_artifact_bytes(source_root, artifact, evidence)
+        _verify_cms_artifact_bytes(source_root, artifact, evidence,
+            allow_runtime_updater=allow_runtime_updater,
+            cms_uid=pwd.getpwnam(config["cmsUser"]).pw_uid if allow_runtime_updater else None)
     if sha256_file(source_cms / "package-lock.json") != sha256_file(artifact / "package-lock.json"):
         raise HostFailure("CMS artifact package-lock differs from the operation source lock")
     required = (artifact / "package.json", artifact / "tsconfig.json", artifact / "dist/config/database.js",
@@ -3260,7 +3273,8 @@ def _activate_cms(config: dict[str, Any], cms_release: Path, candidate_db: Path,
             raise HostFailure("paired CMS activation lacks admitted source provenance") from error
         if _trusted_cms_artifact(admitted) != cms_artifact:
             raise HostFailure("paired CMS activation artifact identity differs from the operation journal")
-        _verify_cms_artifact_bytes(source_root, cms_release, cms_artifact)
+        _verify_cms_artifact_bytes(source_root, cms_release, cms_artifact,
+            allow_runtime_updater=True, cms_uid=pwd.getpwnam(config["cmsUser"]).pw_uid)
     live = Path(config["cmsDatabase"]).resolve(strict=True)
     _assert_no_database_handles(live)
     _copy_atomic(candidate_db, live)
@@ -3595,7 +3609,8 @@ def _cms_update(config: dict[str, Any], state: RehearsalState, args: argparse.Na
                     and (start_record.get("hostHelperArtifact") != helper_artifact
                          or start_record.get("hostHelperRuntimeIdentity") != expected_helper_identity)):
                 raise HostFailure("operation journal host helper identity differs from trusted provenance")
-            _validate_prepared_cms_candidate(config, source_root, op, provenance)
+            _validate_prepared_cms_candidate(config, source_root, op, provenance,
+                allow_runtime_updater=phase.get("phase") == "cms-activated")
     if phase and phase.get("phase") == "cms-activated":
         manifest = _backup_manifest(config, op)
         _verify_fence(config)
@@ -3665,7 +3680,8 @@ def _cms_update(config: dict[str, Any], state: RehearsalState, args: argparse.Na
     candidate_db, cms_release, cms_payload_sha = _install_migrated_database(config, source_root, op, old_cms_root)
     capture = _create_capture_bundle(config, op, sha, source_root, candidate_db)
     if profile in ("staging194", "production-paired"):
-        _validate_prepared_cms_candidate(config, source_root, op, provenance)
+        _validate_prepared_cms_candidate(config, source_root, op, provenance,
+            allow_runtime_updater=True)
     proof = _activate_cms(config, cms_release, candidate_db, capture, source_root, sha, site_workspace,
                           cms_artifact=cms_artifact)
     _wait_health(config["cmsHealthUrl"], 1200)
