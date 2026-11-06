@@ -3617,6 +3617,8 @@ def _cms_update(config: dict[str, Any], state: RehearsalState, args: argparse.Na
     if not start or not isinstance(start.get("oldPair", {}).get("cmsPath"), str):
         raise HostFailure("operation journal has no recorded old CMS release for migration provenance")
     if profile == "staging194":
+        if "cmsSourceEnvironment" not in start.get("oldPair", {}):
+            raise HostFailure("legacy staging194 operation lacks a source environment snapshot; recover it before activation")
         _preflight_staging194_source(config, source_root, sha, op)
     old_cms_root = Path(start["oldPair"]["cmsPath"])
     candidate_db, cms_release, cms_payload_sha = _install_migrated_database(config, source_root, op, old_cms_root)

@@ -3578,6 +3578,50 @@ class Staging194PairedSourceEnvironmentTests(unittest.TestCase):
         self.assertEqual(rehearsal_host._config_sha256(old_config),
                          rehearsal_host._config_sha256(configured))
 
+    def test_legacy_fenced_resume_refuses_activation_before_environment_write(self):
+        with tempfile.TemporaryDirectory(prefix="ikpk-staging194-legacy-resume-") as temporary:
+            root = Path(temporary)
+            state_root = root / "state"
+            state_root.mkdir()
+            operation_id, source_sha = "legacy-resume", "a" * 40
+            state = RehearsalState(state_root)
+            artifact = {"artifactId": 9, "payloadSha256": "b" * 64}
+            state.begin(operation_id, source_sha, {"cmsPath": "/old/cms"}, cms_artifact=artifact)
+            state.confirm_fence(operation_id, lambda: True)
+            backup_root = root / "backups"
+            manifest_dir = backup_root / operation_id
+            manifest_dir.mkdir(parents=True)
+            (manifest_dir / "manifest.json").write_text(json.dumps({"archiveSha256": "c" * 64}), encoding="utf-8")
+            source_root = root / "releases" / f"{source_sha}-{operation_id}"
+            config = {"profile": "staging194", "releaseRoot": str(source_root.parent),
+                      "backupRoot": str(backup_root), "cmsEnvironmentFile": str(root / "missing.env"),
+                      "cmsUnit": "ikpk-cms-prototype193.service"}
+            provenance = {"sourceSha": source_sha, "ref": "refs/heads/dev", "workflow": "Tests",
+                          "workflowName": "Tests", "headBranch": "dev", "event": "push", "runId": 7,
+                          "attempt": 1, "repository": "pgorbachev/ikpk", "runUrl": "https://github.com/pgorbachev/ikpk/actions/runs/7"}
+            args = Namespace(operation_id=operation_id, source_sha=source_sha,
+                             provenance_b64=base64.b64encode(json.dumps(provenance).encode()).decode(),
+                             archive_sha256=None, offhost_sha256="c" * 64)
+            host_stdin = type("HostStdin", (), {"buffer": type("NoRead", (), {
+                "read": lambda *_args: self.fail("legacy continuation must not read an archive")})()})()
+            with patch.object(rehearsal_host.sys, "stdin", host_stdin), \
+                 patch.object(rehearsal_host, "_validate_staging194_temporary_root"), \
+                 patch.object(rehearsal_host, "_validate_paired_ci_workflows"), \
+                 patch.object(rehearsal_host, "_trusted_cms_artifact", return_value=artifact), \
+                 patch.object(rehearsal_host, "_candidate_root", return_value=source_root), \
+                 patch.object(rehearsal_host, "_validate_prepared_cms_candidate",
+                              return_value=(source_root, source_root / "artifact", source_root / "deps")), \
+                 patch.object(rehearsal_host, "_start_acquisition", return_value=state.phase(operation_id)), \
+                 patch.object(rehearsal_host, "_backup_manifest", return_value={"archiveSha256": "c" * 64}), \
+                 patch.object(rehearsal_host, "_preflight_staging194_source",
+                              side_effect=AssertionError("legacy journal must refuse before new env preflight")), \
+                 patch.object(rehearsal_host, "_install_migrated_database",
+                              side_effect=AssertionError("legacy journal must not activate")), \
+                 patch.object(rehearsal_host, "_write_staging194_cms_source_env",
+                              side_effect=AssertionError("legacy journal must not write an unjournaled env")):
+                with self.assertRaisesRegex(rehearsal_host.HostFailure, "legacy staging194 operation"):
+                    rehearsal_host._cms_update(config, state, args)
+
     def test_old_staging_config_gets_fixed_environment_path_without_disk_migration(self):
         template = json.loads((ROOT / "scripts/staging193-rehearsal.json").read_text(encoding="utf-8"))
         template.pop("cmsEnvironmentFile")
