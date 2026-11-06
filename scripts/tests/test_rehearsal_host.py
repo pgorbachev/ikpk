@@ -76,6 +76,54 @@ def backup_archive(operation_id="operator-test"):
 
 
 class RehearsalHostFilesystemTests(unittest.TestCase):
+    def test_staging194_status_reports_idle_only_for_a_clean_fresh_operation(self):
+        def status_for(root: Path, operation_id: str, marker=None):
+            state_dir = root / "state"
+            state_dir.mkdir(exist_ok=True)
+            config = {"profile": "staging194", "stateDir": str(state_dir),
+                      "maintenanceFlag": str(root / "maintenance.flag")}
+            args = Namespace(profile="staging194", action="status", operation_id=operation_id)
+            with patch.object(rehearsal_host.os, "geteuid", return_value=0), \
+                    patch.object(rehearsal_host, "_root_config", return_value=config), \
+                    patch.object(rehearsal_host, "_configure_profile_temp"), \
+                    patch.object(rehearsal_host, "_destination_publication_lock", return_value=nullcontext()), \
+                    patch.object(rehearsal_host, "_read_site_publication_marker", return_value=marker):
+                return rehearsal_host.dispatch(args)
+
+        with tempfile.TemporaryDirectory(prefix="ikpk-status-fresh-") as temporary:
+            root = Path(temporary)
+            result = status_for(root, "fresh-deploy")
+            self.assertEqual(result, {"operationId": "fresh-deploy", "phase": "idle"})
+            state = RehearsalState(root / "state")
+            self.assertFalse(state.marker_path.exists())
+            self.assertFalse(state.journal_path.exists())
+
+        for operation_id, row_operation_id, site_marker, maintenance_flag in (
+            ("same-op", "same-op", None, False),
+            ("new-op", "unfinished-other", None, False),
+            ("fresh-with-site-marker", None,
+             {"version": 1, "operationId": "other-site-operation", "phase": "active"}, False),
+            ("fresh-with-maintenance-flag", None, None, True),
+        ):
+            with self.subTest(operation=operation_id), tempfile.TemporaryDirectory(
+                    prefix="ikpk-status-not-fresh-") as temporary:
+                root = Path(temporary)
+                state_dir = root / "state"
+                state_dir.mkdir()
+                if maintenance_flag:
+                    (root / "maintenance.flag").write_text("fenced\n", encoding="utf-8")
+                if row_operation_id:
+                    state = RehearsalState(state_dir)
+                    state.begin(row_operation_id, "a" * 40, {"cmsPath": "/releases/old"})
+                    state.marker_path.unlink()
+                if site_marker:
+                    with self.assertRaisesRegex(rehearsal_host.HostFailure,
+                                                "site publication marker exists"):
+                        status_for(root, operation_id, site_marker)
+                else:
+                    with self.assertRaises(rehearsal_host.RehearsalRefusal):
+                        status_for(root, operation_id, site_marker)
+
     def test_staging194_cleanup_dispatch_does_not_require_private_tmp_source(self):
         config = {"profile": "staging194", "temporaryRoot": "/var/tmp/ikpk-staging194",
                   "stateDir": "/var/lib/ikpk-rehearsal/staging194",

@@ -35,6 +35,11 @@ def _migration(current: Path, template: Path) -> tuple[dict, bool]:
     if "temporaryRoot" in expected and "temporaryRoot" not in normalized:
         normalized["temporaryRoot"] = expected["temporaryRoot"]
         changed = True
+    if (expected.get("profile", "staging194") == "staging194"
+            and normalized.get("profile", "staging194") == "staging194"
+            and "cmsEnvironmentFile" in expected and "cmsEnvironmentFile" not in normalized):
+        normalized["cmsEnvironmentFile"] = expected["cmsEnvironmentFile"]
+        changed = True
     if normalized != expected:
         raise ValueError("existing rehearsal config has unrelated differences; refusing migration")
     return normalized, changed

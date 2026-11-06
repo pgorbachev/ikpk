@@ -4949,6 +4949,24 @@ def _recover(config: dict[str, Any], state: RehearsalState, operation_id: str,
     return {"operationId": operation_id, "phase": "recovered", "restoredPair": old_pair}
 
 
+def _status_or_idle_if_fresh(state: RehearsalState, operation_id: str,
+                            config: dict[str, Any]) -> dict[str, Any]:
+    try:
+        return state.phase(operation_id)
+    except RehearsalRefusal as error:
+        if str(error) != "operation has no maintenance marker or terminal journal record":
+            raise
+        history = state.read_journal_for_cleanup(validate_history=True)
+        if (state._read_marker() is not None
+                or any(row.get("operationId") == operation_id for row in history)
+                or state._unfinished_operation_ids(history)
+                or os.path.lexists(config["maintenanceFlag"])):
+            raise
+        if _read_site_publication_marker(config) is not None:
+            raise HostFailure("site publication marker exists; operation status is unknown")
+        return {"operationId": operation_id, "phase": "idle"}
+
+
 def dispatch(args: argparse.Namespace) -> dict[str, Any]:
     if os.geteuid() != 0:
         raise HostFailure("host command must run through the installed root-owned entrypoint")
@@ -5234,6 +5252,8 @@ def dispatch(args: argparse.Namespace) -> dict[str, Any]:
                 start = next((row for row in state._operation_rows(args.operation_id) if row.get("record") == "start"), None)
                 if start and isinstance(start.get("oldPair"), dict):
                     phase["oldPair"] = start["oldPair"]
+            elif profile == "staging194":
+                phase = _status_or_idle_if_fresh(state, args.operation_id, config)
             else:
                 phase = state.phase(args.operation_id)
             return phase
