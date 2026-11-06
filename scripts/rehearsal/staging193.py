@@ -50,6 +50,11 @@ REQUIRED_TEST_JOBS = {
     "Playwright smoke (desktop + mobile)",
 }
 STATIC_MAIN_ADDITIONAL_WORKFLOWS = ("Lint and Typecheck", "Security", "Lighthouse CI")
+FRESH_OPERATION_STATUS_ERRORS = frozenset({
+    "operation has no maintenance marker or terminal journal record",
+    "host operation failed (2): ikpk-rehearsal: "
+    "operation has no maintenance marker or terminal journal record",
+})
 
 
 class Refusal(RuntimeError):
@@ -481,10 +486,12 @@ def fetch_host_helper_artifact(provenance: dict, sha: str) -> bytes:
     return payload
 
 
-def install_staging194_host_helper(payload: bytes, digest: str) -> None:
+def install_staging194_host_helper(payload: bytes, digest: str, operation_id: str) -> None:
     """Install a verified helper artifact through the existing staging194 SSH channel."""
     if not isinstance(payload, bytes) or not re.fullmatch(r"[a-f0-9]{64}", digest):
         raise Refusal("host helper payload or digest is invalid")
+    if not isinstance(operation_id, str) or not OP.fullmatch(operation_id):
+        raise Refusal("host helper install requires an explicit valid operation ID")
     if hashlib.sha256(payload).hexdigest() != digest:
         raise Refusal("host helper payload digest does not match its CI evidence")
     if not TARGET_IDENTITY.is_file() or not TARGET_KNOWN_HOSTS.is_file():
@@ -520,7 +527,9 @@ def install_staging194_host_helper(payload: bytes, digest: str) -> None:
             raise Refusal(f"staging194 host helper transfer failed ({result.returncode}): "
                           f"{result.stderr.decode(errors='replace').strip()}")
         remote_python = r'''import fcntl, hashlib, json, os, pwd, re, shutil, stat, subprocess, sys, tarfile
-temporary, expected_digest = sys.argv[1:]
+temporary, expected_digest, requested_operation_id = sys.argv[1:]
+if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}", requested_operation_id):
+    raise SystemExit("fresh staging194 helper bootstrap requires a valid operation ID")
 archive_path = os.path.join(temporary, "host-helper.tar.gz")
 if not re.fullmatch(r"/var/tmp/ikpk-staging194/host-helper\.[A-Za-z0-9]{6}", temporary):
     raise SystemExit("staging194 temporary directory is not a pinned mktemp path")
@@ -585,6 +594,18 @@ try:
                     or any(not (member.isfile() or member.isdir()) for member in members)):
                 raise SystemExit("host helper archive contents differ from the admitted package")
             bundle.extractall(os.path.join(temporary, "payload"))
+        sys.path.insert(0, os.path.join(temporary, "payload", "scripts", "lib"))
+        from rehearsal_state import RehearsalState
+        state = RehearsalState(config["stateDir"])
+        # The caller already holds both locks; this journal reader does not lock again.
+        history = state.read_journal_for_cleanup(validate_history=True)
+        if any(row.get("operationId") == requested_operation_id for row in history):
+            raise SystemExit("requested operation ID already exists in the staging194 journal")
+        if RehearsalState._unfinished_operation_ids(history):
+            raise SystemExit("staging194 journal has an unfinished operation; helper replacement refused")
+        if state._read_marker() is not None or any(os.path.lexists(path) for path in (
+                config["maintenanceFlag"], state.marker_path, config["sitePublicationMarker"])):
+            raise SystemExit("staging194 maintenance or publication marker appeared before helper replacement")
         subprocess.run(["bash", os.path.join(temporary, "payload/scripts/install-rehearsal-host.sh"),
                         "--staging193-existing-config"], check=True)
         subprocess.run(["/usr/local/sbin/ikpk-rehearsal", "--profile", "staging194", "validate-config"], check=True)
@@ -601,7 +622,7 @@ try:
 finally:
     shutil.rmtree(temporary)
 '''.replace("EXPECTED_FILES", repr(set(HOST_HELPER_ARTIFACT_FILES)))
-        install = remote(["python3", "-c", remote_python, remote_dir, digest])
+        install = remote(["python3", "-c", remote_python, remote_dir, digest, operation_id])
         if install.returncode:
             raise Refusal(f"staging194 host helper installation or config validation failed ({install.returncode}): "
                           f"{install.stderr.decode(errors='replace').strip()}")
@@ -1335,8 +1356,19 @@ def invoke(args: argparse.Namespace, *, admission: Optional[dict] = None) -> Opt
         if install_host_helper:
             # A read-only status check makes an interrupted same-ID continuation
             # reuse the installed helper rather than replacing it on resume.
-            status = parse_host_json(ssh_remote(["status", "--operation-id", args.operation_id], profile=profile))
-            resume_phase = status.get("phase")
+            try:
+                status = parse_host_json(ssh_remote(["status", "--operation-id", args.operation_id], profile=profile))
+            except Refusal as error:
+                if str(error) not in FRESH_OPERATION_STATUS_ERRORS:
+                    raise
+                # The previous verified helper reports this exact refusal for a
+                # genuinely new ID. The replacement installer rechecks the
+                # journal and markers under both host locks before any writes.
+                resume_phase = "idle"
+            else:
+                if status.get("operationId") != args.operation_id:
+                    raise Refusal("host status does not match the requested operation ID")
+                resume_phase = status.get("phase")
             helper_payload = fetch_host_helper_artifact(provenance, args.source_sha)
             helper_evidence = provenance.get("hostHelperArtifact")
             if not isinstance(helper_evidence, dict):
@@ -1347,7 +1379,7 @@ def invoke(args: argparse.Namespace, *, admission: Optional[dict] = None) -> Opt
             helper_identity = _host_helper_runtime_identity(helper_payload)
             provenance["hostHelperRuntimeIdentity"] = helper_identity
             if resume_phase == "idle":
-                install_staging194_host_helper(helper_payload, helper_evidence["payloadSha256"])
+                install_staging194_host_helper(helper_payload, helper_evidence["payloadSha256"], args.operation_id)
             elif resume_phase not in ("acquiring", "fenced", "cms-activated"):
                 raise Refusal(f"same-ID CMS continuation is not available from host phase {resume_phase!r}")
         archive, digest = (make_archive(args.source_sha, provenance, cms_artifact=cms_artifact)
@@ -1465,7 +1497,7 @@ def invoke(args: argparse.Namespace, *, admission: Optional[dict] = None) -> Opt
             fetch_provenance.pop("hostHelperArtifact", None)
             journal_provenance["hostHelperArtifact"] = helper_evidence
         if helper_payload is not None and helper_evidence is not None:
-            install_staging194_host_helper(helper_payload, helper_evidence["payloadSha256"])
+            install_staging194_host_helper(helper_payload, helper_evidence["payloadSha256"], args.operation_id)
         provenance_b64 = base64.b64encode(json.dumps(journal_provenance, sort_keys=True,
             separators=(",", ":")).encode()).decode("ascii")
         common = ["static-main", "--operation-id", args.operation_id, "--source-sha", args.source_sha,
@@ -1624,14 +1656,10 @@ def main(argv: Optional[list[str]] = None) -> int:
         if args.command == "cms-update" and args.source_sha is None:
             if args.profile != "staging194":
                 raise Refusal("--source-sha is required outside the staging194 profile")
-            fresh_status_refusals = {
-                "operation has no maintenance marker or terminal journal record",
-                "host operation failed (2): ikpk-rehearsal: operation has no maintenance marker or terminal journal record",
-            }
             try:
                 status = parse_host_json(ssh_remote(["status", "--operation-id", args.operation_id]))
             except Refusal as error:
-                if str(error) not in fresh_status_refusals:
+                if str(error) not in FRESH_OPERATION_STATUS_ERRORS:
                     raise
             else:
                 if (status.get("operationId") != args.operation_id

@@ -3,7 +3,10 @@ import hashlib
 import io
 import json
 import os
+import pwd
+import re
 import shlex
+import shutil
 import subprocess
 import tarfile
 import tempfile
@@ -438,7 +441,8 @@ class OperatorAdmissionTests(unittest.TestCase):
         def ssh(arguments, **_kwargs):
             order.append(arguments[0])
             remote_calls.append(list(arguments))
-            return json.dumps({"phase": "idle" if arguments[0] == "status" else "cms-activated"}).encode()
+            return json.dumps({"operationId": args.operation_id,
+                               "phase": "idle" if arguments[0] == "status" else "cms-activated"}).encode()
 
         archived = []
         def archive(source_sha, provenance, *, cms_artifact):
@@ -462,13 +466,53 @@ class OperatorAdmissionTests(unittest.TestCase):
 
         self.assertEqual(order, ["target-preflight", "local-preflight", "admission", "fetch-cms",
                                  "status", "fetch-helper", "install-helper", "cms-update"])
-        install.assert_called_once_with(b"verified helper", helper["payloadSha256"])
+        install.assert_called_once_with(b"verified helper", helper["payloadSha256"], args.operation_id)
         self.assertEqual(archived[0]["hostHelperArtifact"], helper)
         self.assertEqual(archived[0]["runId"], helper["runId"])
         self.assertEqual(archived[0]["attempt"], helper["attempt"])
         self.assertEqual(archived[0]["hostHelperRuntimeIdentity"], "f" * 64)
         self.assertIn("--expected-host-helper-identity", remote_calls[-1])
         self.assertIn("f" * 64, remote_calls[-1])
+
+    def test_staging194_paired_helper_bootstraps_only_on_exact_legacy_status_refusal(self):
+        args = SimpleNamespace(profile="staging194", host=staging193.TARGET_HOST,
+            command="cms-update", operation_id="legacy-helper-bootstrap", source_sha=SHA,
+            backup_dir=None, release_tag=None, install_host_helper=True)
+        admission = {"sourceSha": SHA, "runId": 123, "attempt": 2}
+        artifact = {"artifactId": 987, "runId": 123, "attempt": 2,
+                    "archiveSha256": "b" * 64, "payloadSha256": "c" * 64}
+
+        def attach_helper(provenance, _sha):
+            provenance["hostHelperArtifact"] = dict(artifact)
+            return b"verified legacy bootstrap helper"
+
+        def run_with_status(status_error):
+            def ssh(command, **_kwargs):
+                if command[0] == "status":
+                    raise staging193.Refusal(status_error)
+                return json.dumps({"phase": "cms-activated"}).encode()
+
+            with patch.object(staging193, "_check_target_space", return_value={"filesystems": []}), \
+                 patch.object(staging193, "_check_local_space", return_value=[]), \
+                 patch.object(staging193, "validate_sha_and_ci", return_value=dict(admission)), \
+                 patch.object(staging193, "fetch_cms_candidate_artifact", return_value=b"verified cms"), \
+                 patch.object(staging193, "fetch_host_helper_artifact", side_effect=attach_helper), \
+                 patch.object(staging193, "_host_helper_runtime_identity", return_value="f" * 64), \
+                 patch.object(staging193, "make_archive", return_value=(b"archive", "a" * 64)), \
+                 patch.object(staging193, "install_staging194_host_helper", create=True) as install, \
+                 patch.object(staging193, "ssh_remote", side_effect=ssh):
+                try:
+                    staging193.invoke(args)
+                except staging193.Refusal:
+                    return install.call_args
+                return install.call_args
+
+        legacy = "host operation failed (2): ikpk-rehearsal: operation has no maintenance marker or terminal journal record"
+        legacy_install = run_with_status(legacy)
+        self.assertIsNotNone(legacy_install)
+        self.assertEqual(legacy_install.args,
+                         (b"verified legacy bootstrap helper", "c" * 64, args.operation_id))
+        self.assertIsNone(run_with_status(legacy + "; ambiguous"))
 
     def test_staging194_paired_helper_rejection_stops_before_install_or_host_fence(self):
         args = SimpleNamespace(profile="staging194", host=staging193.TARGET_HOST,
@@ -483,7 +527,8 @@ class OperatorAdmissionTests(unittest.TestCase):
                           side_effect=staging193.Refusal("host helper artifact is not bound to exact successful CI")), \
              patch.object(staging193, "make_archive", return_value=(b"source archive", "a" * 64)), \
              patch.object(staging193, "install_staging194_host_helper", create=True) as install, \
-             patch.object(staging193, "ssh_remote", return_value=json.dumps({"phase": "idle"}).encode()) as remote:
+             patch.object(staging193, "ssh_remote", return_value=json.dumps({
+                 "operationId": args.operation_id, "phase": "idle"}).encode()) as remote:
             with self.assertRaisesRegex(staging193.Refusal, "not bound to exact successful CI"):
                 staging193.invoke(args)
         install.assert_not_called()
@@ -508,10 +553,11 @@ class OperatorAdmissionTests(unittest.TestCase):
              patch.object(staging193, "install_staging194_host_helper",
                           side_effect=staging193.Refusal("helper config is incompatible"), create=True) as install, \
              patch.object(staging193, "ssh_remote", side_effect=lambda command, **_kw:
-                          json.dumps({"phase": "idle" if command[0] == "status" else "cms-activated"}).encode()) as remote:
+                          json.dumps({"operationId": args.operation_id,
+                                      "phase": "idle" if command[0] == "status" else "cms-activated"}).encode()) as remote:
             with self.assertRaisesRegex(staging193.Refusal, "helper config is incompatible"):
                 staging193.invoke(args)
-        install.assert_called_once_with(b"verified helper", "c" * 64)
+        install.assert_called_once_with(b"verified helper", "c" * 64, args.operation_id)
         self.assertEqual(remote.call_args.args[0], ["status", "--operation-id", args.operation_id])
 
     def test_staging194_recovery_does_not_refetch_or_reinstall_host_helper(self):
@@ -541,7 +587,7 @@ class OperatorAdmissionTests(unittest.TestCase):
 
         def remote(command, **_kwargs):
             phase = "fenced" if command[0] == "status" else "cms-activated"
-            return json.dumps({"phase": phase}).encode()
+            return json.dumps({"operationId": args.operation_id, "phase": phase}).encode()
 
         with patch.object(staging193, "_check_target_space", return_value={"filesystems": []}), \
              patch.object(staging193, "_check_local_space", return_value=[]), \
@@ -1648,7 +1694,7 @@ class Staging194HostHelperInstallTests(unittest.TestCase):
             return subprocess.CompletedProcess(command, 0, b"", b"")
 
         with patch.object(staging193.subprocess, "run", side_effect=run):
-            staging193.install_staging194_host_helper(payload, digest)
+            staging193.install_staging194_host_helper(payload, digest, "fresh-helper-test")
 
         transfer = next(command for command in commands if command[0] == "scp")
         self.assertIn(staging193.TARGET_HOST, transfer[-1])
@@ -1670,6 +1716,125 @@ class Staging194HostHelperInstallTests(unittest.TestCase):
         self.assertNotIn("--production-static-config", install_command)
         self.assertNotIn("--production-paired-config", install_command)
 
+    def test_verified_helper_checks_journal_under_locks_before_replacing_any_file(self):
+        real_run = subprocess.run
+        operation_id = "fresh-helper-operation"
+        cms_user = pwd.getpwuid(os.getuid()).pw_name
+        install_source = (
+            'subprocess.run(["bash", os.path.join(temporary, "payload/scripts/install-rehearsal-host.sh"),\n'
+            '                        "--staging193-existing-config"], check=True)'
+        )
+
+        def package_bytes():
+            archive = io.BytesIO()
+            with tarfile.open(fileobj=archive, mode="w:gz") as bundle:
+                for name in ("scripts", "scripts/lib"):
+                    info = tarfile.TarInfo(name)
+                    info.type = tarfile.DIRTYPE
+                    info.mode = 0o755
+                    bundle.addfile(info)
+                for name in sorted(staging193.HOST_HELPER_ARTIFACT_FILES):
+                    data = (staging193.ROOT / name).read_bytes()
+                    info = tarfile.TarInfo(name)
+                    info.size = len(data)
+                    info.mode = 0o644
+                    bundle.addfile(info, io.BytesIO(data))
+            return archive.getvalue()
+
+        payload = package_bytes()
+        digest = hashlib.sha256(payload).hexdigest()
+
+        def run_case(scenario):
+            with tempfile.TemporaryDirectory(prefix="ikpk-helper-journal-guard-") as temporary:
+                root = Path(temporary)
+                remote_dir = root / "host-helper.ABC123"
+                remote_dir.mkdir(mode=0o700)
+                state_dir = root / "state"
+                state_dir.mkdir()
+                publication_lock = root / "publication.lock"
+                state_lock = state_dir / ".operation.lock"
+                for lock in (publication_lock, state_lock):
+                    lock.touch(mode=0o600)
+                    lock.chmod(0o600)
+                config = {"profile": "staging194", "stateDir": str(state_dir), "cmsUser": cms_user,
+                          "publicationLock": str(publication_lock), "maintenanceFlag": str(root / "fenced"),
+                          "sitePublicationMarker": str(root / "site-publication.json")}
+                config_path = root / "rehearsal.json"
+                config_path.write_text(json.dumps(config), encoding="utf-8")
+                state = rehearsal_host.RehearsalState(state_dir)
+                if scenario == "own-row":
+                    state.begin(operation_id, SHA, {"cmsPath": "/old/cms", "staticPath": "/old/static"})
+                    state.confirm_fence(operation_id, lambda: True)
+                    state.recover(operation_id, lambda: True, lambda: True)
+                elif scenario == "unfinished":
+                    state.begin("unfinished-other", SHA,
+                                {"cmsPath": "/old/cms", "staticPath": "/old/static"})
+                    state.marker_path.unlink()
+                elif scenario == "torn":
+                    state.journal_path.write_bytes(b'{"version":1,"record":"start"')
+                install_marker = root / "helper-replacement-ran"
+                remote_path = "/var/tmp/ikpk-staging194/host-helper.ABC123"
+                calls = []
+
+                def run(command, **kwargs):
+                    calls.append(command)
+                    if command[0] == "ssh" and "python3 -c" in command[-1]:
+                        script = shlex.split(command[-1])[2]
+                        self.assertIn(install_source, script)
+                        self.assertIn(operation_id, command[-1])
+                        local_pattern = re.escape(str(root)) + r"/host-helper\.[A-Za-z0-9]{6}"
+                        script = script.replace(
+                            'r"/var/tmp/ikpk-staging194/host-helper\\.[A-Za-z0-9]{6}"', repr(local_pattern))
+                        script = script.replace('"/etc/ikpk/rehearsal.json"', repr(str(config_path)))
+                        script = script.replace("directory.st_uid != 0", "directory.st_uid != os.getuid()")
+                        script = script.replace("archive_info.st_uid != 0", "archive_info.st_uid != os.getuid()")
+                        for key, original in (
+                            ("stateDir", "/var/lib/ikpk-rehearsal/staging194"),
+                            ("cmsUser", "ikpk-cms"),
+                            ("publicationLock", "/var/www/ikpk/.publication.lock"),
+                            ("maintenanceFlag", "/var/lib/ikpk-rehearsal/staging194/fenced"),
+                            ("sitePublicationMarker", "/var/lib/ikpk-rehearsal/site-publication/host-publication.json"),
+                        ):
+                            script = script.replace(f'config.get("{key}") != "{original}"',
+                                                    f'config.get("{key}") != {config[key]!r}')
+                        script = script.replace(
+                            'subprocess.run(["/usr/local/sbin/ikpk-rehearsal", "--profile", "staging194", "validate-config"], check=True)',
+                            'subprocess.run(["/usr/bin/true"], check=True)')
+                        script = script.replace(install_source,
+                                                f'open({str(install_marker)!r}, "w").write("installed")')
+                        argv = shlex.split(command[-1])
+                        completed = real_run(["python3", "-c", script, str(remote_dir), digest, argv[-1]],
+                                              stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False)
+                        return subprocess.CompletedProcess(command, completed.returncode,
+                            completed.stdout, completed.stderr)
+                    if command[0] == "ssh" and "mktemp" in command[-1]:
+                        return subprocess.CompletedProcess(command, 0, (remote_path + "\n").encode(), b"")
+                    if command[0] == "scp":
+                        shutil.copyfile(command[-2], remote_dir / "host-helper.tar.gz")
+                        return subprocess.CompletedProcess(command, 0, b"", b"")
+                    return subprocess.CompletedProcess(command, 0, b"", b"")
+
+                with patch.object(staging193.subprocess, "run", side_effect=run):
+                    if scenario == "fresh":
+                        staging193.install_staging194_host_helper(payload, digest, operation_id)
+                        self.assertTrue(install_marker.exists())
+                    else:
+                        with self.assertRaises(staging193.Refusal):
+                            staging193.install_staging194_host_helper(payload, digest, operation_id)
+                        self.assertFalse(install_marker.exists(), scenario)
+                    wrapper = next(command[-1] for command in calls
+                                   if command[0] == "ssh" and "python3 -c" in command[-1])
+                    self.assertIn("read_journal_for_cleanup(validate_history=True)", wrapper)
+                    self.assertIn("requested_operation_id", wrapper)
+                    self.assertLess(wrapper.index("fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)"),
+                                    wrapper.index("read_journal_for_cleanup(validate_history=True)"))
+                    self.assertLess(wrapper.index("read_journal_for_cleanup(validate_history=True)"),
+                                    wrapper.rindex("install-rehearsal-host.sh"))
+
+        for scenario in ("fresh", "own-row", "unfinished", "torn"):
+            with self.subTest(scenario=scenario):
+                run_case(scenario)
+
     def test_remote_digest_failure_stops_before_installer(self):
         payload = b"transferred helper bytes"
         digest = hashlib.sha256(payload).hexdigest()
@@ -1685,7 +1850,7 @@ class Staging194HostHelperInstallTests(unittest.TestCase):
 
         with patch.object(staging193.subprocess, "run", side_effect=run), \
              self.assertRaises((staging193.Refusal, subprocess.CalledProcessError, OSError)):
-            staging193.install_staging194_host_helper(payload, digest)
+            staging193.install_staging194_host_helper(payload, digest, "fresh-helper-test")
         wrapper = next(command[-1] for command in commands
                        if command[0] == "ssh" and "python3 -c" in command[-1])
         self.assertLess(wrapper.index("if actual_digest != expected_digest"),
@@ -1766,7 +1931,7 @@ class Staging194HostHelperInstallTests(unittest.TestCase):
         command_provenance = json.loads(base64.b64decode(
             host_calls[0][0][host_calls[0][0].index("--provenance-b64") + 1]))
         self.assertEqual(command_provenance, journal_provenance[0])
-        install.assert_called_once_with(b"verified helper bytes", artifact_evidence["payloadSha256"])
+        install.assert_called_once_with(b"verified helper bytes", artifact_evidence["payloadSha256"], args.operation_id)
         self.assertEqual([call[0][0] for call in host_calls],
                          ["static-main", "export-static-main", "static-main"])
         self.assertEqual(order, ["install", "static-main", "export-static-main", "static-main"])
