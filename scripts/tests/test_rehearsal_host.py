@@ -1241,7 +1241,7 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
                  patch.object(rehearsal_host.os, "chmod", side_effect=lambda *args: events.append(("chmod", args[0]))), \
                  patch.object(rehearsal_host, "_run_as_cms", side_effect=run_as_cms):
                 rehearsal_host._prepare_cms_candidate(
-                    {"cmsUser": "ikpk-cms", "profile": "staging194"}, source, "op", {})
+                    {"cmsUser": "ikpk-cms"}, source, "op", {})
 
             self.assertEqual(len(calls), 2)
             self.assertEqual(calls[0][0], artifact)
@@ -3898,6 +3898,50 @@ class Staging194PairedSourceEnvironmentTests(unittest.TestCase):
                               ("IKPK_BUILD_WORKSPACE", "IKPK_INSTALLED_COMMIT")},
                              {"IKPK_BUILD_WORKSPACE": old_workspace, "IKPK_INSTALLED_COMMIT": old_sha})
 
+    def test_profileless_legacy_staging_config_snapshots_environment_and_resumes(self):
+        with tempfile.TemporaryDirectory(prefix="ikpk-staging194-legacy-profileless-") as temporary:
+            root = Path(temporary)
+            cms, static, uploads = root / "cms", root / "static", root / "uploads"
+            cms.mkdir(); static.mkdir(); uploads.mkdir()
+            database = root / "data.sqlite"
+            database.write_bytes(b"live database")
+            env_file = root / "site-build-current194.env"
+            old_workspace = "/opt/ikpk-cms-prototype193/releases/" + "a" * 40 + "-old-op"
+            old_sha = "a" * 40
+            env_file.write_text(f"IKPK_BUILD_WORKSPACE={old_workspace}\nIKPK_INSTALLED_COMMIT={old_sha}\n",
+                                encoding="utf-8")
+            env_file.chmod(0o600)
+            config = {"cmsUnit": "ikpk-cms-prototype193.service",
+                      "cmsEnvironmentFile": str(env_file), "currentCms": str(root / "current-cms"),
+                      "currentStatic": str(root / "current-static"), "cmsDatabase": str(database),
+                      "mediaRoots": [{"prefix": "/uploads/", "path": str(uploads)}]}
+            real_lstat = Path.lstat
+
+            def root_owned_environment(path, *args, **kwargs):
+                info = real_lstat(path, *args, **kwargs)
+                if path == env_file:
+                    fields = list(info); fields[4] = 0
+                    return os.stat_result(fields)
+                return info
+
+            with tempfile.TemporaryDirectory(prefix="ikpk-staging194-profileless-state-") as state_dir:
+                state = RehearsalState(Path(state_dir))
+                operation_id, source_sha = "legacy-profileless", "b" * 40
+                with patch.object(Path, "lstat", root_owned_environment), \
+                     patch.object(rehearsal_host, "_current_target", side_effect=[cms, static]), \
+                     patch.object(rehearsal_host, "_cms_payload_sha256", return_value="b" * 64), \
+                     patch.object(rehearsal_host, "_tree_sha256", return_value="c" * 64), \
+                     patch.object(rehearsal_host, "_config_sha256", return_value="d" * 64), \
+                     patch.object(rehearsal_host, "_service_pid", return_value=123), \
+                     patch.object(rehearsal_host, "_database_process_proof", return_value={"kind": "live"}):
+                    old_pair = rehearsal_host._old_pair(config)
+                    state.begin(operation_id, source_sha, old_pair)
+
+                start = next(row for row in state._operation_rows(operation_id) if row.get("record") == "start")
+                self.assertEqual(start["oldPair"]["cmsSourceEnvironment"], {
+                    "IKPK_BUILD_WORKSPACE": old_workspace, "IKPK_INSTALLED_COMMIT": old_sha})
+                self.assertEqual(rehearsal_host._effective_old_pair(state, operation_id), old_pair)
+
     def test_cms_activation_updates_source_environment_to_this_versioned_staging_release(self):
         with tempfile.TemporaryDirectory(prefix="ikpk-staging194-source-env-activate-") as temporary:
             root = Path(temporary)
@@ -3925,7 +3969,7 @@ class Staging194PairedSourceEnvironmentTests(unittest.TestCase):
             (capture / "media-manifest.json").write_text(json.dumps({"media": [
                 {"url": "/uploads/photo.jpg", "originalName": "photo.jpg"}]}), encoding="utf-8")
             artifact = {"artifactId": 7, "payloadSha256": "e" * 64}
-            config = {"profile": "staging194", "cmsEnvironmentFile": str(env_file),
+            config = {"cmsEnvironmentFile": str(env_file),
                       "cmsDatabase": str(live_database), "currentCms": str(root / "current-cms"),
                       "releaseRoot": str(root / "releases"), "cmsUnit": "ikpk-cms-prototype193.service",
                       "cmsHealthUrl": "http://127.0.0.1:1338/_health"}
@@ -4004,7 +4048,7 @@ class Staging194PairedSourceEnvironmentTests(unittest.TestCase):
                     if not verify_reopened():
                         raise AssertionError("recovery did not reopen the old CMS")
 
-            config = {"profile": "staging194", "cmsEnvironmentFile": str(env_file),
+            config = {"cmsEnvironmentFile": str(env_file),
                       "cmsDatabase": str(database), "currentCms": str(current_cms),
                       "currentStatic": str(current_static), "cmsUnit": "ikpk-cms-prototype193.service",
                       "writerUnits": [], "cmsHealthUrl": "http://127.0.0.1:1338/_health",

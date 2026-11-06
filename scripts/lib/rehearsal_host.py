@@ -2233,7 +2233,7 @@ def _old_pair(config: dict[str, Any]) -> dict[str, Any]:
             "databaseSha256": sha256_file(database), "staticTreeSha256": _tree_sha256(static),
             "configSha256": _config_sha256(config),
             "cmsDatabaseProof": db_proof}
-    if config.get("profile") == "staging194":
+    if config.get("profile", "staging194") == "staging194":
         result["cmsSourceEnvironment"] = _staging194_cms_source_env(config)
     elif config.get("profile") == "production-paired":
         result["cmsSourceEnvironment"] = _paired_cms_source_env(config)
@@ -2856,7 +2856,7 @@ def _validate_prepared_cms_candidate(config: dict[str, Any], source_root: Path, 
     artifact = _cms_artifact_path(source_root, operation_id)
     if artifact.is_symlink() or not artifact.is_dir():
         raise HostFailure("prepared CMS artifact is missing or unsafe")
-    if config.get("profile") in ("staging194", "production-paired"):
+    if config.get("profile", "staging194") in ("staging194", "production-paired"):
         evidence = _trusted_cms_artifact(admitted)
         _verify_cms_artifact_bytes(source_root, artifact, evidence)
     if sha256_file(source_cms / "package-lock.json") != sha256_file(artifact / "package-lock.json"):
@@ -2891,7 +2891,7 @@ def _validate_prepared_cms_candidate(config: dict[str, Any], source_root: Path, 
 
 def _prepare_cms_candidate(config: dict[str, Any], source_root: Path, operation_id: str,
                            provenance: dict[str, Any]) -> tuple[Path, Path, Path]:
-    if config.get("profile") in ("staging194", "production-paired"):
+    if config.get("profile", "staging194") in ("staging194", "production-paired"):
         evidence = _trusted_cms_artifact(provenance)
         artifact = _extract_ci_cms_artifact(config, source_root, operation_id, evidence)
         source_cms = source_root / "cms"
@@ -3216,7 +3216,7 @@ def _activate_cms(config: dict[str, Any], cms_release: Path, candidate_db: Path,
                   source_sha: Optional[str] = None,
                   site_workspace: Optional[Path] = None,
                   cms_artifact: Optional[dict[str, Any]] = None) -> dict[str, Any]:
-    if config.get("profile") in ("staging194", "production-paired"):
+    if config.get("profile", "staging194") in ("staging194", "production-paired"):
         if source_root is None or cms_artifact is None:
             raise HostFailure("paired CMS activation lacks its journal-bound CI artifact identity")
         try:
@@ -3247,7 +3247,7 @@ def _activate_cms(config: dict[str, Any], cms_release: Path, candidate_db: Path,
             "INITIAL_PROD_PROFILE": "1", "DEPLOY_MODE": "prod", "PAYMENT_ROLE": "prod",
             "PAYMENT_ENDPOINT_PROD": payment_endpoint, "DEMO_FORMS": None,
             "CHAT_LOADER_SRC": chat_loader, "CHAT_OFFLINE_MESSAGE": None})
-    elif config.get("profile") == "staging194":
+    elif config.get("profile", "staging194") == "staging194":
         if source_root is None or source_sha is None or not SHA_RE.fullmatch(source_sha):
             raise HostFailure("staging194 CMS activation lacks its admitted source workspace")
         workspace = source_root.absolute()
@@ -3256,7 +3256,7 @@ def _activate_cms(config: dict[str, Any], cms_release: Path, candidate_db: Path,
             "IKPK_BUILD_WORKSPACE": str(workspace), "IKPK_INSTALLED_COMMIT": source_sha})
     run(["/usr/bin/systemctl", "start", config["cmsUnit"]], timeout=120)
     _wait_health(config["cmsHealthUrl"])
-    if config.get("profile") == "staging194":
+    if config.get("profile", "staging194") == "staging194":
         _assert_staging194_process_source_env(config, {
             "IKPK_BUILD_WORKSPACE": str(workspace), "IKPK_INSTALLED_COMMIT": source_sha})
     proof = _database_process_proof(_service_pid(config["cmsUnit"]), live)
@@ -4753,7 +4753,7 @@ def _recover(config: dict[str, Any], state: RehearsalState, operation_id: str,
     live = Path(config["cmsDatabase"]).resolve(strict=True)
     already_recovered = state._is_recovered(operation_id)
     staging194_previous_environment = None
-    if config.get("profile") == "staging194":
+    if config.get("profile", "staging194") == "staging194":
         if "cmsSourceEnvironment" in old_pair:
             _assert_staging194_source_env_effective(config)
             _staging194_cms_source_env(config)
@@ -4787,12 +4787,12 @@ def _recover(config: dict[str, Any], state: RehearsalState, operation_id: str,
             if not isinstance(previous_environment, dict) or set(previous_environment) != set(PAIRED_CMS_ENV_KEYS):
                 raise HostFailure("operation journal lacks the prior CMS source environment")
             _write_paired_cms_source_env(config, previous_environment)
-        elif config.get("profile") == "staging194":
+        elif config.get("profile", "staging194") == "staging194":
             if "cmsSourceEnvironment" in old_pair:
                 _write_staging194_cms_source_env(config, staging194_previous_environment)
         run(["/usr/bin/systemctl", "start", config["cmsUnit"]], timeout=120)
         _wait_health(config["cmsHealthUrl"], 1200)
-        if config.get("profile") == "staging194" and staging194_previous_environment is not None:
+        if config.get("profile", "staging194") == "staging194" and staging194_previous_environment is not None:
             _assert_staging194_process_source_env(config, staging194_previous_environment)
         _database_process_proof(_service_pid(config["cmsUnit"]), live)
         if str(_current_target(Path(config["currentCms"]))) != old_pair["cmsPath"]:
