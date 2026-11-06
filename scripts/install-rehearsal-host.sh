@@ -93,6 +93,11 @@ fi
 if [[ -n "$INSTALL_CONFIG_PROFILE" || "$PREFIX" -ef /usr/local ]]; then
   systemd_dir=/etc/systemd/system
   if [[ -e "$systemd_dir/ikpk-site-housekeeping.path" ]]; then
+    if [[ ! -f "$systemd_dir/ikpk-site-housekeeping.timer" || -L "$systemd_dir/ikpk-site-housekeeping.timer" ]]; then
+      echo 'existing housekeeping timer is unavailable; leaving the legacy path unit and helper untouched' >&2
+      exit 2
+    fi
+    systemctl enable --now ikpk-site-housekeeping.timer
     systemctl disable --now ikpk-site-housekeeping.path
     rm -f -- "$systemd_dir/ikpk-site-housekeeping.path"
   fi
@@ -199,6 +204,10 @@ if [[ -n "$INSTALL_CONFIG_PROFILE" ]]; then
       }
     fi
   else
+    if (( INSTALL_EXISTING_CONFIG_ONLY )); then
+      echo 'existing rehearsal config disappeared during helper refresh; refusing to create it' >&2
+      exit 2
+    fi
     temporary="$CONFIG.new.$$"
     install -o root -g root -m 0600 "$TEMPLATE" "$temporary"
     mv -T -- "$temporary" "$CONFIG"

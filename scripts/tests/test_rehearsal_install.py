@@ -147,11 +147,14 @@ class InstalledEntrypointTests(unittest.TestCase):
         self.assertIn("--staging193-existing-config)", installer)
         self.assertIn('elif (( INSTALL_EXISTING_CONFIG_ONLY )); then', installer)
         self.assertIn('if ! cmp -s "$CONFIG" "$TEMPLATE" && (( ! INSTALL_EXISTING_CONFIG_ONLY )); then', installer)
+        self.assertIn('if (( INSTALL_EXISTING_CONFIG_ONLY )); then\n      echo \'existing rehearsal config disappeared during helper refresh; refusing to create it\'', installer)
         start = installer.index("  systemctl daemon-reload")
         end = installer.index("\nfi\necho \"installed rehearsal host entrypoint", start)
         activation = "\n".join(line[2:] for line in installer[start:end].splitlines())
         self.assertNotIn("PathExists=", installer)
         disable = installer.index('systemctl disable --now ikpk-site-housekeeping.path')
+        timer_enable = installer.index('systemctl enable --now ikpk-site-housekeeping.timer')
+        self.assertLess(timer_enable, disable)
         self.assertLess(disable, installer.index('install -m 0644 "$ROOT/scripts/lib/rehearsal_state.py"'))
         self.assertLess(disable, installer.index('cat >"$SBIN/ikpk-rehearsal"'))
         self.assertIn('rm -f -- "$systemd_dir/ikpk-site-housekeeping.path"', installer)
@@ -189,6 +192,8 @@ class InstalledEntrypointTests(unittest.TestCase):
             systemd_dir.mkdir()
             old_path = systemd_dir / "ikpk-site-housekeeping.path"
             old_path.write_bytes(b"legacy PathExists unit\n")
+            old_timer = systemd_dir / "ikpk-site-housekeeping.timer"
+            old_timer.write_bytes(b"existing ten-minute retry timer\n")
             prefix = root / "prefix"
             installed_lib = prefix / "lib/ikpk-rehearsal"
             installed_sbin = prefix / "sbin"
@@ -266,6 +271,7 @@ class InstalledEntrypointTests(unittest.TestCase):
             for index, alias in enumerate((str(host_prefix), str(host_prefix) + "/",
                                            str(host_prefix) + "/.")):
                 isolated_unit.write_bytes(b"legacy host unit\n")
+                (isolated_systemd / "ikpk-site-housekeeping.timer").write_bytes(b"existing retry timer\n")
                 alias_calls = root / f"calls-host-prefix-alias-{index}"
                 run = subprocess.run(
                     ["bash", "-c", f"set -e\nPREFIX={alias}\nINSTALL_CONFIG_PROFILE=\n{host_scope_fragment}"],
@@ -275,7 +281,8 @@ class InstalledEntrypointTests(unittest.TestCase):
                 )
                 self.assertEqual(run.returncode, 0, run.stderr)
                 self.assertEqual(alias_calls.read_text(encoding="utf-8").splitlines(),
-                                 ["disable --now ikpk-site-housekeeping.path"])
+                                 ["enable --now ikpk-site-housekeeping.timer",
+                                  "disable --now ikpk-site-housekeeping.path"])
                 self.assertFalse(isolated_unit.exists())
 
             calls = root / "calls-disable-failure"
@@ -288,8 +295,62 @@ class InstalledEntrypointTests(unittest.TestCase):
             )
             self.assertEqual(run.returncode, 42, run.stderr)
             self.assertEqual(old_path.read_bytes(), b"legacy PathExists unit\n")
+            self.assertEqual(old_timer.read_bytes(), b"existing ten-minute retry timer\n")
+            self.assertEqual(calls.read_text(encoding="utf-8").splitlines(),
+                             ["enable --now ikpk-site-housekeeping.timer",
+                              "disable --now ikpk-site-housekeeping.path"])
             for path, content in original.items():
                 self.assertEqual(path.read_bytes(), content, path.name)
+
+            calls = root / "calls-timer-enable-failure"
+            run = subprocess.run(
+                ["bash", "-c", install_fragment],
+                env={**os.environ, "PATH": str(root) + os.pathsep + os.environ["PATH"],
+                     "SYSTEMCTL_CALLS": str(calls),
+                     "SYSTEMCTL_FAIL": "enable --now ikpk-site-housekeeping.timer"},
+                text=True, capture_output=True, check=False,
+            )
+            self.assertEqual(run.returncode, 42, run.stderr)
+            self.assertEqual(calls.read_text(encoding="utf-8").splitlines(),
+                             ["enable --now ikpk-site-housekeeping.timer"])
+            self.assertEqual(old_path.read_bytes(), b"legacy PathExists unit\n")
+            self.assertEqual(old_timer.read_bytes(), b"existing ten-minute retry timer\n")
+            for path, content in original.items():
+                self.assertEqual(path.read_bytes(), content, path.name)
+
+            # Never remove the level trigger if its replacement retry timer
+            # cannot be made available and active first.
+            missing_timer_systemd = root / "missing-timer-systemd"
+            missing_timer_systemd.mkdir()
+            missing_path = missing_timer_systemd / "ikpk-site-housekeeping.path"
+            missing_path.write_bytes(b"legacy PathExists unit\n")
+            missing_fragment = installer[guard_start:guard_end].replace(
+                "systemd_dir=/etc/systemd/system", f"systemd_dir={missing_timer_systemd}")
+            missing_calls = root / "calls-missing-timer"
+            run = subprocess.run(
+                ["bash", "-c", f"set -e\nPREFIX={prefix}\nINSTALL_CONFIG_PROFILE=staging193\n{missing_fragment}"],
+                env={**os.environ, "PATH": str(root) + os.pathsep + os.environ["PATH"],
+                     "SYSTEMCTL_CALLS": str(missing_calls)},
+                text=True, capture_output=True, check=False,
+            )
+            self.assertEqual(run.returncode, 2, run.stderr)
+            self.assertFalse(missing_calls.exists())
+            self.assertEqual(missing_path.read_bytes(), b"legacy PathExists unit\n")
+
+            # Recheck at the write site: disappearance after preflight must not
+            # fall through to the ordinary template creation path.
+            config_start = installer.index('if [[ -e "$CONFIG" || -L "$CONFIG" ]]; then',
+                                            installer.index('installed_config=0'))
+            config_end = installer.index('\n  python3 - "$TEMPLATE" <<\'PY\'', config_start)
+            config_block = installer[config_start:config_end]
+            absent_config = root / "config-disappeared.json"
+            run = subprocess.run(
+                ["bash", "-c", f"set -e\nCONFIG={absent_config}\nTEMPLATE={ROOT}/scripts/staging193-rehearsal.json\nINSTALL_EXISTING_CONFIG_ONLY=1\n{config_block}"],
+                text=True, capture_output=True, check=False,
+            )
+            self.assertEqual(run.returncode, 2, run.stderr)
+            self.assertFalse(absent_config.exists())
+            self.assertFalse(list(root.glob("config-disappeared.json.new.*")))
 
     def test_staging193_config_uses_staging194_helper_validation_profile(self):
         installer = (ROOT / "scripts/install-rehearsal-host.sh").read_text(encoding="utf-8")
