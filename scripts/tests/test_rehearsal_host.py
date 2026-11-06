@@ -1702,12 +1702,15 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
                          "provenance_b64": base64.b64encode(json.dumps(provenance).encode()).decode(),
                          "archive_sha256": hashlib.sha256(archive).hexdigest()}
             host_stdin = type("HostStdin", (), {"buffer": io.BytesIO(archive)})()
-            backup_digest = "d" * 64
+            backup_bytes = b"captured off-host backup"
+            backup_digest = hashlib.sha256(backup_bytes).hexdigest()
 
             def make_backup(_config, op):
                 directory = Path(config["backupRoot"]) / op
                 directory.mkdir(parents=True, exist_ok=True)
-                (directory / "manifest.json").write_text(json.dumps({"archiveSha256": backup_digest}))
+                (directory / "backup.tar").write_bytes(backup_bytes)
+                (directory / "manifest.json").write_text(json.dumps({"operationId": op,
+                    "archiveSha256": backup_digest}))
                 return {"archiveSha256": backup_digest}
 
             real_lstat = Path.lstat
