@@ -422,6 +422,32 @@ HOST_HELPER_ARTIFACT_FILES = frozenset({
     "scripts/production-static-rehearsal.json",
     "scripts/production-paired-rehearsal.json",
 })
+HOST_HELPER_RUNTIME_FILES = (
+    "scripts/lib/rehearsal_host.py",
+    "scripts/lib/rehearsal_state.py",
+    "scripts/lib/housekeeping_journal.py",
+)
+
+
+def _host_helper_runtime_identity(payload: bytes) -> str:
+    """Return a stable identity for the modules installed by the host installer."""
+    try:
+        with tarfile.open(fileobj=io.BytesIO(payload), mode="r:gz") as archive:
+            members = {member.name: member for member in archive.getmembers() if member.isfile()}
+            hashes = {}
+            for name in HOST_HELPER_RUNTIME_FILES:
+                member = members.get(name)
+                source = archive.extractfile(member) if member is not None else None
+                if source is None:
+                    raise Refusal("host helper artifact omitted an installed runtime module")
+                hashes[name] = hashlib.sha256(source.read()).hexdigest()
+            host_source = archive.extractfile(members["scripts/lib/rehearsal_host.py"]).read()
+            if b'STAGING194_PAIRED_HELPER_IDENTITY_CAPABILITY = "paired-helper-identity-v1"' not in host_source:
+                raise Refusal("selected host helper SHA does not support paired helper identity admission")
+    except (OSError, tarfile.TarError, KeyError, AttributeError) as error:
+        raise Refusal("host helper runtime identity could not be read from its CI artifact") from error
+    encoded = json.dumps(hashes, sort_keys=True, separators=(",", ":")).encode()
+    return hashlib.sha256(encoded).hexdigest()
 
 
 def fetch_host_helper_artifact(provenance: dict, sha: str) -> bytes:
@@ -1225,8 +1251,8 @@ def browser_check(source_sha: str, operation_id: str, static_digest: str, archiv
 def invoke(args: argparse.Namespace, *, admission: Optional[dict] = None) -> Optional[dict]:
     profile = getattr(args, "profile", "staging194")
     install_host_helper = getattr(args, "install_host_helper", False)
-    if install_host_helper and (profile != "staging194" or args.command != "static-main"):
-        raise Refusal("--install-host-helper is restricted to staging194 static-main")
+    if install_host_helper and (profile != "staging194" or args.command not in ("static-main", "cms-update")):
+        raise Refusal("--install-host-helper is restricted to staging194 static-main or cms-update")
     accept_expired_rollback = getattr(args, "accept_expired_rollback", False)
     if accept_expired_rollback and (profile != "staging194" or args.command != "static-main-recover"
                                     or getattr(args, "rollback_committed", False)):
@@ -1302,11 +1328,34 @@ def invoke(args: argparse.Namespace, *, admission: Optional[dict] = None) -> Opt
         ci_admission = dict(provenance)
         cms_artifact = (fetch_cms_candidate_artifact(provenance, args.source_sha)
                         if profile in ("staging194", "production-paired") else None)
+        helper_payload = None
+        helper_identity = None
+        resume_phase = None
+        if install_host_helper:
+            # A read-only status check makes an interrupted same-ID continuation
+            # reuse the installed helper rather than replacing it on resume.
+            status = parse_host_json(ssh_remote(["status", "--operation-id", args.operation_id], profile=profile))
+            resume_phase = status.get("phase")
+            helper_payload = fetch_host_helper_artifact(provenance, args.source_sha)
+            helper_evidence = provenance.get("hostHelperArtifact")
+            if not isinstance(helper_evidence, dict):
+                raise Refusal("verified host helper artifact omitted its operation evidence")
+            if cms_artifact is not None and (helper_evidence.get("runId"), helper_evidence.get("attempt")) != (
+                    provenance.get("runId"), provenance.get("attempt")):
+                raise Refusal("host helper artifact is not bound to the exact admitted Tests run and attempt")
+            helper_identity = _host_helper_runtime_identity(helper_payload)
+            provenance["hostHelperRuntimeIdentity"] = helper_identity
+            if resume_phase == "idle":
+                install_staging194_host_helper(helper_payload, helper_evidence["payloadSha256"])
+            elif resume_phase not in ("acquiring", "fenced", "cms-activated"):
+                raise Refusal(f"same-ID CMS continuation is not available from host phase {resume_phase!r}")
         archive, digest = (make_archive(args.source_sha, provenance, cms_artifact=cms_artifact)
                            if cms_artifact is not None else make_archive(args.source_sha, provenance))
         provenance_b64 = base64.b64encode(json.dumps(provenance, sort_keys=True, separators=(",", ":")).encode()).decode("ascii")
         common = ["cms-update", "--operation-id", args.operation_id, "--source-sha", args.source_sha,
                   "--provenance-b64", provenance_b64]
+        if helper_identity is not None:
+            common.extend(["--expected-host-helper-identity", helper_identity])
         first = parse_host_json(ssh_remote(common + ["--archive-sha256", hashlib.sha256(archive).hexdigest()], profile=profile,
                                            input_bytes=archive))
         backup_dir = backup_root(args.backup_dir, profile)
@@ -1561,6 +1610,8 @@ def main(argv: Optional[list[str]] = None) -> int:
             command.add_argument("--reuse-capture-operation-id")
             command.add_argument("--release-tag")
             command.add_argument("--expected-installed-cms-sha")
+            command.add_argument("--install-host-helper", action="store_true")
+        if action == "cms-update":
             command.add_argument("--install-host-helper", action="store_true")
         if action == "space-preflight":
             command.add_argument("--for", dest="preflight_for", required=True,

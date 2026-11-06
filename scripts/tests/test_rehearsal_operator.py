@@ -417,7 +417,7 @@ class OperatorAdmissionTests(unittest.TestCase):
                   "archiveSha256": "b" * 64, "payloadSha256": "c" * 64}
         args = SimpleNamespace(profile="staging194", host=staging193.TARGET_HOST,
             command="cms-update", operation_id="staging194-helper-paired", source_sha=SHA,
-            backup_dir=None, release_tag=None)
+            backup_dir=None, release_tag=None, install_host_helper=True)
 
         def fetch_helper(provenance, source_sha):
             order.append("fetch-helper")
@@ -433,9 +433,11 @@ class OperatorAdmissionTests(unittest.TestCase):
                 "archiveSha256": "d" * 64, "payloadSha256": "e" * 64}
             return b"verified cms"
 
+        remote_calls = []
         def ssh(arguments, **_kwargs):
             order.append(arguments[0])
-            return json.dumps({"phase": "cms-activated"}).encode()
+            remote_calls.append(list(arguments))
+            return json.dumps({"phase": "idle" if arguments[0] == "status" else "cms-activated"}).encode()
 
         archived = []
         def archive(source_sha, provenance, *, cms_artifact):
@@ -450,6 +452,7 @@ class OperatorAdmissionTests(unittest.TestCase):
                           order.append("admission") or dict(admission)), \
              patch.object(staging193, "fetch_cms_candidate_artifact", side_effect=fetch_cms), \
              patch.object(staging193, "fetch_host_helper_artifact", side_effect=fetch_helper), \
+             patch.object(staging193, "_host_helper_runtime_identity", return_value="f" * 64), \
              patch.object(staging193, "install_staging194_host_helper", side_effect=lambda *_a:
                           order.append("install-helper"), create=True) as install, \
              patch.object(staging193, "make_archive", side_effect=archive), \
@@ -457,16 +460,19 @@ class OperatorAdmissionTests(unittest.TestCase):
             staging193.invoke(args)
 
         self.assertEqual(order, ["target-preflight", "local-preflight", "admission", "fetch-cms",
-                                 "fetch-helper", "install-helper", "cms-update"])
+                                 "status", "fetch-helper", "install-helper", "cms-update"])
         install.assert_called_once_with(b"verified helper", helper["payloadSha256"])
         self.assertEqual(archived[0]["hostHelperArtifact"], helper)
         self.assertEqual(archived[0]["runId"], helper["runId"])
         self.assertEqual(archived[0]["attempt"], helper["attempt"])
+        self.assertEqual(archived[0]["hostHelperRuntimeIdentity"], "f" * 64)
+        self.assertIn("--expected-host-helper-identity", remote_calls[-1])
+        self.assertIn("f" * 64, remote_calls[-1])
 
     def test_staging194_paired_helper_rejection_stops_before_install_or_host_fence(self):
         args = SimpleNamespace(profile="staging194", host=staging193.TARGET_HOST,
             command="cms-update", operation_id="staging194-helper-rejected", source_sha=SHA,
-            backup_dir=None, release_tag=None)
+            backup_dir=None, release_tag=None, install_host_helper=True)
         with patch.object(staging193, "_check_target_space", return_value={"filesystems": []}), \
              patch.object(staging193, "_check_local_space", return_value=[]), \
              patch.object(staging193, "validate_sha_and_ci",
@@ -476,16 +482,16 @@ class OperatorAdmissionTests(unittest.TestCase):
                           side_effect=staging193.Refusal("host helper artifact is not bound to exact successful CI")), \
              patch.object(staging193, "make_archive", return_value=(b"source archive", "a" * 64)), \
              patch.object(staging193, "install_staging194_host_helper", create=True) as install, \
-             patch.object(staging193, "ssh_remote", return_value=json.dumps({"phase": "cms-activated"}).encode()) as remote:
+             patch.object(staging193, "ssh_remote", return_value=json.dumps({"phase": "idle"}).encode()) as remote:
             with self.assertRaisesRegex(staging193.Refusal, "not bound to exact successful CI"):
                 staging193.invoke(args)
         install.assert_not_called()
-        remote.assert_not_called()
+        self.assertEqual(remote.call_args.args[0], ["status", "--operation-id", args.operation_id])
 
     def test_staging194_paired_helper_install_failure_stops_before_host_fence(self):
         args = SimpleNamespace(profile="staging194", host=staging193.TARGET_HOST,
             command="cms-update", operation_id="staging194-helper-install-failure", source_sha=SHA,
-            backup_dir=None, release_tag=None)
+            backup_dir=None, release_tag=None, install_host_helper=True)
         provenance = {"sourceSha": SHA, "runId": 123, "attempt": 2}
         def attach_helper(evidence, _sha):
             evidence["hostHelperArtifact"] = {"artifactId": 987, "runId": 123, "attempt": 2,
@@ -496,14 +502,16 @@ class OperatorAdmissionTests(unittest.TestCase):
              patch.object(staging193, "validate_sha_and_ci", return_value=provenance), \
              patch.object(staging193, "fetch_cms_candidate_artifact", return_value=b"cms"), \
              patch.object(staging193, "fetch_host_helper_artifact", side_effect=attach_helper), \
+             patch.object(staging193, "_host_helper_runtime_identity", return_value="f" * 64), \
              patch.object(staging193, "make_archive", return_value=(b"archive", "a" * 64)), \
              patch.object(staging193, "install_staging194_host_helper",
                           side_effect=staging193.Refusal("helper config is incompatible"), create=True) as install, \
-             patch.object(staging193, "ssh_remote", return_value=json.dumps({"phase": "cms-activated"}).encode()) as remote:
+             patch.object(staging193, "ssh_remote", side_effect=lambda command, **_kw:
+                          json.dumps({"phase": "idle" if command[0] == "status" else "cms-activated"}).encode()) as remote:
             with self.assertRaisesRegex(staging193.Refusal, "helper config is incompatible"):
                 staging193.invoke(args)
         install.assert_called_once_with(b"verified helper", "c" * 64)
-        remote.assert_not_called()
+        self.assertEqual(remote.call_args.args[0], ["status", "--operation-id", args.operation_id])
 
     def test_staging194_recovery_does_not_refetch_or_reinstall_host_helper(self):
         args = SimpleNamespace(profile="staging194", host=staging193.TARGET_HOST,
@@ -516,6 +524,34 @@ class OperatorAdmissionTests(unittest.TestCase):
             staging193.invoke(args)
         self.assertEqual(remote.call_args.args[0], ["recover", "--operation-id", args.operation_id])
         fetch.assert_not_called()
+        install.assert_not_called()
+
+    def test_staging194_same_id_cms_resume_verifies_helper_without_reinstalling(self):
+        args = SimpleNamespace(profile="staging194", host=staging193.TARGET_HOST,
+            command="cms-update", operation_id="staging194-helper-resume", source_sha=SHA,
+            backup_dir=None, release_tag=None, install_host_helper=True)
+        provenance = {"sourceSha": SHA, "runId": 123, "attempt": 2}
+        helper = {"artifactId": 987, "runId": 123, "attempt": 2,
+                  "archiveSha256": "b" * 64, "payloadSha256": "c" * 64}
+
+        def attach_helper(evidence, _sha):
+            evidence["hostHelperArtifact"] = dict(helper)
+            return b"verified helper"
+
+        def remote(command, **_kwargs):
+            phase = "fenced" if command[0] == "status" else "cms-activated"
+            return json.dumps({"phase": phase}).encode()
+
+        with patch.object(staging193, "_check_target_space", return_value={"filesystems": []}), \
+             patch.object(staging193, "_check_local_space", return_value=[]), \
+             patch.object(staging193, "validate_sha_and_ci", return_value=provenance), \
+             patch.object(staging193, "fetch_cms_candidate_artifact", return_value=b"cms"), \
+             patch.object(staging193, "fetch_host_helper_artifact", side_effect=attach_helper), \
+             patch.object(staging193, "_host_helper_runtime_identity", return_value="f" * 64), \
+             patch.object(staging193, "make_archive", return_value=(b"archive", "a" * 64)), \
+             patch.object(staging193, "install_staging194_host_helper") as install, \
+             patch.object(staging193, "ssh_remote", side_effect=remote):
+            staging193.invoke(args)
         install.assert_not_called()
 
     def test_staging194_rechecks_admission_after_backup_before_second_cms_command(self):
@@ -1464,6 +1500,15 @@ class Staging194HostHelperInstallTests(unittest.TestCase):
         with patch.object(staging193, "invoke", side_effect=lambda args: observed.append(args)):
             result = staging193.main(["--profile", "staging194", "static-main", "--host",
                 staging193.TARGET_HOST, "--operation-id", "helper-step", "--source-sha", SHA,
+                "--install-host-helper"])
+        self.assertEqual(result, 0)
+        self.assertTrue(observed[0].install_host_helper)
+
+    def test_cms_update_exposes_the_staging194_host_helper_opt_in(self):
+        observed = []
+        with patch.object(staging193, "invoke", side_effect=lambda args: observed.append(args)):
+            result = staging193.main(["--profile", "staging194", "cms-update", "--host",
+                staging193.TARGET_HOST, "--operation-id", "paired-helper-cli", "--source-sha", SHA,
                 "--install-host-helper"])
         self.assertEqual(result, 0)
         self.assertTrue(observed[0].install_host_helper)

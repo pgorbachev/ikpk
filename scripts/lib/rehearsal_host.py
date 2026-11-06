@@ -63,6 +63,8 @@ REQUIRED_CONFIG = {
 }
 SHA_RE = re.compile(r"[a-f0-9]{40}\Z")
 SHA256_RE = re.compile(r"[a-f0-9]{64}\Z")
+STAGING194_PAIRED_HELPER_IDENTITY_CAPABILITY = "paired-helper-identity-v1"
+HOST_HELPER_RUNTIME_MODULES = ("rehearsal_host.py", "rehearsal_state.py", "housekeeping_journal.py")
 CONTENT_FINGERPRINT_RE = re.compile(r"sha256:[a-f0-9]{64}\Z")
 PREFIX_RE = re.compile(r"/[A-Za-z0-9_./*?=-]+\Z")
 UNIT_RE = re.compile(r"[A-Za-z0-9_.@:-]+\.service\Z")
@@ -99,6 +101,13 @@ def sha256_file(path: Path) -> str:
         for block in iter(lambda: source.read(1024 * 1024), b""):
             digest.update(block)
     return digest.hexdigest()
+
+
+def _host_helper_runtime_identity() -> str:
+    module_dir = Path(__file__).resolve().parent
+    hashes = {name: sha256_file(module_dir / name) for name in HOST_HELPER_RUNTIME_MODULES}
+    encoded = json.dumps(hashes, sort_keys=True, separators=(",", ":")).encode()
+    return hashlib.sha256(encoded).hexdigest()
 
 
 def _maintenance_banner(config: dict[str, Any]) -> str:
@@ -2467,6 +2476,23 @@ def _trusted_cms_artifact(provenance: dict[str, Any]) -> dict[str, Any]:
             ("artifactId", "runId", "attempt", "archiveSha256", "payloadSha256")}
 
 
+def _trusted_host_helper_artifact(provenance: dict[str, Any], expected_identity: str) -> dict[str, Any]:
+    evidence = provenance.get("hostHelperArtifact")
+    if (not isinstance(evidence, dict)
+            or set(evidence) != {"artifactId", "runId", "attempt", "archiveSha256", "payloadSha256"}
+            or type(evidence.get("artifactId")) is not int or evidence["artifactId"] <= 0
+            or type(evidence.get("runId")) is not int or evidence["runId"] != provenance.get("runId")
+            or type(evidence.get("attempt")) is not int or evidence["attempt"] != provenance.get("attempt")
+            or not SHA256_RE.fullmatch(str(evidence.get("archiveSha256", "")))
+            or not SHA256_RE.fullmatch(str(evidence.get("payloadSha256", "")))):
+        raise HostFailure("trusted CI provenance lacks a valid host helper artifact identity")
+    if (not SHA256_RE.fullmatch(expected_identity)
+            or provenance.get("hostHelperRuntimeIdentity") != expected_identity):
+        raise HostFailure("host helper runtime identity does not match the exact artifact admission")
+    return {key: evidence[key] for key in
+            ("artifactId", "runId", "attempt", "archiveSha256", "payloadSha256")}
+
+
 def _cms_tar_members(payload: bytes) -> tuple[tarfile.TarFile, list[tarfile.TarInfo]]:
     try:
         archive = tarfile.open(fileobj=io.BytesIO(payload), mode="r:gz")
@@ -2801,16 +2827,23 @@ def _prepare_cms_candidate(config: dict[str, Any], source_root: Path, operation_
 
 def _start_acquisition(config: dict[str, Any], state: RehearsalState, operation_id: str,
                        source_sha: str, *, recovery: bool = False,
-                       cms_artifact: Optional[dict[str, Any]] = None) -> dict[str, Any]:
+                       cms_artifact: Optional[dict[str, Any]] = None,
+                       host_helper_artifact: Optional[dict[str, Any]] = None,
+                       host_helper_identity: Optional[str] = None) -> dict[str, Any]:
     if not recovery:
         _assert_site_refresh_idle(config)
     prior = next((row for row in state._operation_rows(operation_id) if row.get("record") == "start"), None)
     old_pair = prior.get("oldPair") if prior else _old_pair(config)
     _write_site_publication_marker(config, operation_id)
-    if cms_artifact is None:
-        state.begin(operation_id, source_sha, old_pair)
+    if host_helper_artifact is None and host_helper_identity is None:
+        if cms_artifact is None:
+            state.begin(operation_id, source_sha, old_pair)
+        else:
+            state.begin(operation_id, source_sha, old_pair, cms_artifact=cms_artifact)
     else:
-        state.begin(operation_id, source_sha, old_pair, cms_artifact=cms_artifact)
+        state.begin(operation_id, source_sha, old_pair, cms_artifact=cms_artifact,
+                    host_helper_artifact=host_helper_artifact,
+                    host_helper_identity=host_helper_identity)
     _set_flag(config, True)
     _write_gate(config, True)
     _verify_site_refresh_idle(config, recovery=recovery)
@@ -3322,6 +3355,7 @@ def _import_offhost_backup(config: dict[str, Any], operation_id: str, payload: b
 def _cms_update(config: dict[str, Any], state: RehearsalState, args: argparse.Namespace) -> dict[str, Any]:
     if _uses_staging194_temp(config):
         tempfile.tempdir = str(_validate_staging194_temporary_root(config))
+    profile = config.get("profile", "staging194")
     op, sha = args.operation_id, args.source_sha
     if not SHA_RE.fullmatch(sha):
         raise HostFailure("source SHA must be a full lowercase commit ID")
@@ -3329,6 +3363,14 @@ def _cms_update(config: dict[str, Any], state: RehearsalState, args: argparse.Na
         provenance = json.loads(base64.b64decode(args.provenance_b64, validate=True))
     except (ValueError, TypeError) as error:
         raise HostFailure("source CI provenance is not valid base64 JSON") from error
+    expected_helper_identity = getattr(args, "expected_host_helper_identity", None)
+    helper_artifact = None
+    if expected_helper_identity is not None:
+        if profile != "staging194":
+            raise HostFailure("expected host helper identity is supported only for staging194 CMS update")
+        helper_artifact = _trusted_host_helper_artifact(provenance, expected_helper_identity)
+    elif profile == "staging194" and "hostHelperArtifact" in provenance:
+        raise HostFailure("staging194 host helper provenance requires under-lock identity admission")
     if config.get("profile", "staging194") == "initial-prod":
         if op != INITIAL_PROD_OPERATION_ID:
             raise HostFailure("initial-prod accepts only its fixed single-use operation ID")
@@ -3338,7 +3380,6 @@ def _cms_update(config: dict[str, Any], state: RehearsalState, args: argparse.Na
                 or not isinstance(provenance.get("runId"), int) or provenance["runId"] <= 0
                 or not isinstance(provenance.get("attempt"), int) or provenance["attempt"] <= 0):
             raise HostFailure("initial-prod source admission must bind exact canonical main push run")
-    profile = config.get("profile", "staging194")
     main_release_admission = _has_main_release_admission(provenance, sha)
     cms_artifact = None
     if profile in ("staging194", "production-paired"):
@@ -3358,6 +3399,10 @@ def _cms_update(config: dict[str, Any], state: RehearsalState, args: argparse.Na
         if profile in ("staging194", "production-paired"):
             if not start_record or start_record.get("cmsArtifact") != cms_artifact:
                 raise HostFailure("operation journal CMS artifact identity differs from trusted provenance")
+            if ((helper_artifact is not None or "hostHelperArtifact" in start_record)
+                    and (start_record.get("hostHelperArtifact") != helper_artifact
+                         or start_record.get("hostHelperRuntimeIdentity") != expected_helper_identity)):
+                raise HostFailure("operation journal host helper identity differs from trusted provenance")
             _validate_prepared_cms_candidate(config, source_root, op, provenance)
     if phase and phase.get("phase") == "cms-activated":
         manifest = _backup_manifest(config, op)
@@ -3394,8 +3439,13 @@ def _cms_update(config: dict[str, Any], state: RehearsalState, args: argparse.Na
                       if config.get("profile") == "production-paired" else None)
     if profile in ("staging194", "production-paired"):
         _validate_prepared_cms_candidate(config, source_root, op, provenance)
-    phase = (_start_acquisition(config, state, op, sha) if cms_artifact is None else
-             _start_acquisition(config, state, op, sha, cms_artifact=cms_artifact))
+    if helper_artifact is not None:
+        phase = _start_acquisition(config, state, op, sha, cms_artifact=cms_artifact,
+            host_helper_artifact=helper_artifact, host_helper_identity=expected_helper_identity)
+    elif cms_artifact is not None:
+        phase = _start_acquisition(config, state, op, sha, cms_artifact=cms_artifact)
+    else:
+        phase = _start_acquisition(config, state, op, sha)
     backup_manifest_path = Path(config["backupRoot"]) / op / "manifest.json"
     if not backup_manifest_path.exists():
         _verify_fence(config)
@@ -4732,6 +4782,12 @@ def dispatch(args: argparse.Namespace) -> dict[str, Any]:
             raise HostFailure("expected installed CMS SHA is supported only for staging194 static-main")
         if not isinstance(expected_installed_cms_sha, str) or not SHA_RE.fullmatch(expected_installed_cms_sha):
             raise HostFailure("expected installed CMS SHA must be a full lowercase commit ID")
+    expected_helper_identity = getattr(args, "expected_host_helper_identity", None)
+    if expected_helper_identity is not None:
+        if (profile != "staging194" or args.action != "cms-update"
+                or not isinstance(expected_helper_identity, str)
+                or not SHA256_RE.fullmatch(expected_helper_identity)):
+            raise HostFailure("expected host helper identity is restricted to staging194 cms-update")
     config_path = (INITIAL_PROD_CONFIG_PATH if profile == "initial-prod" else
                    PRODUCTION_STATIC_CONFIG_PATH if profile == "production-static" else
                    PRODUCTION_PAIRED_CONFIG_PATH if profile == "production-paired" else CONFIG_PATH)
@@ -4761,6 +4817,18 @@ def dispatch(args: argparse.Namespace) -> dict[str, Any]:
     destination_lock = (nullcontext() if args.action == "status"
                         else _destination_publication_lock(config, wait=args.action == "cleanup-site"))
     with destination_lock, state.lock():
+        if profile == "staging194" and args.action == "cms-update":
+            try:
+                admitted_provenance = json.loads(base64.b64decode(args.provenance_b64, validate=True))
+            except (AttributeError, ValueError, TypeError) as error:
+                raise HostFailure("source CI provenance is not valid base64 JSON") from error
+            has_helper_evidence = isinstance(admitted_provenance, dict) and "hostHelperArtifact" in admitted_provenance
+            if (has_helper_evidence != (expected_helper_identity is not None)):
+                raise HostFailure("host helper provenance and under-lock identity admission must be supplied together")
+            if expected_helper_identity is not None:
+                _trusted_host_helper_artifact(admitted_provenance, expected_helper_identity)
+        if expected_helper_identity is not None and _host_helper_runtime_identity() != expected_helper_identity:
+            raise HostFailure("installed host helper identity changed before the destination lock was acquired")
         try:
             # The ordinary journal reader repairs torn tails. Validate before
             # any dispatch path (including status/export) can call it.
@@ -4994,6 +5062,7 @@ def main(argv: Optional[list[str]] = None) -> int:
             command.add_argument("--provenance-b64", required=True)
             if name == "cms-update":
                 command.add_argument("--offhost-sha256")
+                command.add_argument("--expected-host-helper-identity")
             else:
                 command.add_argument("--browser-digest")
             if name == "static-main":

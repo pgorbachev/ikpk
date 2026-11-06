@@ -350,7 +350,9 @@ class RehearsalState:
                 raise RehearsalRefusal("another unfinished operation owns recovery")
 
     def begin(self, operation_id: str, source_sha: str, old_pair: dict,
-              cms_artifact: Optional[dict] = None) -> dict:
+              cms_artifact: Optional[dict] = None,
+              host_helper_artifact: Optional[dict] = None,
+              host_helper_identity: Optional[str] = None) -> dict:
         self._validate_identity(operation_id, source_sha)
         if not isinstance(old_pair, dict) or not old_pair:
             raise RehearsalRefusal("start record must identify the old CMS/static pair")
@@ -368,13 +370,23 @@ class RehearsalState:
                     raise RehearsalRefusal("maintenance marker has no matching journal start record")
                 if cms_artifact is not None and start.get("cmsArtifact") != cms_artifact:
                     raise RehearsalRefusal("operation CMS artifact identity differs from its journal start")
+                if (host_helper_artifact is not None
+                        and start.get("hostHelperArtifact") != host_helper_artifact):
+                    raise RehearsalRefusal("operation host helper artifact identity differs from its journal start")
+                if (host_helper_identity is not None
+                        and start.get("hostHelperRuntimeIdentity") != host_helper_identity):
+                    raise RehearsalRefusal("operation host helper runtime identity differs from its journal start")
                 return current
             history = self._journal()
             unfinished = self._unfinished_operation_ids(history)
             if operation_id in unfinished:
                 start = next(row for row in history if row.get("record") == "start" and row.get("operationId") == operation_id)
                 if (start.get("sourceSha") != source_sha or start.get("oldPair") != old_pair
-                        or (cms_artifact is not None and start.get("cmsArtifact") != cms_artifact)):
+                        or (cms_artifact is not None and start.get("cmsArtifact") != cms_artifact)
+                        or (host_helper_artifact is not None
+                            and start.get("hostHelperArtifact") != host_helper_artifact)
+                        or (host_helper_identity is not None
+                            and start.get("hostHelperRuntimeIdentity") != host_helper_identity)):
                     raise RehearsalRefusal("interrupted operation identity does not match its journal start")
                 current = {
                     "version": 1,
@@ -402,6 +414,10 @@ class RehearsalState:
                      "sourceSha": source_sha, "oldPair": old_pair}
             if cms_artifact is not None:
                 start["cmsArtifact"] = cms_artifact
+            if host_helper_artifact is not None:
+                start["hostHelperArtifact"] = host_helper_artifact
+            if host_helper_identity is not None:
+                start["hostHelperRuntimeIdentity"] = host_helper_identity
             self._append(start)
             durable_json(self.marker_path, current)
             return current
