@@ -65,6 +65,11 @@ SHA_RE = re.compile(r"[a-f0-9]{40}\Z")
 SHA256_RE = re.compile(r"[a-f0-9]{64}\Z")
 STAGING194_PAIRED_HELPER_IDENTITY_CAPABILITY = "paired-helper-identity-v1"
 HOST_HELPER_RUNTIME_MODULES = ("rehearsal_host.py", "rehearsal_state.py", "housekeeping_journal.py")
+DESTINATION_LOCKED_ACTIONS = frozenset({
+    "cms-update", "static-publish", "static-main", "static-main-recover",
+    "recover", "restore", "finalize-recover", "cleanup-site",
+    "export-backup", "export-static", "export-static-main",
+})
 CONTENT_FINGERPRINT_RE = re.compile(r"sha256:[a-f0-9]{64}\Z")
 PREFIX_RE = re.compile(r"/[A-Za-z0-9_./*?=-]+\Z")
 UNIT_RE = re.compile(r"[A-Za-z0-9_.@:-]+\.service\Z")
@@ -4824,9 +4829,10 @@ def dispatch(args: argparse.Namespace) -> dict[str, Any]:
         return _space_preflight(config, args.operation_id, operation_kind)
     state = RehearsalState(Path(config["stateDir"]))
     prelocked_fd = getattr(args, "_publication_lock_fd", None)
-    destination_lock = (nullcontext() if args.action == "status"
-                        else _destination_publication_lock(config, wait=args.action == "cleanup-site",
-                                                          prelocked_fd=prelocked_fd))
+    if args.action != "status" and args.action not in DESTINATION_LOCKED_ACTIONS:
+        raise HostFailure("host action has no destination lock policy")
+    destination_lock = (nullcontext() if args.action == "status" else
+        _destination_publication_lock(config, wait=args.action == "cleanup-site", prelocked_fd=prelocked_fd))
     with destination_lock, state.lock():
         if profile == "staging194" and args.action == "cms-update":
             try:

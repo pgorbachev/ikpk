@@ -94,7 +94,25 @@ import fcntl, json, os, pwd, stat, sys
 sys.path.insert(0, "$LIB")
 publication_lock_fd = None
 argv = sys.argv[1:]
-if "cms-update" in argv and any(arg.startswith("--expected") for arg in argv):
+profile = "staging194"
+profile_value_indexes = set()
+for index, argument in enumerate(argv):
+    option = argument.split("=", 1)[0]
+    if argument.startswith("--") and "--profile".startswith(option):
+        profile_value_indexes.add(index)
+        if "=" in argument:
+            profile = argument.split("=", 1)[1]
+        elif index + 1 < len(argv):
+            profile = argv[index + 1]
+            profile_value_indexes.add(index + 1)
+action = next((argument for index, argument in enumerate(argv)
+               if index not in profile_value_indexes and not argument.startswith("-")), None)
+locked_actions = {
+    "cms-update", "static-publish", "static-main", "static-main-recover",
+    "recover", "restore", "finalize-recover", "cleanup-site",
+    "export-backup", "export-static", "export-static-main",
+}
+if profile == "staging194" and action in locked_actions:
     lock_path = "/var/www/ikpk/.publication.lock"
     fd = None
     try:

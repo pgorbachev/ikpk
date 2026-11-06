@@ -13,6 +13,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
+from scripts.lib import rehearsal_host
 from scripts.rehearsal import staging193
 
 
@@ -1513,13 +1514,39 @@ class Staging194HostHelperInstallTests(unittest.TestCase):
         self.assertEqual(result, 0)
         self.assertTrue(observed[0].install_host_helper)
 
-    def test_paired_launcher_takes_shared_lock_before_import_and_blocks_interprocess_replacement(self):
+    def test_staging_launcher_prelocks_every_host_action_that_uses_the_destination_lock(self):
+        import ast
         import fcntl
         installer = (Path(__file__).resolve().parents[1] / "install-rehearsal-host.sh").read_text()
         launcher = installer.split('cat >"$SBIN/ikpk-rehearsal" <<EOF\n', 1)[1].split("\nEOF", 1)[0]
         self.assertLess(launcher.index("fcntl.flock(fd"), launcher.index("from rehearsal_host import main"))
-        self.assertIn('any(arg.startswith("--expected") for arg in argv)', launcher)
         self.assertIn("main(publication_lock_fd=publication_lock_fd)", launcher)
+        parsed_launcher = ast.parse(launcher)
+        actions_assignment = next(node for node in parsed_launcher.body
+                                   if isinstance(node, ast.Assign)
+                                   and any(isinstance(target, ast.Name) and target.id == "locked_actions"
+                                           for target in node.targets))
+        self.assertEqual(ast.literal_eval(actions_assignment.value), rehearsal_host.DESTINATION_LOCKED_ACTIONS)
+        self.assertIn('if profile == "staging194" and action in locked_actions:', launcher)
+
+        classification = launcher[launcher.index('profile = "staging194"'):
+                                   launcher.index('if profile == "staging194" and action in locked_actions:')]
+        def select(argv):
+            state = {"argv": argv}
+            exec(compile(classification, "paired-launcher-selection", "exec"), state)
+            return state["profile"], state["action"], state["locked_actions"]
+
+        for action in rehearsal_host.DESTINATION_LOCKED_ACTIONS:
+            self.assertEqual(select(["--profile", "staging194", action])[:2], ("staging194", action))
+        for arguments in (["--profile=staging194", "recover"], ["--prof", "staging194", "cleanup-site"]):
+            self.assertEqual(select(arguments)[0], "staging194")
+        for arguments in (["--profile", "staging194", "status"],
+                          ["--profile", "staging194", "space-preflight"],
+                          ["--profile", "staging194", "validate-config"],
+                          ["--profile", "production-static", "static-main"],
+                          ["--prof", "production-paired", "cms-update"]):
+            profile, action, locked_actions = select(arguments)
+            self.assertFalse(profile == "staging194" and action in locked_actions, arguments)
 
         with tempfile.TemporaryDirectory(prefix="ikpk-helper-import-lock-") as temporary:
             root = Path(temporary)
