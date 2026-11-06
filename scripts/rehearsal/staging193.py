@@ -1624,10 +1624,14 @@ def main(argv: Optional[list[str]] = None) -> int:
         if args.command == "cms-update" and args.source_sha is None:
             if args.profile != "staging194":
                 raise Refusal("--source-sha is required outside the staging194 profile")
+            fresh_status_refusals = {
+                "operation has no maintenance marker or terminal journal record",
+                "host operation failed (2): ikpk-rehearsal: operation has no maintenance marker or terminal journal record",
+            }
             try:
                 status = parse_host_json(ssh_remote(["status", "--operation-id", args.operation_id]))
             except Refusal as error:
-                if str(error) != "operation has no maintenance marker or terminal journal record":
+                if str(error) not in fresh_status_refusals:
                     raise
             else:
                 if (status.get("operationId") != args.operation_id

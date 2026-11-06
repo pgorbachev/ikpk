@@ -113,6 +113,27 @@ class Staging194PairedAdmissionRedTests(unittest.TestCase):
         capture.assert_not_called()
         invoke.assert_not_called()
 
+    def test_cli_without_source_sha_accepts_only_exact_wrapped_legacy_status_refusal(self):
+        legacy = "operation has no maintenance marker or terminal journal record"
+        wrapped = f"host operation failed (2): ikpk-rehearsal: {legacy}"
+        with patch.object(operator, "ssh_remote", side_effect=operator.Refusal(wrapped)), \
+                patch.object(operator, "capture", return_value=MAIN_SHA) as capture, \
+                patch.object(operator, "invoke") as invoke:
+            result = operator.main(["cms-update", "--operation-id", "wrapped-fresh-operation"])
+
+        self.assertEqual(result, 0)
+        capture.assert_called_once()
+        self.assertEqual(invoke.call_args.args[0].source_sha, MAIN_SHA)
+
+        with patch.object(operator, "ssh_remote", side_effect=operator.Refusal(wrapped + "; retry later")), \
+                patch.object(operator, "capture") as capture, \
+                patch.object(operator, "invoke") as invoke:
+            result = operator.main(["cms-update", "--operation-id", "wrapped-ambiguous-operation"])
+
+        self.assertEqual(result, 2)
+        capture.assert_not_called()
+        invoke.assert_not_called()
+
     def test_cli_defaults_only_new_staging_cms_update_to_exact_main_ref(self):
         with patch.object(operator, "ssh_remote",
                           side_effect=operator.Refusal("operation has no maintenance marker or terminal journal record")) as status, \
