@@ -82,6 +82,15 @@ if [[ -n "$INSTALL_CONFIG_PROFILE" ]]; then
   fi
 fi
 
+# Stop the legacy level-triggered cleanup unit before replacing any helper
+# files it can invoke. The staging194 installer wrapper holds the existing
+# publication and operation locks around this installer call.
+systemd_dir=/etc/systemd/system
+if [[ -e "$systemd_dir/ikpk-site-housekeeping.path" ]]; then
+  systemctl disable --now ikpk-site-housekeeping.path
+  rm -f -- "$systemd_dir/ikpk-site-housekeeping.path"
+fi
+
 LIB="$PREFIX/lib/ikpk-rehearsal"
 SBIN="$PREFIX/sbin"
 install -d -m 0755 "$LIB" "$SBIN"
@@ -363,12 +372,6 @@ WantedBy=timers.target
 EOF
   chmod 0644 "$timer_tmp"
   mv -f -- "$timer_tmp" "$systemd_dir/ikpk-site-housekeeping.timer"
-  # Older versions enabled a level-triggered PathExists unit. Stop and disable
-  # it before removing the unit file so a pending request cannot hot-loop.
-  if [[ -e "$systemd_dir/ikpk-site-housekeeping.path" ]]; then
-    systemctl disable --now ikpk-site-housekeeping.path
-    rm -f -- "$systemd_dir/ikpk-site-housekeeping.path"
-  fi
   systemctl daemon-reload
   if (( ! INSTALL_DISABLED )); then
     systemctl enable --now ikpk-site-housekeeping.timer

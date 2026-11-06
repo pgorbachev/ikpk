@@ -146,6 +146,58 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
         consume.assert_not_called()
         cleanup.assert_not_called()
 
+    def test_cleanup_busy_preserves_request_then_dispatch_retries_after_lock_release(self):
+        import fcntl
+        with tempfile.TemporaryDirectory(prefix="ikpk-cleanup-busy-dispatch-") as temporary:
+            root = Path(temporary)
+            state_dir = root / "state"
+            state_dir.mkdir()
+            lock_path = root / "publication.lock"
+            lock_path.touch(mode=0o600)
+            lock_path.chmod(0o600)
+            request = root / "cleanup.request"
+            request_bytes = b'{"version":1,"releaseId":"stale-release"}'
+            request.write_bytes(request_bytes)
+            config = {"profile": "production-static", "stateDir": str(state_dir),
+                      "publicationLock": str(lock_path), "cmsUser": "test-owner",
+                      "siteRefreshState": str(root / "site-refresh.json"),
+                      "sitePublicationMarker": str(rehearsal_host.SITE_PUBLICATION_MARKER_DIR /
+                                                    rehearsal_host.SITE_PUBLICATION_MARKER)}
+            args = Namespace(profile="production-static", action="cleanup-site")
+            owner = type("Account", (), {"pw_uid": os.getuid()})()
+            descriptor = os.open(lock_path, os.O_RDWR)
+            fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            consume = rehearsal_host._consume_site_cleanup_request
+            try:
+                with patch.object(rehearsal_host.os, "geteuid", return_value=0), \
+                     patch.object(rehearsal_host, "_root_config", return_value=config), \
+                     patch.object(rehearsal_host, "_select_cleanup_profile",
+                                  return_value=(config, "production-static", None)), \
+                     patch.object(rehearsal_host, "_configure_profile_temp"), \
+                     patch.object(rehearsal_host, "PRODUCTION_PUBLICATION_LOCK", lock_path), \
+                     patch.object(rehearsal_host.pwd, "getpwnam", return_value=owner), \
+                     patch.object(rehearsal_host, "_read_site_publication_marker", return_value=None), \
+                     patch.object(rehearsal_host, "_assert_site_publication_admission"), \
+                     patch.object(rehearsal_host, "_assert_site_refresh_idle"), \
+                     patch.object(rehearsal_host, "_consume_site_cleanup_request", wraps=consume) as consume_mock, \
+                     patch.object(rehearsal_host, "_cleanup_site_releases",
+                                  return_value={"removed": []}) as cleanup_mock:
+                    with self.assertRaisesRegex(rehearsal_host.HostFailure, "another publisher"):
+                        rehearsal_host.dispatch(args)
+                    self.assertEqual(request.read_bytes(), request_bytes)
+                    consume_mock.assert_not_called()
+                    cleanup_mock.assert_not_called()
+
+                    fcntl.flock(descriptor, fcntl.LOCK_UN)
+                    result = rehearsal_host.dispatch(args)
+                    self.assertEqual(result, {"status": "succeeded", "removed": []})
+                    self.assertFalse(request.exists())
+                    consume_mock.assert_called_once()
+                    cleanup_mock.assert_called_once()
+            finally:
+                fcntl.flock(descriptor, fcntl.LOCK_UN)
+                os.close(descriptor)
+
     def test_cleanup_does_not_auto_remove_a_dead_root_reservation(self):
         with tempfile.TemporaryDirectory(prefix="ikpk-dead-housekeeping-lock-") as temporary:
             root = Path(temporary)
