@@ -1,4 +1,5 @@
 import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -6,14 +7,16 @@ import { PUBLICATION_CI_POLICY, ciEvidenceProblem, type CiEvidence } from './pub
 import { PublicationReportError } from './publication-report-error.ts';
 
 export interface CiArtifact {
-  id: number; name: string; archive_download_url: string; expired?: boolean; created_at?: string;
-  workflow_run?: { id: number; head_sha?: string };
+  id: number; name: string; archive_download_url: string; digest?: string; expired?: boolean; created_at?: string;
+  workflow_run?: { id: number; head_sha?: string; head_branch?: string };
 }
 export interface ReadCiEvidenceOptions {
   commit: string; releaseTag: string; token?: string; fetch?: typeof globalThis.fetch;
   requireCurrentMain?: boolean;
   operatorAdmission?: boolean;
   ensureRelease?: (tag: string, commit: string) => Promise<void>;
+  ensureHostHelperAsset?: (tag: string, commit: string, payload: Uint8Array, sha256: string) => Promise<void>;
+  readHostHelperPayload?: (artifact: CiArtifact, context: { fetch: typeof globalThis.fetch; token?: string }) => Promise<Uint8Array>;
   readReports?: (artifact: CiArtifact, context: { fetch: typeof globalThis.fetch; token?: string }) => Promise<Record<string, unknown>>;
 }
 interface WorkflowRun {
@@ -27,6 +30,8 @@ interface Job {
 }
 const API = `https://api.github.com/repos/${PUBLICATION_CI_POLICY.repository}`;
 const REPORT_NAMES = ['web-unit-head.json', 'web-render-head.json', 'web-build-head.json'];
+const HOST_HELPER_ASSET_NAME = 'host-helper.tar.gz';
+const HOST_HELPER_JOB_NAME = 'Package host helper artifact';
 export const RELEASE_CI_WORKFLOWS = [
   { file: 'lint.yml', jobs: ['web checks', 'cms checks', 'scripts checks', 'payments checks', 'OpenSpec integration'] },
   { file: 'security.yml', jobs: ['Secret scan', 'Runtime dependency audit (web)', 'Runtime dependency audit (scripts)',
@@ -95,8 +100,38 @@ async function downloadReports(artifact: CiArtifact, context: { fetch: typeof gl
   } finally { rmSync(directory, { recursive: true, force: true }); }
 }
 
+/** Download the single CI-produced helper payload without extracting arbitrary ZIP paths. */
+async function downloadHostHelper(artifact: CiArtifact, context: { fetch: typeof globalThis.fetch; token?: string }): Promise<Buffer> {
+  const url = `${API}/actions/artifacts/${artifact.id}/zip`;
+  if (artifact.archive_download_url !== url || !/^sha256:[a-f0-9]{64}$/.test(artifact.digest ?? '')) {
+    throw new Error('untrusted-host-helper-artifact');
+  }
+  let response = await context.fetch(url, { method: 'GET', headers: headers(context.token), redirect: 'manual', signal: AbortSignal.timeout(30_000) });
+  if (response.status === 302) {
+    const location = response.headers.get('location');
+    if (!location || new URL(location).protocol !== 'https:') throw new Error('invalid-host-helper-redirect');
+    response = await context.fetch(location, { method: 'GET', redirect: 'error', signal: AbortSignal.timeout(60_000) });
+  }
+  const archive = await readLimited(response, 100 * 1024 * 1024);
+  const expectedArchiveHash = artifact.digest!.slice('sha256:'.length);
+  if (createHash('sha256').update(archive).digest('hex') !== expectedArchiveHash) throw new Error('host-helper-archive-digest-mismatch');
+  const directory = mkdtempSync(join(tmpdir(), 'ikpk-ci-host-helper-'));
+  try {
+    const zip = join(directory, 'host-helper.zip');
+    writeFileSync(zip, archive, { mode: 0o600, flag: 'wx' });
+    const entries = execFileSync('/usr/bin/unzip', ['-Z1', zip], { encoding: 'utf8', maxBuffer: 64 * 1024,
+      stdio: ['ignore', 'pipe', 'pipe'] }).trim().split('\n');
+    if (entries.length !== 1 || entries[0] !== HOST_HELPER_ASSET_NAME) throw new Error('unexpected-host-helper-archive');
+    return execFileSync('/usr/bin/unzip', ['-p', zip, HOST_HELPER_ASSET_NAME], { maxBuffer: 20 * 1024 * 1024,
+      stdio: ['ignore', 'pipe', 'pipe'] });
+  } finally { rmSync(directory, { recursive: true, force: true }); }
+}
+
 /** Read-only GitHub API. Policy and endpoints are fixed, never selected by an operator report. */
-export async function readCiEvidence(options: ReadCiEvidenceOptions): Promise<CiEvidence & { operatorAdmission?: OperatorAdmission }> {
+export async function readCiEvidence(options: ReadCiEvidenceOptions): Promise<CiEvidence & {
+  operatorAdmission?: OperatorAdmission;
+  hostHelperArtifact?: { artifactId: number; runId: number; attempt: number; archiveSha256: string; payloadSha256: string };
+}> {
   if (!/^[a-f0-9]{40}$/.test(options.commit)) throw new Error('invalid-main-sha');
   if (!/^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/.test(options.releaseTag)) throw new Error('invalid-release-tag');
   const fetcher = options.fetch ?? globalThis.fetch;
@@ -181,7 +216,7 @@ export async function readCiEvidence(options: ReadCiEvidenceOptions): Promise<Ci
     .sort((a, b) => b.id - a.id)[0];
   if (!run || !Number.isSafeInteger(run.id) || run.id <= 0 || run.status !== 'completed' || run.conclusion !== 'success') throw new Error('no-successful-mandatory-main-run');
   const jobs = await list<Job>(`${API}/actions/runs/${run.id}/jobs?filter=latest&per_page=100`, 'jobs');
-  if ((options.operatorAdmission || options.ensureRelease) && (!Number.isSafeInteger(run.run_attempt) || run.run_attempt! <= 0 ||
+  if ((options.operatorAdmission || options.ensureRelease || options.ensureHostHelperAsset) && (!Number.isSafeInteger(run.run_attempt) || run.run_attempt! <= 0 ||
       (options.ensureRelease && jobs.some((job) => !job || job.run_attempt !== run.run_attempt)))) {
     throw new Error('missing-main-run-attempt');
   }
@@ -206,6 +241,29 @@ export async function readCiEvidence(options: ReadCiEvidenceOptions): Promise<Ci
     if (startedAt === undefined || completedAt === undefined || completedAt < startedAt || artifactCreatedAt === undefined ||
         artifactCreatedAt < startedAt || artifactCreatedAt > completedAt) throw new Error('untrusted-ci-artifact-time');
   }
+  let helperArtifact: CiArtifact | undefined;
+  if (options.ensureHostHelperAsset) {
+    const helperJobs = jobs.filter((job) => job.name === HOST_HELPER_JOB_NAME && job.run_attempt === run.run_attempt);
+    const helperJob = helperJobs[0];
+    const helperStartedAt = helperJobs.length === 1 && helperJob.status === 'completed' && helperJob.conclusion === 'success'
+      ? githubTimestamp(helperJob.started_at) : undefined;
+    const helperCompletedAt = helperJobs.length === 1 && helperJob.status === 'completed' && helperJob.conclusion === 'success'
+      ? githubTimestamp(helperJob.completed_at) : undefined;
+    const namedHelpers = artifacts.filter((candidate) => candidate.name === `host-helper-${run.id}-${run.run_attempt}`);
+    helperArtifact = namedHelpers[0];
+    const helperCreatedAt = githubTimestamp(helperArtifact?.created_at);
+    if (namedHelpers.length !== 1 || !helperArtifact) throw new Error('missing-trusted-host-helper-artifact');
+    if (run.event !== 'push' || run.head_branch !== 'main' || helperJobs.length !== 1 || helperStartedAt === undefined ||
+        helperCompletedAt === undefined || helperCompletedAt < helperStartedAt ||
+        helperArtifact.expired !== false || !Number.isSafeInteger(helperArtifact.id) || helperArtifact.id <= 0 ||
+        helperArtifact.digest === undefined || !/^sha256:[a-f0-9]{64}$/.test(helperArtifact.digest) ||
+        helperArtifact.workflow_run?.id !== run.id || helperArtifact.workflow_run.head_sha !== options.commit ||
+        helperArtifact.workflow_run.head_branch !== 'main' ||
+        helperArtifact.archive_download_url !== `${API}/actions/artifacts/${helperArtifact.id}/zip` ||
+        helperCreatedAt === undefined || helperCreatedAt < helperStartedAt || helperCreatedAt > helperCompletedAt) {
+      throw new Error('missing-trusted-host-helper-artifact');
+    }
+  }
   const reports = await (options.readReports ?? downloadReports)(artifact, { fetch: fetcher, token: options.token });
   let count = 0;
   let emptyReport: string | undefined;
@@ -216,17 +274,34 @@ export async function readCiEvidence(options: ReadCiEvidenceOptions): Promise<Ci
     count += report.numPassedTests!;
   }
   if (emptyReport) throw new PublicationReportError(`ci-report-count:${emptyReport}:0`, 'ci', count);
-  const evidence: CiEvidence & { operatorAdmission?: OperatorAdmission } = { repository: PUBLICATION_CI_POLICY.repository, workflow: PUBLICATION_CI_POLICY.workflow,
+  const evidence: CiEvidence & { operatorAdmission?: OperatorAdmission;
+    hostHelperArtifact?: { artifactId: number; runId: number; attempt: number; archiveSha256: string; payloadSha256: string } } = { repository: PUBLICATION_CI_POLICY.repository, workflow: PUBLICATION_CI_POLICY.workflow,
     branch: 'main', commit: options.commit, runId: run.id, event: run.event, conclusion: 'success', executedTests: count,
     jobs: jobs.filter((job) => PUBLICATION_CI_POLICY.requiredJobs.includes(job.name)).map(({ name }) => ({ name, conclusion: 'success' })),
     release: { tag: options.releaseTag, id: release?.id ?? 1, publishedAt: release?.publishedAt ?? new Date(0).toISOString() }, workflows: workflowEvidence,
   };
   const problem = ciEvidenceProblem(evidence, options.commit);
   if (problem) throw new Error(problem);
+  let helperPayload: Uint8Array | undefined;
+  let helperPayloadSha256: string | undefined;
+  if (helperArtifact) {
+    helperPayload = await (options.readHostHelperPayload ?? downloadHostHelper)(helperArtifact, { fetch: fetcher, token: options.token });
+    if (helperPayload.byteLength === 0 || helperPayload.byteLength > 20 * 1024 * 1024) throw new Error('invalid-host-helper-payload-size');
+    helperPayloadSha256 = createHash('sha256').update(helperPayload).digest('hex');
+  }
+  if (options.requireCurrentMain !== false) {
+    const { data: main } = await request(`${API}/git/ref/heads/main`);
+    if (main.ref !== 'refs/heads/main' || (main.object as { sha?: string } | undefined)?.sha !== options.commit) throw new Error('head-moved');
+  }
   if (options.ensureRelease) {
     await options.ensureRelease(options.releaseTag, options.commit);
     release = await verifyPublishedRelease();
     evidence.release = { tag: options.releaseTag, id: release.id, publishedAt: release.publishedAt };
+  }
+  if (helperPayload && helperPayloadSha256 && options.ensureHostHelperAsset) {
+    await options.ensureHostHelperAsset(options.releaseTag, options.commit, helperPayload, helperPayloadSha256);
+    evidence.hostHelperArtifact = { artifactId: helperArtifact!.id, runId: run.id, attempt: run.run_attempt!,
+      archiveSha256: helperArtifact!.digest!.slice('sha256:'.length), payloadSha256: helperPayloadSha256 };
   }
   if (options.operatorAdmission || options.ensureRelease) evidence.operatorAdmission = { repository: PUBLICATION_CI_POLICY.repository,
     ref: 'refs/heads/main', sourceSha: options.commit, workflow: 'Tests', workflowName: 'Tests',

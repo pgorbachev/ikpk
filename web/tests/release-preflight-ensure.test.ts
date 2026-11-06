@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { ensureStableRelease } from '../scripts/release-preflight.ts';
 import { readCiEvidence } from '../scripts/lib/publication-ci.ts';
 import { PUBLICATION_CI_POLICY } from '../scripts/lib/publish-gate.ts';
+import { createHash } from 'node:crypto';
 
 const SHA = 'a'.repeat(40);
 const TAG = 'v2026.1102.1';
@@ -58,7 +59,7 @@ describe('readCiEvidence with the real stable-release callback', () => {
     'lighthouse.yml': ['Lighthouse budgets (4 templates, median of 5)'],
   };
 
-  function fixture(options: { invalidCi?: boolean; wrongTagSha?: boolean; staleArtifact?: boolean;
+  function fixture(options: { invalidCi?: boolean; wrongTagSha?: boolean; staleArtifact?: boolean; missingHelper?: boolean;
     wrongJobAttempt?: boolean; wrongWorkflowJobAttempt?: boolean } = {}) {
     const calls: Array<{ url: string; method: string; body?: string }> = [];
     let releaseExists = false;
@@ -93,27 +94,35 @@ describe('readCiEvidence with the real stable-release callback', () => {
       const jobsMatch = url.match(/\/actions\/runs\/(\d+)\/jobs\?/);
       if (jobsMatch) {
         const isMain = jobsMatch[1] === '900';
-        const names = isMain ? requiredMainJobs : requiredWorkflowJobs[Number(jobsMatch[1]) === 901 ? 'lint.yml' :
+        const names = isMain ? [...requiredMainJobs, 'Package host helper artifact'] : requiredWorkflowJobs[Number(jobsMatch[1]) === 901 ? 'lint.yml' :
           Number(jobsMatch[1]) === 902 ? 'security.yml' : 'lighthouse.yml'];
         return json({ total_count: names.length, jobs: names.map((name) => ({ name,
           run_attempt: (options.wrongJobAttempt && isMain && name === 'Unit and build tests') ||
             (options.wrongWorkflowJobAttempt && jobsMatch[1] === '901' && name === 'web checks') ? 0 : 1,
           status: 'completed', conclusion: 'success', started_at: '2026-11-02T17:13:18Z', completed_at: '2026-11-02T17:34:46Z' })) });
       }
-      if (url === `${API}/actions/runs/900/artifacts?per_page=100`) return json({ total_count: 1, artifacts: [{
+      if (url === `${API}/actions/runs/900/artifacts?per_page=100`) {
+        const runArtifacts = [{
         id: 777, name: 'publication-ci-counts', expired: false,
         created_at: options.staleArtifact ? '2026-11-02T17:00:00Z' : '2026-11-02T17:20:00Z',
         archive_download_url: `${API}/actions/artifacts/777/zip`,
         workflow_run: { id: 900, head_sha: SHA },
-      }] });
+      }, ...(!options.missingHelper ? [{ id: 778, name: 'host-helper-900-1', expired: false,
+        created_at: '2026-11-02T17:20:00Z', digest: `sha256:${'c'.repeat(64)}`,
+        archive_download_url: `${API}/actions/artifacts/778/zip`, workflow_run: { id: 900, head_sha: SHA, head_branch: 'main' } }] : [])];
+        return json({ total_count: runArtifacts.length, artifacts: runArtifacts });
+      }
       throw new Error(`unexpected fake API request: ${method} ${url}`);
     };
     const reports = async () => ({ 'web-unit-head.json': { numPassedTests: 1, numFailedTests: 0 },
       'web-render-head.json': { numPassedTests: 1, numFailedTests: 0 },
       'web-build-head.json': { numPassedTests: 1, numFailedTests: 0 } });
-    const read = (ensureRelease?: (tag: string, sha: string) => Promise<void>) => readCiEvidence({
+    const read = (ensureRelease?: (tag: string, sha: string) => Promise<void>, helper?: {
+      ensureHostHelperAsset: (tag: string, sha: string, payload: Uint8Array, digest: string) => Promise<void>;
+      readHostHelperPayload: () => Promise<Uint8Array>;
+    }) => readCiEvidence({
       commit: SHA, releaseTag: TAG, token: 'fake-token', fetch, operatorAdmission: true,
-      requireCurrentMain: false, readReports: reports, ensureRelease,
+      requireCurrentMain: false, readReports: reports, ensureRelease, ...helper,
     });
     return { calls, fetch, read };
   }
@@ -138,6 +147,28 @@ describe('readCiEvidence with the real stable-release callback', () => {
     const f = fixture({ invalidCi: true });
     await expect(f.read((tag, sha) => ensureStableRelease(tag, sha, 'fake-token', f.fetch))).rejects.toThrow();
     expect(f.calls.some(({ url, method }) => url === `${API}/releases` && method === 'POST')).toBe(false);
+  });
+
+  it('passes only the exact successful run helper bytes to the Release asset callback after CI admission', async () => {
+    const f = fixture(); const payload = Buffer.from('helper from exact Tests run'); const digest = createHash('sha256').update(payload).digest('hex');
+    let callbacks = 0;
+    const evidence = await f.read((tag, sha) => ensureStableRelease(tag, sha, 'fake-token', f.fetch), {
+      readHostHelperPayload: async () => payload,
+      ensureHostHelperAsset: async (tag, sha, bytes, sha256) => {
+        callbacks++;
+        expect([tag, sha, Buffer.from(bytes), sha256]).toEqual([TAG, SHA, payload, digest]);
+        expect(f.calls.some(({ url }) => url.includes('/actions/workflows/test.yml/runs?'))).toBe(true);
+      },
+    });
+    expect(callbacks).toBe(1);
+    expect(evidence.hostHelperArtifact).toMatchObject({ artifactId: 778, runId: 900, attempt: 1, payloadSha256: digest });
+  });
+
+  it('does not invoke a Release asset callback when the exact helper run artifact is absent', async () => {
+    const f = fixture({ missingHelper: true }); let callbacks = 0;
+    await expect(f.read((tag, sha) => ensureStableRelease(tag, sha, 'fake-token', f.fetch), { readHostHelperPayload: async () => Buffer.from('helper'),
+      ensureHostHelperAsset: async () => { callbacks++; } })).rejects.toThrow();
+    expect(callbacks).toBe(0);
   });
 
   it('refuses publication counts created before the successful current attempt', async () => {
