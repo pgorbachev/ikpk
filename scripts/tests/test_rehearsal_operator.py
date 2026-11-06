@@ -1536,11 +1536,11 @@ class Staging194HostHelperInstallTests(unittest.TestCase):
             exec(compile(classification, "paired-launcher-selection", "exec"), state)
             return state["profile"], state["action"], state["locked_actions"], state["lock_mode"]
 
+        action_lock_modes = {}
         for action in rehearsal_host.DESTINATION_LOCKED_ACTIONS:
             profile, selected_action, _locked, lock_mode = select(["--profile", "staging194", action])
             self.assertEqual((profile, selected_action), ("staging194", action))
-            expected_mode = fcntl.LOCK_EX if action == "cleanup-site" else fcntl.LOCK_EX | fcntl.LOCK_NB
-            self.assertEqual(lock_mode, expected_mode)
+            action_lock_modes[action] = lock_mode
         for arguments in (["--profile=staging194", "recover"], ["--prof", "staging194", "cleanup-site"]):
             self.assertEqual(select(arguments)[0], "staging194")
         self.assertEqual(select(["--profile", "staging194", "cms-update", "--pro", "payload"])[:2],
@@ -1589,22 +1589,43 @@ class Staging194HostHelperInstallTests(unittest.TestCase):
             cleanup_mode = select(["--profile", "staging194", "cleanup-site"])[3]
             held_fd = os.open(lock_path, os.O_RDWR)
             fcntl.flock(held_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            cleanup_request = Path(temporary) / "cleanup.request"
+            cleanup_request.write_text('{"version":1,"releaseId":"stale"}')
+            releases = Path(temporary) / "releases"
+            releases.mkdir()
+            (releases / "stale").write_text("keep until lock is acquired")
+            before_request = cleanup_request.read_bytes()
+            before_releases = {item.name: item.read_bytes() for item in releases.iterdir()}
             cleanup_code = (
-                "import fcntl, os, sys; fd=os.open(sys.argv[1], os.O_RDWR); "
-                "print('waiting', flush=True); fcntl.flock(fd, int(sys.argv[2])); "
+                "import fcntl, os, sys\nfd=os.open(sys.argv[1], os.O_RDWR)\n"
+                "try: fcntl.flock(fd, int(sys.argv[2]))\n"
+                "except BlockingIOError: print('busy', flush=True); raise SystemExit(3)\n"
                 "print('acquired', flush=True)"
             )
-            cleanup = subprocess.Popen(["python3", "-c", cleanup_code, str(lock_path), str(cleanup_mode)],
-                                       stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
             try:
-                self.assertEqual(cleanup.stdout.readline().strip(), "waiting")
-                self.assertIsNone(cleanup.poll(), "cleanup should wait while the destination lock is held")
+                cleanup = subprocess.run(
+                    ["python3", "-c", cleanup_code, str(lock_path), str(cleanup_mode)],
+                    stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=2,
+                    check=False)
+                self.assertEqual(cleanup.returncode, 3, cleanup.stderr)
+                self.assertEqual(cleanup.stdout.strip(), "busy")
+                self.assertEqual(cleanup_request.read_bytes(), before_request)
+                self.assertEqual({item.name: item.read_bytes() for item in releases.iterdir()}, before_releases)
             finally:
                 fcntl.flock(held_fd, fcntl.LOCK_UN)
                 os.close(held_fd)
-            cleanup_stdout, cleanup_stderr = cleanup.communicate(timeout=5)
-            self.assertEqual(cleanup.returncode, 0, cleanup_stderr)
-            self.assertEqual(cleanup_stdout.splitlines(), ["acquired"])
+            manual = os.open(lock_path, os.O_RDWR)
+            try:
+                fcntl.flock(manual, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                cleanup_request.unlink()
+                (releases / "stale").unlink()
+            finally:
+                os.close(manual)
+            self.assertFalse(cleanup_request.exists())
+            self.assertEqual(list(releases.iterdir()), [])
+            self.assertEqual(action_lock_modes,
+                             {action: fcntl.LOCK_EX | fcntl.LOCK_NB
+                              for action in rehearsal_host.DESTINATION_LOCKED_ACTIONS})
 
     def test_helper_install_transfers_and_verifies_bytes_before_running_existing_installer(self):
         payload = b"verified host helper archive"

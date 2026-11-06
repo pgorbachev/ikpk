@@ -139,7 +139,7 @@ class InstalledEntrypointTests(unittest.TestCase):
         self.assertIn("the 194 transport serialize through", installer)
         self.assertIn("Do not require that prod-only inode on 194", installer)
 
-    def test_install_disabled_skips_housekeeping_activation_but_default_enables_units(self):
+    def test_housekeeping_keeps_timer_retry_without_activating_level_trigger_path(self):
         installer = (ROOT / "scripts/install-rehearsal-host.sh").read_text(encoding="utf-8")
         self.assertIn("INSTALL_DISABLED=0", installer)
         self.assertIn("--install-disabled) INSTALL_DISABLED=1; shift ;;", installer)
@@ -148,6 +148,8 @@ class InstalledEntrypointTests(unittest.TestCase):
         end = installer.index("\nfi\necho \"installed rehearsal host entrypoint", start)
         activation = "\n".join(line[2:] for line in installer[start:end].splitlines())
         self.assertLess(installer.index('mv -f -- "$path_tmp" "$systemd_dir/ikpk-site-housekeeping.path"'), start)
+        self.assertIn("OnUnitActiveSec=10min", installer)
+        self.assertNotIn("enable --now ikpk-site-housekeeping.path", activation)
 
         with tempfile.TemporaryDirectory(prefix="ikpk-housekeeping-systemctl-") as temporary:
             root = Path(temporary)
@@ -159,7 +161,7 @@ class InstalledEntrypointTests(unittest.TestCase):
             stub.chmod(0o755)
             for disabled, expected in (
                 (1, ["daemon-reload"]),
-                (0, ["daemon-reload", "enable --now ikpk-site-housekeeping.path ikpk-site-housekeeping.timer"]),
+                (0, ["daemon-reload", "enable --now ikpk-site-housekeeping.timer"]),
             ):
                 calls = root / f"calls-{disabled}"
                 run = subprocess.run(
