@@ -5,6 +5,7 @@
   "releaseRoot": "/opt/ikpk-cms-prototype193/releases",
   "currentCms": "/opt/ikpk-cms-prototype193/current",
   "currentStatic": "/var/www/ikpk/current",
+  "cmsEnvironmentFile": "/etc/ikpk-cms/site-build-current194.env",
   "siteRefreshState": "/var/lib/ikpk-cms-prototype193/staging/site-refresh194/state/state.json",
   "publicationLock": "/var/www/ikpk/.publication.lock",
   "sitePublicationMarker": "/var/lib/ikpk-rehearsal/site-publication/host-publication.json",
