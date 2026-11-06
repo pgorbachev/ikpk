@@ -1518,6 +1518,7 @@ class Staging194HostHelperInstallTests(unittest.TestCase):
         installer = (Path(__file__).resolve().parents[1] / "install-rehearsal-host.sh").read_text()
         launcher = installer.split('cat >"$SBIN/ikpk-rehearsal" <<EOF\n', 1)[1].split("\nEOF", 1)[0]
         self.assertLess(launcher.index("fcntl.flock(fd"), launcher.index("from rehearsal_host import main"))
+        self.assertIn('any(arg.startswith("--expected") for arg in argv)', launcher)
         self.assertIn("main(publication_lock_fd=publication_lock_fd)", launcher)
 
         with tempfile.TemporaryDirectory(prefix="ikpk-helper-import-lock-") as temporary:

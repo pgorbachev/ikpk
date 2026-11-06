@@ -2290,22 +2290,25 @@ class StaticMainAdmissionTests(unittest.TestCase):
             os.close(descriptor)
 
     def test_paired_helper_identity_is_checked_under_destination_lock_before_journal_or_mutation(self):
+        import fcntl
         with tempfile.TemporaryDirectory(prefix="ikpk-helper-identity-lock-") as temporary:
             state_dir = Path(temporary) / "state"
             state_dir.mkdir()
-            config = {"stateDir": str(state_dir), "profile": "staging194"}
-            lock_state = {"held": False}
-
-            @contextmanager
-            def destination_lock(*_args, **_kwargs):
-                lock_state["held"] = True
-                try:
-                    yield
-                finally:
-                    lock_state["held"] = False
+            lock_path = Path(temporary) / "publication.lock"
+            lock_path.touch(mode=0o600)
+            os.chmod(lock_path, 0o600)
+            descriptor = os.open(lock_path, os.O_RDWR)
+            fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            config = {"stateDir": str(state_dir), "profile": "staging194",
+                      "publicationLock": lock_path, "cmsUser": "test-owner"}
 
             def runtime_identity():
-                self.assertTrue(lock_state["held"], "helper identity must be checked under destination lock")
+                replacement_fd = os.open(lock_path, os.O_RDWR)
+                try:
+                    with self.assertRaises(BlockingIOError):
+                        fcntl.flock(replacement_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                finally:
+                    os.close(replacement_fd)
                 return "0" * 64
 
             provenance = {"runId": 1, "attempt": 1, "hostHelperArtifact": {
@@ -2315,16 +2318,36 @@ class StaticMainAdmissionTests(unittest.TestCase):
             args = Namespace(profile="staging194", action="cms-update", operation_id="helper-op",
                 source_sha="a" * 40,
                 provenance_b64=base64.b64encode(json.dumps(provenance).encode()).decode(),
-                expected_host_helper_identity="a" * 64)
+                expected_host_helper_identity="a" * 64,
+                _publication_lock_fd=descriptor)
             with patch.object(rehearsal_host.os, "geteuid", return_value=0), \
                  patch.object(rehearsal_host, "_root_config", return_value=config), \
                  patch.object(rehearsal_host, "_configure_profile_temp"), \
-                 patch.object(rehearsal_host, "_destination_publication_lock", side_effect=destination_lock), \
+                 patch.object(rehearsal_host, "PRODUCTION_PUBLICATION_LOCK", lock_path), \
+                 patch.object(rehearsal_host.pwd, "getpwnam", return_value=SimpleNamespace(pw_uid=os.getuid())), \
                  patch.object(rehearsal_host, "_host_helper_runtime_identity", side_effect=runtime_identity), \
                  patch.object(RehearsalState, "read_journal_for_cleanup") as read_journal:
                 with self.assertRaisesRegex(rehearsal_host.HostFailure, "identity changed"):
                     rehearsal_host.dispatch(args)
             read_journal.assert_not_called()
+            os.close(descriptor)
+
+    def test_old_launcher_without_preimport_lock_fd_refuses_identity_before_config_or_journal(self):
+        identity = "a" * 64
+        provenance = {"runId": 1, "attempt": 1, "hostHelperArtifact": {
+            "artifactId": 2, "runId": 1, "attempt": 1,
+            "archiveSha256": "b" * 64, "payloadSha256": "c" * 64},
+            "hostHelperRuntimeIdentity": identity}
+        encoded = base64.b64encode(json.dumps(provenance).encode()).decode()
+        base_args = ["--profile", "staging194", "cms-update", "--operation-id", "old-launcher",
+                     "--source-sha", "a" * 40, "--provenance-b64", encoded]
+        with patch.object(rehearsal_host.os, "geteuid", return_value=0), \
+             patch.object(rehearsal_host, "_root_config") as root_config:
+            for option in ("--expected-host-helper-identity=" + identity,
+                           "--expected-host-helper-ident=" + identity):
+                with self.subTest(option=option):
+                    self.assertEqual(rehearsal_host.main([*base_args, option]), 2)
+            root_config.assert_not_called()
 
     def test_capture_projection_digest_binds_field_map_and_snapshot_transformer(self):
         import os

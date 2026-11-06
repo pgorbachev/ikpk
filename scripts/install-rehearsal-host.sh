@@ -94,7 +94,7 @@ import fcntl, json, os, pwd, stat, sys
 sys.path.insert(0, "$LIB")
 publication_lock_fd = None
 argv = sys.argv[1:]
-if "cms-update" in argv and "--expected-host-helper-identity" in argv:
+if "cms-update" in argv and any(arg.startswith("--expected") for arg in argv):
     lock_path = "/var/www/ikpk/.publication.lock"
     fd = None
     try:

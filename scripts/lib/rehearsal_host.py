@@ -4794,6 +4794,9 @@ def dispatch(args: argparse.Namespace) -> dict[str, Any]:
                 or not isinstance(expected_helper_identity, str)
                 or not SHA256_RE.fullmatch(expected_helper_identity)):
             raise HostFailure("expected host helper identity is restricted to staging194 cms-update")
+        prelocked_fd = getattr(args, "_publication_lock_fd", None)
+        if type(prelocked_fd) is not int or prelocked_fd < 0:
+            raise HostFailure("paired host helper requires the publication lock before helper import")
     config_path = (INITIAL_PROD_CONFIG_PATH if profile == "initial-prod" else
                    PRODUCTION_STATIC_CONFIG_PATH if profile == "production-static" else
                    PRODUCTION_PAIRED_CONFIG_PATH if profile == "production-paired" else CONFIG_PATH)
