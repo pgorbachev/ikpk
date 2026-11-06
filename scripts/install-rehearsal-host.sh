@@ -95,23 +95,31 @@ sys.path.insert(0, "$LIB")
 publication_lock_fd = None
 argv = sys.argv[1:]
 profile = "staging194"
-profile_value_indexes = set()
-for index, argument in enumerate(argv):
+action = None
+index = 0
+while index < len(argv):
+    argument = argv[index]
     option = argument.split("=", 1)[0]
     if argument.startswith("--") and "--profile".startswith(option):
-        profile_value_indexes.add(index)
         if "=" in argument:
             profile = argument.split("=", 1)[1]
+            index += 1
         elif index + 1 < len(argv):
             profile = argv[index + 1]
-            profile_value_indexes.add(index + 1)
-action = next((argument for index, argument in enumerate(argv)
-               if index not in profile_value_indexes and not argument.startswith("-")), None)
+            index += 2
+        else:
+            break
+    elif argument.startswith("-"):
+        break
+    else:
+        action = argument
+        break
 locked_actions = {
     "cms-update", "static-publish", "static-main", "static-main-recover",
     "recover", "restore", "finalize-recover", "cleanup-site",
     "export-backup", "export-static", "export-static-main",
 }
+lock_mode = fcntl.LOCK_EX if action == "cleanup-site" else fcntl.LOCK_EX | fcntl.LOCK_NB
 if profile == "staging194" and action in locked_actions:
     lock_path = "/var/www/ikpk/.publication.lock"
     fd = None
@@ -133,7 +141,7 @@ if profile == "staging194" and action in locked_actions:
                 or not stat.S_ISREG(opened.st_mode) or opened.st_nlink != 1
                 or opened.st_uid != expected_uid or stat.S_IMODE(opened.st_mode) != 0o600):
             raise RuntimeError("shared publication lock changed while opening")
-        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        fcntl.flock(fd, lock_mode)
         named = os.lstat(lock_path)
         if ((opened.st_dev, opened.st_ino) != (named.st_dev, named.st_ino)
                 or not stat.S_ISREG(named.st_mode) or named.st_nlink != 1

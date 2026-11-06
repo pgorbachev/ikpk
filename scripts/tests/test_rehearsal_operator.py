@@ -1532,20 +1532,25 @@ class Staging194HostHelperInstallTests(unittest.TestCase):
         classification = launcher[launcher.index('profile = "staging194"'):
                                    launcher.index('if profile == "staging194" and action in locked_actions:')]
         def select(argv):
-            state = {"argv": argv}
+            state = {"argv": argv, "fcntl": fcntl}
             exec(compile(classification, "paired-launcher-selection", "exec"), state)
-            return state["profile"], state["action"], state["locked_actions"]
+            return state["profile"], state["action"], state["locked_actions"], state["lock_mode"]
 
         for action in rehearsal_host.DESTINATION_LOCKED_ACTIONS:
-            self.assertEqual(select(["--profile", "staging194", action])[:2], ("staging194", action))
+            profile, selected_action, _locked, lock_mode = select(["--profile", "staging194", action])
+            self.assertEqual((profile, selected_action), ("staging194", action))
+            expected_mode = fcntl.LOCK_EX if action == "cleanup-site" else fcntl.LOCK_EX | fcntl.LOCK_NB
+            self.assertEqual(lock_mode, expected_mode)
         for arguments in (["--profile=staging194", "recover"], ["--prof", "staging194", "cleanup-site"]):
             self.assertEqual(select(arguments)[0], "staging194")
+        self.assertEqual(select(["--profile", "staging194", "cms-update", "--pro", "payload"])[:2],
+                         ("staging194", "cms-update"))
         for arguments in (["--profile", "staging194", "status"],
                           ["--profile", "staging194", "space-preflight"],
                           ["--profile", "staging194", "validate-config"],
                           ["--profile", "production-static", "static-main"],
                           ["--prof", "production-paired", "cms-update"]):
-            profile, action, locked_actions = select(arguments)
+            profile, action, locked_actions, _lock_mode = select(arguments)
             self.assertFalse(profile == "staging194" and action in locked_actions, arguments)
 
         with tempfile.TemporaryDirectory(prefix="ikpk-helper-import-lock-") as temporary:
@@ -1580,6 +1585,26 @@ class Staging194HostHelperInstallTests(unittest.TestCase):
             finally:
                 os.close(replacement_fd)
             self.assertIn('"B"', module_path.read_text())
+
+            cleanup_mode = select(["--profile", "staging194", "cleanup-site"])[3]
+            held_fd = os.open(lock_path, os.O_RDWR)
+            fcntl.flock(held_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            cleanup_code = (
+                "import fcntl, os, sys; fd=os.open(sys.argv[1], os.O_RDWR); "
+                "print('waiting', flush=True); fcntl.flock(fd, int(sys.argv[2])); "
+                "print('acquired', flush=True)"
+            )
+            cleanup = subprocess.Popen(["python3", "-c", cleanup_code, str(lock_path), str(cleanup_mode)],
+                                       stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            try:
+                self.assertEqual(cleanup.stdout.readline().strip(), "waiting")
+                self.assertIsNone(cleanup.poll(), "cleanup should wait while the destination lock is held")
+            finally:
+                fcntl.flock(held_fd, fcntl.LOCK_UN)
+                os.close(held_fd)
+            cleanup_stdout, cleanup_stderr = cleanup.communicate(timeout=5)
+            self.assertEqual(cleanup.returncode, 0, cleanup_stderr)
+            self.assertEqual(cleanup_stdout.splitlines(), ["acquired"])
 
     def test_helper_install_transfers_and_verifies_bytes_before_running_existing_installer(self):
         payload = b"verified host helper archive"
