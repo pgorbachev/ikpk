@@ -206,7 +206,7 @@ class InstalledEntrypointTests(unittest.TestCase):
                 "systemd_dir=/etc/systemd/system", f"systemd_dir={systemd_dir}")
             install_fragment = (
                 "set -e\n"
-                f"ROOT={ROOT}\nPREFIX={prefix}\nINSTALL_CONFIG_PROFILE=\n"
+                f"ROOT={ROOT}\nPREFIX={prefix}\nINSTALL_CONFIG_PROFILE=staging193\n"
                 f"{preflight}\n{installer[writes_start:writes_end]}\n"
             )
             stub = root / "systemctl"
@@ -221,13 +221,33 @@ class InstalledEntrypointTests(unittest.TestCase):
                 "systemd_dir=/etc/systemd/system", f"systemd_dir={absent_systemd}")
             absent_calls = root / "calls-absent-unit"
             absent = subprocess.run(
-                ["bash", "-c", f"set -e\n{absent_fragment}"],
+                ["bash", "-c", f"set -e\nPREFIX={prefix}\nINSTALL_CONFIG_PROFILE=staging193\n{absent_fragment}"],
                 env={**os.environ, "PATH": str(root) + os.pathsep + os.environ["PATH"],
                      "SYSTEMCTL_CALLS": str(absent_calls)},
                 text=True, capture_output=True, check=False,
             )
             self.assertEqual(absent.returncode, 0, absent.stderr)
             self.assertFalse(absent_calls.exists(), "fresh install must skip disable for an absent unit")
+
+            # An isolated prefix is not a host install, even if the host has an
+            # old unit file. It must not call systemctl or alter that unit.
+            isolated_prefix = root / "isolated-prefix"
+            isolated_systemd = root / "isolated-systemd"
+            isolated_systemd.mkdir()
+            isolated_unit = isolated_systemd / "ikpk-site-housekeeping.path"
+            isolated_unit.write_bytes(b"host unit must remain untouched\n")
+            isolated_fragment = installer[guard_start:guard_end].replace(
+                "systemd_dir=/etc/systemd/system", f"systemd_dir={isolated_systemd}")
+            isolated_calls = root / "calls-isolated-prefix"
+            isolated = subprocess.run(
+                ["bash", "-c", f"set -e\nPREFIX={isolated_prefix}\nINSTALL_CONFIG_PROFILE=\n{isolated_fragment}"],
+                env={**os.environ, "PATH": str(root) + os.pathsep + os.environ["PATH"],
+                     "SYSTEMCTL_CALLS": str(isolated_calls)},
+                text=True, capture_output=True, check=False,
+            )
+            self.assertEqual(isolated.returncode, 0, isolated.stderr)
+            self.assertFalse(isolated_calls.exists(), "isolated prefix must not invoke host systemctl")
+            self.assertEqual(isolated_unit.read_bytes(), b"host unit must remain untouched\n")
 
             calls = root / "calls-disable-failure"
             run = subprocess.run(
