@@ -249,6 +249,32 @@ class InstalledEntrypointTests(unittest.TestCase):
             self.assertFalse(isolated_calls.exists(), "isolated prefix must not invoke host systemctl")
             self.assertEqual(isolated_unit.read_bytes(), b"host unit must remain untouched\n")
 
+            host_prefix = root / "host-prefix"
+            host_prefix.mkdir()
+            stub.write_text(
+                "#!/usr/bin/env bash\nprintf '%s\\n' \"$*\" >> \"$SYSTEMCTL_CALLS\"\n"
+                "[[ \"${SYSTEMCTL_FAIL:-}\" != \"$*\" ]] || exit 42\n",
+                encoding="utf-8",
+            )
+            stub.chmod(0o755)
+            host_scope_fragment = installer[guard_start:guard_end].replace(
+                "systemd_dir=/etc/systemd/system", f"systemd_dir={isolated_systemd}").replace(
+                    '"$PREFIX" -ef /usr/local', f'"$PREFIX" -ef {host_prefix}')
+            for index, alias in enumerate((str(host_prefix), str(host_prefix) + "/",
+                                           str(host_prefix) + "/.")):
+                isolated_unit.write_bytes(b"legacy host unit\n")
+                alias_calls = root / f"calls-host-prefix-alias-{index}"
+                run = subprocess.run(
+                    ["bash", "-c", f"set -e\nPREFIX={alias}\nINSTALL_CONFIG_PROFILE=\n{host_scope_fragment}"],
+                    env={**os.environ, "PATH": str(root) + os.pathsep + os.environ["PATH"],
+                         "SYSTEMCTL_CALLS": str(alias_calls)},
+                    text=True, capture_output=True, check=False,
+                )
+                self.assertEqual(run.returncode, 0, run.stderr)
+                self.assertEqual(alias_calls.read_text(encoding="utf-8").splitlines(),
+                                 ["disable --now ikpk-site-housekeeping.path"])
+                self.assertFalse(isolated_unit.exists())
+
             calls = root / "calls-disable-failure"
             run = subprocess.run(
                 ["bash", "-c", install_fragment],

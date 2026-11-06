@@ -85,7 +85,7 @@ fi
 # Stop the legacy level-triggered cleanup unit before replacing any helper
 # files it can invoke. The staging194 installer wrapper holds the existing
 # publication and operation locks around this installer call.
-if [[ "$PREFIX" == /usr/local || -n "$INSTALL_CONFIG_PROFILE" ]]; then
+if [[ -n "$INSTALL_CONFIG_PROFILE" || "$PREFIX" -ef /usr/local ]]; then
   systemd_dir=/etc/systemd/system
   if [[ -e "$systemd_dir/ikpk-site-housekeeping.path" ]]; then
     systemctl disable --now ikpk-site-housekeeping.path
