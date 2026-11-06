@@ -105,7 +105,8 @@ def sha256_file(path: Path) -> str:
 
 def _host_helper_runtime_identity() -> str:
     module_dir = Path(__file__).resolve().parent
-    hashes = {name: sha256_file(module_dir / name) for name in HOST_HELPER_RUNTIME_MODULES}
+    hashes = {f"scripts/lib/{name}": sha256_file(module_dir / name)
+              for name in HOST_HELPER_RUNTIME_MODULES}
     encoded = json.dumps(hashes, sort_keys=True, separators=(",", ":")).encode()
     return hashlib.sha256(encoded).hexdigest()
 
@@ -638,7 +639,8 @@ def _validate_target_binding(data: dict[str, Any]) -> None:
 
 
 @contextmanager
-def _destination_publication_lock(config: dict[str, Any], *, wait: bool = False):
+def _destination_publication_lock(config: dict[str, Any], *, wait: bool = False,
+                                  prelocked_fd: Optional[int] = None):
     """Serialize host work with publication-remote on the fixed destination inode."""
     path = Path(config.get("publicationLock", PRODUCTION_PUBLICATION_LOCK))
     if path != PRODUCTION_PUBLICATION_LOCK:
@@ -655,7 +657,8 @@ def _destination_publication_lock(config: dict[str, Any], *, wait: bool = False)
         if (not stat.S_ISREG(before.st_mode) or before.st_nlink != 1 or before.st_uid != expected_uid
                 or stat.S_IMODE(before.st_mode) != 0o600):
             raise HostFailure("shared publication lock must be a 0600 regular file owned by the configured CMS user")
-        fd = os.open(path, os.O_RDWR | getattr(os, "O_NOFOLLOW", 0))
+        fd = (prelocked_fd if prelocked_fd is not None
+              else os.open(path, os.O_RDWR | getattr(os, "O_NOFOLLOW", 0)))
     except OSError as error:
         raise HostFailure("shared publication lock is unavailable") from error
     try:
@@ -664,6 +667,8 @@ def _destination_publication_lock(config: dict[str, Any], *, wait: bool = False)
                 or info.st_nlink != 1 or info.st_uid != expected_uid or stat.S_IMODE(info.st_mode) != 0o600):
             raise HostFailure("shared publication lock changed or has unsafe owner/permissions")
         try:
+            # The opt-in launcher acquires this same open-file-description
+            # before importing helper modules; reassert that lock here.
             fcntl.flock(fd, fcntl.LOCK_EX if wait else fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError as error:
             raise HostFailure("another publisher holds the destination lock") from error
@@ -680,7 +685,8 @@ def _destination_publication_lock(config: dict[str, Any], *, wait: bool = False)
             raise HostFailure("shared publication lock changed or has unsafe owner/permissions")
         yield
     finally:
-        os.close(fd)
+        if prelocked_fd is None:
+            os.close(fd)
 
 
 def _site_marker_path(config: dict[str, Any]) -> Path:
@@ -4814,8 +4820,10 @@ def dispatch(args: argparse.Namespace) -> dict[str, Any]:
             raise HostFailure("space preflight is available only through status")
         return _space_preflight(config, args.operation_id, operation_kind)
     state = RehearsalState(Path(config["stateDir"]))
+    prelocked_fd = getattr(args, "_publication_lock_fd", None)
     destination_lock = (nullcontext() if args.action == "status"
-                        else _destination_publication_lock(config, wait=args.action == "cleanup-site"))
+                        else _destination_publication_lock(config, wait=args.action == "cleanup-site",
+                                                          prelocked_fd=prelocked_fd))
     with destination_lock, state.lock():
         if profile == "staging194" and args.action == "cms-update":
             try:
@@ -5047,7 +5055,7 @@ def dispatch(args: argparse.Namespace) -> dict[str, Any]:
     raise HostFailure("unsupported bounded host action")
 
 
-def main(argv: Optional[list[str]] = None) -> int:
+def main(argv: Optional[list[str]] = None, *, publication_lock_fd: Optional[int] = None) -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--profile", choices=("staging194", "initial-prod", "production-static", "production-paired"), default="staging194")
     sub = parser.add_subparsers(dest="action", required=True)
@@ -5091,6 +5099,7 @@ def main(argv: Optional[list[str]] = None) -> int:
             command.add_argument("--space-preflight", action="store_true")
             command.add_argument("--space-preflight-for", choices=("cms-update", "static-main"))
     args = parser.parse_args(argv)
+    args._publication_lock_fd = publication_lock_fd
     try:
         if args.action == "validate-config":
             if os.geteuid() != 0:

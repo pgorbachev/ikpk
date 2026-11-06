@@ -72,9 +72,21 @@ def artifact_record(*, name=None, expired=False, sha=SOURCE_SHA, run_id=RUN_ID):
 
 class HostHelperArtifactBuildTests(unittest.TestCase):
     def test_runtime_identity_requires_the_paired_cms_capability_in_the_selected_ci_artifact(self):
-        payload = make_tar()
+        with tempfile.TemporaryDirectory(prefix="ikpk-helper-real-artifact-") as temporary:
+            artifact_path = Path(temporary) / "host-helper.tar.gz"
+            subprocess.run(["bash", str(REPO_ROOT / "scripts/build-host-helper-artifact.sh"), str(artifact_path)],
+                           cwd=REPO_ROOT, check=True, capture_output=True, text=True)
+            payload = artifact_path.read_bytes()
         identity = staging193._host_helper_runtime_identity(payload)
         self.assertRegex(identity, r"^[a-f0-9]{64}$")
+        with tempfile.TemporaryDirectory(prefix="ikpk-helper-runtime-copy-") as temporary:
+            root = Path(temporary)
+            with tarfile.open(fileobj=io.BytesIO(payload), mode="r:gz") as archive:
+                archive.extractall(root)
+            from scripts.lib import rehearsal_host
+            helper_path = root / "scripts/lib/rehearsal_host.py"
+            with patch.object(rehearsal_host, "__file__", str(helper_path)):
+                self.assertEqual(rehearsal_host._host_helper_runtime_identity(), identity)
         files = {name: (REPO_ROOT / name).read_bytes() for name in EXPECTED_FILES}
         files["scripts/lib/rehearsal_host.py"] = files["scripts/lib/rehearsal_host.py"].replace(
             b'STAGING194_PAIRED_HELPER_IDENTITY_CAPABILITY = "paired-helper-identity-v1"',

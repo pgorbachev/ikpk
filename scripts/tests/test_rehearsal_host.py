@@ -2267,6 +2267,28 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
 
 
 class StaticMainAdmissionTests(unittest.TestCase):
+    def test_destination_lock_reuses_the_launcher_descriptor_without_releasing_it(self):
+        import fcntl
+        with tempfile.TemporaryDirectory(prefix="ikpk-prelocked-publication-") as temporary:
+            lock_path = Path(temporary) / "publication.lock"
+            lock_path.touch(mode=0o600)
+            os.chmod(lock_path, 0o600)
+            descriptor = os.open(lock_path, os.O_RDWR)
+            fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            owner = SimpleNamespace(pw_uid=os.getuid())
+            config = {"publicationLock": lock_path, "cmsUser": "test-owner"}
+            with patch.object(rehearsal_host, "PRODUCTION_PUBLICATION_LOCK", lock_path), \
+                 patch.object(rehearsal_host.pwd, "getpwnam", return_value=owner):
+                with rehearsal_host._destination_publication_lock(config, prelocked_fd=descriptor):
+                    self.assertTrue(os.fstat(descriptor))
+                replacement_descriptor = os.open(lock_path, os.O_RDWR)
+                try:
+                    with self.assertRaises(BlockingIOError):
+                        fcntl.flock(replacement_descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                finally:
+                    os.close(replacement_descriptor)
+            os.close(descriptor)
+
     def test_paired_helper_identity_is_checked_under_destination_lock_before_journal_or_mutation(self):
         with tempfile.TemporaryDirectory(prefix="ikpk-helper-identity-lock-") as temporary:
             state_dir = Path(temporary) / "state"

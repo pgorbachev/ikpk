@@ -90,10 +90,44 @@ install -m 0644 "$ROOT/scripts/lib/housekeeping_journal.py" "$LIB/housekeeping_j
 install -m 0644 "$ROOT/scripts/lib/rehearsal_host.py" "$LIB/rehearsal_host.py"
 cat >"$SBIN/ikpk-rehearsal" <<EOF
 #!/usr/bin/env python3
-import sys
+import fcntl, json, os, pwd, stat, sys
 sys.path.insert(0, "$LIB")
+publication_lock_fd = None
+argv = sys.argv[1:]
+if "cms-update" in argv and "--expected-host-helper-identity" in argv:
+    lock_path = "/var/www/ikpk/.publication.lock"
+    fd = None
+    try:
+        config_path = "/etc/ikpk/rehearsal.json"
+        with open(config_path, encoding="utf-8") as source:
+            config = json.load(source)
+        if (config.get("profile", "staging194") != "staging194"
+                or config.get("publicationLock") != lock_path):
+            raise RuntimeError("paired helper lock profile is not staging194")
+        expected_uid = pwd.getpwnam(config["cmsUser"]).pw_uid
+        before = os.lstat(lock_path)
+        if (not stat.S_ISREG(before.st_mode) or before.st_nlink != 1
+                or before.st_uid != expected_uid or stat.S_IMODE(before.st_mode) != 0o600):
+            raise RuntimeError("shared publication lock has unsafe type, owner, or mode")
+        fd = os.open(lock_path, os.O_RDWR | getattr(os, "O_NOFOLLOW", 0))
+        opened = os.fstat(fd)
+        if ((opened.st_dev, opened.st_ino) != (before.st_dev, before.st_ino)
+                or not stat.S_ISREG(opened.st_mode) or opened.st_nlink != 1
+                or opened.st_uid != expected_uid or stat.S_IMODE(opened.st_mode) != 0o600):
+            raise RuntimeError("shared publication lock changed while opening")
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        named = os.lstat(lock_path)
+        if ((opened.st_dev, opened.st_ino) != (named.st_dev, named.st_ino)
+                or not stat.S_ISREG(named.st_mode) or named.st_nlink != 1
+                or named.st_uid != expected_uid or stat.S_IMODE(named.st_mode) != 0o600):
+            raise RuntimeError("shared publication lock changed after acquisition")
+        publication_lock_fd = fd
+    except (OSError, KeyError, ValueError, RuntimeError) as error:
+        if fd is not None:
+            os.close(fd)
+        raise SystemExit("could not lock staging194 before importing the paired helper") from error
 from rehearsal_host import main
-raise SystemExit(main())
+raise SystemExit(main(publication_lock_fd=publication_lock_fd))
 EOF
 chmod 0755 "$SBIN/ikpk-rehearsal"
 PYTHONDONTWRITEBYTECODE=1 "$SBIN/ikpk-rehearsal" --help >/dev/null

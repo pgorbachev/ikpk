@@ -1513,6 +1513,46 @@ class Staging194HostHelperInstallTests(unittest.TestCase):
         self.assertEqual(result, 0)
         self.assertTrue(observed[0].install_host_helper)
 
+    def test_paired_launcher_takes_shared_lock_before_import_and_blocks_interprocess_replacement(self):
+        import fcntl
+        installer = (Path(__file__).resolve().parents[1] / "install-rehearsal-host.sh").read_text()
+        launcher = installer.split('cat >"$SBIN/ikpk-rehearsal" <<EOF\n', 1)[1].split("\nEOF", 1)[0]
+        self.assertLess(launcher.index("fcntl.flock(fd"), launcher.index("from rehearsal_host import main"))
+        self.assertIn("main(publication_lock_fd=publication_lock_fd)", launcher)
+
+        with tempfile.TemporaryDirectory(prefix="ikpk-helper-import-lock-") as temporary:
+            root = Path(temporary)
+            lock_path = root / "publication.lock"
+            module_path = root / "loaded_helper.py"
+            lock_path.touch(mode=0o600)
+            module_path.write_text('generation = "A"\n')
+            child_code = (
+                "import fcntl, importlib.util, os, sys, time; "
+                "fd=os.open(sys.argv[1], os.O_RDWR); fcntl.flock(fd, fcntl.LOCK_EX); "
+                "spec=importlib.util.spec_from_file_location('loaded_helper', sys.argv[2]); "
+                "module=importlib.util.module_from_spec(spec); spec.loader.exec_module(module); "
+                "print(module.generation, flush=True); time.sleep(0.25); print(module.generation, flush=True)"
+            )
+            child = subprocess.Popen(["python3", "-c", child_code, str(lock_path), str(module_path)],
+                                     stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            self.assertEqual(child.stdout.readline().strip(), "A")
+            replacement_fd = os.open(lock_path, os.O_RDWR)
+            try:
+                with self.assertRaises(BlockingIOError):
+                    fcntl.flock(replacement_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            finally:
+                os.close(replacement_fd)
+            stdout, stderr = child.communicate(timeout=5)
+            self.assertEqual(child.returncode, 0, stderr)
+            self.assertEqual(stdout.splitlines(), ["A"])
+            replacement_fd = os.open(lock_path, os.O_RDWR)
+            try:
+                fcntl.flock(replacement_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                module_path.write_text('generation = "B"\n')
+            finally:
+                os.close(replacement_fd)
+            self.assertIn('"B"', module_path.read_text())
+
     def test_helper_install_transfers_and_verifies_bytes_before_running_existing_installer(self):
         payload = b"verified host helper archive"
         digest = hashlib.sha256(payload).hexdigest()
