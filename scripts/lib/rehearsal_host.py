@@ -3186,7 +3186,7 @@ def _ensure_empty_candidate_upload_directory(config: dict[str, Any], artifact_ro
             raise HostFailure("prepared CMS artifact uploads path contains unexpected data")
     else:
         code = "import os,sys; os.mkdir(sys.argv[1],0o755)"
-        _run_as_cms(config, artifact_root, ["/usr/bin/python3", "-c", code, str(uploads)], timeout=30)
+        _run_as_cms(config, artifact_root, ["/usr/bin/python3", "-c", code, str(uploads)], timeout=60)
         try:
             uploads_info = uploads.lstat()
         except OSError as error:

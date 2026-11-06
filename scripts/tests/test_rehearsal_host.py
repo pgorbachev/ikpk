@@ -1480,13 +1480,15 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
             config = {"cmsDatabase": str(live_database), "cmsUser": getpass.getuser(),
                       "mediaRoots": [{"prefix": "/uploads/", "path": str(external_uploads)}]}
             observed = []
+            create_timeouts = []
             artifact_digest = rehearsal_host._cms_payload_sha256(artifact, external_uploads)
 
-            def run_as_cms(_config, cwd, argv, **_kwargs):
+            def run_as_cms(_config, cwd, argv, **kwargs):
                 uploads = Path(cwd) / "public/uploads"
                 if argv[0] == "/usr/bin/python3":
                     self.assertEqual(argv[1], "-c")
                     self.assertEqual(argv[3], str(uploads))
+                    create_timeouts.append(kwargs["timeout"])
                     uploads.mkdir(mode=0o755)
                     return ""
                 accessible = (uploads.is_dir() and not uploads.is_symlink()
@@ -1515,6 +1517,7 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
                     config, source, "uploads-op", root / "old-cms")
 
             self.assertEqual([call[0] for call in observed], ["prepare", "status"])
+            self.assertEqual(create_timeouts, [60])
             self.assertTrue((artifact / "public/uploads").is_symlink())
             self.assertEqual((external_uploads / "existing-media.jpg").read_bytes(), b"preserved")
             self.assertEqual(len(digest), 64)
