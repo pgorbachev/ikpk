@@ -3162,6 +3162,33 @@ def _staging194_stable_cms_payload_sha256(root: Path, uploads: Path) -> str:
     return digest
 
 
+def _ensure_empty_candidate_upload_directory(config: dict[str, Any], artifact_root: Path) -> Path:
+    """Give pre-activation CMS checks an empty writable uploads directory, without media."""
+    if artifact_root.is_symlink() or not artifact_root.is_dir():
+        raise HostFailure("prepared CMS artifact directory is missing or unsafe")
+    public = artifact_root / "public"
+    try:
+        public_info = public.lstat()
+    except OSError as error:
+        raise HostFailure("prepared CMS artifact public directory is missing") from error
+    if not stat.S_ISDIR(public_info.st_mode):
+        raise HostFailure("prepared CMS artifact public path is not a real directory")
+    uploads = public / "uploads"
+    if os.path.lexists(uploads):
+        try:
+            uploads_info = uploads.lstat()
+        except OSError as error:
+            raise HostFailure("prepared CMS artifact uploads path is unavailable") from error
+        if not stat.S_ISDIR(uploads_info.st_mode) or any(uploads.iterdir()):
+            raise HostFailure("prepared CMS artifact uploads path must be an empty real directory")
+    else:
+        uploads.mkdir(mode=0o755)
+    user = pwd.getpwnam(config["cmsUser"])
+    os.chown(uploads, user.pw_uid, user.pw_gid, follow_symlinks=False)
+    os.chmod(uploads, 0o755)
+    return uploads
+
+
 def _config_sha256(config: dict[str, Any]) -> str:
     stable_config = dict(config)
     if stable_config.get("profile", "staging194") == "staging194":
@@ -3181,6 +3208,7 @@ def _install_migrated_database(config: dict[str, Any], source_root: Path, operat
     user = pwd.getpwnam(config["cmsUser"])
     if operation_root.parent.is_symlink() or operation_root.parent.parent.is_symlink():
         raise HostFailure("migration work directory contains a symlink")
+    _ensure_empty_candidate_upload_directory(config, artifact_dir)
     candidate = operation_root / "candidate.db"
     receipt = operation_root / "receipt.json"
     if any(os.path.lexists(path) for path in (candidate, receipt)):

@@ -1461,6 +1461,57 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
             self.assertEqual((uploads / "photo original.jpg").read_bytes(), b"editor media")
             self.assertEqual(len(rehearsal_host._cms_payload_sha256(artifact, external)), 64)
 
+    def test_ci_cms_migration_runner_can_access_empty_uploads_before_shared_media_link(self):
+        with tempfile.TemporaryDirectory(prefix="ikpk-cms-migration-empty-uploads-") as temporary:
+            root = Path(temporary)
+            source = root / "source"
+            artifact = source / "migration/cms-artifact"
+            (artifact / "public").mkdir(parents=True)
+            (artifact / "scripts").mkdir()
+            (artifact / "scripts/run-data-migrations.mjs").write_text("runner", encoding="utf-8")
+            dependencies = root / "deps/node_modules"
+            dependencies.mkdir(parents=True)
+            external_uploads = root / "shared/uploads"
+            external_uploads.mkdir(parents=True)
+            (external_uploads / "existing-media.jpg").write_bytes(b"preserved")
+            live_database = root / "live.sqlite"
+            sqlite3.connect(live_database).close()
+            user = rehearsal_host.pwd.getpwnam(getpass.getuser())
+            config = {"cmsDatabase": str(live_database), "cmsUser": getpass.getuser(),
+                      "mediaRoots": [{"prefix": "/uploads/", "path": str(external_uploads)}]}
+            observed = []
+            artifact_digest = rehearsal_host._cms_payload_sha256(artifact, external_uploads)
+
+            def run_as_cms(_config, cwd, argv, **_kwargs):
+                uploads = Path(cwd) / "public/uploads"
+                accessible = (uploads.is_dir() and not uploads.is_symlink()
+                              and os.access(uploads, os.R_OK | os.W_OK | os.X_OK))
+                observed.append((argv[2], accessible, list(uploads.iterdir()) if uploads.is_dir() else None))
+                self.assertTrue(accessible, "CMS migration runner must access its empty local uploads directory")
+                self.assertEqual(list(uploads.iterdir()), [], "migration must not see or copy real media")
+                self.assertEqual(uploads.stat().st_uid, user.pw_uid)
+                self.assertEqual(stat.S_IMODE(uploads.stat().st_mode), 0o755)
+                self.assertEqual(rehearsal_host._cms_payload_sha256(artifact, external_uploads), artifact_digest,
+                                 "the staging directory must not alter verified CMS artifact payload bytes")
+                if argv[2] == "prepare":
+                    candidate = Path(argv[argv.index("--candidate-db") + 1])
+                    sqlite3.connect(candidate).close()
+                    return ""
+                return json.dumps({"phase": "prepared", "passed": True})
+
+            with patch.object(rehearsal_host, "_validate_prepared_cms_candidate",
+                              return_value=(source, artifact, dependencies)), \
+                 patch.object(rehearsal_host.pwd, "getpwnam", return_value=user), \
+                 patch.object(rehearsal_host, "_run_as_cms", side_effect=run_as_cms), \
+                 patch.object(rehearsal_host, "_assert_no_database_handles"):
+                _candidate, _artifact, digest = rehearsal_host._install_migrated_database(
+                    config, source, "uploads-op", root / "old-cms")
+
+            self.assertEqual([call[0] for call in observed], ["prepare", "status"])
+            self.assertTrue((artifact / "public/uploads").is_symlink())
+            self.assertEqual((external_uploads / "existing-media.jpg").read_bytes(), b"preserved")
+            self.assertEqual(len(digest), 64)
+
     def test_cms_payload_accepts_operation_source_dependencies_and_internal_bin_links(self):
         with tempfile.TemporaryDirectory(prefix="ikpk-cms-node-modules-") as temporary:
             root = Path(temporary) / "source/op/.staging193-rehearsal/op/migration"
