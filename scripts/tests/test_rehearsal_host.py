@@ -1007,7 +1007,8 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
                 with self.assertRaisesRegex(rehearsal_host.HostFailure, "staging194"):
                     rehearsal_host._validate_target_binding(changed)
 
-    def _activate_for_media_probe_test(self, media_inventory, cms_health_url="http://127.0.0.1:1338/_health"):
+    def _activate_for_media_probe_test(self, media_inventory, cms_health_url="http://127.0.0.1:1338/_health",
+                                       profile="staging194-dev"):
         with tempfile.TemporaryDirectory(prefix="ikpk-cms-media-probe-") as temporary:
             root = Path(temporary)
             live_database = root / "live.sqlite"
@@ -1016,7 +1017,7 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
             capture.mkdir()
             (capture / "media-manifest.json").write_text(
                 json.dumps({"media": media_inventory}), encoding="utf-8")
-            config = {"cmsDatabase": str(live_database), "currentCms": str(root / "current"),
+            config = {"profile": profile, "cmsDatabase": str(live_database), "currentCms": str(root / "current"),
                       "releaseRoot": str(root / "releases"), "cmsUnit": "ikpk-cms-prototype193.service",
                       "cmsHealthUrl": cms_health_url}
             commands = []
@@ -1048,7 +1049,8 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
 
     def test_initial_prod_cms_activation_probes_upload_on_configured_1337_port(self):
         upload = {"url": "/uploads/prod-image.webp", "originalName": "prod-image.webp"}
-        probes = self._activate_for_media_probe_test([upload], "http://127.0.0.1:1337/_health")
+        probes = self._activate_for_media_probe_test([upload], "http://127.0.0.1:1337/_health",
+                                                     profile="initial-prod")
         self.assertEqual(probes[0][-1], "http://127.0.0.1:1337/uploads/prod-image.webp")
 
     def test_cms_activation_fails_clearly_when_capture_has_no_upload_entry(self):
@@ -1165,7 +1167,8 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
             expected = {"version": 1, "lockSha256": sha(lock_bytes), "profile": "full-build",
                         "nodeVersion": "v24.1.0", "nodeAbi": "137", "platform": "linux",
                         "architecture": "x64"}
-            config = {"allowedSourceRef": "refs/heads/dev", "cmsUser": getpass.getuser()}
+            config = {"profile": "staging194-dev", "allowedSourceRef": "refs/heads/dev",
+                      "cmsUser": getpass.getuser()}
             with patch.object(rehearsal_host, "_cms_build_generation", return_value=(root / "unused", expected)), \
                  patch.object(rehearsal_host, "_validate_cms_build_generation", return_value=dependencies.resolve()):
                 with self.assertRaisesRegex(rehearsal_host.HostFailure, "identities do not match"):
