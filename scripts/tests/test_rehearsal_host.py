@@ -1318,6 +1318,10 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
                     info = tarfile.TarInfo(name)
                     info.size = len(data)
                     archive.addfile(info, io.BytesIO(data))
+                directory = tarfile.TarInfo(".strapi")
+                directory.type = tarfile.DIRTYPE
+                directory.mode = 0o755
+                archive.addfile(directory)
             payload = payload_buffer.getvalue()
             (source / ".ikpk-cms-artifact.tar.gz").write_bytes(payload)
             evidence = {"artifactId": 99, "runId": 7, "attempt": 1,
@@ -1347,6 +1351,10 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
                 for name, data in members.items():
                     info = tarfile.TarInfo(name); info.size = len(data)
                     archive.addfile(info, io.BytesIO(data))
+                directory = tarfile.TarInfo(".strapi")
+                directory.type = tarfile.DIRTYPE
+                directory.mode = 0o755
+                archive.addfile(directory)
             payload = payload_buffer.getvalue()
             (source / ".ikpk-cms-artifact.tar.gz").write_bytes(payload)
             evidence = {"artifactId": 101, "runId": 17, "attempt": 1,
