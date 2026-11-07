@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Narrow, reversible migration for the staging194 source-ref policy."""
+"""Narrow, reversible migration for rehearsal host configuration."""
 import json
 import os
 import stat
@@ -7,6 +7,8 @@ import sys
 import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
+
+PRODUCTION_PROFILES = {"initial-prod", "production-static", "production-paired"}
 
 
 def _migration(current: Path, template: Path) -> tuple[dict, bool]:
@@ -40,9 +42,21 @@ def _migration(current: Path, template: Path) -> tuple[dict, bool]:
             and "cmsEnvironmentFile" in expected and "cmsEnvironmentFile" not in normalized):
         normalized["cmsEnvironmentFile"] = expected["cmsEnvironmentFile"]
         changed = True
-    if normalized != expected:
+    if normalized != expected and not _preserves_existing_payment_probe(actual, expected, normalized):
         raise ValueError("existing rehearsal config has unrelated differences; refusing migration")
     return normalized, changed
+
+
+def _preserves_existing_payment_probe(actual: dict, expected: dict, normalized: dict) -> bool:
+    """Keep an already installed production probe URL and accept no other drift."""
+    profile = expected.get("profile")
+    if profile not in PRODUCTION_PROFILES or normalized.get("profile") != profile:
+        return False
+    if "paymentStatusProbeUrl" not in actual or normalized.get("paymentStatusProbeUrl") != actual["paymentStatusProbeUrl"]:
+        return False
+    comparable = dict(normalized)
+    comparable["paymentStatusProbeUrl"] = expected.get("paymentStatusProbeUrl")
+    return comparable == expected
 
 
 def check(current: str, template: str) -> None:

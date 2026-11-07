@@ -514,5 +514,77 @@ class ReleaseCleanupTests(unittest.TestCase):
         self.assertTrue(self.old.exists())
 
 
+class CmsReleaseCleanupTests(unittest.TestCase):
+    def _state(self, history, unfinished=()):
+        return type("State", (), {
+            "read_journal_for_cleanup": lambda self, validate_history=False: history,
+            "_unfinished_operation_ids": staticmethod(lambda _rows: set(unfinished)),
+        })()
+
+    def _layout(self):
+        temporary = tempfile.TemporaryDirectory(prefix="ikpk-cms-cleanup-")
+        self.addCleanup(temporary.cleanup)
+        root = Path(temporary.name) / "releases"
+        root.mkdir()
+        current = root / "current-release"
+        rollback = root / "rollback-release"
+        stale = root / "stale-release"
+        for directory in (current, rollback, stale):
+            directory.mkdir()
+            (directory / "marker").write_text(directory.name, encoding="utf-8")
+        pointer = Path(temporary.name) / "current"
+        pointer.symlink_to(current / "cms-artifact")
+        (current / "cms-artifact").mkdir()
+        history = [{
+            "record": "start", "operationId": "op-current",
+            "oldPair": {"cmsPath": str((rollback / "cms-artifact").resolve())},
+        }, {
+            "record": "committed", "operationId": "op-current",
+        }]
+        (rollback / "cms-artifact").mkdir()
+        config = {"releaseRoot": str(root), "currentCms": str(pointer)}
+        return config, current, rollback, stale, history
+
+    def test_cms_cleanup_removes_only_finished_release_outside_current_and_rollback(self):
+        config, current, rollback, stale, history = self._layout()
+        with patch.object(host, "_mount_points", return_value=set()):
+            removed = host._cleanup_cms_releases(config, self._state(history))
+        self.assertEqual(removed, [str(stale.resolve())])
+        self.assertTrue(current.exists())
+        self.assertTrue(rollback.exists())
+        self.assertFalse(stale.exists())
+
+    def test_cms_cleanup_refuses_while_a_publication_is_unfinished(self):
+        config, current, rollback, stale, history = self._layout()
+        with self.assertRaisesRegex(host.HostFailure, "unfinished"):
+            host._cleanup_cms_releases(config, self._state(history, unfinished={"op-next"}))
+        self.assertTrue(stale.exists())
+        self.assertTrue(current.exists())
+        self.assertTrue(rollback.exists())
+
+    def test_cms_cleanup_deletes_nothing_when_rollback_target_is_already_gone(self):
+        config, current, rollback, stale, history = self._layout()
+        shutil.rmtree(rollback)
+        removed = host._cleanup_cms_releases(config, self._state(history))
+        self.assertEqual(removed, [])
+        self.assertTrue(stale.exists())
+        self.assertTrue(current.exists())
+
+    def test_cms_cleanup_keeps_restart_workspace_named_by_the_environment_file(self):
+        config, current, rollback, stale, history = self._layout()
+        restart = stale.parent / "restart-release"
+        restart.mkdir()
+        env_file = stale.parent.parent / "cms.env"
+        env_file.write_text(f"CMS_DIR={(restart / 'cms-artifact').resolve()}\n", encoding="utf-8")
+        config["cmsEnvironmentFile"] = str(env_file)
+        with patch.object(host, "_mount_points", return_value=set()):
+            removed = host._cleanup_cms_releases(config, self._state(history))
+        self.assertEqual(removed, [str(stale.resolve())])
+        self.assertTrue(restart.exists())
+
+    def test_cms_cleanup_skips_when_the_profile_has_no_cms_root(self):
+        self.assertEqual(host._cleanup_cms_releases({}, self._state([])), [])
+
+
 if __name__ == '__main__':
     unittest.main()
