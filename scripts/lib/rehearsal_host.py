@@ -1026,7 +1026,6 @@ def _operation_backup_cleanup_candidates(backup_root: Path, history: list[dict],
 
 def _cleanup_operation_backups(config: dict[str, Any], history: list[dict], marker: Optional[dict],
                                operation_id: Optional[str], mounts: set[Path]) -> list[str]:
-    print("IKPK housekeeping: CMS source release cleanup skipped; systemd EnvironmentFiles can change the restart workspace without changing the live process environment", file=sys.stderr)
     backup_root = Path(config["backupRoot"])
     root_info = backup_root.lstat()
     if not stat.S_ISDIR(root_info.st_mode) or stat.S_ISLNK(root_info.st_mode):
@@ -1418,9 +1417,140 @@ def _cleanup_site_releases(config: dict[str, Any], state: RehearsalState,
     return {"removedReleases": removed, "retainedLegacy": retained_legacy}
 
 
+def _release_dirs_mentioned(text: str, root: Path) -> set[Path]:
+    found = set()
+    prefix = str(root) + "/"
+    start = 0
+    while True:
+        index = text.find(prefix, start)
+        if index < 0:
+            return found
+        end = index + len(prefix)
+        while end < len(text) and text[end] not in " \t\n\r\"'":
+            end += 1
+        mentioned = Path(text[index:end])
+        try:
+            relative = mentioned.relative_to(root)
+        except ValueError:
+            start = end
+            continue
+        if relative.parts and (root / relative.parts[0]).exists():
+            found.add(root / relative.parts[0])
+        start = end
+
+
+def _restart_cms_releases(config: dict[str, Any], root: Path) -> set[Path]:
+    """Protect the workspace a restart would use, not only the running process."""
+    protected = set()
+    env_files = []
+    configured = config.get("cmsEnvironmentFile")
+    if isinstance(configured, str) and configured:
+        env_files.append(Path(configured))
+    unit = config.get("cmsUnit")
+    if isinstance(unit, str) and unit:
+        if not re.fullmatch(r"[A-Za-z0-9@:.\\_-]+", unit):
+            raise HostFailure("CMS unit name is unsafe; cleanup refused")
+        try:
+            listing = subprocess.check_output(["systemctl", "cat", unit], text=True, stderr=subprocess.DEVNULL)
+            pid_text = subprocess.check_output(
+                ["systemctl", "show", "-p", "MainPID", "--value", unit], text=True, stderr=subprocess.DEVNULL).strip()
+        except (OSError, subprocess.CalledProcessError) as error:
+            raise HostFailure("CMS unit environment is unreadable; cleanup refused") from error
+        for line in listing.splitlines():
+            stripped = line.strip()
+            if not stripped.startswith("EnvironmentFile="):
+                continue
+            value = stripped.split("=", 1)[1].strip()
+            if value.startswith("-"):
+                value = value[1:]
+            env_files.append(Path(value))
+        if pid_text not in ("", "0"):
+            if not pid_text.isdigit():
+                raise HostFailure("CMS service pid is unreadable; cleanup refused")
+            try:
+                live = Path(os.readlink(f"/proc/{pid_text}/cwd")).resolve()
+            except OSError as error:
+                raise HostFailure("live CMS workspace is unreadable; cleanup refused") from error
+            if root in live.parents:
+                protected.add(_cms_release_dir(root, live))
+    for env_file in env_files:
+        try:
+            text = env_file.read_text(encoding="utf-8", errors="replace")
+        except OSError as error:
+            raise HostFailure("CMS environment file is unreadable; cleanup refused") from error
+        protected.update(_release_dirs_mentioned(text, root))
+    return protected
+
+
+def _cms_release_dir(root: Path, path: Path) -> Path:
+    relative = path.resolve().relative_to(root)
+    if not relative.parts:
+        raise HostFailure("CMS path is the release root; cleanup refused")
+    return root / relative.parts[0]
+
+
+def _cleanup_cms_releases(config: dict[str, Any], state: RehearsalState) -> list[str]:
+    """Remove finished CMS release directories, keeping the live tree and its rollback."""
+    raw_root = config.get("releaseRoot")
+    raw_current = config.get("currentCms")
+    if not isinstance(raw_root, str) or not isinstance(raw_current, str):
+        return []
+    try:
+        history = state.read_journal_for_cleanup(validate_history=True)
+    except RehearsalRefusal as error:
+        raise HostFailure(str(error)) from error
+    if state._unfinished_operation_ids(history):
+        raise HostFailure("another publication is unfinished; CMS release cleanup refused")
+    root = Path(raw_root)
+    try:
+        root_info = root.lstat()
+        if not stat.S_ISDIR(root_info.st_mode) or stat.S_ISLNK(root_info.st_mode):
+            raise HostFailure("CMS release root is unsafe; cleanup refused")
+        root = root.resolve(strict=True)
+        current = Path(raw_current).resolve(strict=True)
+        current_release = _cms_release_dir(root, current)
+    except (OSError, ValueError) as error:
+        raise HostFailure("CMS release cleanup cannot inspect its root; cleanup refused") from error
+    committed = [row for row in history if row.get("record") == "committed"]
+    if not committed:
+        return []
+    operation_id = committed[-1].get("operationId")
+    start = next((row for row in history
+                  if row.get("operationId") == operation_id and row.get("record") == "start"), None)
+    old_raw = (start or {}).get("oldPair", {}).get("cmsPath") if isinstance(start, dict) else None
+    if not isinstance(old_raw, str):
+        return []
+    old = Path(old_raw)
+    try:
+        if not old.exists():
+            return []
+        protected = {current_release, _cms_release_dir(root, old.resolve())}
+        protected.update(_restart_cms_releases(config, root))
+    except (OSError, ValueError) as error:
+        raise HostFailure("CMS rollback target is outside its release root; cleanup refused") from error
+    mounts = _mount_points()
+    removed = []
+    for candidate in sorted(root.iterdir()):
+        if candidate.name.startswith(".") or candidate in protected:
+            continue
+        info = candidate.lstat()
+        if stat.S_ISLNK(info.st_mode) or not stat.S_ISDIR(info.st_mode):
+            raise HostFailure("unexpected entry in CMS release root; cleanup refused")
+        _remove_release_tree(candidate, mounts)
+        removed.append(str(candidate.resolve()))
+    directory = os.open(root, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+    try:
+        os.fsync(directory)
+    finally:
+        os.close(directory)
+    return removed
+
+
 def _cleanup_after_commit(config: dict[str, Any], state: RehearsalState, operation_id: str) -> dict[str, Any]:
     try:
-        return _cleanup_site_releases(config, state, operation_id)
+        result = _cleanup_site_releases(config, state, operation_id)
+        result["removedCmsReleases"] = _cleanup_cms_releases(config, state)
+        return result
     except (HostFailure, OSError, ValueError) as error:
         try:
             marker = _read_site_publication_marker(config)
@@ -5176,7 +5306,9 @@ def dispatch(args: argparse.Namespace) -> dict[str, Any]:
             if _read_site_publication_marker(config) != cleanup_marker_snapshot:
                 raise HostFailure("site-publication marker changed while housekeeping was acquiring locks; retry required")
             _consume_site_cleanup_request(config)
-            return {"status": "succeeded", **_cleanup_site_releases(config, state, None)}
+            static_result = _cleanup_site_releases(config, state, None)
+            return {"status": "succeeded", **static_result,
+                    "removedCmsReleases": _cleanup_cms_releases(config, state)}
         rows = state._operation_rows(args.operation_id)
         static_main_owned = any(row.get("operationKind") == "static-main" for row in rows)
         if static_main_owned and args.action in ("cms-update", "static-publish", "recover", "restore", "finalize-recover"):
