@@ -2874,6 +2874,13 @@ def _verify_cms_artifact_bytes(source_root: Path, artifact: Path, expected: dict
                     "database/.migrations-expected", "scripts/run-data-migrations.mjs")
         if any(not (artifact / name).is_file() or (artifact / name).is_symlink() for name in required):
             raise HostFailure("CI CMS artifact is structurally incomplete")
+        strapi_cache = artifact / ".strapi"
+        if ".strapi" not in expected_paths or strapi_cache.is_symlink() or not strapi_cache.is_dir():
+            raise HostFailure("CI CMS artifact is missing the .strapi directory required by the CMS service")
+        if cms_uid is not None:
+            cache_info = strapi_cache.lstat()
+            if cache_info.st_uid != cms_uid or stat.S_IMODE(cache_info.st_mode) != 0o755:
+                raise HostFailure("CI CMS artifact .strapi directory is not writable by the CMS service user")
         return payload
     finally:
         tar.close()

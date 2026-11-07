@@ -3,7 +3,9 @@ import getpass
 import hashlib
 import io
 import json
+import os
 import sqlite3
+import stat
 import tarfile
 import tempfile
 import unittest
@@ -18,7 +20,7 @@ def sha(payload: bytes) -> str:
     return hashlib.sha256(payload).hexdigest()
 
 
-def provenance(source_sha: str) -> dict:
+def provenance(source_sha: str, *, include_strapi: bool = True) -> dict:
     result = {
         "sourceSha": source_sha, "ref": "refs/heads/main", "workflow": "Tests",
         "workflowName": "Tests", "headBranch": "main", "event": "push", "runId": 7,
@@ -44,16 +46,22 @@ def provenance(source_sha: str) -> dict:
             info = tarfile.TarInfo(name)
             info.size = len(data)
             archive.addfile(info, io.BytesIO(data))
+        if include_strapi:
+            directory = tarfile.TarInfo(".strapi")
+            directory.type = tarfile.DIRTYPE
+            directory.mode = 0o755
+            archive.addfile(directory)
     payload = payload_io.getvalue()
     result["cmsArtifact"] = {"artifactId": 99, "runId": 7, "attempt": 1,
                               "archiveSha256": "c" * 64, "payloadSha256": sha(payload)}
     return result, payload, members
 
 
-def prepared_artifact(root: Path, operation_id: str = "artifact-op") -> dict:
+def prepared_artifact(root: Path, operation_id: str = "artifact-op", *,
+                      include_strapi: bool = True) -> dict:
     root = root.resolve()
     source_sha = "a" * 40
-    admitted, payload, members = provenance(source_sha)
+    admitted, payload, members = provenance(source_sha, include_strapi=include_strapi)
     source = root / f"{source_sha}-{operation_id}"
     cms = source / "cms"
     cms.mkdir(parents=True)
@@ -183,4 +191,49 @@ class CmsArtifactHostConsumerTests(unittest.TestCase):
                  patch.object(rehearsal_host, "_activate_cms") as activate:
                 with self.assertRaisesRegex(rehearsal_host.HostFailure, "artifact bytes differ"):
                     rehearsal_host._cms_update(f["config"], State(), args)
-            activate.assert_not_called()
+                activate.assert_not_called()
+
+    def test_missing_strapi_directory_is_refused_before_live_database_replacement(self):
+        with tempfile.TemporaryDirectory(prefix="ikpk-missing-strapi-") as temporary:
+            root = Path(temporary).resolve()
+            operation_id = "strapi-op"
+            source_sha = "a" * 40
+            admitted, payload, members = provenance(source_sha, include_strapi=False)
+            source = root / f"{source_sha}-{operation_id}"
+            source.mkdir()
+            (source / ".ikpk-rehearsal-ci.json").write_text(json.dumps(admitted), encoding="utf-8")
+            (source / ".ikpk-cms-artifact.tar.gz").write_bytes(payload)
+            artifact = source / ".staging193-rehearsal" / operation_id / "migration" / "cms-artifact"
+            for name, data in members.items():
+                target = artifact / name
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_bytes(data)
+            live = root / "data.db"
+            live.write_bytes(b"live-database")
+            candidate = root / "candidate.db"
+            candidate.write_bytes(b"replacement-database")
+            current = root / "current"
+            (root / "releases").mkdir()
+            config = {"profile": "production-paired", "cmsUser": getpass.getuser(),
+                      "cmsDatabase": str(live), "currentCms": str(current),
+                      "releaseRoot": str(root / "releases")}
+            with self.assertRaisesRegex(rehearsal_host.HostFailure, r"\.strapi"):
+                rehearsal_host._activate_cms(
+                    config, artifact, candidate, root / "capture", source, source_sha,
+                    cms_artifact=admitted["cmsArtifact"])
+            self.assertEqual(live.read_bytes(), b"live-database")
+            self.assertFalse(current.exists() or current.is_symlink())
+
+    def test_unpacked_strapi_directory_is_writable_by_the_cms_user(self):
+        with tempfile.TemporaryDirectory(prefix="ikpk-strapi-permissions-") as temporary:
+            f = prepared_artifact(Path(temporary), "strapi-mode")
+            cache = f["artifact"] / ".strapi"
+            info = cache.lstat()
+            self.assertTrue(stat.S_ISDIR(info.st_mode))
+            self.assertFalse(cache.is_symlink())
+            self.assertEqual(info.st_uid, os.getuid())
+            self.assertEqual(info.st_gid, os.getgid())
+            self.assertEqual(stat.S_IMODE(info.st_mode), 0o755)
+            probe = cache / "cache-probe"
+            probe.write_text("writable", encoding="utf-8")
+            self.assertEqual(probe.read_text(encoding="utf-8"), "writable")

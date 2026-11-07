@@ -111,6 +111,10 @@ jobs:
                       raise SystemExit("CMS archive contains public/uploads")
                   if normalized == "node_modules" or "/node_modules/" in f"/{normalized}/":
                       raise SystemExit("CMS archive contains node_modules")
+                  if normalized == ".strapi" and not member.isdir():
+                      raise SystemExit("CMS archive .strapi entry is not a directory")
+          if ".strapi" not in seen:
+              raise SystemExit("CMS archive is missing the .strapi directory required by the CMS service")
           if "." in seen:
               raise SystemExit("CMS archive contains the forbidden root member '.'")
           print(f"CMS archive paths verified ({len(seen)} entries)")
