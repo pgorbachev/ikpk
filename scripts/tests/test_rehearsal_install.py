@@ -33,6 +33,116 @@ class InstalledEntrypointTests(unittest.TestCase):
             self.assertEqual(len(backups), 1)
             self.assertEqual(backups[0].read_bytes(), original)
 
+    def test_production_migration_keeps_installed_payment_probe_and_adds_missing_lock(self):
+        template = {
+            "profile": "initial-prod",
+            "paymentStatusProbeUrl": "https://payments.example/template",
+            "publicationLock": "/var/www/ikpk/.publication.lock",
+            "cmsUser": "cms",
+        }
+        installed_probe = "https://payments.example/installed?keep=exact"
+        current = dict(template)
+        current.pop("publicationLock")
+        current["paymentStatusProbeUrl"] = installed_probe
+        with tempfile.TemporaryDirectory(prefix="ikpk-probe-preserve-") as temporary:
+            root = Path(temporary)
+            template_path, config_path = root / "template.json", root / "rehearsal.json"
+            template_path.write_text(json.dumps(template), encoding="utf-8")
+            original = json.dumps(current, indent=2).encode()
+            config_path.write_bytes(original)
+            rehearsal_config.check(str(config_path), str(template_path))
+            rehearsal_config.migrate(str(config_path), str(template_path))
+            migrated = json.loads(config_path.read_text(encoding="utf-8"))
+            self.assertEqual(migrated["paymentStatusProbeUrl"], installed_probe)
+            self.assertEqual(migrated["publicationLock"], template["publicationLock"])
+            self.assertEqual(migrated["cmsUser"], "cms")
+            self.assertEqual(list(root.glob("rehearsal.json.pre-update-*.bak"))[0].read_bytes(), original)
+
+    def test_production_probe_difference_alone_does_not_rewrite_config(self):
+        template = {"profile": "production-static", "paymentStatusProbeUrl": "https://payments.example/template"}
+        current = {"profile": "production-static", "paymentStatusProbeUrl": "https://payments.example/installed"}
+        with tempfile.TemporaryDirectory(prefix="ikpk-probe-noop-") as temporary:
+            root = Path(temporary)
+            template_path, config_path = root / "template.json", root / "rehearsal.json"
+            template_path.write_text(json.dumps(template), encoding="utf-8")
+            original = json.dumps(current).encode()
+            config_path.write_bytes(original)
+            rehearsal_config.migrate(str(config_path), str(template_path))
+            self.assertEqual(config_path.read_bytes(), original)
+            self.assertFalse(list(root.glob("*.bak")))
+
+    def test_production_migration_refuses_probe_drift_combined_with_another_change(self):
+        template = {
+            "profile": "production-paired",
+            "paymentStatusProbeUrl": "https://payments.example/template",
+            "cmsUser": "cms",
+        }
+        current = {
+            "profile": "production-paired",
+            "paymentStatusProbeUrl": "https://payments.example/installed",
+            "cmsUser": "other",
+        }
+        with tempfile.TemporaryDirectory(prefix="ikpk-probe-refuse-") as temporary:
+            root = Path(temporary)
+            template_path, config_path = root / "template.json", root / "rehearsal.json"
+            template_path.write_text(json.dumps(template), encoding="utf-8")
+            config_path.write_text(json.dumps(current), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "unrelated differences"):
+                rehearsal_config.check(str(config_path), str(template_path))
+            self.assertEqual(json.loads(config_path.read_text()), current)
+
+    def test_real_production_templates_keep_foreign_probe_and_fill_one_missing_field(self):
+        cases = (
+            ("initial-prod-rehearsal.json", "publicationLock"),
+            ("production-static-rehearsal.json", "siteRefreshState"),
+            ("production-paired-rehearsal.json", "sitePublicationMarker"),
+        )
+        installed_probe = "https://payments.example/installed-not-template"
+        for filename, missing in cases:
+            template = json.loads((ROOT / "scripts" / filename).read_text(encoding="utf-8"))
+            current = dict(template)
+            current.pop(missing)
+            current["paymentStatusProbeUrl"] = installed_probe
+            with tempfile.TemporaryDirectory(prefix="ikpk-real-probe-") as temporary:
+                root = Path(temporary)
+                template_path, config_path = root / "template.json", root / "rehearsal.json"
+                template_path.write_text(json.dumps(template), encoding="utf-8")
+                config_path.write_text(json.dumps(current), encoding="utf-8")
+                rehearsal_config.migrate(str(config_path), str(template_path))
+                migrated = json.loads(config_path.read_text(encoding="utf-8"))
+                self.assertEqual(migrated["paymentStatusProbeUrl"], installed_probe)
+                self.assertEqual(migrated[missing], template[missing])
+                for key, value in template.items():
+                    if key != "paymentStatusProbeUrl":
+                        self.assertEqual(migrated[key], value, filename)
+
+    def test_production_migration_does_not_invent_a_missing_payment_probe(self):
+        template = json.loads((ROOT / "scripts/initial-prod-rehearsal.json").read_text(encoding="utf-8"))
+        current = dict(template)
+        current.pop("paymentStatusProbeUrl")
+        with tempfile.TemporaryDirectory(prefix="ikpk-missing-probe-") as temporary:
+            root = Path(temporary)
+            template_path, config_path = root / "template.json", root / "rehearsal.json"
+            template_path.write_text(json.dumps(template), encoding="utf-8")
+            original = json.dumps(current)
+            config_path.write_text(original, encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "unrelated differences"):
+                rehearsal_config.migrate(str(config_path), str(template_path))
+            self.assertEqual(config_path.read_text(encoding="utf-8"), original)
+            self.assertFalse(list(root.glob("*.bak")))
+
+    def test_staging_migration_refuses_payment_probe_drift(self):
+        template = {"profile": "staging194", "paymentStatusProbeUrl": "https://payments.example/template"}
+        current = {"profile": "staging194", "paymentStatusProbeUrl": "https://payments.example/installed"}
+        with tempfile.TemporaryDirectory(prefix="ikpk-staging-probe-") as temporary:
+            root = Path(temporary)
+            template_path, config_path = root / "template.json", root / "rehearsal.json"
+            template_path.write_text(json.dumps(template), encoding="utf-8")
+            config_path.write_text(json.dumps(current), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "unrelated differences"):
+                rehearsal_config.migrate(str(config_path), str(template_path))
+            self.assertFalse(list(root.glob("*.bak")))
+
     def test_real_staging194_config_without_profile_migrates_and_installer_accepts_it(self):
         template_path = ROOT / "scripts/staging193-rehearsal.json"
         template = json.loads(template_path.read_text(encoding="utf-8"))
@@ -164,6 +274,8 @@ class InstalledEntrypointTests(unittest.TestCase):
         ):
             self.assertIn(path, installer)
         self.assertIn('json.load(source)["backupRoot"]', installer)
+        self.assertIn('json.load(source)["releaseRoot"]', installer)
+        self.assertIn("$cleanup_cms_release_root", installer)
         self.assertNotIn("ReadWritePaths=/var/www/ikpk/releases /var/www/ikpk/.publication.lock", installer)
         for profile in ("initial-prod", "production-static", "production-paired"):
             self.assertIn("-/var/lib/ikpk-rehearsal/" + profile, installer)

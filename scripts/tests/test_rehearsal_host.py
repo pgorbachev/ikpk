@@ -112,10 +112,12 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
                     patch.object(rehearsal_host, "_assert_site_publication_admission"), \
                     patch.object(rehearsal_host, "_consume_site_cleanup_request"), \
                     patch.object(rehearsal_host, "_cleanup_site_releases",
-                                 return_value={"removedReleases": [], "retainedLegacy": []}):
+                                 return_value={"removedReleases": [], "retainedLegacy": []}), \
+                    patch.object(rehearsal_host, "_cleanup_cms_releases", return_value=[]):
                 result = rehearsal_host.dispatch(Namespace(profile="staging194", action="cleanup-site"))
 
-            self.assertEqual(result, {"status": "succeeded", "removedReleases": [], "retainedLegacy": []})
+            self.assertEqual(result, {"status": "succeeded", "removedReleases": [], "retainedLegacy": [],
+                                      "removedCmsReleases": []})
 
             with common_patches[0], common_patches[1], common_patches[2], common_patches[3], \
                     patch.object(rehearsal_host, "_configure_profile_temp"):
@@ -208,10 +210,12 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
                 patch.object(rehearsal_host, "_assert_site_publication_admission"), \
                 patch.object(rehearsal_host, "_consume_site_cleanup_request") as consume, \
                 patch.object(rehearsal_host, "_cleanup_site_releases",
-                             return_value={"removedReleases": [], "retainedLegacy": []}) as cleanup:
+                             return_value={"removedReleases": [], "retainedLegacy": []}) as cleanup, \
+                patch.object(rehearsal_host, "_cleanup_cms_releases", return_value=[]):
             result = rehearsal_host.dispatch(args)
 
-        self.assertEqual(result, {"status": "succeeded", "removedReleases": [], "retainedLegacy": []})
+        self.assertEqual(result, {"status": "succeeded", "removedReleases": [], "retainedLegacy": [],
+                                  "removedCmsReleases": []})
         configure_temp.assert_not_called()
         consume.assert_called_once_with(config)
         cleanup.assert_called_once_with(config, state, None)
@@ -321,7 +325,8 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
                      patch.object(rehearsal_host, "_assert_site_refresh_idle"), \
                      patch.object(rehearsal_host, "_consume_site_cleanup_request", wraps=consume) as consume_mock, \
                      patch.object(rehearsal_host, "_cleanup_site_releases",
-                                  return_value={"removed": []}) as cleanup_mock:
+                                  return_value={"removed": []}) as cleanup_mock, \
+                     patch.object(rehearsal_host, "_cleanup_cms_releases", return_value=[]):
                     with self.assertRaisesRegex(rehearsal_host.HostFailure, "another publisher"):
                         rehearsal_host.dispatch(args)
                     self.assertEqual(request.read_bytes(), request_bytes)
@@ -330,7 +335,7 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
 
                     fcntl.flock(descriptor, fcntl.LOCK_UN)
                     result = rehearsal_host.dispatch(args)
-                    self.assertEqual(result, {"status": "succeeded", "removed": []})
+                    self.assertEqual(result, {"status": "succeeded", "removed": [], "removedCmsReleases": []})
                     self.assertFalse(request.exists())
                     consume_mock.assert_called_once()
                     cleanup_mock.assert_called_once()

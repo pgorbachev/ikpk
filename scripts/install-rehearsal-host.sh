@@ -354,6 +354,15 @@ if not os.path.isabs(path) or path == "/":
 print(path)
 PY
 )
+  cleanup_cms_release_root=$(python3 - "$CONFIG" <<'PY'
+import json, os, sys
+with open(sys.argv[1], encoding="utf-8") as source:
+    path = json.load(source)["releaseRoot"]
+if not os.path.isabs(path) or path == "/":
+    raise SystemExit("CMS release root must be an absolute non-root path")
+print(path)
+PY
+)
   site_state_dir=$(python3 - "$CONFIG" <<'PY'
 import json, os, sys
 with open(sys.argv[1], encoding="utf-8") as source:
@@ -397,7 +406,7 @@ ProtectControlGroups=yes
 # directory and fsyncs its parent. CMS and the 194 transport serialize through
 # the shared site-refresh reservation; production transport also uses its
 # configured .publication.lock. Do not require that prod-only inode on 194.
-ReadWritePaths=/var/www/ikpk $site_state_dir $state_dir $cleanup_profile_state_dirs /var/lib/ikpk-rehearsal/site-publication $cleanup_backup_root $cleanup_profile_artifact_roots
+ReadWritePaths=/var/www/ikpk $site_state_dir $state_dir $cleanup_profile_state_dirs /var/lib/ikpk-rehearsal/site-publication $cleanup_backup_root $cleanup_profile_artifact_roots $cleanup_cms_release_root
 EOF
   chmod 0644 "$unit_tmp"
   mv -f -- "$unit_tmp" "$systemd_dir/ikpk-site-housekeeping.service"
