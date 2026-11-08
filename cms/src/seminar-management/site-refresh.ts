@@ -340,12 +340,12 @@ async function restorePrevious({ hostPublicationStatus: readHostPublication = ho
           } catch (error) { checked = { ok: false, detail: error?.message || MESSAGES.restoreVerifyFailed }; }
           if (!checked.ok) {
             return { status: 'verification-failed', phase: 'verifying', message: MESSAGES.restoreVerifyFailed,
-              detail: redact(checked.detail), releaseId: targetId,
-              previousReleaseId: source, switched: true };
+              detail: redact(checked.detail), releaseId: targetId, commit: identity.commit,
+              previousReleaseId: source, switched: true, finishedAt: new Date().toISOString() };
           }
           effectiveRecord = {
             status: 'succeeded', phase: 'done', message: MESSAGES.restored,
-            releaseId: targetId, switched: true,
+            releaseId: targetId, commit: identity.commit, switched: true,
             startedAt: loaded.record.startedAt, finishedAt: new Date().toISOString(),
             siteUrl: checked.siteUrl || null,
           };
