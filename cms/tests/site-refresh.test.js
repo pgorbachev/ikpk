@@ -189,12 +189,27 @@ test('без настроенной проверки релиз не перек�
 });
 
 test('ошибка проверки после переключения не называется успехом', async () => {
-  const { deps } = harness({ verify: async () => ({ ok: false, detail: 'HTTP 500' }) });
+  const { deps } = harness({ verify: async () => ({ ok: false, detail: 'HTTP 301' }) });
   const result = await runRefresh(deps);
   assert.equal(result.status, 'verification-failed');
   assert.equal(result.switched, true);
   assert.equal(result.message, MESSAGES.verificationFailed);
   assert.match(result.message, /не автоматический откат/);
+  assert.equal(result.detail, 'HTTP 301');
+  assert.equal(result.releaseId, 'content-1');
+  assert.equal(result.commit, 'a'.repeat(40));
+  assert.equal(result.finishedAt, '2026-09-27T00:00:00.000Z');
+  assert.equal(publicView(result).commit, 'a'.repeat(40));
+});
+
+test('успешное обновление запоминает релиз и коммит этой попытки', async () => {
+  const { deps } = harness();
+  const result = await runRefresh(deps);
+  assert.equal(result.status, 'succeeded');
+  assert.equal(result.releaseId, 'content-1');
+  assert.equal(result.commit, 'a'.repeat(40));
+  assert.equal(result.finishedAt, '2026-09-27T00:00:00.000Z');
+  assert.equal(publicView(result).releaseId, 'content-1');
 });
 
 test('повторное нажатие показывает уже идущую сборку', () => {

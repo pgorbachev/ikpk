@@ -44,6 +44,7 @@ export function publicView(record) {
     startedAt: record.startedAt || null,
     finishedAt: record.finishedAt || null,
     releaseId: record.releaseId || null,
+    commit: typeof record.commit === 'string' && /^[0-9a-f]{40}$/.test(record.commit) ? record.commit : null,
     previousReleaseId: record.previousReleaseId || null,
     siteUrl: record.siteUrl || null,
     detail: record.detail ? redact(record.detail) : null,
@@ -746,6 +747,7 @@ export async function runRefresh(deps) {
     status: 'running',
     phase: 'verifying',
     releaseId: built.releaseId,
+    commit: built.identity.commit,
     previousReleaseId: previous,
     startedAt,
     pid: deps.pid,
@@ -760,6 +762,7 @@ export async function runRefresh(deps) {
       message: MESSAGES.verificationFailed,
       detail: redact(verified.detail),
       releaseId: built.releaseId,
+      commit: built.identity.commit,
       previousReleaseId: previous,
       startedAt,
       finishedAt: deps.now(),
@@ -772,6 +775,7 @@ export async function runRefresh(deps) {
     phase: 'done',
     message: MESSAGES.succeeded,
     releaseId: built.releaseId,
+    commit: built.identity.commit,
     previousReleaseId: previous,
     siteUrl: verified.siteUrl || null,
     startedAt,
@@ -808,6 +812,8 @@ export async function runRestore(deps) {
         message: MESSAGES.restoreVerifyFailed,
         detail: redact(verified.detail),
         releaseId,
+        commit: expected.commit,
+        finishedAt: new Date().toISOString(),
         switched: true,
       });
     }
@@ -815,6 +821,8 @@ export async function runRestore(deps) {
       status: 'succeeded',
       message: MESSAGES.restored,
       releaseId,
+      commit: expected.commit,
+      finishedAt: new Date().toISOString(),
       siteUrl: verified.siteUrl || null,
       switched: true,
     });
@@ -826,6 +834,8 @@ export async function runRestore(deps) {
       message: MESSAGES.restoreVerifyFailed,
       detail: redact(error && error.message),
       releaseId,
+      commit: expected.commit,
+      finishedAt: new Date().toISOString(),
       switched: true,
     });
   }

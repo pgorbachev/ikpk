@@ -263,6 +263,27 @@ test('publish: акция без тела отклоняется', async () => {
   );
 });
 
+test('publish: семинар без SEO-заголовка и описания публикуется', async () => {
+  const { run } = makeStrapi({
+    draftsByUid: {
+      'doc-1': {
+        name: 'Семинар',
+        slug: 'dolgoletie',
+        course_group: { id: 1 },
+        description: 'текст',
+        documents_state: 'not-issued',
+        seo: null,
+      },
+    },
+  });
+  const result = await run({
+    uid: 'api::seminar.seminar',
+    action: 'publish',
+    params: { documentId: 'doc-1' },
+  });
+  assert.equal(result, 'next-called');
+});
+
 test('publish: семинар с documentsState=issued требует непустого набора документов', async () => {
   const { run } = makeStrapi({
     draftsByUid: {
