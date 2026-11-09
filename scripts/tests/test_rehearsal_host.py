@@ -648,6 +648,7 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
                 def _append(self, row): self.rows.append(row)
             config = {"profile": "production-paired", "cmsDatabase": str(database), "backupRoot": str(root / "backups"),
                       "currentCms": str(current_cms), "currentStatic": str(current_static),
+                      "cmsUser": getpass.getuser(),
                       "releaseRoot": str(root), "staticReleaseRoot": str(root),
                       "mediaRoots": [{"prefix": "/uploads/", "path": str(uploads)}]}
             with patch.object(rehearsal_host, "_start_acquisition"), patch.object(rehearsal_host, "_write_gate"), \
@@ -2654,8 +2655,11 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
             old.mkdir(); new.mkdir(); outside.mkdir()
             pointer = root / "current"
             pointer.symlink_to(old)
+            displaced_links = []
             def substitute(path, uid, gid, *, follow_symlinks=True):
-                path.unlink()
+                displaced = path.with_name(path.name + "-displaced")
+                path.rename(displaced)
+                displaced_links.append(displaced)
                 path.symlink_to(outside, target_is_directory=True)
                 return None
 
@@ -2664,9 +2668,12 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
                     _switch_pointer(pointer, new, releases, owner=(os.getuid(), os.getgid()))
             self.assertEqual(pointer.resolve(), old.resolve())
             stage = next(root.glob(".ikpk-pointer-stage-*"))
-            substituted = next(stage.iterdir())
+            substituted = next(path for path in stage.iterdir() if path not in displaced_links)
             self.assertEqual(substituted.resolve(), outside.resolve())
+            self.assertEqual(os.readlink(substituted), str(outside))
             substituted.unlink()
+            for displaced in displaced_links:
+                displaced.unlink()
             stage.rmdir()
 
     def test_static_pointer_switch_ignores_crash_left_private_link(self):
@@ -3756,7 +3763,8 @@ class StaticMainAdmissionTests(unittest.TestCase):
                 "operationId": "main-op", "sourceSha": "a" * 40, "oldStaticPath": str(old),
                 "candidateStaticPath": str(candidate), "staticTreeSha256": digest})
             result = rehearsal_host._static_main_recover(
-                {"currentStatic": str(pointer), "staticReleaseRoot": str(releases)}, state, "main-op")
+                {"cmsUser": getpass.getuser(), "currentStatic": str(pointer),
+                 "staticReleaseRoot": str(releases)}, state, "main-op")
             self.assertEqual(result["phase"], "recovered")
             self.assertEqual(pointer.resolve(strict=True), old.resolve(strict=True))
             self.assertTrue(any(row.get("record") == "static-main-recovered"
@@ -3808,6 +3816,7 @@ class StaticMainAdmissionTests(unittest.TestCase):
             state = RehearsalState(state_dir)
             config = {"profile": "staging194", "staticMainReleasePolicy": "ci-only-approved",
                 "staticReleaseRoot": str(releases), "currentStatic": str(pointer),
+                "cmsUser": getpass.getuser(),
                 "siteHealthUrl": "https://194.226.99.10/", "siteProbeUrls": []}
             provenance = {"repository": "pgorbachev/ikpk", "ref": "refs/heads/main",
                 "sourceSha": "a" * 40, "workflow": "Tests", "workflowName": "Tests",
@@ -3885,6 +3894,7 @@ class StaticMainAdmissionTests(unittest.TestCase):
                     for index, workflow in enumerate(rehearsal_host.STATIC_MAIN_ADDITIONAL_WORKFLOWS)]}
             config = {"profile": "staging194", "staticMainReleasePolicy": "ci-only-approved",
                       "staticReleaseRoot": str(releases), "currentStatic": str(pointer),
+                      "cmsUser": getpass.getuser(),
                       "releaseRoot": str(root / "source"), "siteHealthUrl": "https://site.test/health",
                       "siteBaseUrl": "https://site.test", "siteReleaseUrl": "https://site.test/release.json",
                       "siteProbeUrls": ["https://site.test/"]}
