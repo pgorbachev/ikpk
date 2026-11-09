@@ -147,6 +147,9 @@ export default defineConfig({
   // $uri/ — иначе он редиректит на вариант со слэшем и смысл теряется.
   trailingSlash: 'never',
   vite: {
+    // `node_modules` can point at an immutable shared dependency release. Keep
+    // Vite's prebundle cache in the writable workspace instead of following it.
+    cacheDir: join(webRoot, '.astro', 'vite-cache'),
     build: {
       // Vite 8 минифицирует CSS через lightningcss, который по умолчанию
       // переписывает медиазапросы в range-синтаксис: (max-width:640px) →

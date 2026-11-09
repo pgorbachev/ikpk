@@ -2315,6 +2315,7 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
                       "writerUnits": ["ikpk-cms-test.service"], "cmsHealthUrl": "http://127.0.0.1/health",
                       "siteHealthUrl": "https://127.0.0.1/", "currentCms": str(current_cms),
                       "releaseRoot": str(cms_releases), "currentStatic": str(current_static),
+                      "cmsUser": getpass.getuser(),
                       "staticReleaseRoot": str(static_releases),
                       "mediaRoots": [{"path": str(uploads), "prefix": "/uploads/"},
                                      {"path": str(current_static / "media"), "prefix": "/media/"}]}
@@ -2593,6 +2594,98 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
             with self.assertRaisesRegex(Exception, "escapes configured root"):
                 _switch_pointer(pointer, outside, releases)
             self.assertEqual(pointer.resolve(), new.resolve())
+
+    def test_static_pointer_is_owned_by_cms_before_atomic_switch_and_old_pointer_survives_failure(self):
+        with tempfile.TemporaryDirectory(prefix="ikpk-pointer-owner-") as temporary:
+            root = Path(temporary)
+            releases = root / "releases"
+            releases.mkdir()
+            old, new = releases / "old", releases / "new"
+            old.mkdir()
+            new.mkdir()
+            root.chmod(0o3775)
+            pointer = root / "current"
+            pointer.symlink_to(old)
+            uid, gid = os.getuid(), os.getgid()
+
+            _switch_pointer(pointer, new, releases, owner=(uid, gid))
+            self.assertEqual(pointer.resolve(), new.resolve())
+            self.assertEqual((pointer.lstat().st_uid, pointer.lstat().st_gid), (uid, gid))
+
+            with patch.object(rehearsal_host.os, "chown", side_effect=PermissionError("chown denied")):
+                with self.assertRaisesRegex(PermissionError, "chown denied"):
+                    _switch_pointer(pointer, old, releases, owner=(uid + 1, gid + 1))
+            self.assertEqual(pointer.resolve(), new.resolve())
+            self.assertEqual(list(root.glob(".ikpk-pointer-stage-*")), [])
+
+    def test_static_pointer_eexist_does_not_delete_competing_staging_link_or_change_current(self):
+        with tempfile.TemporaryDirectory(prefix="ikpk-pointer-eexist-") as temporary:
+            root = Path(temporary)
+            releases = root / "releases"
+            releases.mkdir()
+            old, new, outside = releases / "old", releases / "new", root / "outside"
+            old.mkdir(); new.mkdir(); outside.mkdir()
+            pointer = root / "current"
+            pointer.symlink_to(old)
+            original_symlink_to = Path.symlink_to
+
+            def collide(path, target, **kwargs):
+                if path.parent.name.startswith(".ikpk-pointer-stage-"):
+                    original_symlink_to(path, outside, **kwargs)
+                    raise FileExistsError("simulated competing entry")
+                return original_symlink_to(path, target, **kwargs)
+
+            with patch.object(Path, "symlink_to", autospec=True, side_effect=collide):
+                with self.assertRaisesRegex(FileExistsError, "competing entry"):
+                    _switch_pointer(pointer, new, releases, owner=(os.getuid(), os.getgid()))
+            self.assertEqual(pointer.resolve(), old.resolve())
+            stage = next(root.glob(".ikpk-pointer-stage-*"))
+            competing = next(stage.iterdir())
+            self.assertEqual(competing.resolve(), outside.resolve())
+            competing.unlink()
+            stage.rmdir()
+
+    def test_static_pointer_rejects_staging_link_substitution_without_clobbering_current(self):
+        with tempfile.TemporaryDirectory(prefix="ikpk-pointer-substitution-") as temporary:
+            root = Path(temporary)
+            releases = root / "releases"
+            releases.mkdir()
+            old, new, outside = releases / "old", releases / "new", root / "outside"
+            old.mkdir(); new.mkdir(); outside.mkdir()
+            pointer = root / "current"
+            pointer.symlink_to(old)
+            def substitute(path, uid, gid, *, follow_symlinks=True):
+                path.unlink()
+                path.symlink_to(outside, target_is_directory=True)
+                return None
+
+            with patch.object(rehearsal_host.os, "chown", side_effect=substitute):
+                with self.assertRaisesRegex(rehearsal_host.HostFailure, "changed before activation"):
+                    _switch_pointer(pointer, new, releases, owner=(os.getuid(), os.getgid()))
+            self.assertEqual(pointer.resolve(), old.resolve())
+            stage = next(root.glob(".ikpk-pointer-stage-*"))
+            substituted = next(stage.iterdir())
+            self.assertEqual(substituted.resolve(), outside.resolve())
+            substituted.unlink()
+            stage.rmdir()
+
+    def test_static_pointer_switch_ignores_crash_left_private_link(self):
+        with tempfile.TemporaryDirectory(prefix="ikpk-pointer-crash-left-") as temporary:
+            root = Path(temporary)
+            releases = root / "releases"
+            releases.mkdir()
+            old, new = releases / "old", releases / "new"
+            old.mkdir(); new.mkdir()
+            pointer = root / "current"
+            pointer.symlink_to(old)
+            stage = root / ".ikpk-pointer-stage-interrupted"
+            stage.mkdir(mode=0o700)
+            (stage / "interrupted-operation").symlink_to(old)
+
+            _switch_pointer(pointer, new, releases, owner=(os.getuid(), os.getgid()))
+
+            self.assertEqual(pointer.resolve(), new.resolve())
+            self.assertEqual((stage / "interrupted-operation").resolve(), old.resolve())
 
     def test_offhost_backup_verifies_actual_database_and_media_member_digests(self):
         archive = backup_archive()
@@ -2981,6 +3074,7 @@ class StaticMainAdmissionTests(unittest.TestCase):
             "operationId": "main-op", "sourceSha": "a" * 40, "staticTreeSha256": candidate_digest,
             "snapshotId": "snap:main"})
         return {"profile": "staging194", "currentStatic": str(pointer), "staticReleaseRoot": str(releases),
+                "cmsUser": getpass.getuser(),
                 "currentCms": str(current_cms)}, state, pointer, old, candidate, foreign
 
     def test_static_main_expired_rollback_requires_exact_current_and_durable_audit(self):
