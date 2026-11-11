@@ -13,6 +13,7 @@ import secrets
 import io
 import hashlib
 import json
+import errno
 import fcntl
 import os
 import pwd
@@ -25,6 +26,7 @@ import sys
 import tarfile
 import tempfile
 import time
+import uuid
 from contextlib import contextmanager, nullcontext
 from pathlib import Path
 from typing import Any, Callable, Optional
@@ -2409,25 +2411,92 @@ def _record_fenced_baseline(config: dict[str, Any], state: RehearsalState,
                    "sourceSha": source_sha, "oldPair": baseline})
 
 
-def _switch_pointer(pointer: Path, target: Path, allowed_root: Path) -> None:
-    target = target.resolve(strict=True)
-    allowed_root = allowed_root.resolve(strict=True)
-    if target == allowed_root or allowed_root not in target.parents:
-        raise HostFailure(f"release target escapes configured root: {target}")
-    temporary = pointer.with_name(f".{pointer.name}.new-{os.getpid()}")
+def _atomic_switch_pointer(pointer: Path, target: Path, *, owner: Optional[tuple[int, int]],
+                           staging: Optional[Path] = None) -> None:
+    temporary = (staging / f"{pointer.name}-{uuid.uuid4().hex}" if staging is not None
+                 else pointer.with_name(f".{pointer.name}.new-{os.getpid()}-{uuid.uuid4().hex}"))
+    temporary_identity = None
     try:
         temporary.symlink_to(target, target_is_directory=True)
+        temporary_info = temporary.lstat()
+        temporary_identity = (temporary_info.st_dev, temporary_info.st_ino)
+        if owner is not None:
+            # WEB_ROOT has the sticky bit. Chown in the root-private staging
+            # directory so the CMS user cannot substitute the link before rename.
+            os.chown(temporary, *owner, follow_symlinks=False)
+            current_info = temporary.lstat()
+            if ((current_info.st_dev, current_info.st_ino) != temporary_identity
+                    or not stat.S_ISLNK(current_info.st_mode)
+                    or (current_info.st_uid, current_info.st_gid) != owner):
+                raise HostFailure("release pointer staging link changed before activation")
+            stage_fd = os.open(temporary.parent, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+            try:
+                os.fsync(stage_fd)
+            finally:
+                os.close(stage_fd)
         os.replace(temporary, pointer)
+        temporary_identity = None
         fd = os.open(pointer.parent, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
         try:
             os.fsync(fd)
         finally:
             os.close(fd)
+        if staging is not None:
+            stage_fd = os.open(staging, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+            try:
+                os.fsync(stage_fd)
+            finally:
+                os.close(stage_fd)
     finally:
+        # Never unlink a replacement entry if symlink creation collided or the
+        # staging name changed. A crash-left entry stays private and inert.
+        if temporary_identity is not None:
+            try:
+                current_info = temporary.lstat()
+                if ((current_info.st_dev, current_info.st_ino) == temporary_identity
+                        and stat.S_ISLNK(current_info.st_mode)):
+                    temporary.unlink()
+            except FileNotFoundError:
+                pass
+
+
+def _switch_pointer(pointer: Path, target: Path, allowed_root: Path,
+                    owner: Optional[tuple[int, int]] = None) -> None:
+    target = target.resolve(strict=True)
+    allowed_root = allowed_root.resolve(strict=True)
+    if target == allowed_root or allowed_root not in target.parents:
+        raise HostFailure(f"release target escapes configured root: {target}")
+    if owner is not None:
+        uid, gid = owner
+        if type(uid) is not int or type(gid) is not int or uid < 0 or gid < 0:
+            raise HostFailure("release pointer owner is invalid")
+        staging = Path(tempfile.mkdtemp(prefix=".ikpk-pointer-stage-", dir=pointer.parent))
         try:
-            temporary.unlink()
-        except FileNotFoundError:
-            pass
+            staging_info = staging.lstat()
+            staging_mode = stat.S_IMODE(staging_info.st_mode)
+            special_mode = staging_mode & 0o7000
+            if (not stat.S_ISDIR(staging_info.st_mode) or staging_info.st_uid != os.geteuid()
+                    or staging_info.st_dev != pointer.parent.stat().st_dev
+                    or staging_mode & 0o777 != 0o700
+                    or special_mode not in (0, stat.S_ISGID)):
+                raise HostFailure("release pointer staging directory is not private and same-filesystem")
+            _atomic_switch_pointer(pointer, target, owner=owner, staging=staging)
+        finally:
+            # Remove only an empty directory. If its temporary link was replaced,
+            # leave that inode in an inaccessible, inert directory for inspection.
+            try:
+                staging.rmdir()
+            except OSError as error:
+                if error.errno not in (errno.ENOTEMPTY, errno.EEXIST):
+                    raise
+    else:
+        _atomic_switch_pointer(pointer, target, owner=None)
+
+
+def _switch_static_pointer(config: dict[str, Any], pointer: Path, target: Path,
+                           allowed_root: Path) -> None:
+    user = pwd.getpwnam(config["cmsUser"])
+    _switch_pointer(pointer, target, allowed_root, owner=(user.pw_uid, user.pw_gid))
 
 
 def _copy_atomic(source: Path, destination: Path) -> None:
@@ -4403,7 +4472,7 @@ def _static_main_rollback(config: dict[str, Any], state: RehearsalState, start: 
         raise HostFailure("static-main rollback target expired/unavailable; no switch was attempted") from error
     if _tree_sha256(old) != start.get("oldStaticTreeSha256"):
         raise HostFailure("static-main rollback target differs from the exact old static tree")
-    _switch_pointer(pointer, old, Path(config["staticReleaseRoot"]))
+    _switch_static_pointer(config, pointer, old, Path(config["staticReleaseRoot"]))
     if _current_target(pointer) != old:
         raise HostFailure("static-main rollback did not restore the old static tree")
     record = {"version": 1, "record": terminal_record, "operationKind": "static-main",
@@ -4623,7 +4692,7 @@ def _static_main_commit(config: dict[str, Any], state: RehearsalState, operation
                    "operationId": operation_id, "sourceSha": source_sha,
                    "oldStaticPath": start["oldStaticPath"], "candidateStaticPath": str(candidate),
                    "staticTreeSha256": digest})
-    _switch_pointer(pointer, candidate, Path(config["staticReleaseRoot"]))
+    _switch_static_pointer(config, pointer, candidate, Path(config["staticReleaseRoot"]))
     if _current_target(pointer) != candidate.resolve(strict=True):
         raise HostFailure("static-main candidate did not become currentStatic")
     state._append({"version": 1, "record": "static-main-switched", "operationKind": "static-main",
@@ -4810,7 +4879,8 @@ def _static_publish(config: dict[str, Any], state: RehearsalState, args: argpars
     provenance = json.loads((_candidate_root(config, sha, op) / ".ikpk-rehearsal-ci.json").read_text(encoding="utf-8"))
     if provenance.get("sourceSha") != sha or provenance.get("repository") != "pgorbachev/ikpk":
         raise HostFailure("static candidate provenance no longer matches the pinned source identity")
-    _switch_pointer(Path(config["currentStatic"]), release, Path(config["staticReleaseRoot"]))
+    _switch_static_pointer(config, Path(config["currentStatic"]), release,
+                           Path(config["staticReleaseRoot"]))
     _wait_health(config["cmsHealthUrl"], 1200)
     cms_proof = _database_process_proof(_service_pid(config["cmsUnit"]), Path(config["cmsDatabase"]))
     _wait_health(config["siteHealthUrl"], 1200)
@@ -5105,7 +5175,8 @@ def _recover(config: dict[str, Any], state: RehearsalState, operation_id: str,
         _copy_atomic(database, live)
         _restore_media(config, backup_dir, manifest)
         _switch_pointer(Path(config["currentCms"]), Path(old_pair["cmsPath"]), Path(config["releaseRoot"]))
-        _switch_pointer(Path(config["currentStatic"]), Path(old_pair["staticPath"]), Path(config["staticReleaseRoot"]))
+        _switch_static_pointer(config, Path(config["currentStatic"]), Path(old_pair["staticPath"]),
+                               Path(config["staticReleaseRoot"]))
         expected_database_sha = manifest["databaseSha256"]
     else:
         # No destructive work starts before the final backup. If acquisition was interrupted
