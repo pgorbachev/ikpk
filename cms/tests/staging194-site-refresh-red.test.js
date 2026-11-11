@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, unlinkSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdtempSync, mkdirSync, readFileSync, rmSync, unlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -75,8 +75,12 @@ test('операция 194 строит demo из нового серверно�
   try {
     const ws = join(root, 'workspace'); const web = join(ws, 'web'); const site = join(root, 'site'); const captures = join(root, 'captures');
     const state = join(root, 'state.json'); const old = join(site, 'releases/previous'); const bin = join(root, 'bin');
+    const operationToken = 'a'.repeat(32);
     put(join(old, 'release.json'), JSON.stringify({ commit: 'a'.repeat(40), snapshotId: 'snap:old' }));
+    put(join(site, '.publication.lock'), '', 0o600); chmodSync(join(site, '.publication.lock'), 0o600);
     spawnSync('ln', ['-s', 'releases/previous', join(site, 'current')]);
+    put(state, JSON.stringify({ status: 'running', phase: 'starting', pid: process.pid,
+      refreshOperationToken: operationToken, startedAt: new Date().toISOString(), switched: false }));
     put(join(web, 'node_modules/astro/package.json'), '{}'); put(join(web, 'node_modules/tsx/package.json'), '{}');
     // Контролируемая граница процесса: имитируется свежий снимок с новой записью.
     put(join(ws, 'cms/scripts/capture-staging194.py'), 'import os,sys,pathlib\np=pathlib.Path(os.environ["IKPK_CAPTURE_ROOT"])/sys.argv[1]\np.mkdir(parents=True)\n(p/"database.sqlite").write_text("updated-published")\n');
@@ -86,6 +90,7 @@ test('операция 194 строит demo из нового серверно�
     const runner = `import {readFileSync} from 'node:fs'; import {join} from 'node:path'; globalThis.fetch=async()=>({status:200,json:async()=>JSON.parse(readFileSync(join(process.env.IKPK_WEB_ROOT,'current','release.json'),'utf8'))}); const {executeRefresh}=await import(${JSON.stringify(worker)}); const r=await executeRefresh(); console.log(JSON.stringify(r));`;
     const env = { ...process.env, PATH: `${bin}:${process.env.PATH}`, IKPK_BUILD_WORKSPACE: ws, IKPK_WEB_ROOT: site, IKPK_REFRESH_STATE: state, IKPK_CAPTURE_PROFILE: 'staging194', IKPK_VERIFY_URL: 'https://194.226.99.10/release.json', IKPK_CAPTURE_DATABASE: join(root,'source.sqlite'), IKPK_CAPTURE_MEDIA: join(root,'uploads'), IKPK_CAPTURE_ROOT: captures, IKPK_MEDIA_CACHE: '/var/www/ikpk/current/media', IKPK_INSTALLED_COMMIT: 'a'.repeat(40) };
     delete env.CHAT_LOADER_SRC; delete env.CHAT_LOADER_PROFILE;
+    env.IKPK_REFRESH_OWNER_PID = String(process.pid); env.IKPK_REFRESH_OPERATION_TOKEN = operationToken;
     const run = spawnSync(process.execPath, ['--input-type=module', '-e', runner], { env, encoding: 'utf8', timeout: 30000 });
     assert.equal(run.status, 0, run.stderr); const result = JSON.parse(run.stdout.trim());
     assert.equal(result.status, 'succeeded', JSON.stringify(result));

@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readlinkSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs';
+import { chmodSync, cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readlinkSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -11,6 +11,8 @@ const options = { timeout: 15000 };
 function fixture(t) {
   const temp = mkdtempSync(join(tmpdir(), 'ikpk-transport-independent-'));
   const root = join(temp, 'host'); const source = join(temp, 'source');
+  mkdirSync(join(root, 'shared', 'site-refresh'), { recursive: true });
+  writeFileSync(join(root, '.publication.lock'), ''); chmodSync(join(root, '.publication.lock'), 0o600);
   mkdirSync(join(root, 'releases', 'old'), { recursive: true }); mkdirSync(source);
   writeFileSync(join(root, 'releases', 'old', 'index.html'), 'old');
   const bytes = Buffer.from('verified new release'); writeFileSync(join(source, 'index.html'), bytes);

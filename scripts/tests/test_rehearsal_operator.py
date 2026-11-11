@@ -1,19 +1,37 @@
+import base64
 import hashlib
 import io
 import json
+import os
+import pwd
+import re
 import shlex
+import shutil
 import subprocess
 import tarfile
 import tempfile
 import unittest
+import zipfile
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
+from scripts.lib import rehearsal_host
 from scripts.rehearsal import staging193
 
 
 SHA = "a" * 40
 JOBS = sorted(staging193.REQUIRED_TEST_JOBS)
+
+
+def space_preflight_response(arguments):
+    if arguments[:1] == ["status"] and "--space-preflight" in arguments:
+        return json.dumps({"filesystems": [{"path": "/var/lib/test", "freeBytes": 1 << 40,
+                                             "estimatedBytes": 1, "reserveBytes": 0,
+                                             "requiredBytes": 1}], "backupBytes": 0,
+                            "staticExportEstimateBytes": 0,
+                            "backupReserveBytes": 0}).encode()
+    return None
 
 
 class OperatorAdmissionTests(unittest.TestCase):
@@ -236,21 +254,26 @@ class OperatorAdmissionTests(unittest.TestCase):
 
         def ssh(arguments, input_bytes=None, **_kwargs):
             calls.append((arguments, input_bytes))
+            preflight = space_preflight_response(arguments)
+            if preflight is not None:
+                return preflight
             return responses.pop(0)
 
         args = type("Args", (), {"host": staging193.TARGET_HOST, "command": "static-main",
             "operation_id": "new-build", "source_sha": SHA,
             "reuse_capture_operation_id": "sealed-capture"})()
         with patch.object(staging193, "validate_static_main_ci", return_value=provenance), \
+             patch.object(staging193, "_source_tree_bytes", return_value=10), \
              patch.object(staging193, "make_archive", return_value=(b"source archive", "a" * 64)), \
              patch.object(staging193, "ssh_remote", side_effect=ssh), \
              patch.object(staging193, "browser_check"):
             staging193.invoke(args)
-        self.assertIn("--reuse-capture-operation-id", calls[0][0])
-        self.assertEqual(calls[0][0][calls[0][0].index("--reuse-capture-operation-id") + 1],
+        operation_calls = [call for call in calls if "--space-preflight" not in call[0]]
+        self.assertIn("--reuse-capture-operation-id", operation_calls[0][0])
+        self.assertEqual(operation_calls[0][0][operation_calls[0][0].index("--reuse-capture-operation-id") + 1],
                          "sealed-capture")
         self.assertIn(["export-static-main", "--operation-id", "new-build", "--source-sha", SHA],
-                      [call[0] for call in calls])
+                      [call[0] for call in operation_calls])
 
     def test_production_static_profile_cli_accepts_reusable_static_main_operation(self):
         with patch.object(staging193, "invoke") as invoke:
@@ -269,23 +292,31 @@ class OperatorAdmissionTests(unittest.TestCase):
 
         def ssh(arguments, input_bytes=None, **kwargs):
             calls.append((arguments, input_bytes, kwargs))
+            preflight = space_preflight_response(arguments)
+            if preflight is not None:
+                return preflight
             return responses.pop(0)
 
         args = type("Args", (), {"profile": "production-static", "host": staging193.INITIAL_PROD_HOST,
             "command": "static-main", "operation_id": "production-static-20261025-1",
             "source_sha": SHA, "reuse_capture_operation_id": None})()
         with patch.object(staging193, "validate_static_main_ci", return_value=provenance), \
+             patch.object(staging193, "_source_tree_bytes", return_value=10), \
              patch.object(staging193, "make_archive", return_value=(b"source archive", "a" * 64)), \
              patch.object(staging193, "ssh_remote", side_effect=ssh) as remote, \
              patch.object(staging193, "browser_check") as browser:
             staging193.invoke(args)
 
-        self.assertEqual(remote.call_args_list[0].kwargs.get("profile"), "production-static")
-        self.assertEqual(remote.call_args_list[1].kwargs.get("profile"), "production-static")
-        self.assertEqual(remote.call_args_list[2].kwargs.get("profile"), "production-static")
+        operation_remote_calls = [call for call in remote.call_args_list
+                                  if "--space-preflight" not in call.args[0]]
+        self.assertEqual(len(operation_remote_calls), 3)
+        self.assertTrue(all(call.kwargs.get("profile") == "production-static"
+                            for call in operation_remote_calls))
         self.assertEqual(browser.call_args.args[4], "production-static")
         self.assertEqual(browser.call_args.kwargs["chat_loader_src"], staging193.INITIAL_PROD_CHAT_LOADER_SRC)
-        self.assertTrue(all(call[0][0] in ("static-main", "export-static-main") for call in calls))
+        operation_calls = [call for call in calls if "--space-preflight" not in call[0]]
+        self.assertTrue(all(call[0][0] in ("static-main", "export-static-main")
+                            for call in operation_calls))
 
     def test_production_paired_committed_finalize_works_without_github(self):
         responses = [json.dumps({"phase": "committed", "sourceSha": SHA}).encode(),
@@ -314,12 +345,384 @@ class OperatorAdmissionTests(unittest.TestCase):
                 "command": "cms-update", "operation_id": "paired-no-tsx", "source_sha": SHA,
                 "backup_dir": None})()
             status = json.dumps({"phase": "idle", "oldPair": {"cmsPath": "/opt/old/cms"}}).encode()
+            def ssh(arguments, **_kwargs):
+                preflight = space_preflight_response(arguments)
+                return preflight if preflight is not None else status
+
             with patch.object(staging193, "ROOT", root), \
-                 patch.object(staging193, "ssh_remote", return_value=status) as remote, \
+                 patch.object(staging193, "_source_tree_bytes", return_value=10), \
+                 patch.object(staging193, "ssh_remote", side_effect=ssh) as remote, \
                  patch.object(staging193, "production_paired_schema_source", return_value=(SHA, "f" * 64)), \
                  self.assertRaisesRegex(staging193.Refusal, "before production fence"):
                 staging193.invoke(args)
             self.assertEqual([call.args[0][0] for call in remote.call_args_list], ["status"])
+            self.assertNotIn("--space-preflight", remote.call_args_list[0].args[0])
+
+    def _direct_cms_update(self, profile):
+        root_context = tempfile.TemporaryDirectory(prefix="ikpk-cms-update-no-auto-space-")
+        root = Path(root_context.name)
+        tsx = root / "web/node_modules/.bin/tsx"
+        tsx.parent.mkdir(parents=True)
+        tsx.write_text("", encoding="utf-8")
+        paired = profile == "production-paired"
+        operation_id = (staging193.INITIAL_PROD_OPERATION_ID if profile == "initial-prod"
+                        else f"{profile}-direct-update")
+        args = type("Args", (), {"profile": profile,
+            "host": staging193.INITIAL_PROD_HOST if profile in ("production-paired", "initial-prod")
+                    else staging193.TARGET_HOST,
+            "command": "cms-update", "operation_id": operation_id, "source_sha": SHA,
+            "backup_dir": None, "release_tag": None})()
+        provenance = {"sourceSha": SHA, "runId": 123, "attempt": 1}
+        calls = []
+
+        def ssh(arguments, **kwargs):
+            calls.append((arguments, kwargs))
+            if arguments[0] == "status":
+                return json.dumps({"oldPair": {"cmsPath": "/opt/ikpk-cms/releases/old"}}).encode()
+            return json.dumps({"phase": "cms-activated"}).encode()
+
+        try:
+            with patch.object(staging193, "ROOT", root), \
+                 patch.object(staging193, "_check_local_space", return_value=[{"path": str(root)}]) as local_space, \
+                 patch.object(staging193, "_check_target_space", return_value={"filesystems": []}) as target_space, \
+                 patch.object(staging193, "validate_production_paired_admission", return_value=provenance) as paired_admission, \
+                 patch.object(staging193, "validate_sha_and_ci", return_value=provenance) as cms_admission, \
+                 patch.object(staging193, "fetch_cms_candidate_artifact", return_value=b"cms tar payload") as artifact_fetch, \
+                 patch.object(staging193, "make_archive", return_value=(b"source archive", "a" * 64)) as make_archive, \
+                 patch.object(staging193, "production_paired_schema_source", return_value=(SHA, "f" * 64)), \
+                 patch.object(staging193, "ssh_remote", side_effect=ssh):
+                staging193.invoke(args)
+            return local_space, target_space, calls, paired, paired_admission, cms_admission, artifact_fetch, make_archive
+        finally:
+            root_context.cleanup()
+
+    def _assert_capacity_helpers_not_called(self, local_space, target_space):
+        for name, helper in (("_check_local_space", local_space), ("_check_target_space", target_space)):
+            with self.subTest(capacity_helper=name):
+                helper.assert_not_called()
+
+    def test_staging194_direct_cms_update_preserves_admission_and_remote_sequence_without_auto_space_checks(self):
+        local_space, target_space, calls, _, paired_admission, cms_admission, artifact_fetch, make_archive = self._direct_cms_update("staging194")
+        self.assertEqual([call[0][0] for call in calls], ["cms-update"])
+        self.assertEqual(calls[0][1].get("profile"), "staging194")
+        cms_admission.assert_called_once_with(SHA, "staging194")
+        paired_admission.assert_not_called()
+        artifact_fetch.assert_called_once_with({"sourceSha": SHA, "runId": 123, "attempt": 1}, SHA)
+        make_archive.assert_called_once_with(SHA, {"sourceSha": SHA, "runId": 123, "attempt": 1},
+                                             cms_artifact=b"cms tar payload")
+        self._assert_capacity_helpers_not_called(local_space, target_space)
+
+    def test_staging194_paired_cms_update_installs_exact_ci_helper_before_host_admission(self):
+        """The first paired CMS command must not fence a host running stale helper code."""
+        order = []
+        admission = {"sourceSha": SHA, "runId": 123, "attempt": 2,
+                     "workflow": "Tests", "conclusion": "success"}
+        helper = {"artifactId": 987, "runId": 123, "attempt": 2,
+                  "archiveSha256": "b" * 64, "payloadSha256": "c" * 64}
+        args = SimpleNamespace(profile="staging194", host=staging193.TARGET_HOST,
+            command="cms-update", operation_id="staging194-helper-paired", source_sha=SHA,
+            backup_dir=None, release_tag=None, install_host_helper=True)
+
+        def fetch_helper(provenance, source_sha):
+            order.append("fetch-helper")
+            self.assertEqual(source_sha, SHA)
+            self.assertEqual((provenance["sourceSha"], provenance["runId"], provenance["attempt"]),
+                             (SHA, 123, 2))
+            provenance["hostHelperArtifact"] = dict(helper)
+            return b"verified helper"
+
+        def fetch_cms(provenance, source_sha):
+            order.append("fetch-cms")
+            provenance["cmsArtifact"] = {"artifactId": 88, "runId": 123, "attempt": 2,
+                "archiveSha256": "d" * 64, "payloadSha256": "e" * 64}
+            return b"verified cms"
+
+        remote_calls = []
+        def ssh(arguments, **_kwargs):
+            order.append(arguments[0])
+            remote_calls.append(list(arguments))
+            return json.dumps({"operationId": args.operation_id,
+                               "phase": "idle" if arguments[0] == "status" else "cms-activated"}).encode()
+
+        archived = []
+        def archive(source_sha, provenance, *, cms_artifact):
+            archived.append(dict(provenance))
+            return b"source archive", "a" * 64
+
+        with patch.object(staging193, "_check_target_space", side_effect=lambda *_a, **_k:
+                          order.append("target-preflight") or {"filesystems": []}), \
+             patch.object(staging193, "_check_local_space", side_effect=lambda *_a, **_k:
+                          order.append("local-preflight") or []), \
+             patch.object(staging193, "validate_sha_and_ci", side_effect=lambda *_a:
+                          order.append("admission") or dict(admission)), \
+             patch.object(staging193, "fetch_cms_candidate_artifact", side_effect=fetch_cms), \
+             patch.object(staging193, "fetch_host_helper_artifact", side_effect=fetch_helper), \
+             patch.object(staging193, "_host_helper_runtime_identity", return_value="f" * 64), \
+             patch.object(staging193, "install_staging194_host_helper", side_effect=lambda *_a:
+                          order.append("install-helper"), create=True) as install, \
+             patch.object(staging193, "make_archive", side_effect=archive), \
+             patch.object(staging193, "ssh_remote", side_effect=ssh):
+            staging193.invoke(args)
+
+        self.assertEqual(order, ["target-preflight", "local-preflight", "admission", "fetch-cms",
+                                 "status", "fetch-helper", "install-helper", "cms-update"])
+        install.assert_called_once_with(b"verified helper", helper["payloadSha256"], args.operation_id)
+        self.assertEqual(archived[0]["hostHelperArtifact"], helper)
+        self.assertEqual(archived[0]["runId"], helper["runId"])
+        self.assertEqual(archived[0]["attempt"], helper["attempt"])
+        self.assertEqual(archived[0]["hostHelperRuntimeIdentity"], "f" * 64)
+        self.assertIn("--expected-host-helper-identity", remote_calls[-1])
+        self.assertIn("f" * 64, remote_calls[-1])
+
+    def test_staging194_paired_helper_bootstraps_only_on_exact_legacy_status_refusal(self):
+        args = SimpleNamespace(profile="staging194", host=staging193.TARGET_HOST,
+            command="cms-update", operation_id="legacy-helper-bootstrap", source_sha=SHA,
+            backup_dir=None, release_tag=None, install_host_helper=True)
+        admission = {"sourceSha": SHA, "runId": 123, "attempt": 2}
+        artifact = {"artifactId": 987, "runId": 123, "attempt": 2,
+                    "archiveSha256": "b" * 64, "payloadSha256": "c" * 64}
+
+        def attach_helper(provenance, _sha):
+            provenance["hostHelperArtifact"] = dict(artifact)
+            return b"verified legacy bootstrap helper"
+
+        def run_with_status(status_error):
+            def ssh(command, **_kwargs):
+                if command[0] == "status":
+                    raise staging193.Refusal(status_error)
+                return json.dumps({"phase": "cms-activated"}).encode()
+
+            with patch.object(staging193, "_check_target_space", return_value={"filesystems": []}), \
+                 patch.object(staging193, "_check_local_space", return_value=[]), \
+                 patch.object(staging193, "validate_sha_and_ci", return_value=dict(admission)), \
+                 patch.object(staging193, "fetch_cms_candidate_artifact", return_value=b"verified cms"), \
+                 patch.object(staging193, "fetch_host_helper_artifact", side_effect=attach_helper), \
+                 patch.object(staging193, "_host_helper_runtime_identity", return_value="f" * 64), \
+                 patch.object(staging193, "make_archive", return_value=(b"archive", "a" * 64)), \
+                 patch.object(staging193, "install_staging194_host_helper", create=True) as install, \
+                 patch.object(staging193, "ssh_remote", side_effect=ssh):
+                try:
+                    staging193.invoke(args)
+                except staging193.Refusal:
+                    return install.call_args
+                return install.call_args
+
+        legacy = "host operation failed (2): ikpk-rehearsal: operation has no maintenance marker or terminal journal record"
+        legacy_install = run_with_status(legacy)
+        self.assertIsNotNone(legacy_install)
+        self.assertEqual(legacy_install.args,
+                         (b"verified legacy bootstrap helper", "c" * 64, args.operation_id))
+        self.assertIsNone(run_with_status(legacy + "; ambiguous"))
+
+    def test_staging194_paired_helper_rejection_stops_before_install_or_host_fence(self):
+        args = SimpleNamespace(profile="staging194", host=staging193.TARGET_HOST,
+            command="cms-update", operation_id="staging194-helper-rejected", source_sha=SHA,
+            backup_dir=None, release_tag=None, install_host_helper=True)
+        with patch.object(staging193, "_check_target_space", return_value={"filesystems": []}), \
+             patch.object(staging193, "_check_local_space", return_value=[]), \
+             patch.object(staging193, "validate_sha_and_ci",
+                          return_value={"sourceSha": SHA, "runId": 123, "attempt": 2}), \
+             patch.object(staging193, "fetch_cms_candidate_artifact", return_value=b"cms"), \
+             patch.object(staging193, "fetch_host_helper_artifact",
+                          side_effect=staging193.Refusal("host helper artifact is not bound to exact successful CI")), \
+             patch.object(staging193, "make_archive", return_value=(b"source archive", "a" * 64)), \
+             patch.object(staging193, "install_staging194_host_helper", create=True) as install, \
+             patch.object(staging193, "ssh_remote", return_value=json.dumps({
+                 "operationId": args.operation_id, "phase": "idle"}).encode()) as remote:
+            with self.assertRaisesRegex(staging193.Refusal, "not bound to exact successful CI"):
+                staging193.invoke(args)
+        install.assert_not_called()
+        self.assertEqual(remote.call_args.args[0], ["status", "--operation-id", args.operation_id])
+
+    def test_staging194_paired_helper_install_failure_stops_before_host_fence(self):
+        args = SimpleNamespace(profile="staging194", host=staging193.TARGET_HOST,
+            command="cms-update", operation_id="staging194-helper-install-failure", source_sha=SHA,
+            backup_dir=None, release_tag=None, install_host_helper=True)
+        provenance = {"sourceSha": SHA, "runId": 123, "attempt": 2}
+        def attach_helper(evidence, _sha):
+            evidence["hostHelperArtifact"] = {"artifactId": 987, "runId": 123, "attempt": 2,
+                "archiveSha256": "b" * 64, "payloadSha256": "c" * 64}
+            return b"verified helper"
+        with patch.object(staging193, "_check_target_space", return_value={"filesystems": []}), \
+             patch.object(staging193, "_check_local_space", return_value=[]), \
+             patch.object(staging193, "validate_sha_and_ci", return_value=provenance), \
+             patch.object(staging193, "fetch_cms_candidate_artifact", return_value=b"cms"), \
+             patch.object(staging193, "fetch_host_helper_artifact", side_effect=attach_helper), \
+             patch.object(staging193, "_host_helper_runtime_identity", return_value="f" * 64), \
+             patch.object(staging193, "make_archive", return_value=(b"archive", "a" * 64)), \
+             patch.object(staging193, "install_staging194_host_helper",
+                          side_effect=staging193.Refusal("helper config is incompatible"), create=True) as install, \
+             patch.object(staging193, "ssh_remote", side_effect=lambda command, **_kw:
+                          json.dumps({"operationId": args.operation_id,
+                                      "phase": "idle" if command[0] == "status" else "cms-activated"}).encode()) as remote:
+            with self.assertRaisesRegex(staging193.Refusal, "helper config is incompatible"):
+                staging193.invoke(args)
+        install.assert_called_once_with(b"verified helper", "c" * 64, args.operation_id)
+        self.assertEqual(remote.call_args.args[0], ["status", "--operation-id", args.operation_id])
+
+    def test_staging194_recovery_does_not_refetch_or_reinstall_host_helper(self):
+        args = SimpleNamespace(profile="staging194", host=staging193.TARGET_HOST,
+            command="recover", operation_id="staging194-helper-recovery", backup_dir=None)
+        with tempfile.TemporaryDirectory(prefix="ikpk-staging194-helper-recovery-") as temporary, \
+             patch.object(staging193, "backup_root", return_value=Path(temporary)), \
+             patch.object(staging193, "ssh_remote", return_value=json.dumps({"phase": "recovered"}).encode()) as remote, \
+             patch.object(staging193, "fetch_host_helper_artifact") as fetch, \
+             patch.object(staging193, "install_staging194_host_helper", create=True) as install:
+            staging193.invoke(args)
+        self.assertEqual(remote.call_args.args[0], ["recover", "--operation-id", args.operation_id])
+        fetch.assert_not_called()
+        install.assert_not_called()
+
+    def test_staging194_same_id_cms_resume_verifies_helper_without_reinstalling(self):
+        args = SimpleNamespace(profile="staging194", host=staging193.TARGET_HOST,
+            command="cms-update", operation_id="staging194-helper-resume", source_sha=SHA,
+            backup_dir=None, release_tag=None, install_host_helper=True)
+        provenance = {"sourceSha": SHA, "runId": 123, "attempt": 2}
+        helper = {"artifactId": 987, "runId": 123, "attempt": 2,
+                  "archiveSha256": "b" * 64, "payloadSha256": "c" * 64}
+
+        def attach_helper(evidence, _sha):
+            evidence["hostHelperArtifact"] = dict(helper)
+            return b"verified helper"
+
+        def remote(command, **_kwargs):
+            phase = "fenced" if command[0] == "status" else "cms-activated"
+            return json.dumps({"operationId": args.operation_id, "phase": phase}).encode()
+
+        with patch.object(staging193, "_check_target_space", return_value={"filesystems": []}), \
+             patch.object(staging193, "_check_local_space", return_value=[]), \
+             patch.object(staging193, "validate_sha_and_ci", return_value=provenance), \
+             patch.object(staging193, "fetch_cms_candidate_artifact", return_value=b"cms"), \
+             patch.object(staging193, "fetch_host_helper_artifact", side_effect=attach_helper), \
+             patch.object(staging193, "_host_helper_runtime_identity", return_value="f" * 64), \
+             patch.object(staging193, "make_archive", return_value=(b"archive", "a" * 64)), \
+             patch.object(staging193, "install_staging194_host_helper") as install, \
+             patch.object(staging193, "ssh_remote", side_effect=remote):
+            staging193.invoke(args)
+        install.assert_not_called()
+
+    def test_staging194_rechecks_admission_after_backup_before_second_cms_command(self):
+        admitted = {"sourceSha": SHA, "runId": 123, "attempt": 1}
+        changed = {"sourceSha": SHA, "runId": 124, "attempt": 2}
+        calls = []
+        with tempfile.TemporaryDirectory(prefix="ikpk-staging194-backup-recheck-") as temporary:
+            backup_path = Path(temporary) / "backup.tar"
+            backup_path.write_bytes(b"verified local backup")
+            args = SimpleNamespace(profile="staging194", host=staging193.TARGET_HOST,
+                command="cms-update", operation_id="staging194-recheck", source_sha=SHA,
+                backup_dir=None, release_tag=None)
+
+            def ssh(arguments, **_kwargs):
+                calls.append(arguments)
+                if arguments[0] == "cms-update":
+                    return json.dumps({"offhostBackupRequired": True,
+                                       "backupSha256": "b" * 64}).encode()
+                if arguments[0] == "export-backup":
+                    return b"offhost backup"
+                self.fail(f"unexpected host command before re-admission: {arguments[0]}")
+
+            def add_artifact(provenance, _sha):
+                provenance["cmsArtifact"] = {
+                    "artifactId": 88, "runId": provenance["runId"], "attempt": provenance["attempt"],
+                    "archiveSha256": "b" * 64, "payloadSha256": "c" * 64,
+                }
+                return b"cms payload"
+
+            with patch.object(staging193, "validate_sha_and_ci", side_effect=[admitted, changed]) as admission, \
+                 patch.object(staging193, "fetch_cms_candidate_artifact", side_effect=add_artifact), \
+                 patch.object(staging193, "make_archive", return_value=(b"source archive", "a" * 64)), \
+                 patch.object(staging193, "backup_root", return_value=Path(temporary)), \
+                 patch.object(staging193, "persist_offhost_backup", return_value=backup_path), \
+                 patch.object(staging193, "ssh_remote", side_effect=ssh):
+                with self.assertRaisesRegex(staging193.Refusal, "workflow proofs changed before CMS activation"):
+                    staging193.invoke(args)
+
+        self.assertEqual([call[0] for call in calls], ["cms-update", "export-backup"])
+        self.assertEqual(admission.call_count, 2)
+
+    def test_other_direct_cms_update_profiles_do_not_gain_auto_space_checks(self):
+        for profile, expected in (("production-paired", ["status", "cms-update"]),
+                                  ("initial-prod", ["cms-update"])):
+            with self.subTest(profile=profile):
+                local_space, target_space, calls, _, paired_admission, cms_admission, artifact_fetch, make_archive = self._direct_cms_update(profile)
+                self.assertEqual([call[0][0] for call in calls], expected)
+                self.assertTrue(all(call[1].get("profile") == profile for call in calls))
+                (paired_admission.assert_called_once_with(SHA) if profile == "production-paired"
+                 else cms_admission.assert_called_once_with(SHA, "initial-prod"))
+                (artifact_fetch.assert_called_once_with({"sourceSha": SHA, "runId": 123, "attempt": 1}, SHA)
+                 if profile == "production-paired" else artifact_fetch.assert_not_called())
+                if profile == "production-paired":
+                    make_archive.assert_called_once_with(SHA, {"sourceSha": SHA, "runId": 123, "attempt": 1},
+                                                         cms_artifact=b"cms tar payload")
+                else:
+                    make_archive.assert_called_once_with(SHA, {"sourceSha": SHA, "runId": 123, "attempt": 1})
+                self._assert_capacity_helpers_not_called(local_space, target_space)
+
+    def test_staging194_direct_static_main_preserves_ci_and_remote_sequence_without_auto_space_checks(self):
+        provenance = {"sourceSha": SHA, "runId": 123, "attempt": 1}
+        responses = [json.dumps({"phase": "browser-check-required", "staticTreeSha256": "c" * 64}).encode(),
+                     b"candidate bytes", json.dumps({"phase": "committed"}).encode()]
+        calls = []
+        args = type("Args", (), {"profile": "staging194", "host": staging193.TARGET_HOST,
+            "command": "static-main", "operation_id": "staging194-direct-static", "source_sha": SHA,
+            "release_tag": None, "reuse_capture_operation_id": None})()
+        def ssh(arguments, **kwargs):
+            calls.append((arguments, kwargs))
+            return responses.pop(0)
+        with patch.object(staging193, "_check_local_space", return_value=[]) as local_space, \
+             patch.object(staging193, "_check_target_space", return_value={"filesystems": []}) as target_space, \
+             patch.object(staging193, "validate_static_main_ci", return_value=provenance) as admission, \
+             patch.object(staging193, "make_archive", return_value=(b"source archive", "a" * 64)), \
+             patch.object(staging193, "ssh_remote", side_effect=ssh), \
+             patch.object(staging193, "browser_check"):
+            staging193.invoke(args)
+        self.assertEqual([call[0][0] for call in calls], ["static-main", "export-static-main", "static-main"])
+        self.assertEqual(admission.call_count, 2)
+        self._assert_capacity_helpers_not_called(local_space, target_space)
+
+    def test_explicit_space_preflight_keeps_capacity_checks_for_existing_profiles(self):
+        for profile, host in (("staging194", staging193.TARGET_HOST),
+                              ("production-paired", staging193.INITIAL_PROD_HOST),
+                              ("production-static", staging193.INITIAL_PROD_HOST)):
+            with self.subTest(profile=profile):
+                args = type("Args", (), {"profile": profile, "host": host,
+                    "command": "space-preflight", "preflight_for": "static-main",
+                    "operation_id": f"{profile}-explicit-preflight", "source_sha": SHA,
+                    "backup_dir": None, "release_tag": None})()
+                with patch.object(staging193, "_check_local_space", return_value=[{"path": "/tmp"}]) as local_space, \
+                     patch.object(staging193, "_check_target_space", return_value={"filesystems": [{"path": "/target"}],
+                         "staticExportEstimateBytes": 123}) as target_space:
+                    result = staging193.invoke(args)
+                if profile == "production-static":
+                    local_space.assert_called_once_with(SHA, profile, "static-main", None,
+                        static_export_estimate_bytes=123)
+                else:
+                    local_space.assert_called_once_with(SHA, profile, "static-main", None)
+                target_space.assert_called_once_with(profile, args.operation_id, "static-main")
+                self.assertEqual(result["operationKind"], "static-main")
+
+    def test_production_static_static_main_keeps_auto_capacity_and_release_admission_checks(self):
+        provenance = {"sourceSha": SHA, "runId": 123, "attempt": 1}
+        admission = {"sourceSha": SHA, "tag": "v2026.1103.1"}
+        responses = [json.dumps({"phase": "browser-check-required", "staticTreeSha256": "c" * 64}).encode(),
+                     b"candidate bytes", json.dumps({"phase": "committed"}).encode()]
+        args = type("Args", (), {"profile": "production-static", "host": staging193.INITIAL_PROD_HOST,
+            "command": "static-main", "operation_id": "production-static-explicit-release",
+            "source_sha": SHA, "release_tag": "v2026.1103.1", "reuse_capture_operation_id": None})()
+        def ssh(_arguments, **_kwargs):
+            return responses.pop(0)
+        with patch.object(staging193, "_check_local_space", return_value=[{"path": "/tmp"}]) as local_space, \
+             patch.object(staging193, "_check_target_space", return_value={"filesystems": [{"path": "/target"}],
+                 "staticExportEstimateBytes": 123}) as target_space, \
+             patch.object(staging193, "validate_production_static_release", return_value=admission) as release_admission, \
+             patch.object(staging193, "make_archive", return_value=(b"source archive", "a" * 64)), \
+             patch.object(staging193, "ssh_remote", side_effect=ssh), \
+             patch.object(staging193, "browser_check"):
+            staging193.invoke(args)
+        local_space.assert_called_once_with(SHA, "production-static", "static-main", None,
+            static_export_estimate_bytes=123)
+        target_space.assert_called_once_with("production-static", args.operation_id, "static-main")
+        release_admission.assert_called_once_with(SHA, "v2026.1103.1")
 
     def test_production_static_profile_refuses_staging_host_before_ci_or_ssh(self):
         for host in (staging193.TARGET_HOST, "193.124.115.99"):
@@ -334,6 +737,212 @@ class OperatorAdmissionTests(unittest.TestCase):
                     staging193.invoke(args)
                 admit.assert_not_called()
                 ssh.assert_not_called()
+
+    def _invoke_static_with_target_capacity_report(self, local_free_bytes):
+        source_sha = subprocess.check_output(
+            ["git", "rev-parse", "HEAD"], cwd=staging193.ROOT, text=True
+        ).strip()
+        source_bytes = staging193._source_tree_bytes(source_sha)
+        # The target report contains a large capture (database/WAL/media), but
+        # browser export omits those capture inputs and extracts only the current
+        # static tree plus snapshot proof files.
+        current_static_bytes = 2 * source_bytes
+        live_database_bytes = source_bytes // 2
+        live_media_bytes = 2 * source_bytes
+        static_capture_bytes = 2 * live_database_bytes + live_media_bytes
+        # Local browser export uses the target's current static tree estimate;
+        # DB/WAL/media remain part of target-side capacity accounting only.
+        target_export_estimate = current_static_bytes
+        target_capacity_estimate = current_static_bytes + static_capture_bytes
+        reserve = staging193._space_reserve_bytes(target_capacity_estimate)
+        source_required = source_bytes + staging193._space_reserve_bytes(source_bytes)
+        target_required = target_capacity_estimate + reserve
+        calls = []
+
+        def disk_usage(_path):
+            return SimpleNamespace(total=local_free_bytes * 2, used=local_free_bytes,
+                                   free=local_free_bytes)
+
+        def ssh(arguments, **kwargs):
+            calls.append((arguments, kwargs))
+            preflight = space_preflight_response(arguments)
+            if preflight is not None:
+                report = json.loads(preflight)
+                report["filesystems"][0].update({"estimatedBytes": target_capacity_estimate,
+                    "reserveBytes": reserve, "requiredBytes": target_required})
+                report["staticCaptureBytes"] = static_capture_bytes
+                report["staticExportEstimateBytes"] = target_export_estimate
+                return json.dumps(report).encode()
+            if arguments[0] == "static-main" and "--browser-digest" in arguments:
+                return json.dumps({"phase": "committed"}).encode()
+            if arguments[0] == "static-main":
+                return json.dumps({"phase": "browser-check-required",
+                                   "staticTreeSha256": "c" * 64}).encode()
+            if arguments[0] == "export-static-main":
+                return b"static candidate tar fixture"
+            raise AssertionError(f"unexpected fake remote command: {arguments!r}")
+
+        args = type("Args", (), {"profile": "production-static", "host": staging193.INITIAL_PROD_HOST,
+            "command": "static-main", "operation_id": "production-static-local-space",
+            "source_sha": source_sha, "release_tag": "v2026.1103.1",
+            "reuse_capture_operation_id": None, "backup_dir": None})()
+        provenance = {"sourceSha": source_sha, "runId": 123, "attempt": 1}
+        with patch.dict(os.environ, {"IKPK_REHEARSAL_SPACE_RESERVE_BYTES": "0"}), \
+             patch.object(staging193.shutil, "disk_usage", side_effect=disk_usage), \
+             patch.object(staging193, "validate_production_static_release", return_value=provenance) as release_admission, \
+             patch.object(staging193, "make_archive", return_value=(b"source archive", "a" * 64)), \
+             patch.object(staging193, "ssh_remote", side_effect=ssh), \
+             patch.object(staging193, "browser_check"):
+            try:
+                staging193.invoke(args)
+                refusal = None
+            except staging193.Refusal as error:
+                refusal = error
+        return {"sourceBytes": source_bytes, "currentStaticBytes": current_static_bytes,
+                "staticCaptureBytes": static_capture_bytes, "targetEstimate": target_capacity_estimate,
+                "staticExportEstimateBytes": target_export_estimate,
+                "reserveBytes": reserve, "sourceRequiredBytes": source_required,
+                "targetRequiredBytes": target_required,
+                "localFreeBytes": local_free_bytes, "refusal": refusal,
+                "releaseAdmission": release_admission, "calls": calls}
+
+    def test_production_static_local_export_ignores_remote_capture_bytes(self):
+        source_sha = subprocess.check_output(
+            ["git", "rev-parse", "HEAD"], cwd=staging193.ROOT, text=True
+        ).strip()
+        source_bytes = staging193._source_tree_bytes(source_sha)
+        local_estimate = source_bytes + 2 * source_bytes
+        local_required = local_estimate + staging193._space_reserve_bytes(local_estimate)
+        target_estimate = 2 * source_bytes + (2 * (source_bytes // 2) + 2 * source_bytes)
+        target_required = target_estimate + staging193._space_reserve_bytes(target_estimate)
+        local_free_bytes = (local_required + target_required) // 2
+        observed = self._invoke_static_with_target_capacity_report(local_free_bytes)
+        self.assertLess(observed["sourceRequiredBytes"], observed["localFreeBytes"])
+        self.assertLess(observed["localFreeBytes"], observed["targetRequiredBytes"])
+        local_estimate = observed["sourceBytes"] + observed["currentStaticBytes"]
+        local_required = local_estimate + staging193._space_reserve_bytes(local_estimate)
+        self.assertGreater(observed["localFreeBytes"], local_required)
+        details = (f"source={observed['sourceBytes']}, static={observed['targetEstimate']}, "
+                   f"reserve={observed['reserveBytes']}, local free={observed['localFreeBytes']}, "
+                   f"release_admission_called={observed['releaseAdmission'].called}, "
+                   f"remote_commands={[call[0][0] for call in observed['calls']]}")
+        self.assertIsNone(observed["refusal"], details)
+        observed["releaseAdmission"].assert_called_once_with(
+            source_sha, "v2026.1103.1")
+        self.assertEqual([call[0][0] for call in observed["calls"]],
+                         ["status", "static-main", "export-static-main", "static-main"])
+
+    def test_production_static_low_local_export_capacity_refuses_before_release_or_prepare(self):
+        source_sha = subprocess.check_output(
+            ["git", "rev-parse", "HEAD"], cwd=staging193.ROOT, text=True
+        ).strip()
+        source_bytes = staging193._source_tree_bytes(source_sha)
+        source_required = source_bytes + staging193._space_reserve_bytes(source_bytes)
+        local_estimate = source_bytes + 2 * source_bytes
+        local_required = local_estimate + staging193._space_reserve_bytes(local_estimate)
+        export_required = 2 * source_bytes + staging193._space_reserve_bytes(2 * source_bytes)
+        local_free_bytes = (source_required + export_required) // 2
+        observed = self._invoke_static_with_target_capacity_report(local_free_bytes)
+        local_estimate = observed["sourceBytes"] + observed["currentStaticBytes"]
+        local_required = local_estimate + staging193._space_reserve_bytes(local_estimate)
+        self.assertLess(observed["sourceRequiredBytes"], observed["localFreeBytes"])
+        self.assertLess(observed["localFreeBytes"], local_required)
+        export_required = observed["currentStaticBytes"] + staging193._space_reserve_bytes(
+            observed["currentStaticBytes"])
+        self.assertLess(observed["localFreeBytes"], export_required)
+        details = (f"source={observed['sourceBytes']}, static={observed['currentStaticBytes']}, "
+                   f"local required={local_required}, local free={observed['localFreeBytes']}, "
+                   f"release_admission_called={observed['releaseAdmission'].called}, "
+                   f"remote_commands={[call[0][0] for call in observed['calls']]}")
+        self.assertIsNotNone(observed["refusal"], details)
+        self.assertFalse(observed["releaseAdmission"].called, details)
+        self.assertEqual([call[0][0] for call in observed["calls"]], ["status"], details)
+
+    def test_production_static_local_capacity_with_target_estimate_and_reserve_passes(self):
+        source_sha = subprocess.check_output(
+            ["git", "rev-parse", "HEAD"], cwd=staging193.ROOT, text=True
+        ).strip()
+        source_bytes = staging193._source_tree_bytes(source_sha)
+        target_estimate = 2 * source_bytes
+        local_estimate = source_bytes + target_estimate
+        required = local_estimate + staging193._space_reserve_bytes(local_estimate)
+        observed = self._invoke_static_with_target_capacity_report(required + 1_000_000)
+        self.assertIsNone(observed["refusal"])
+        observed["releaseAdmission"].assert_called_once_with(source_sha, "v2026.1103.1")
+        self.assertEqual([call[0][0] for call in observed["calls"]],
+                         ["status", "static-main", "export-static-main", "static-main"])
+
+    def test_local_export_estimate_is_charged_to_temp_and_aggregated_by_device(self):
+        source_bytes = 100
+        temp_path = Path(tempfile.gettempdir())
+        checkout_path = staging193.ROOT
+        real_stat = Path.stat
+
+        class DeviceStat:
+            def __init__(self, result, device):
+                self._result = result
+                self.st_dev = device
+
+            def __getattr__(self, name):
+                return getattr(self._result, name)
+
+        for export_bytes in (50, 500):
+            for same_device in (False, True):
+                with self.subTest(export_bytes=export_bytes, same_device=same_device):
+                    temp_device = 101
+                    checkout_device = temp_device if same_device else 202
+
+                    def stat_with_devices(path, *args, **kwargs):
+                        result = real_stat(path, *args, **kwargs)
+                        if path == temp_path:
+                            return DeviceStat(result, temp_device)
+                        if path == checkout_path:
+                            return DeviceStat(result, checkout_device)
+                        return result
+
+                    def disk_usage(_path):
+                        return SimpleNamespace(total=3 << 30, used=0, free=3 << 30)
+
+                    with patch.object(staging193, "_source_tree_bytes", return_value=source_bytes), \
+                         patch.object(Path, "stat", new=stat_with_devices), \
+                         patch.object(staging193.shutil, "disk_usage", side_effect=disk_usage):
+                        report = staging193._check_local_space("a" * 40, "production-static", "static-main",
+                            None, static_export_estimate_bytes=export_bytes)
+
+                    temp_item = next(item for item in report if "temporary data" in item["label"])
+                    self.assertEqual(temp_item["staticExportEstimateBytes"], export_bytes)
+                    if same_device:
+                        self.assertEqual(len(report), 1)
+                        self.assertIn("source checkout", temp_item["label"])
+                        self.assertEqual(temp_item["estimatedBytes"], source_bytes + export_bytes)
+                    else:
+                        self.assertEqual(len(report), 2)
+                        checkout_item = next(item for item in report if "source checkout" in item["label"])
+                        self.assertEqual(temp_item["estimatedBytes"], max(source_bytes, export_bytes))
+                        self.assertEqual(checkout_item["estimatedBytes"], source_bytes)
+
+    def test_cms_update_local_space_sums_temp_checkout_and_backup_on_shared_filesystem(self):
+        real_stat = Path.stat
+
+        class DeviceStat:
+            def __init__(self, result):
+                self._result = result
+                self.st_dev = 101
+
+            def __getattr__(self, name):
+                return getattr(self._result, name)
+
+        def same_device(path, *args, **kwargs):
+            return DeviceStat(real_stat(path, *args, **kwargs))
+
+        with patch.object(staging193, "_source_tree_bytes", return_value=600_000_000), \
+             patch.object(Path, "stat", new=same_device), \
+             patch.object(staging193.shutil, "disk_usage",
+                          return_value=SimpleNamespace(total=2_000_000_000, used=300_000_000,
+                                                       free=1_700_000_000)):
+            with self.assertRaisesRegex(staging193.Refusal,
+                                        "temporary data \+ source checkout \+ off-host backup filesystem"):
+                staging193._check_local_space("a" * 40, "staging194", "cms-update", None)
 
     def test_production_static_profile_refuses_cms_mutating_commands_before_ci_or_ssh(self):
         for command in ("cms-update", "static-publish", "recover"):
@@ -477,9 +1086,13 @@ class OperatorAdmissionTests(unittest.TestCase):
 
         def ssh(arguments, input_bytes=None, **_kwargs):
             calls.append((arguments, input_bytes))
+            preflight = space_preflight_response(arguments)
+            if preflight is not None:
+                return preflight
             return responses.pop(0)
 
         with patch.object(staging193, "validate_static_main_ci", side_effect=[provenance, provenance]) as admit, \
+             patch.object(staging193, "_source_tree_bytes", return_value=10), \
              patch.object(staging193, "make_archive", return_value=(b"source archive", "a" * 64)), \
              patch.object(staging193, "ssh_remote", side_effect=ssh), \
              patch.object(staging193, "browser_check") as browser:
@@ -487,11 +1100,49 @@ class OperatorAdmissionTests(unittest.TestCase):
                 "operation_id": "main-static", "source_sha": SHA})())
 
         self.assertEqual(admit.call_count, 2)
-        self.assertEqual([call[0][0] for call in calls], ["static-main", "export-static-main", "static-main"])
-        self.assertEqual(calls[0][1], b"source archive")
-        self.assertIn("--browser-digest", calls[-1][0])
+        operation_calls = [call for call in calls if "--space-preflight" not in call[0]]
+        self.assertEqual([call[0][0] for call in operation_calls],
+                         ["static-main", "export-static-main", "static-main"])
+        self.assertEqual(operation_calls[0][1], b"source archive")
+        self.assertIn("--browser-digest", operation_calls[-1][0])
         browser.assert_called_once_with(SHA, "main-static", "c" * 64, b"candidate bytes", "staging194", provenance,
             chat_loader_src=staging193.STAGING194_CHAT_LOADER_SRC)
+
+    def test_static_main_forwards_expected_installed_cms_sha_to_host(self):
+        provenance = {"sourceSha": SHA, "runId": 123, "attempt": 1}
+        responses = [json.dumps({"phase": "browser-check-required", "staticTreeSha256": "c" * 64}).encode(),
+                     b"candidate bytes", json.dumps({"phase": "committed"}).encode()]
+        calls = []
+
+        def ssh(arguments, input_bytes=None, **_kwargs):
+            calls.append((arguments, input_bytes))
+            return responses.pop(0)
+
+        args = type("Args", (), {"profile": "staging194", "host": staging193.TARGET_HOST,
+            "command": "static-main", "operation_id": "cms-binding", "source_sha": SHA,
+            "release_tag": None, "reuse_capture_operation_id": None,
+            "expected_installed_cms_sha": "b" * 40})()
+        with patch.object(staging193, "_check_local_space", return_value=[]), \
+             patch.object(staging193, "_check_target_space", return_value={"filesystems": []}), \
+             patch.object(staging193, "validate_static_main_ci", return_value=provenance), \
+             patch.object(staging193, "make_archive", return_value=(b"archive", "a" * 64)), \
+             patch.object(staging193, "ssh_remote", side_effect=ssh), \
+             patch.object(staging193, "browser_check"):
+            staging193.invoke(args)
+
+        operation_calls = [call[0] for call in calls]
+        self.assertEqual([call[0] for call in operation_calls], ["static-main", "export-static-main", "static-main"])
+        for call in (operation_calls[0], operation_calls[2]):
+            self.assertIn("--expected-installed-cms-sha", call)
+            self.assertEqual(call[call.index("--expected-installed-cms-sha") + 1], "b" * 40)
+
+    def test_static_main_cli_accepts_expected_installed_cms_sha(self):
+        observed = []
+        with patch.object(staging193, "invoke", side_effect=lambda args: observed.append(args)):
+            result = staging193.main(["--profile", "staging194", "static-main", "--operation-id",
+                "cms-binding-cli", "--source-sha", SHA, "--expected-installed-cms-sha", "b" * 40])
+        self.assertEqual(result, 0)
+        self.assertEqual(observed[0].expected_installed_cms_sha, "b" * 40)
 
     def test_static_main_refuses_changed_main_proof_before_remote_activation(self):
         admitted = {"sourceSha": SHA, "runId": 123, "attempt": 2}
@@ -502,9 +1153,13 @@ class OperatorAdmissionTests(unittest.TestCase):
 
         def ssh(arguments, **_kwargs):
             calls.append(arguments)
+            preflight = space_preflight_response(arguments)
+            if preflight is not None:
+                return preflight
             return responses.pop(0)
 
         with patch.object(staging193, "validate_static_main_ci", side_effect=[admitted, changed]), \
+             patch.object(staging193, "_source_tree_bytes", return_value=10), \
              patch.object(staging193, "make_archive", return_value=(b"source archive", "a" * 64)), \
              patch.object(staging193, "ssh_remote", side_effect=ssh), \
              patch.object(staging193, "browser_check"):
@@ -512,7 +1167,7 @@ class OperatorAdmissionTests(unittest.TestCase):
                 staging193.invoke(type("Args", (), {"host": staging193.TARGET_HOST, "command": "static-main",
                     "operation_id": "main-static", "source_sha": SHA})())
         self.assertEqual(responses, [])
-        self.assertEqual(len(calls), 2)
+        self.assertEqual(len([call for call in calls if "--space-preflight" not in call]), 2)
 
     def test_remote_helper_uses_fixed_existing_root_identity_without_sudo(self):
         with tempfile.TemporaryDirectory(prefix="ikpk-operator-identity-") as temporary:
@@ -611,6 +1266,31 @@ class OperatorAdmissionTests(unittest.TestCase):
                 staging193.invoke(args)
         ssh.assert_not_called()
 
+    def test_expired_static_rollback_acceptance_is_staging_only_and_reports_pending_retry(self):
+        args = type("Args", (), {"host": staging193.TARGET_HOST, "profile": "staging194",
+            "command": "static-main-recover", "operation_id": "main-static",
+            "rollback_committed": False, "accept_expired_rollback": True,
+            "operator": "release-operator", "reason": "Test stand rollback tree was lost"})()
+        with patch.object(staging193, "ssh_remote", return_value=b'{"phase":"rollback-target-expired"}') as ssh:
+            staging193.invoke(args)
+        ssh.assert_called_once_with(["static-main-recover", "--operation-id", "main-static",
+            "--accept-expired-rollback", "--operator", "release-operator", "--reason",
+            "Test stand rollback tree was lost"])
+
+        args.profile = "production-static"
+        with patch.object(staging193, "ssh_remote") as ssh:
+            with self.assertRaisesRegex(staging193.Refusal, "restricted to staging194"):
+                staging193.invoke(args)
+        ssh.assert_not_called()
+
+        args.profile = "staging194"
+        with patch.object(staging193, "ssh_remote",
+                          return_value=b'{"phase":"rollback-target-expired-cleanup-pending",'
+                                       b'"cleanupPending":true}') as ssh:
+            with self.assertRaisesRegex(staging193.Refusal, "durably recorded.*cleanup remains pending"):
+                staging193.invoke(args)
+        ssh.assert_called_once()
+
     def test_cms_update_sends_source_archive_before_offhost_backup_confirmation(self):
         with tempfile.TemporaryDirectory(prefix="ikpk-operator-prefence-") as temporary:
             archive = b"admitted source archive"
@@ -625,6 +1305,9 @@ class OperatorAdmissionTests(unittest.TestCase):
 
             def ssh(arguments, input_bytes=None, **_kwargs):
                 calls.append((arguments, input_bytes))
+                preflight = space_preflight_response(arguments)
+                if preflight is not None:
+                    return preflight
                 return responses.pop(0)
 
             def save_backup(directory, operation_id, _source_sha, payload, _digest):
@@ -634,6 +1317,8 @@ class OperatorAdmissionTests(unittest.TestCase):
 
             provenance = {"sourceSha": SHA, "runId": 123, "attempt": 1}
             with patch.object(staging193, "validate_sha_and_ci", return_value=provenance), \
+                 patch.object(staging193, "_source_tree_bytes", return_value=10), \
+                 patch.object(staging193, "fetch_cms_candidate_artifact", return_value=b"cms tar payload"), \
                  patch.object(staging193, "make_archive", return_value=(archive, "a" * 64)), \
                  patch.object(staging193, "ssh_remote", side_effect=ssh), \
                  patch.object(staging193, "persist_offhost_backup", side_effect=save_backup):
@@ -641,12 +1326,638 @@ class OperatorAdmissionTests(unittest.TestCase):
                     "command": "cms-update", "operation_id": "prefence", "source_sha": SHA,
                     "backup_dir": temporary})())
 
-            self.assertEqual(len(calls), 3)
-            self.assertEqual(calls[0][1], archive)
-            self.assertIn("--archive-sha256", calls[0][0])
-            self.assertIsNone(calls[2][1])
-            self.assertNotIn("--archive-sha256", calls[2][0])
-            self.assertIn("--offhost-sha256", calls[2][0])
+            preflight_calls = [call for call in calls if "--space-preflight" in call[0]]
+            operation_calls = [call for call in calls if "--space-preflight" not in call[0]]
+            self.assertEqual(preflight_calls, [])
+            self.assertEqual(len(operation_calls), 3)
+            self.assertEqual(operation_calls[0][1], archive)
+            self.assertIn("--archive-sha256", operation_calls[0][0])
+            self.assertIsNone(operation_calls[2][1])
+            self.assertNotIn("--archive-sha256", operation_calls[2][0])
+            self.assertIn("--offhost-sha256", operation_calls[2][0])
+
+
+class PairedCmsAdmissionRecheckTests(unittest.TestCase):
+    ARTIFACT = {"artifactId": 88, "runId": 123, "attempt": 1,
+                "archiveSha256": "b" * 64, "payloadSha256": "c" * 64}
+
+    def _run_backup_recheck(self, profile, *, changed):
+        admitted = {"sourceSha": SHA, "runId": 123, "attempt": 1, "ref": "refs/heads/main"}
+        current = ({**admitted, "runId": 124, "attempt": 2} if changed else dict(admitted))
+        calls = []
+        old_cms_path = f"/opt/ikpk-cms/releases/{'d' * 40}-old/cms-artifact"
+        with tempfile.TemporaryDirectory(prefix=f"ikpk-{profile}-admission-recheck-") as temporary:
+            root = Path(temporary)
+            if profile == "production-paired":
+                tsx = root / "web/node_modules/.bin/tsx"
+                tsx.parent.mkdir(parents=True)
+                tsx.touch()
+            operation_id = f"{profile}-admission-recheck"
+            backup_path = root / f"{operation_id}.tar"
+            args = SimpleNamespace(profile=profile,
+                host=staging193.INITIAL_PROD_HOST if profile == "production-paired" else staging193.TARGET_HOST,
+                command="cms-update", operation_id=operation_id, source_sha=SHA,
+                backup_dir=temporary, release_tag=None)
+
+            def ssh(arguments, **_kwargs):
+                calls.append(arguments)
+                if arguments[0] == "status":
+                    return json.dumps({"phase": "idle", "oldPair": {"cmsPath": old_cms_path}}).encode()
+                if arguments[0] == "export-backup":
+                    return b"verified off-host backup"
+                if arguments[0] == "cms-update" and "--offhost-sha256" in arguments:
+                    return json.dumps({"phase": "cms-activated"}).encode()
+                if arguments[0] == "cms-update":
+                    return json.dumps({"phase": "fenced", "offhostBackupRequired": True,
+                                       "backupSha256": "d" * 64}).encode()
+                self.fail(f"unexpected host command: {arguments[0]}")
+
+            def persist_backup(directory, operation_id, source_sha, payload, digest, *extra):
+                backup_path.write_bytes(payload)
+                if profile == "production-paired":
+                    (root / f"{operation_id}.json").write_text(json.dumps({
+                        "oldCmsSourceSha": "d" * 40, "oldCmsSchemaSha256": "e" * 64,
+                        "snapshotFingerprint": "sha256:" + "f" * 64}), encoding="utf-8")
+                return backup_path
+
+            def attach_artifact(provenance, _sha):
+                provenance["cmsArtifact"] = dict(self.ARTIFACT)
+                return b"cms candidate tar"
+
+            admission_patch = (patch.object(staging193, "validate_production_paired_admission",
+                                            side_effect=[dict(admitted), dict(current)])
+                               if profile == "production-paired" else
+                               patch.object(staging193, "validate_sha_and_ci",
+                                            side_effect=[dict(admitted), dict(current)]))
+            with patch.object(staging193, "ROOT", root), \
+                 patch.object(staging193, "ssh_remote", side_effect=ssh), \
+                 patch.object(staging193, "production_paired_schema_source",
+                              return_value=("d" * 40, "e" * 64)), \
+                 patch.object(staging193, "fetch_cms_candidate_artifact", side_effect=attach_artifact), \
+                 patch.object(staging193, "make_archive", return_value=(b"source archive", "a" * 64)) as make_archive, \
+                 patch.object(staging193, "backup_root", return_value=root), \
+                 patch.object(staging193, "persist_offhost_backup", side_effect=persist_backup) as save_backup, \
+                 admission_patch as admission:
+                if changed:
+                    message = ("production Release/main/CI admission changed before CMS activation"
+                               if profile == "production-paired"
+                               else "staging194 exact-SHA workflow proofs changed before CMS activation")
+                    with self.assertRaisesRegex(staging193.Refusal, message):
+                        staging193.invoke(args)
+                else:
+                    staging193.invoke(args)
+
+            self.assertEqual(admission.call_count, 2)
+            self.assertTrue(make_archive.call_args.kwargs["cms_artifact"] == b"cms candidate tar")
+            self.assertEqual(make_archive.call_args.args[1]["cmsArtifact"], self.ARTIFACT)
+            initial_update = next(call for call in calls if call[0] == "cms-update")
+            provenance_arg = initial_update[initial_update.index("--provenance-b64") + 1]
+            sent_provenance = json.loads(base64.b64decode(provenance_arg))
+            self.assertEqual(sent_provenance["cmsArtifact"], self.ARTIFACT)
+            save_backup.assert_called_once()
+            if profile == "production-paired":
+                self.assertEqual(save_backup.call_args.args[5]["cmsArtifact"], self.ARTIFACT)
+            self.assertEqual(sum(1 for call in calls if call[0] == "cms-update"), 1 if changed else 2)
+
+    def test_staging194_recheck_compares_ci_only_but_keeps_artifact_evidence(self):
+        for changed in (False, True):
+            with self.subTest(changed=changed):
+                self._run_backup_recheck("staging194", changed=changed)
+
+    def test_production_paired_recheck_compares_ci_only_but_keeps_artifact_evidence(self):
+        for changed in (False, True):
+            with self.subTest(changed=changed):
+                self._run_backup_recheck("production-paired", changed=changed)
+
+
+class CmsCandidateArtifactTests(unittest.TestCase):
+    def _payload(self):
+        output = io.BytesIO()
+        with tarfile.open(fileobj=output, mode="w:gz") as archive:
+            data = b"built CMS payload"
+            member = tarfile.TarInfo("package.json")
+            member.size = len(data)
+            archive.addfile(member, io.BytesIO(data))
+        return output.getvalue()
+
+    def _zip(self, payload, name="cms-artifact.tar.gz"):
+        output = io.BytesIO()
+        with zipfile.ZipFile(output, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+            archive.writestr(name, payload)
+        return output.getvalue()
+
+    def test_fetches_exact_run_artifact_and_records_both_digests(self):
+        payload = self._payload()
+        zipped = self._zip(payload)
+        metadata = {"artifacts": [{"id": 987, "name": "cms-candidate-123-2", "expired": False,
+            "digest": "sha256:" + hashlib.sha256(zipped).hexdigest(),
+            "workflow_run": {"id": 123, "head_sha": SHA, "head_branch": "main"}}]}
+        provenance = {"sourceSha": SHA, "runId": 123, "attempt": 2}
+        with patch.object(staging193, "capture", return_value=json.dumps([metadata])) as capture, \
+             patch.object(staging193, "capture_bytes", return_value=zipped) as capture_bytes:
+            result = staging193.fetch_cms_candidate_artifact(provenance, SHA)
+        self.assertEqual(result, payload)
+        self.assertEqual(provenance["cmsArtifact"], {"artifactId": 987, "runId": 123, "attempt": 2,
+            "archiveSha256": hashlib.sha256(zipped).hexdigest(),
+            "payloadSha256": hashlib.sha256(payload).hexdigest()})
+        self.assertEqual(capture.call_count, 1)
+        self.assertEqual(capture_bytes.call_count, 1)
+        self.assertIn("actions/runs/123/artifacts", capture.call_args.args[0][2])
+        self.assertIn("actions/artifacts/987/zip", capture_bytes.call_args.args[0][2])
+
+    def test_missing_expired_or_misbound_artifact_fails_closed(self):
+        base = {"id": 987, "name": "cms-candidate-123-2", "expired": False,
+            "digest": "sha256:" + "b" * 64,
+            "workflow_run": {"id": 123, "head_sha": SHA, "head_branch": "main"}}
+        for label, artifacts in (
+            ("missing", []),
+            ("PR diagnostic is not a deploy candidate", [{**base, "name": "cms-candidate-pr-123-2"}]),
+            ("expired", [{**base, "expired": True}]),
+            ("wrong run", [{**base, "workflow_run": {**base["workflow_run"], "id": 999}}]),
+            ("wrong sha", [{**base, "workflow_run": {**base["workflow_run"], "head_sha": "c" * 40}}]),
+            ("duplicate", [base, base]),
+        ):
+            with self.subTest(label=label):
+                with patch.object(staging193, "capture", return_value=json.dumps([{"artifacts": artifacts}])), \
+                     patch.object(staging193, "capture_bytes") as download, \
+                     self.assertRaises(staging193.Refusal):
+                    staging193.fetch_cms_candidate_artifact({"sourceSha": SHA, "runId": 123, "attempt": 2}, SHA)
+                download.assert_not_called()
+
+    def test_zip_digest_and_single_payload_contract_are_enforced(self):
+        payload = self._payload()
+        wrong_name_zip = self._zip(payload, "nested/cms-artifact.tar.gz")
+        metadata = {"artifacts": [{"id": 987, "name": "cms-candidate-123-2", "expired": False,
+            "digest": "sha256:" + hashlib.sha256(wrong_name_zip).hexdigest(),
+            "workflow_run": {"id": 123, "head_sha": SHA, "head_branch": "main"}}]}
+        with patch.object(staging193, "capture", return_value=json.dumps([metadata])), \
+             patch.object(staging193, "capture_bytes", return_value=wrong_name_zip), \
+             self.assertRaisesRegex(staging193.Refusal, "exactly one unencrypted tar"):
+            staging193.fetch_cms_candidate_artifact({"sourceSha": SHA, "runId": 123, "attempt": 2}, SHA)
+
+        good_zip = self._zip(payload)
+        metadata["artifacts"][0]["digest"] = "sha256:" + "0" * 64
+        with patch.object(staging193, "capture", return_value=json.dumps([metadata])), \
+             patch.object(staging193, "capture_bytes", return_value=good_zip), \
+             self.assertRaisesRegex(staging193.Refusal, "does not match GitHub"):
+            staging193.fetch_cms_candidate_artifact({"sourceSha": SHA, "runId": 123, "attempt": 2}, SHA)
+
+    def test_source_archive_includes_reserved_payload_member(self):
+        source = io.BytesIO()
+        with tarfile.open(fileobj=source, mode="w:") as archive:
+            data = b"source"
+            member = tarfile.TarInfo("README.md")
+            member.size = len(data)
+            archive.addfile(member, io.BytesIO(data))
+        payload = b"cms gzip tar"
+        with patch.object(staging193, "capture_bytes", return_value=source.getvalue()):
+            result, _ = staging193.make_archive(SHA, {"sourceSha": SHA}, cms_artifact=payload)
+        with tarfile.open(fileobj=io.BytesIO(result), mode="r:") as archive:
+            self.assertEqual(archive.extractfile(".ikpk-cms-artifact.tar.gz").read(), payload)
+
+    def test_missing_candidate_stops_before_host_mutation(self):
+        args = type("Args", (), {"profile": "staging194", "host": staging193.TARGET_HOST,
+            "command": "cms-update", "operation_id": "artifact-required", "source_sha": SHA,
+            "backup_dir": None, "release_tag": None})()
+        provenance = {"sourceSha": SHA, "runId": 123, "attempt": 2}
+        with patch.object(staging193, "validate_sha_and_ci", return_value=provenance), \
+             patch.object(staging193, "fetch_cms_candidate_artifact",
+                           side_effect=staging193.Refusal("exact CMS candidate artifact is missing")), \
+             patch.object(staging193, "ssh_remote") as ssh, \
+             self.assertRaisesRegex(staging193.Refusal, "artifact is missing"):
+            staging193.invoke(args)
+        ssh.assert_not_called()
+
+
+class Staging194HostHelperInstallTests(unittest.TestCase):
+    def setUp(self):
+        self.ssh_files = tempfile.TemporaryDirectory(prefix="staging194-host-helper-test-")
+        self.addCleanup(self.ssh_files.cleanup)
+        identity = Path(self.ssh_files.name) / "id_rsa"
+        known_hosts = Path(self.ssh_files.name) / "known_hosts"
+        identity.write_text("test identity")
+        known_hosts.write_text("194.226.99.10 ssh-ed25519 test-key\n")
+        for name, value in (("TARGET_IDENTITY", identity), ("TARGET_KNOWN_HOSTS", known_hosts)):
+            patcher = patch.object(staging193, name, value)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
+    def test_static_main_exposes_an_explicit_host_helper_step(self):
+        observed = []
+        with patch.object(staging193, "invoke", side_effect=lambda args: observed.append(args)):
+            result = staging193.main(["--profile", "staging194", "static-main", "--host",
+                staging193.TARGET_HOST, "--operation-id", "helper-step", "--source-sha", SHA,
+                "--install-host-helper"])
+        self.assertEqual(result, 0)
+        self.assertTrue(observed[0].install_host_helper)
+
+    def test_cms_update_exposes_the_staging194_host_helper_opt_in(self):
+        observed = []
+        with patch.object(staging193, "invoke", side_effect=lambda args: observed.append(args)):
+            result = staging193.main(["--profile", "staging194", "cms-update", "--host",
+                staging193.TARGET_HOST, "--operation-id", "paired-helper-cli", "--source-sha", SHA,
+                "--install-host-helper"])
+        self.assertEqual(result, 0)
+        self.assertTrue(observed[0].install_host_helper)
+
+    def test_staging_launcher_prelocks_every_host_action_that_uses_the_destination_lock(self):
+        import ast
+        import fcntl
+        installer = (Path(__file__).resolve().parents[1] / "install-rehearsal-host.sh").read_text()
+        launcher = installer.split('cat >"$SBIN/ikpk-rehearsal" <<EOF\n', 1)[1].split("\nEOF", 1)[0]
+        self.assertLess(launcher.index("fcntl.flock(fd"), launcher.index("from rehearsal_host import main"))
+        self.assertIn("main(publication_lock_fd=publication_lock_fd)", launcher)
+        parsed_launcher = ast.parse(launcher)
+        actions_assignment = next(node for node in parsed_launcher.body
+                                   if isinstance(node, ast.Assign)
+                                   and any(isinstance(target, ast.Name) and target.id == "locked_actions"
+                                           for target in node.targets))
+        self.assertEqual(ast.literal_eval(actions_assignment.value), rehearsal_host.DESTINATION_LOCKED_ACTIONS)
+        self.assertIn('if profile == "staging194" and action in locked_actions:', launcher)
+
+        classification = launcher[launcher.index('profile = "staging194"'):
+                                   launcher.index('if profile == "staging194" and action in locked_actions:')]
+        def select(argv):
+            state = {"argv": argv, "fcntl": fcntl}
+            exec(compile(classification, "paired-launcher-selection", "exec"), state)
+            return state["profile"], state["action"], state["locked_actions"], state["lock_mode"]
+
+        action_lock_modes = {}
+        for action in rehearsal_host.DESTINATION_LOCKED_ACTIONS:
+            profile, selected_action, _locked, lock_mode = select(["--profile", "staging194", action])
+            self.assertEqual((profile, selected_action), ("staging194", action))
+            action_lock_modes[action] = lock_mode
+        for arguments in (["--profile=staging194", "recover"], ["--prof", "staging194", "cleanup-site"]):
+            self.assertEqual(select(arguments)[0], "staging194")
+        self.assertEqual(select(["--profile", "staging194", "cms-update", "--pro", "payload"])[:2],
+                         ("staging194", "cms-update"))
+        for arguments in (["--profile", "staging194", "status"],
+                          ["--profile", "staging194", "space-preflight"],
+                          ["--profile", "staging194", "validate-config"],
+                          ["--profile", "production-static", "static-main"],
+                          ["--prof", "production-paired", "cms-update"]):
+            profile, action, locked_actions, _lock_mode = select(arguments)
+            self.assertFalse(profile == "staging194" and action in locked_actions, arguments)
+
+        with tempfile.TemporaryDirectory(prefix="ikpk-helper-import-lock-") as temporary:
+            root = Path(temporary)
+            lock_path = root / "publication.lock"
+            module_path = root / "loaded_helper.py"
+            lock_path.touch(mode=0o600)
+            module_path.write_text('generation = "A"\n')
+            child_code = (
+                "import fcntl, importlib.util, os, sys, time; "
+                "fd=os.open(sys.argv[1], os.O_RDWR); fcntl.flock(fd, fcntl.LOCK_EX); "
+                "spec=importlib.util.spec_from_file_location('loaded_helper', sys.argv[2]); "
+                "module=importlib.util.module_from_spec(spec); spec.loader.exec_module(module); "
+                "print(module.generation, flush=True); time.sleep(0.25); print(module.generation, flush=True)"
+            )
+            child = subprocess.Popen(["python3", "-c", child_code, str(lock_path), str(module_path)],
+                                     stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            self.assertEqual(child.stdout.readline().strip(), "A")
+            replacement_fd = os.open(lock_path, os.O_RDWR)
+            try:
+                with self.assertRaises(BlockingIOError):
+                    fcntl.flock(replacement_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            finally:
+                os.close(replacement_fd)
+            stdout, stderr = child.communicate(timeout=5)
+            self.assertEqual(child.returncode, 0, stderr)
+            self.assertEqual(stdout.splitlines(), ["A"])
+            replacement_fd = os.open(lock_path, os.O_RDWR)
+            try:
+                fcntl.flock(replacement_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                module_path.write_text('generation = "B"\n')
+            finally:
+                os.close(replacement_fd)
+            self.assertIn('"B"', module_path.read_text())
+
+            cleanup_mode = select(["--profile", "staging194", "cleanup-site"])[3]
+            held_fd = os.open(lock_path, os.O_RDWR)
+            fcntl.flock(held_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            cleanup_request = Path(temporary) / "cleanup.request"
+            cleanup_request.write_text('{"version":1,"releaseId":"stale"}')
+            releases = Path(temporary) / "releases"
+            releases.mkdir()
+            (releases / "stale").write_text("keep until lock is acquired")
+            before_request = cleanup_request.read_bytes()
+            before_releases = {item.name: item.read_bytes() for item in releases.iterdir()}
+            cleanup_code = (
+                "import fcntl, os, sys\nfd=os.open(sys.argv[1], os.O_RDWR)\n"
+                "try: fcntl.flock(fd, int(sys.argv[2]))\n"
+                "except BlockingIOError: print('busy', flush=True); raise SystemExit(3)\n"
+                "print('acquired', flush=True)"
+            )
+            try:
+                cleanup = subprocess.run(
+                    ["python3", "-c", cleanup_code, str(lock_path), str(cleanup_mode)],
+                    stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=2,
+                    check=False)
+                self.assertEqual(cleanup.returncode, 3, cleanup.stderr)
+                self.assertEqual(cleanup.stdout.strip(), "busy")
+                self.assertEqual(cleanup_request.read_bytes(), before_request)
+                self.assertEqual({item.name: item.read_bytes() for item in releases.iterdir()}, before_releases)
+            finally:
+                fcntl.flock(held_fd, fcntl.LOCK_UN)
+                os.close(held_fd)
+            manual = os.open(lock_path, os.O_RDWR)
+            try:
+                fcntl.flock(manual, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                cleanup_request.unlink()
+                (releases / "stale").unlink()
+            finally:
+                os.close(manual)
+            self.assertFalse(cleanup_request.exists())
+            self.assertEqual(list(releases.iterdir()), [])
+            self.assertEqual(action_lock_modes,
+                             {action: fcntl.LOCK_EX | fcntl.LOCK_NB
+                              for action in rehearsal_host.DESTINATION_LOCKED_ACTIONS})
+
+    def test_helper_install_transfers_and_verifies_bytes_before_running_existing_installer(self):
+        payload = b"verified host helper archive"
+        digest = hashlib.sha256(payload).hexdigest()
+        commands = []
+
+        def run(command, **kwargs):
+            commands.append(command)
+            if command[0] == "scp":
+                transferred = Path(command[-2]).read_bytes()
+                self.assertEqual(transferred, payload)
+            if command[0] == "ssh" and "mktemp" in command[-1]:
+                return subprocess.CompletedProcess(command, 0, b"/var/tmp/ikpk-staging194/host-helper.ABC123\n", b"")
+            if command[0] == "ssh" and "python3 -c" in command[-1]:
+                script = shlex.split(command[-1])[2]
+                compile(script, "remote-host-helper-installer", "exec")
+                config = json.loads((staging193.ROOT / "scripts/staging193-rehearsal.json").read_text())
+                self.assertNotIn("profile", config)
+                self.assertIn('config.get("profile", "staging194")', script)
+            return subprocess.CompletedProcess(command, 0, b"", b"")
+
+        with patch.object(staging193.subprocess, "run", side_effect=run):
+            staging193.install_staging194_host_helper(payload, digest, "fresh-helper-test")
+
+        transfer = next(command for command in commands if command[0] == "scp")
+        self.assertIn(staging193.TARGET_HOST, transfer[-1])
+        self.assertTrue(any(command[0] == "ssh" and "mktemp" in command[-1] for command in commands))
+        remote = [" ".join(command) for command in commands if command[0] == "ssh"]
+        install_command = next(command for command in remote if "install-rehearsal-host.sh" in command)
+        self.assertLess(install_command.index("transferred host helper SHA-256"),
+                        install_command.index("install-rehearsal-host.sh"))
+        self.assertIn(digest, install_command)
+        self.assertIn("LOCK_NB", install_command)
+        self.assertLess(install_command.index("fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)"),
+                        install_command.index("--staging193-existing-config"))
+        self.assertLess(install_command.index("--staging193-existing-config"),
+                        install_command.index("for fd in reversed(fds)"))
+        self.assertIn("staging194 lock inode changed during helper installation", install_command)
+        self.assertIn("recover with the previous operation ID, then use a new operation ID", install_command)
+        self.assertIn('--staging193-existing-config"], check=True)', install_command)
+        self.assertNotIn("--initial-prod-config", install_command)
+        self.assertNotIn("--production-static-config", install_command)
+        self.assertNotIn("--production-paired-config", install_command)
+
+    def test_verified_helper_checks_journal_under_locks_before_replacing_any_file(self):
+        real_run = subprocess.run
+        operation_id = "fresh-helper-operation"
+        cms_user = pwd.getpwuid(os.getuid()).pw_name
+        install_source = (
+            'subprocess.run(["bash", os.path.join(temporary, "payload/scripts/install-rehearsal-host.sh"),\n'
+            '                        "--staging193-existing-config"], check=True)'
+        )
+
+        def package_bytes():
+            archive = io.BytesIO()
+            with tarfile.open(fileobj=archive, mode="w:gz") as bundle:
+                for name in ("scripts", "scripts/lib"):
+                    info = tarfile.TarInfo(name)
+                    info.type = tarfile.DIRTYPE
+                    info.mode = 0o755
+                    bundle.addfile(info)
+                for name in sorted(staging193.HOST_HELPER_ARTIFACT_FILES):
+                    data = (staging193.ROOT / name).read_bytes()
+                    info = tarfile.TarInfo(name)
+                    info.size = len(data)
+                    info.mode = 0o644
+                    bundle.addfile(info, io.BytesIO(data))
+            return archive.getvalue()
+
+        payload = package_bytes()
+        digest = hashlib.sha256(payload).hexdigest()
+
+        def run_case(scenario):
+            with tempfile.TemporaryDirectory(prefix="ikpk-helper-journal-guard-") as temporary:
+                root = Path(temporary)
+                remote_dir = root / "host-helper.ABC123"
+                remote_dir.mkdir(mode=0o700)
+                state_dir = root / "state"
+                state_dir.mkdir()
+                publication_lock = root / "publication.lock"
+                state_lock = state_dir / ".operation.lock"
+                for lock in (publication_lock, state_lock):
+                    lock.touch(mode=0o600)
+                    lock.chmod(0o600)
+                config = {"profile": "staging194", "stateDir": str(state_dir), "cmsUser": cms_user,
+                          "publicationLock": str(publication_lock), "maintenanceFlag": str(root / "fenced"),
+                          "sitePublicationMarker": str(root / "site-publication.json")}
+                config_path = root / "rehearsal.json"
+                config_path.write_text(json.dumps(config), encoding="utf-8")
+                state = rehearsal_host.RehearsalState(state_dir)
+                if scenario == "own-row":
+                    state.begin(operation_id, SHA, {"cmsPath": "/old/cms", "staticPath": "/old/static"})
+                    state.confirm_fence(operation_id, lambda: True)
+                    state.recover(operation_id, lambda: True, lambda: True)
+                elif scenario == "unfinished":
+                    state.begin("unfinished-other", SHA,
+                                {"cmsPath": "/old/cms", "staticPath": "/old/static"})
+                    state.marker_path.unlink()
+                elif scenario == "torn":
+                    state.journal_path.write_bytes(b'{"version":1,"record":"start"')
+                install_marker = root / "helper-replacement-ran"
+                remote_path = "/var/tmp/ikpk-staging194/host-helper.ABC123"
+                calls = []
+
+                def run(command, **kwargs):
+                    calls.append(command)
+                    if command[0] == "ssh" and "python3 -c" in command[-1]:
+                        script = shlex.split(command[-1])[2]
+                        self.assertIn(install_source, script)
+                        self.assertIn(operation_id, command[-1])
+                        local_pattern = re.escape(str(root)) + r"/host-helper\.[A-Za-z0-9]{6}"
+                        script = script.replace(
+                            'r"/var/tmp/ikpk-staging194/host-helper\\.[A-Za-z0-9]{6}"', repr(local_pattern))
+                        script = script.replace('"/etc/ikpk/rehearsal.json"', repr(str(config_path)))
+                        script = script.replace("directory.st_uid != 0", "directory.st_uid != os.getuid()")
+                        script = script.replace("archive_info.st_uid != 0", "archive_info.st_uid != os.getuid()")
+                        for key, original in (
+                            ("stateDir", "/var/lib/ikpk-rehearsal/staging194"),
+                            ("cmsUser", "ikpk-cms"),
+                            ("publicationLock", "/var/www/ikpk/.publication.lock"),
+                            ("maintenanceFlag", "/var/lib/ikpk-rehearsal/staging194/fenced"),
+                            ("sitePublicationMarker", "/var/lib/ikpk-rehearsal/site-publication/host-publication.json"),
+                        ):
+                            script = script.replace(f'config.get("{key}") != "{original}"',
+                                                    f'config.get("{key}") != {config[key]!r}')
+                        script = script.replace(
+                            'subprocess.run(["/usr/local/sbin/ikpk-rehearsal", "--profile", "staging194", "validate-config"], check=True)',
+                            'subprocess.run(["/usr/bin/true"], check=True)')
+                        script = script.replace(install_source,
+                                                f'open({str(install_marker)!r}, "w").write("installed")')
+                        argv = shlex.split(command[-1])
+                        completed = real_run(["python3", "-c", script, str(remote_dir), digest, argv[-1]],
+                                              stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False)
+                        return subprocess.CompletedProcess(command, completed.returncode,
+                            completed.stdout, completed.stderr)
+                    if command[0] == "ssh" and "mktemp" in command[-1]:
+                        return subprocess.CompletedProcess(command, 0, (remote_path + "\n").encode(), b"")
+                    if command[0] == "scp":
+                        shutil.copyfile(command[-2], remote_dir / "host-helper.tar.gz")
+                        return subprocess.CompletedProcess(command, 0, b"", b"")
+                    return subprocess.CompletedProcess(command, 0, b"", b"")
+
+                with patch.object(staging193.subprocess, "run", side_effect=run):
+                    if scenario == "fresh":
+                        staging193.install_staging194_host_helper(payload, digest, operation_id)
+                        self.assertTrue(install_marker.exists())
+                    else:
+                        with self.assertRaises(staging193.Refusal):
+                            staging193.install_staging194_host_helper(payload, digest, operation_id)
+                        self.assertFalse(install_marker.exists(), scenario)
+                    wrapper = next(command[-1] for command in calls
+                                   if command[0] == "ssh" and "python3 -c" in command[-1])
+                    self.assertIn("read_journal_for_cleanup(validate_history=True)", wrapper)
+                    self.assertIn("requested_operation_id", wrapper)
+                    self.assertLess(wrapper.index("fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)"),
+                                    wrapper.index("read_journal_for_cleanup(validate_history=True)"))
+                    self.assertLess(wrapper.index("read_journal_for_cleanup(validate_history=True)"),
+                                    wrapper.rindex("install-rehearsal-host.sh"))
+
+        for scenario in ("fresh", "own-row", "unfinished", "torn"):
+            with self.subTest(scenario=scenario):
+                run_case(scenario)
+
+    def test_remote_digest_failure_stops_before_installer(self):
+        payload = b"transferred helper bytes"
+        digest = hashlib.sha256(payload).hexdigest()
+        commands = []
+
+        def run(command, **kwargs):
+            commands.append(command)
+            if command[0] == "ssh" and "python3 -c" not in command[-1] and "mktemp" in command[-1]:
+                return subprocess.CompletedProcess(command, 0, b"/var/tmp/ikpk-staging194/host-helper.ABC123\n", b"")
+            if command[0] == "ssh" and "python3 -c" in command[-1] and "transferred host helper SHA-256" in command[-1]:
+                return subprocess.CompletedProcess(command, 1, b"", b"digest mismatch")
+            return subprocess.CompletedProcess(command, 0, b"", b"")
+
+        with patch.object(staging193.subprocess, "run", side_effect=run), \
+             self.assertRaises((staging193.Refusal, subprocess.CalledProcessError, OSError)):
+            staging193.install_staging194_host_helper(payload, digest, "fresh-helper-test")
+        wrapper = next(command[-1] for command in commands
+                       if command[0] == "ssh" and "python3 -c" in command[-1])
+        self.assertLess(wrapper.index("if actual_digest != expected_digest"),
+                        wrapper.index("install-rehearsal-host.sh"))
+        self.assertEqual(sum(command[0] == "ssh" and "python3 -c" in command[-1]
+                             for command in commands), 1)
+
+    def test_static_main_fetch_failure_stops_before_any_host_operation(self):
+        args = SimpleNamespace(profile="staging194", host=staging193.TARGET_HOST,
+            command="static-main", operation_id="helper-fetch-failure", source_sha=SHA,
+            release_tag=None, reuse_capture_operation_id=None, expected_installed_cms_sha=None,
+            install_host_helper=True)
+        provenance = {"sourceSha": SHA, "runId": 123, "attempt": 2}
+        responses = [json.dumps({"phase": "browser-check-required", "staticTreeSha256": "d" * 64}).encode(),
+                     b"candidate", json.dumps({"phase": "committed"}).encode()]
+        with patch.object(staging193, "_check_target_space", return_value={"filesystems": [{"path": "/", "freeBytes": 1, "requiredBytes": 1}]}), \
+             patch.object(staging193, "_check_local_space", return_value=[]), \
+             patch.object(staging193, "validate_static_main_ci", return_value=provenance), \
+             patch.object(staging193, "fetch_host_helper_artifact",
+                          side_effect=staging193.Refusal("host helper archive digest mismatch")), \
+             patch.object(staging193, "make_archive", return_value=(b"source archive", "a" * 64)), \
+             patch.object(staging193, "ssh_remote") as remote, \
+             patch.object(staging193, "browser_check"):
+            remote.side_effect = lambda *_args, **_kwargs: responses.pop(0)
+            try:
+                staging193.invoke(args)
+            except staging193.Refusal as error:
+                self.assertIn("host helper archive digest mismatch", str(error))
+            else:
+                self.fail("static-main continued after the requested helper artifact was rejected")
+        remote.assert_not_called()
+
+    def test_artifact_evidence_does_not_change_the_exact_ci_recheck(self):
+        admitted = {"sourceSha": SHA, "runId": 123, "attempt": 2, "workflow": "Tests",
+                    "conclusion": "success", "requiredJobs": ["Tests"]}
+        artifact_evidence = {"artifactId": 987, "runId": 123, "attempt": 2,
+                             "archiveSha256": "b" * 64, "payloadSha256": "c" * 64}
+        responses = [json.dumps({"phase": "browser-check-required", "staticTreeSha256": "d" * 64}).encode(),
+                     b"candidate bytes", json.dumps({"phase": "committed"}).encode()]
+        host_calls = []
+
+        def attach_helper(provenance, _sha):
+            provenance["hostHelperArtifact"] = dict(artifact_evidence)
+            return b"verified helper bytes"
+
+        def ssh(arguments, input_bytes=None, **_kwargs):
+            host_calls.append((arguments, input_bytes))
+            return responses.pop(0)
+
+        args = SimpleNamespace(profile="staging194", host=staging193.TARGET_HOST,
+            command="static-main", operation_id="helper-and-publish", source_sha=SHA,
+            release_tag=None, reuse_capture_operation_id=None, expected_installed_cms_sha=None,
+            install_host_helper=True)
+        journal_provenance = []
+        def capture_archive(sha, provenance):
+            journal_provenance.append(dict(provenance))
+            return b"source archive", "a" * 64
+        order = []
+        def ordered_ssh(arguments, input_bytes=None, **_kwargs):
+            order.append(arguments[0])
+            return ssh(arguments, input_bytes=input_bytes)
+
+        with patch.object(staging193, "_check_target_space", return_value={"filesystems": [{"path": "/", "freeBytes": 1, "requiredBytes": 1}]}), \
+             patch.object(staging193, "_check_local_space", return_value=[]), \
+             patch.object(staging193, "validate_static_main_ci", side_effect=[dict(admitted), dict(admitted)]) as admit, \
+             patch.object(staging193, "fetch_host_helper_artifact", side_effect=attach_helper) as fetch, \
+             patch.object(staging193, "install_staging194_host_helper", create=True,
+                          side_effect=lambda *_args: order.append("install")) as install, \
+             patch.object(staging193, "make_archive", side_effect=capture_archive), \
+             patch.object(staging193, "ssh_remote", side_effect=ordered_ssh), \
+             patch.object(staging193, "browser_check"):
+            staging193.invoke(args)
+
+        self.assertEqual(admit.call_count, 2)
+        fetch.assert_called_once_with(admitted, SHA)
+        self.assertNotIn("hostHelperArtifact", admitted)
+        self.assertEqual(journal_provenance[0]["hostHelperArtifact"], artifact_evidence)
+        command_provenance = json.loads(base64.b64decode(
+            host_calls[0][0][host_calls[0][0].index("--provenance-b64") + 1]))
+        self.assertEqual(command_provenance, journal_provenance[0])
+        install.assert_called_once_with(b"verified helper bytes", artifact_evidence["payloadSha256"], args.operation_id)
+        self.assertEqual([call[0][0] for call in host_calls],
+                         ["static-main", "export-static-main", "static-main"])
+        self.assertEqual(order, ["install", "static-main", "export-static-main", "static-main"])
+
+    def test_helper_install_failure_stops_before_static_prepare_or_commit(self):
+        args = SimpleNamespace(profile="staging194", host=staging193.TARGET_HOST,
+            command="static-main", operation_id="helper-install-failure", source_sha=SHA,
+            release_tag=None, reuse_capture_operation_id=None, expected_installed_cms_sha=None,
+            install_host_helper=True)
+        provenance = {"sourceSha": SHA, "runId": 123, "attempt": 2}
+        def attach_helper(evidence, _sha):
+            evidence["hostHelperArtifact"] = {"payloadSha256": "c" * 64}
+            return b"verified helper bytes"
+        with patch.object(staging193, "_check_target_space", return_value={"filesystems": [{"path": "/", "freeBytes": 1, "requiredBytes": 1}]}), \
+             patch.object(staging193, "_check_local_space", return_value=[]), \
+             patch.object(staging193, "validate_static_main_ci", return_value=provenance), \
+             patch.object(staging193, "fetch_host_helper_artifact", side_effect=attach_helper), \
+             patch.object(staging193, "install_staging194_host_helper",
+                          side_effect=staging193.Refusal("installer rejected config")) as install, \
+             patch.object(staging193, "make_archive") as archive, \
+             patch.object(staging193, "ssh_remote") as remote:
+            with self.assertRaisesRegex(staging193.Refusal, "installer rejected config"):
+                staging193.invoke(args)
+        install.assert_called_once()
+        archive.assert_not_called()
+        remote.assert_not_called()
 
 
 if __name__ == "__main__":

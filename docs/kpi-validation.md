@@ -167,7 +167,7 @@ for line in sys.stdin:
 
 ### 7. TTFB p75 — Target ≤ 300ms
 
-**Post-launch only** — requires the live CDN. Synthetic monitoring from 2 locations.
+**Post-launch only** — measure the published target. Synthetic monitoring from 2 locations.
 
 **Option A: curl-based measurement script**
 

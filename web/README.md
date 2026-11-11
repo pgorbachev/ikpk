@@ -1,9 +1,9 @@
 # ИКПК — статический сайт (Astro)
 
-Static-first ребилд [ikpk.su](https://ikpk.su) — Института клинической прикладной
-кинезиологии. **259 страниц** (255 контентных + 404 + 3 noindex-превью вариантов) собираются из снапшота данных
-`discovery/entities/*.json` без CMS и бэкенда. Архитектура и план запуска:
-[docs/plans/004-mvp-plan.md](../docs/plans/004-mvp-plan.md).
+Static-first сайт [ikpk.su](https://ikpk.su) — Института клинической прикладной
+кинезиологии. Astro собирает страницы из снимка контента; источник и подготовка
+снимка описаны в `src/lib/data.ts` и `scripts/prepare-snapshot.ts`.
+Правила поведения находятся в `../openspec/specs/`.
 
 ## Стек
 
@@ -19,15 +19,15 @@ npm install
 npx playwright install chromium   # один раз: браузер для e2e (версия из lock!)
 
 npm run dev          # dev-сервер
-npm run build        # прод-сборка в dist/ (259 страниц)
+npm run build        # прод-сборка в dist/ с поисковым индексом
 ./serve.sh [port]    # стабильный локальный превью dist/ (дефолт: 4322)
 
 npm run lint         # eslint
 npm run typecheck    # astro check
-npm test             # vitest unit (42)
-npm run test:build   # build + проверки dist/ (50)
-npm run test:e2e:smoke   # Playwright smoke, desktop+mobile (60)
-npm run test:e2e:a11y    # axe-core: 0 critical/serious (20 проверок)
+npm test             # unit- и render-тесты
+npm run test:build   # build + проверки dist/
+npm run test:e2e:smoke   # Playwright smoke, desktop+mobile
+npm run test:e2e:a11y    # axe-core, desktop+mobile
 npm run test:e2e:compat  # 7 браузеров/устройств (nightly, не PR-гейт)
 npx lhci autorun     # Lighthouse-бюджеты (см. lighthouserc.cjs)
 ```
@@ -56,32 +56,23 @@ npx lhci autorun     # Lighthouse-бюджеты (см. lighthouserc.cjs)
 
 ## CI
 
-| Workflow | Когда | Что |
-|---|---|---|
-| `lint.yml` | PR-гейт | eslint + astro check (web/cms/scripts) |
-| `test.yml` | PR-гейт | vitest unit + build-тесты + Playwright smoke + axe |
-| `security.yml` | PR-гейт + weekly | gitleaks + npm audit (prod, high) |
-| `lighthouse.yml` | PR-гейт* | бюджеты kpi-validation.md, медиана 5×4 шаблона |
-| `nightly.yml` | cron 02:30 | compat 7 проектов + parity против живого ikpk.su |
-
-\* required-чеком в branch protection становится после мерджа PR Этапа 2
-(до этого — информационный; WBS 2.5).
+Состав проверок определяется файлами в `../.github/workflows/` и настройками репозитория.
 
 ## Тесты
 
 - `tests/site.spec.ts` — smoke: ключевые страницы, SEO-теги, навигация
 - `tests/a11y.spec.ts` — axe-core (WCAG 2.1 AA) на 4 шаблонах
 - `tests/compat.spec.ts` — кросс-браузерная матрица (7 проектов)
-- `tests/*-parity.spec.ts`, `compare.spec.ts` — паритет с живым ikpk.su
-  (`PARITY_REMOTE=1`); после переключения DNS переводятся в snapshot-режим
-- unit: `html-cleaner.test.ts`, `parity-compare.test.ts`; build-тесты гоняются
-  против `dist/` (`vitest.build.config.ts`)
+- `tests/parity-compare.test.ts` — сравнение с живым ikpk.su при `PARITY_REMOTE=1`
+- `tests/compare.spec.ts` — браузерное сравнение с живым ikpk.su
+- unit: `html-cleaner.test.ts`; build-тесты, включая `parity-compare.test.ts`,
+  запускаются против `dist/` (`vitest.build.config.ts`)
 
 ## Структура
 
 ```
 src/
-  pages/          # роуты: 18 .astro-файлов → 259 страниц (динамика из data.ts)
+  pages/          # маршруты и страницы
   layouts/        # BaseLayout: head, canonical/OG/JSON-LD, шапка/подвал
   components/     # по разделам: home/, schedule/, seminars/, articles/, …
   lib/            # data.ts (аксессоры), html-cleaner.ts, seo.ts
@@ -89,32 +80,7 @@ src/
 public/fonts/     # self-hosted шрифты
 ```
 
-## Медиа
+## Медиа и выкладка
 
-Все медиа самохостятся из `public/media/**` (**345 файлов, ~21 МБ**), качает
-их `scripts/download-media.ts` из **трёх** источников старого сайта:
-
-| Источник | Куда | Что это |
-|---|---|---|
-| `storage.yandexcloud.net/ikpk-image` | `/media/**` | контентные картинки старой CMS |
-| `ikpk.su/api/upload/file/<uuid>` | `/media/uploads/**` | картинки статей и групп курсов + 2 PDF (учебные схемы) |
-| `ikpk.su/_next/static/media` | `/media/legacy/**` | эмблемы институтов, иконки министерств |
-
-Последние два — **умирающий деплой старого сайта**: при переключении DNS эти
-пути исчезают, поэтому ассеты захвачены локально, а ссылки в
-`discovery/entities` переписаны.
-
-Скрипт даунскейлит оверсайз >1200px и пережимает раздутые растры (upload-API
-отдавал webp почти без сжатия — до 2.8 МБ на 974×1349; итог 104 МБ → 5.9 МБ),
-оставляя результат только если он меньше оригинала. Расширение сверяется с
-`Content-Type`: PDF под именем `.webp` роняет прогон с понятной ошибкой.
-
-Гейты: «0 хотлинков на storage.yandexcloud.net» и обобщённый
-«каждая картинка резолвится локально, внешних хостов нет» — второй и поймал
-`/_next/**` и `/api/upload/**`. При появлении новых картинок в entities —
-перезапустить скрипт.
-
-## Известные ограничения (до соответствующих этапов плана 004)
-
-- Конверсионный контур записи/подписки/чата не подключён → Этап 4 (поиск уже работает: Pagefind)
-- Деплой-таргет GitHub Pages временный; прод — VPS + Nginx → Этап 1
+Медиа обрабатываются при подготовке сборки; команды находятся в `package.json`.
+Инструкции по выкладке и эксплуатации — в `../docs/` и `../deploy/`.

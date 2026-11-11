@@ -1,9 +1,11 @@
 ## 1. First release
 
-- [ ] Change paired staging194 admission to exact current `main` with stable Release, required CI, and `release-preflight`; keep its staging-only config/content source bound to 194. Retain fixed `initial-prod` admission on exact current `main` with its single protected ID `initial-prod-20261019-A-01`, bound source/run at start, and no reuse after commit. Prepare source, CMS/web dependencies, and CMS artifact before creating the journal or marker. Keep CMS/static payload digests separate.
+- [ ] Change paired staging194 admission to default to canonical `main` head or an explicitly selected eligible main revision with exact-SHA required CI and no GitHub Release; keep its staging-only config/content source bound to 194. Retain fixed `initial-prod` admission on exact current `main` with its single protected ID `initial-prod-20261019-A-01`, bound source/run at start, and no reuse after commit. Prepare source and web dependencies before creating the journal or marker. Paired staging194 validates its admitted CI-built CMS artifact and required compatible dependencies before the fence; the fixed historical initial-prod operation retains its original host build and dependency preparation. Keep CMS/static payload digests separate.
 - [x] On staging194 (`194.226.99.10`), hold the host flock and reject an existing marker, unfinished operation, or used operation ID before preparation; after complete preparation, record the old pair, fence and stop writers, checkpoint WAL, prove no DB handles, and verify actual DB/media backup bytes off-host before mutation.
 - [x] After backup confirmation, run CMS migration/audit unprivileged; verify CMS health, process DB path, and media. Build static output from the sealed capture with the prepared web dependencies, verify served `/release.json`, routes, and images, then durably commit both acceptances before reopening writers.
 - [ ] For initial-prod, retain truthful `origin=server-db` with a distinct production-only proof bound to host, source SHA, run, operation ID, DB/schema/media digests; use production origin/payment role and run browser checks against the same frozen candidate with external payment/CRM writes disabled. Verify production HTTPS served release/routes/images before commit. Keep ordinary publication snapshot validation rejecting this proof.
+
+- [ ] Verify CI-built CMS candidate admission and target compatibility for paired staging194, with no destination CMS build; after explicit handoff use the existing writer/worker transition and verify workspace, recovery and retryable cleanup.
 
 ## 2. Pre-commit recovery (staging194 only; initial-prod recovery deferred)
 
@@ -16,11 +18,22 @@
 
 ## 4. Static-only main publication
 
-- [x] Admit exact current canonical `main` only after successful `Tests`, `Lint and Typecheck`, `Security`, and `Lighthouse CI` push runs with required jobs successful; build from a read-only current CMS/content/media capture and atomically switch only the static tree.
+- [x] Keep staging194 static-only admission on exact current canonical `main` after successful `Tests`, `Lint and Typecheck`, `Security`, and `Lighthouse CI` push runs with required jobs successful; build from a read-only current CMS/content/media capture and atomically switch only the static tree.
 - [x] Preserve CMS code, service, environment, DB/WAL, uploads, roles, and users; journal the prior static tree and require explicit compare-and-swap rollback with operator and reason. The paired staging194 source policy is separately changed above; ordinary production policy remains unchanged.
 - [ ] Execute the approved static-only publication on staging194 for an exact admitted current `main` SHA; verify the externally served release/routes and unchanged CMS fingerprint, then exercise the installed explicit rollback and verify the exact prior static tree is served again.
-- [ ] Add reusable production-static config/state and fresh read-only production capture with an explicit static-only command allowlist; exercise its rollback only under a separately authorized production release.
+- [ ] Add reusable production-static config/state and fresh read-only production capture with an explicit static-only command allowlist. In the shared tag-based operator workflow (`--release-tag` plus validated in-memory Release admission), default to the green exact `main` SHA at operation start and permit an explicitly selected older stable GitHub Release only when `Tests`, `Lint and Typecheck`, `Security`, and `Lighthouse CI` succeed for that exact SHA and existing compatibility checks pass. Keep its admitted SHA if `main` advances. Preserve the legacy direct no-tag `static-main` current-main pre-switch check, and exercise rollback only under a separately authorized production release.
 
 Owner-accepted staging194 A01 evidence: source `b06e9ea354c7fdbd58e347258a076b4a0860786b`; canonical Tests run 39226509667, attempt 1 (all five required jobs green); off-host DB/media backup SHA-256 `28bbc71b5a8762a6689c412caf65410f18a0406404d82e29b01f9d5294331db9`; 32/32 browser checks; 3,783 media responses returned HTTP 200; operation committed. This records the completed staging first-release tasks only.
 
 Initial-prod recovery acceptance, the production equivalent of recovery scenario 2, CMS editor workflows, the production equivalent of second-release scenario 3, ordinary production publication, and production tag archival remain deferred by the owner. The staging194 paired source gate and conditional `dev` retirement are tracked above and are not claimed complete here. A pre-commit production failure stays fenced pending safe completion of the same admitted operation or separate owner-approved database restore.
+
+## 5. Shared publication lock
+
+- [ ] Use the existing destination flock for CMS refresh/restore, deploy/recovery and cleanup; check existing unresolved operation state under the lock, preserve current and protected rollback targets, and verify competing operations and interrupted recovery.
+
+
+## 6. Host helper release artifact
+
+- [ ] Package `host-helper.tar.gz` from the existing installer, modules, and configuration templates for the admitted exact source SHA; upload it from CI with verifiable source/CI provenance and no host credentials.
+- [ ] Configure staging194 to consume the exact-SHA CI artifact without requiring a GitHub Release, and production to reuse the identical artifact bytes as a GitHub Release asset; retain separate destination configurations.
+- [ ] Reuse the existing CMS artifact admission checks for the helper: exact SHA admitted by the existing source-selection mode and its successful canonical `main` `Tests` push run/attempt, unique unexpired run-bound artifact, GitHub digest verification of the downloaded ZIP, and exactly the expected payload; record the verified payload SHA-256. Require the production GitHub Release asset to match that SHA-256. Orchestrate retrieval, verification, existing installer invocation through an evidenced permitted channel, and continuation of the explicit staging194 publication command; accept only after verifying the actually served release and required routes. `ssh_remote` invoking the installed helper does not establish an update channel. If no permitted channel is evidenced, refuse before installation and leave this task blocked on the concrete channel decision. Preserve installed lock/configuration and existing gates; add no self-update, service, or transport.

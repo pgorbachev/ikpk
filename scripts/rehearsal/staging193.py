@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import base64
+import copy
 import hashlib
 import http.server
 import io
@@ -19,7 +20,8 @@ import sys
 import tarfile
 import tempfile
 import threading
-from pathlib import Path
+import zipfile
+from pathlib import Path, PurePosixPath
 from typing import Optional
 
 
@@ -48,6 +50,11 @@ REQUIRED_TEST_JOBS = {
     "Playwright smoke (desktop + mobile)",
 }
 STATIC_MAIN_ADDITIONAL_WORKFLOWS = ("Lint and Typecheck", "Security", "Lighthouse CI")
+FRESH_OPERATION_STATUS_ERRORS = frozenset({
+    "operation has no maintenance marker or terminal journal record",
+    "host operation failed (2): ikpk-rehearsal: "
+    "operation has no maintenance marker or terminal journal record",
+})
 
 
 class Refusal(RuntimeError):
@@ -69,15 +76,14 @@ def capture_bytes(argv: list[str]) -> bytes:
     return result.stdout
 
 
-def validate_sha_and_ci(sha: str, profile: str = "staging194") -> dict:
+def validate_sha_and_ci(sha: str, profile: str = "staging194", *, require_current_head: bool = True) -> dict:
     if profile not in ("staging194", "staging194-dev", "staging194-main", "initial-prod"):
         raise Refusal("unknown fixed rehearsal profile")
     if not SHA.fullmatch(sha):
         raise Refusal("source SHA must be a full lowercase commit ID")
     capture(["git", "cat-file", "-e", f"{sha}^{{commit}}"])
     if profile == "staging194":
-        main_provenance = validate_sha_and_ci(sha, "staging194-main")
-        return validate_stable_release(main_provenance, sha)
+        return validate_staging194_paired_admission(sha)
     repo = capture(["gh", "repo", "view", CANONICAL_REPOSITORY,
                     "--json", "nameWithOwner", "--jq", ".nameWithOwner"])
     if repo != CANONICAL_REPOSITORY:
@@ -85,7 +91,7 @@ def validate_sha_and_ci(sha: str, profile: str = "staging194") -> dict:
     branch = "main" if profile in ("staging194", "staging194-main", "initial-prod") else "dev"
     canonical_ref = f"refs/heads/{branch}"
     canonical_head = capture(["gh", "api", f"repos/{repo}/git/ref/heads/{branch}", "--jq", ".object.sha"])
-    if canonical_head != sha:
+    if require_current_head and canonical_head != sha:
         raise Refusal(f"source SHA is not the current canonical pgorbachev/ikpk {branch} head")
     raw = capture(["gh", "run", "list", "--repo", repo, "--commit", sha,
                    "--workflow", WORKFLOW, "--limit", "50", "--json",
@@ -128,8 +134,11 @@ def validate_sha_and_ci(sha: str, profile: str = "staging194") -> dict:
             "runUrl": f"https://github.com/{repo}/actions/runs/{latest['databaseId']}"}
 
 
-def validate_static_main_ci(sha: str) -> dict:
-    provenance = validate_sha_and_ci(sha, "staging194-main")
+def validate_static_main_ci(sha: str, *, release_tag: Optional[str] = None,
+                            require_current_head: bool = True) -> dict:
+    historical_release = release_tag is not None
+    provenance = validate_sha_and_ci(sha, "staging194-main",
+                                    require_current_head=require_current_head and not historical_release)
     workflow_proofs = []
     for workflow in STATIC_MAIN_ADDITIONAL_WORKFLOWS:
         raw = capture(["gh", "run", "list", "--repo", CANONICAL_REPOSITORY, "--commit", sha,
@@ -171,15 +180,54 @@ def validate_static_main_ci(sha: str) -> dict:
             "runUrl": f"https://github.com/{CANONICAL_REPOSITORY}/actions/runs/{latest['databaseId']}"})
     canonical_head = capture(["gh", "api", f"repos/{CANONICAL_REPOSITORY}/git/ref/heads/main",
                               "--jq", ".object.sha"])
-    if canonical_head != sha:
+    if require_current_head and not historical_release and canonical_head != sha:
         raise Refusal("canonical main head moved during CI admission")
     provenance["additionalWorkflows"] = workflow_proofs
+    if historical_release:
+        provenance = validate_stable_release(provenance, sha, release_tag=release_tag, historical_release=True)
     return provenance
 
 
-def validate_stable_release(provenance: dict, sha: str) -> dict:
-    """Bind an exact-main CI proof to its stable Release tag and release preflight."""
-    raw = capture(["gh", "release", "view", "--repo", CANONICAL_REPOSITORY,
+def validate_staging194_paired_admission(sha: str) -> dict:
+    """Admit staging194 from exact-SHA canonical main push CI, without a Release."""
+    if not SHA.fullmatch(sha):
+        raise Refusal("source SHA must be a full lowercase commit ID")
+    capture(["git", "cat-file", "-e", f"{sha}^{{commit}}"])
+    repo = capture(["gh", "repo", "view", CANONICAL_REPOSITORY,
+                    "--json", "nameWithOwner", "--jq", ".nameWithOwner"])
+    if repo != CANONICAL_REPOSITORY:
+        raise Refusal("GitHub CLI resolved a repository other than the pinned IKPK repository")
+    canonical_head = capture(["gh", "api", f"repos/{repo}/git/ref/heads/main", "--jq", ".object.sha"])
+    if not SHA.fullmatch(canonical_head):
+        raise Refusal("canonical main returned an invalid head SHA")
+    _require_canonical_main_ancestor(sha, canonical_head)
+    provenance = validate_static_main_ci(sha, require_current_head=False)
+    final_head = capture(["gh", "api", f"repos/{repo}/git/ref/heads/main", "--jq", ".object.sha"])
+    if not SHA.fullmatch(final_head):
+        raise Refusal("canonical main returned an invalid head SHA after CI admission")
+    _require_canonical_main_ancestor(sha, final_head)
+    return provenance
+
+
+def _require_canonical_main_ancestor(sha: str, main_sha: str) -> None:
+    """Use GitHub's canonical comparison so local remote-tracking refs may be stale."""
+    comparison = capture(["gh", "api", f"repos/{CANONICAL_REPOSITORY}/compare/{sha}...{main_sha}",
+                         "--jq", ".status + \":\" + .merge_base_commit.sha"])
+    try:
+        status, merge_base = comparison.split(":", 1)
+    except ValueError as error:
+        raise Refusal("gh returned malformed canonical main ancestry metadata") from error
+    if status not in ("ahead", "identical") or merge_base != sha:
+        raise Refusal("selected source is not an ancestor of canonical main")
+
+
+def validate_stable_release(provenance: dict, sha: str, *, release_tag: Optional[str] = None,
+                            historical_release: bool = False) -> dict:
+    """Bind exact-SHA CI proof to a published stable Release and release preflight."""
+    command = ["gh", "release", "view"]
+    if release_tag is not None:
+        command.append(release_tag)
+    raw = capture([*command, "--repo", CANONICAL_REPOSITORY,
                    "--json", "tagName,isDraft,isPrerelease,publishedAt"])
     try:
         release = json.loads(raw)
@@ -191,7 +239,8 @@ def validate_stable_release(provenance: dict, sha: str) -> dict:
     published_at = release.get("publishedAt", release.get("published_at"))
     if (not isinstance(tag, str) or not re.fullmatch(r"v[0-9][A-Za-z0-9._-]{0,127}", tag)
             or draft is not False or prerelease is not False
-            or not isinstance(published_at, str) or not published_at):
+            or not isinstance(published_at, str) or not published_at
+            or (release_tag is not None and tag != release_tag)):
         raise Refusal("production paired admission requires a published stable GitHub Release")
     tag_object = capture(["gh", "api", f"repos/{CANONICAL_REPOSITORY}/git/ref/tags/{tag}",
                           "--jq", ".object.sha"])
@@ -199,19 +248,44 @@ def validate_stable_release(provenance: dict, sha: str) -> dict:
         peeled = capture(["gh", "api", f"repos/{CANONICAL_REPOSITORY}/git/tags/{tag_object}",
                           "--jq", ".object.sha"])
         if peeled != sha:
-            raise Refusal("stable Release tag does not resolve to the exact current main SHA")
-    preflight = capture(["node", "web/scripts/release-preflight.ts", "--release-tag", tag,
+            raise Refusal("stable Release tag does not resolve to the exact selected SHA")
+    preflight_command = ["node", "web/scripts/release-preflight.ts"]
+    if historical_release:
+        preflight_command.append("--historical-release")
+    else:
+        preflight_command.append("--ensure-helper-asset")
+    preflight = capture([*preflight_command, "--release-tag", tag,
                          "--commit", sha])
     try:
         preflight_result = json.loads(preflight)
     except ValueError as error:
         raise Refusal("release-preflight returned malformed admission evidence") from error
     if (preflight_result.get("status", preflight_result.get("result")) not in ("admitted", "passed")
-            or preflight_result.get("commit") != sha):
-        raise Refusal("release-preflight did not admit the exact current main SHA")
+            or preflight_result.get("commit") != sha
+            or preflight_result.get("historicalRelease", False) != historical_release):
+        raise Refusal("release-preflight did not admit the exact selected Release SHA")
+    helper = _verified_preflight_helper_artifact(preflight_result, sha)
+    if helper["runId"] != provenance.get("runId") or helper["attempt"] != provenance.get("attempt"):
+        raise Refusal("release-preflight helper artifact run/attempt changed during current-source admission")
     provenance["release"] = {"tag": tag, "publishedAt": published_at}
     provenance["releasePreflight"] = preflight_result
+    provenance["hostHelperArtifact"] = helper
+    provenance["historicalRelease"] = historical_release
     return provenance
+
+
+def _verified_preflight_helper_artifact(result: dict, sha: str) -> dict:
+    helper = result.get("hostHelperArtifact")
+    admission = result.get("operatorAdmission")
+    if (not isinstance(helper, dict) or type(helper.get("artifactId")) is not int or helper["artifactId"] <= 0
+            or type(helper.get("runId")) is not int or helper["runId"] <= 0
+            or type(helper.get("attempt")) is not int or helper["attempt"] <= 0
+            or not re.fullmatch(r"[a-f0-9]{64}", helper.get("archiveSha256", ""))
+            or not re.fullmatch(r"[a-f0-9]{64}", helper.get("payloadSha256", ""))
+            or not isinstance(admission, dict) or admission.get("sourceSha") != sha
+            or admission.get("runId") != helper.get("runId") or admission.get("attempt") != helper.get("attempt")):
+        raise Refusal("release-preflight omitted the verified exact-run host helper artifact digest")
+    return helper
 
 
 def validate_production_paired_admission(sha: str) -> dict:
@@ -219,7 +293,353 @@ def validate_production_paired_admission(sha: str) -> dict:
     return validate_stable_release(validate_static_main_ci(sha), sha)
 
 
-def make_archive(sha: str, provenance: dict) -> tuple[bytes, str]:
+def production_static_admission_from_result(sha: str, tag: str, result: dict) -> dict:
+    """Validate trusted release-preflight output before the caller reuses it in memory."""
+    if not SHA.fullmatch(sha):
+        raise Refusal("source SHA must be a full lowercase commit ID")
+    if not isinstance(result, dict):
+        raise Refusal("release-preflight returned malformed admission evidence")
+    capture(["git", "cat-file", "-e", f"{sha}^{{commit}}"])
+    release = result.get("release")
+    provenance = result.get("operatorAdmission")
+    additional = provenance.get("additionalWorkflows") if isinstance(provenance, dict) else None
+    additional_by_name = ({item.get("workflow"): item for item in additional if isinstance(item, dict)}
+                          if isinstance(additional, list) else {})
+    valid_additional = (isinstance(additional, list) and len(additional) == len(STATIC_MAIN_ADDITIONAL_WORKFLOWS)
+        and set(additional_by_name) == set(STATIC_MAIN_ADDITIONAL_WORKFLOWS)
+        and all(item.get("headSha") == sha and item.get("event") == "push" and item.get("headBranch") == "main"
+                and item.get("status") == "completed" and item.get("conclusion") == "success"
+                and type(item.get("runId")) is int and item["runId"] > 0
+                and type(item.get("attempt")) is int and item["attempt"] > 0
+                and isinstance(item.get("requiredJobs"), list) and bool(item["requiredJobs"])
+                and all(isinstance(job, str) and job for job in item["requiredJobs"])
+                and item["requiredJobs"] == sorted(set(item["requiredJobs"]))
+                and item.get("runUrl") == f"https://github.com/{CANONICAL_REPOSITORY}/actions/runs/{item['runId']}"
+                for item in additional_by_name.values()))
+    if (result.get("status") != "admitted" or result.get("commit") != sha
+            or result.get("historicalRelease") is not True or not isinstance(release, dict)
+            or release.get("tag") != tag or type(release.get("id")) is not int or release["id"] <= 0
+            or not isinstance(release.get("publishedAt"), str) or not release["publishedAt"]
+            or not isinstance(provenance, dict) or not valid_additional
+            or provenance.get("sourceSha") != sha or provenance.get("ref") != "refs/heads/main"
+            or provenance.get("repository") != CANONICAL_REPOSITORY
+            or provenance.get("workflow") != WORKFLOW or provenance.get("workflowName") != WORKFLOW
+            or provenance.get("event") != "push" or provenance.get("headBranch") != "main"
+            or provenance.get("status") != "completed" or provenance.get("conclusion") != "success"
+            or type(provenance.get("runId")) is not int or provenance["runId"] <= 0
+            or type(provenance.get("attempt")) is not int or provenance["attempt"] <= 0
+            or provenance.get("requiredJobs") != sorted(REQUIRED_TEST_JOBS)
+            or provenance.get("runUrl") != f"https://github.com/{CANONICAL_REPOSITORY}/actions/runs/{provenance['runId']}"):
+        raise Refusal("release-preflight did not admit the selected stable Release and exact SHA")
+    helper = _verified_preflight_helper_artifact(result, sha)
+    provenance["release"] = release
+    provenance["hostHelperArtifact"] = helper
+    provenance["releasePreflight"] = {"status": result["status"], "commit": result["commit"],
+                                      "release": release, "historicalRelease": True,
+                                      "hostHelperArtifact": helper}
+    provenance["historicalRelease"] = True
+    return provenance
+
+
+def validate_production_static_release(sha: str, tag: str) -> dict:
+    """Admit one explicitly selected stable Release through the single exact-SHA preflight."""
+    raw = capture(["node", "web/scripts/release-preflight.ts", "--historical-release",
+                   "--release-tag", tag, "--commit", sha])
+    try:
+        result = json.loads(raw)
+    except ValueError as error:
+        raise Refusal("release-preflight returned malformed admission evidence") from error
+    return production_static_admission_from_result(sha, tag, result)
+
+
+def _fetch_tests_run_artifact_payload(provenance: dict, sha: str, *, artifact_prefix: str,
+                                      payload_name: str, evidence_key: str, label: str) -> bytes:
+    """Fetch one digest-verified payload bound to the admitted Tests run and SHA."""
+    run_id = provenance.get("runId")
+    attempt = provenance.get("attempt")
+    if (type(run_id) is not int or run_id <= 0 or type(attempt) is not int or attempt <= 0
+            or provenance.get("sourceSha") != sha):
+        raise Refusal(f"{label} admission omitted the exact workflow run identity")
+
+    artifact_name = f"{artifact_prefix}-{run_id}-{attempt}"
+    endpoint = f"repos/{CANONICAL_REPOSITORY}/actions/runs/{run_id}/artifacts"
+    raw = capture(["gh", "api", endpoint, "--paginate", "--slurp"])
+    try:
+        pages = json.loads(raw)
+    except ValueError as error:
+        raise Refusal(f"gh returned malformed {label} artifact metadata") from error
+    if not isinstance(pages, list):
+        raise Refusal(f"gh returned malformed {label} artifact metadata")
+    artifacts = []
+    for page in pages:
+        if isinstance(page, dict) and isinstance(page.get("artifacts"), list):
+            artifacts.extend(page["artifacts"])
+    matches = [item for item in artifacts if isinstance(item, dict) and item.get("name") == artifact_name]
+    if len(matches) != 1:
+        raise Refusal(f"exact {label} artifact is missing or duplicated")
+    artifact = matches[0]
+    workflow_run = artifact.get("workflow_run")
+    digest = artifact.get("digest")
+    if (type(artifact.get("id")) is not int or artifact["id"] <= 0
+            or artifact.get("expired") is not False
+            or not isinstance(workflow_run, dict)
+            or workflow_run.get("id") != run_id or workflow_run.get("head_sha") != sha
+            or workflow_run.get("head_branch") != "main"
+            or not isinstance(digest, str) or not re.fullmatch(r"sha256:[a-f0-9]{64}", digest)):
+        raise Refusal(f"{label} artifact is expired or not bound to the admitted run and SHA")
+
+    archive = capture_bytes(["gh", "api",
+        f"repos/{CANONICAL_REPOSITORY}/actions/artifacts/{artifact['id']}/zip"])
+    archive_sha256 = hashlib.sha256(archive).hexdigest()
+    if digest.removeprefix("sha256:") != archive_sha256:
+        raise Refusal(f"downloaded {label} ZIP does not match GitHub's artifact digest")
+    try:
+        with zipfile.ZipFile(io.BytesIO(archive)) as bundle:
+            entries = bundle.infolist()
+            if (len(entries) != 1 or entries[0].filename != payload_name
+                    or entries[0].is_dir() or entries[0].flag_bits & 0x1):
+                raise Refusal(f"{label} ZIP must contain exactly one unencrypted tar payload")
+            payload = bundle.read(entries[0])
+    except Refusal:
+        raise
+    except (OSError, zipfile.BadZipFile, RuntimeError) as error:
+        raise Refusal(f"{label} ZIP is unreadable") from error
+    provenance[evidence_key] = {"artifactId": artifact["id"], "runId": run_id, "attempt": attempt,
+        "archiveSha256": archive_sha256, "payloadSha256": hashlib.sha256(payload).hexdigest()}
+    return payload
+
+
+def fetch_cms_candidate_artifact(provenance: dict, sha: str) -> bytes:
+    """Fetch and verify the CMS payload bound to this exact Tests run and SHA."""
+    return _fetch_tests_run_artifact_payload(
+        provenance, sha, artifact_prefix="cms-candidate", payload_name="cms-artifact.tar.gz",
+        evidence_key="cmsArtifact", label="CMS candidate")
+
+
+HOST_HELPER_ARTIFACT_FILES = frozenset({
+    "scripts/install-rehearsal-host.sh",
+    "scripts/lib/rehearsal_state.py",
+    "scripts/lib/housekeeping_journal.py",
+    "scripts/lib/rehearsal_host.py",
+    "scripts/lib/rehearsal_config.py",
+    "scripts/staging193-rehearsal.json",
+    "scripts/initial-prod-rehearsal.json",
+    "scripts/production-static-rehearsal.json",
+    "scripts/production-paired-rehearsal.json",
+})
+HOST_HELPER_RUNTIME_FILES = (
+    "scripts/lib/rehearsal_host.py",
+    "scripts/lib/rehearsal_state.py",
+    "scripts/lib/housekeeping_journal.py",
+)
+
+
+def _host_helper_runtime_identity(payload: bytes) -> str:
+    """Return a stable identity for the modules installed by the host installer."""
+    try:
+        with tarfile.open(fileobj=io.BytesIO(payload), mode="r:gz") as archive:
+            members = {member.name: member for member in archive.getmembers() if member.isfile()}
+            hashes = {}
+            for name in HOST_HELPER_RUNTIME_FILES:
+                member = members.get(name)
+                source = archive.extractfile(member) if member is not None else None
+                if source is None:
+                    raise Refusal("host helper artifact omitted an installed runtime module")
+                hashes[name] = hashlib.sha256(source.read()).hexdigest()
+            host_source = archive.extractfile(members["scripts/lib/rehearsal_host.py"]).read()
+            if b'STAGING194_PAIRED_HELPER_IDENTITY_CAPABILITY = "paired-helper-identity-v1"' not in host_source:
+                raise Refusal("selected host helper SHA does not support paired helper identity admission")
+    except (OSError, tarfile.TarError, KeyError, AttributeError) as error:
+        raise Refusal("host helper runtime identity could not be read from its CI artifact") from error
+    encoded = json.dumps(hashes, sort_keys=True, separators=(",", ":")).encode()
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def fetch_host_helper_artifact(provenance: dict, sha: str) -> bytes:
+    """Fetch the exact helper package and bind its digests to admitted provenance."""
+    payload = _fetch_tests_run_artifact_payload(
+        provenance, sha, artifact_prefix="host-helper", payload_name="host-helper.tar.gz",
+        evidence_key="hostHelperArtifact", label="host helper")
+    try:
+        with tarfile.open(fileobj=io.BytesIO(payload), mode="r:gz") as archive:
+            members = archive.getmembers()
+            names = [member.name for member in members]
+            for member in members:
+                raw_parts = member.name.split("/")
+                path = PurePosixPath(member.name)
+                if (not member.name or path.is_absolute()
+                        or any(part in ("", ".", "..") for part in raw_parts)
+                        or (member.isdir() and member.name not in {"scripts", "scripts/lib"})
+                        or (not member.isdir() and not member.isfile())):
+                    raise Refusal(f"host helper payload contains an unsafe member: {member.name!r}")
+            file_names = {member.name for member in members if member.isfile()}
+            directories = {member.name for member in members if member.isdir()}
+            if (len(names) != len(set(names)) or file_names != HOST_HELPER_ARTIFACT_FILES
+                    or directories != {"scripts", "scripts/lib"}):
+                raise Refusal("host helper payload does not contain exactly the expected files")
+    except Refusal:
+        provenance.pop("hostHelperArtifact", None)
+        raise
+    except (OSError, tarfile.TarError, EOFError) as error:
+        provenance.pop("hostHelperArtifact", None)
+        raise Refusal("host helper payload is unreadable") from error
+    return payload
+
+
+def install_staging194_host_helper(payload: bytes, digest: str, operation_id: str) -> None:
+    """Install a verified helper artifact through the existing staging194 SSH channel."""
+    if not isinstance(payload, bytes) or not re.fullmatch(r"[a-f0-9]{64}", digest):
+        raise Refusal("host helper payload or digest is invalid")
+    if not isinstance(operation_id, str) or not OP.fullmatch(operation_id):
+        raise Refusal("host helper install requires an explicit valid operation ID")
+    if hashlib.sha256(payload).hexdigest() != digest:
+        raise Refusal("host helper payload digest does not match its CI evidence")
+    if not TARGET_IDENTITY.is_file() or not TARGET_KNOWN_HOSTS.is_file():
+        raise Refusal("authorized staging194 SSH identity or known-hosts file is unavailable")
+
+    remote_dir_prefix = "/var/tmp/ikpk-staging194/host-helper."
+    ssh_options = ["-i", str(TARGET_IDENTITY), "-o", "IdentitiesOnly=yes", "-o", "BatchMode=yes",
+                   "-o", "StrictHostKeyChecking=yes", "-o", f"UserKnownHostsFile={TARGET_KNOWN_HOSTS}",
+                   "-o", "GlobalKnownHostsFile=/dev/null", "-o", "ConnectTimeout=15",
+                   f"{TARGET_USER}@{TARGET_HOST}"]
+    def remote(command: list[str]) -> subprocess.CompletedProcess:
+        return subprocess.run(["ssh", *ssh_options, shlex.join(command)], stdout=subprocess.PIPE,
+                              stderr=subprocess.PIPE, check=False, cwd=ROOT)
+
+    created = remote(["mktemp", "-d", f"{remote_dir_prefix}XXXXXX"])
+    if created.returncode:
+        raise Refusal("could not create a private staging194 host-helper directory")
+    remote_dir = created.stdout.decode(errors="replace").strip()
+    if not re.fullmatch(re.escape(remote_dir_prefix) + r"[A-Za-z0-9]{6}", remote_dir):
+        raise Refusal("remote mktemp returned an unexpected staging194 path")
+    remote_archive = f"{remote_dir}/host-helper.tar.gz"
+    with tempfile.NamedTemporaryFile(prefix="ikpk-host-helper-", suffix=".tar.gz", delete=False) as source:
+        source.write(payload)
+        local_archive = Path(source.name)
+    failure = None
+    try:
+        transfer = ["scp", "-i", str(TARGET_IDENTITY), "-o", "IdentitiesOnly=yes", "-o", "BatchMode=yes",
+                    "-o", "StrictHostKeyChecking=yes", "-o", f"UserKnownHostsFile={TARGET_KNOWN_HOSTS}",
+                    "-o", "GlobalKnownHostsFile=/dev/null", "-o", "ConnectTimeout=15",
+                    str(local_archive), f"{TARGET_USER}@{TARGET_HOST}:{remote_archive}"]
+        result = subprocess.run(transfer, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False, cwd=ROOT)
+        if result.returncode:
+            raise Refusal(f"staging194 host helper transfer failed ({result.returncode}): "
+                          f"{result.stderr.decode(errors='replace').strip()}")
+        remote_python = r'''import fcntl, hashlib, json, os, pwd, re, shutil, stat, subprocess, sys, tarfile
+temporary, expected_digest, requested_operation_id = sys.argv[1:]
+if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}", requested_operation_id):
+    raise SystemExit("fresh staging194 helper bootstrap requires a valid operation ID")
+archive_path = os.path.join(temporary, "host-helper.tar.gz")
+if not re.fullmatch(r"/var/tmp/ikpk-staging194/host-helper\.[A-Za-z0-9]{6}", temporary):
+    raise SystemExit("staging194 temporary directory is not a pinned mktemp path")
+try:
+    directory = os.lstat(temporary)
+    if not stat.S_ISDIR(directory.st_mode) or directory.st_uid != 0 or stat.S_IMODE(directory.st_mode) != 0o700:
+        raise SystemExit("staging194 helper directory is not root-owned and private")
+    config_path = "/etc/ikpk/rehearsal.json"
+    config_info = os.lstat(config_path)
+    if not stat.S_ISREG(config_info.st_mode):
+        raise SystemExit("staging194 configuration is not a regular file")
+    with open(config_path, "rb") as stream:
+        config_before = stream.read()
+    config = json.loads(config_before)
+    if (config.get("profile", "staging194") != "staging194"
+            or config.get("stateDir") != "/var/lib/ikpk-rehearsal/staging194"
+            or config.get("cmsUser") != "ikpk-cms"
+            or config.get("publicationLock") != "/var/www/ikpk/.publication.lock"
+            or config.get("maintenanceFlag") != "/var/lib/ikpk-rehearsal/staging194/fenced"
+            or config.get("sitePublicationMarker") != "/var/lib/ikpk-rehearsal/site-publication/host-publication.json"):
+        raise SystemExit("staging194 config differs from the validated helper-install lock profile")
+    fds, snapshots = [], []
+    try:
+        locks = [config["publicationLock"], os.path.join(config["stateDir"], ".operation.lock")]
+        for path in locks:
+            before = os.lstat(path)
+            if not stat.S_ISREG(before.st_mode) or before.st_nlink != 1:
+                raise SystemExit("existing staging194 lock is unsafe")
+            fd = os.open(path, os.O_RDWR | getattr(os, "O_NOFOLLOW", 0))
+            fds.append(fd)
+            info = os.fstat(fd)
+            if (info.st_dev, info.st_ino) != (before.st_dev, before.st_ino) or not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
+                raise SystemExit("staging194 lock changed while opening")
+            if path == locks[0] and (info.st_uid != pwd.getpwnam(config["cmsUser"]).pw_uid or stat.S_IMODE(info.st_mode) != 0o600):
+                raise SystemExit("staging194 publication lock has unsafe owner or mode")
+            if stat.S_IMODE(info.st_mode) != 0o600:
+                raise SystemExit("staging194 state lock has unsafe mode")
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            snapshots.append((path, info.st_dev, info.st_ino))
+        if any(os.path.lexists(path) for path in (config["maintenanceFlag"],
+                os.path.join(config["stateDir"], "maintenance.json"), config["sitePublicationMarker"])):
+            raise SystemExit("staging194 publication or maintenance marker exists; recover with the previous operation ID, then use a new operation ID")
+        for path, device, inode in snapshots:
+            named = os.lstat(path)
+            if (named.st_dev, named.st_ino) != (device, inode) or not stat.S_ISREG(named.st_mode) or named.st_nlink != 1:
+                raise SystemExit("staging194 lock inode changed before installation")
+        subprocess.run(["/usr/local/sbin/ikpk-rehearsal", "--profile", "staging194", "validate-config"], check=True)
+        archive_info = os.lstat(archive_path)
+        if not stat.S_ISREG(archive_info.st_mode) or archive_info.st_uid != 0 or archive_info.st_nlink != 1:
+            raise SystemExit("transferred host helper is not a root-owned regular file")
+        with open(archive_path, "rb") as stream:
+            actual_digest = hashlib.sha256(stream.read()).hexdigest()
+        if actual_digest != expected_digest:
+            raise SystemExit("transferred host helper SHA-256 does not match CI evidence")
+        with tarfile.open(archive_path, "r:gz") as bundle:
+            members = bundle.getmembers()
+            names = [member.name for member in members]
+            files = {member.name for member in members if member.isfile()}
+            directories = {member.name for member in members if member.isdir()}
+            if (len(names) != len(set(names)) or files != EXPECTED_FILES
+                    or directories != {"scripts", "scripts/lib"}
+                    or any(not (member.isfile() or member.isdir()) for member in members)):
+                raise SystemExit("host helper archive contents differ from the admitted package")
+            bundle.extractall(os.path.join(temporary, "payload"))
+        sys.path.insert(0, os.path.join(temporary, "payload", "scripts", "lib"))
+        from rehearsal_state import RehearsalState
+        state = RehearsalState(config["stateDir"])
+        # The caller already holds both locks; this journal reader does not lock again.
+        history = state.read_journal_for_cleanup(validate_history=True)
+        if any(row.get("operationId") == requested_operation_id for row in history):
+            raise SystemExit("requested operation ID already exists in the staging194 journal")
+        if RehearsalState._unfinished_operation_ids(history):
+            raise SystemExit("staging194 journal has an unfinished operation; helper replacement refused")
+        if state._read_marker() is not None or any(os.path.lexists(path) for path in (
+                config["maintenanceFlag"], state.marker_path, config["sitePublicationMarker"])):
+            raise SystemExit("staging194 maintenance or publication marker appeared before helper replacement")
+        subprocess.run(["bash", os.path.join(temporary, "payload/scripts/install-rehearsal-host.sh"),
+                        "--staging193-existing-config"], check=True)
+        subprocess.run(["/usr/local/sbin/ikpk-rehearsal", "--profile", "staging194", "validate-config"], check=True)
+        with open(config_path, "rb") as stream:
+            if stream.read() != config_before:
+                raise SystemExit("staging194 configuration changed during helper installation")
+        for path, device, inode in snapshots:
+            named = os.lstat(path)
+            if (named.st_dev, named.st_ino) != (device, inode) or not stat.S_ISREG(named.st_mode) or named.st_nlink != 1:
+                raise SystemExit("staging194 lock inode changed during helper installation")
+    finally:
+        for fd in reversed(fds):
+            os.close(fd)
+finally:
+    shutil.rmtree(temporary)
+'''.replace("EXPECTED_FILES", repr(set(HOST_HELPER_ARTIFACT_FILES)))
+        install = remote(["python3", "-c", remote_python, remote_dir, digest, operation_id])
+        if install.returncode:
+            raise Refusal(f"staging194 host helper installation or config validation failed ({install.returncode}): "
+                          f"{install.stderr.decode(errors='replace').strip()}")
+    except Exception as error:
+        failure = error
+    finally:
+        local_archive.unlink(missing_ok=True)
+        cleanup = remote(["rm", "-rf", "--", remote_dir])
+        if cleanup.returncode and failure is None:
+            failure = Refusal("could not clean the private staging194 host-helper directory")
+    if failure is not None:
+        if isinstance(failure, Refusal):
+            raise failure
+        raise Refusal(f"staging194 host helper installation failed: {failure}") from failure
+
+
+def make_archive(sha: str, provenance: dict, *, cms_artifact: Optional[bytes] = None) -> tuple[bytes, str]:
     source = capture_bytes(["git", "archive", "--format=tar", sha])
     tar_buffer = io.BytesIO(source)
     out = io.BytesIO()
@@ -238,6 +658,13 @@ def make_archive(sha: str, provenance: dict) -> tuple[bytes, str]:
                 dst.addfile(member)
             else:
                 raise Refusal(f"source archive contains unsupported entry {member.name}")
+        if cms_artifact is not None:
+            if any(member.name == ".ikpk-cms-artifact.tar.gz" for member in src.getmembers()):
+                raise Refusal("source archive already contains the reserved CMS artifact member")
+            info = tarfile.TarInfo(".ikpk-cms-artifact.tar.gz")
+            info.size = len(cms_artifact)
+            info.mode = 0o600
+            dst.addfile(info, io.BytesIO(cms_artifact))
         payload = json.dumps(provenance, sort_keys=True, separators=(",", ":")).encode() + b"\n"
         info = tarfile.TarInfo(".ikpk-rehearsal-ci.json")
         info.size = len(payload)
@@ -297,6 +724,156 @@ def backup_root(requested: Optional[str], profile: str = "staging194") -> Path:
     if root.stat().st_mode & 0o077:
         raise Refusal("off-host backup directory must not be accessible by group or other")
     return root
+
+
+def _space_reserve_bytes(estimated_bytes: int) -> int:
+    value = os.environ.get("IKPK_REHEARSAL_SPACE_RESERVE_BYTES", "0")
+    baseline = max(1_073_741_824, (estimated_bytes + 3) // 4)
+    try:
+        reserve = int(value)
+    except ValueError as error:
+        raise Refusal("IKPK_REHEARSAL_SPACE_RESERVE_BYTES must be a non-negative integer") from error
+    if reserve < 0:
+        raise Refusal("IKPK_REHEARSAL_SPACE_RESERVE_BYTES must be a non-negative integer")
+    return max(baseline, reserve)
+
+
+def _existing_path(path: Path) -> Path:
+    path = path.expanduser().absolute()
+    while not path.exists():
+        path = path.parent
+    return path
+
+
+def _source_tree_bytes(sha: str) -> int:
+    if not isinstance(sha, str) or not SHA.fullmatch(sha):
+        raise Refusal("cannot determine selected source tree size: a canonical source SHA is required")
+    try:
+        listing = capture_bytes(["git", "ls-tree", "-rlz", sha])
+        records = [record for record in listing.split(b"\0") if record]
+        sizes = [int(record.split(b"\t", 1)[0].split()[-1]) for record in records]
+        if not records or any(size < 0 for size in sizes):
+            raise ValueError("empty or invalid git tree listing")
+        return sum(sizes)
+    except (Refusal, ValueError, IndexError) as error:
+        raise Refusal(f"cannot determine selected source tree size for {sha}: {error}") from error
+
+
+def _check_local_space(sha: Optional[str], profile: str, command: str, backup_dir: Optional[str],
+                       *, static_export_estimate_bytes: Optional[int] = None,
+                       backup_required_bytes: Optional[int] = None) -> list[dict]:
+    estimated_bytes = _source_tree_bytes(sha or "")
+    paths = {"temporary data": Path(tempfile.gettempdir()), "source checkout": ROOT}
+    if command == "cms-update":
+        default = Path.home() / (".local/share/ikpk-production-paired/backups" if profile == "production-paired"
+                                 else ".local/share/ikpk-initial-prod/backups" if profile == "initial-prod"
+                                 else ".local/share/ikpk-rehearsal/staging194/backups")
+        paths["off-host backup"] = Path(backup_dir).expanduser() if backup_dir else default
+    if static_export_estimate_bytes is not None:
+        if (profile != "production-static" or command != "static-main"
+                or type(static_export_estimate_bytes) is not int or static_export_estimate_bytes < 0):
+            raise Refusal("static export estimate is valid only for production-static static-main")
+        # The Git archive is held in memory; browser export extraction writes
+        # only below tempfile.gettempdir(). If temp and checkout use different
+        # devices, preserve the former source-size headroom on each and use the
+        # larger of source or export on temp. If they share a device, count the
+        # source headroom once plus the target-derived export proxy.
+        estimates = [("temporary data", paths["temporary data"]),
+                     ("source checkout", paths["source checkout"])]
+        by_device: dict[int, dict] = {}
+        for label, raw_path in estimates:
+            checked_path = _existing_path(raw_path)
+            disk = shutil.disk_usage(checked_path)
+            device = checked_path.stat().st_dev
+            item = by_device.get(device)
+            if item is None:
+                by_device[device] = {"path": str(checked_path), "labels": [label],
+                                     "freeBytes": disk.free}
+            else:
+                item["labels"].append(label)
+                item["freeBytes"] = min(item["freeBytes"], disk.free)
+        report = []
+        for item in by_device.values():
+            if "temporary data" in item["labels"] and "source checkout" in item["labels"]:
+                estimated = estimated_bytes + static_export_estimate_bytes
+            elif "temporary data" in item["labels"]:
+                estimated = max(estimated_bytes, static_export_estimate_bytes)
+            else:
+                estimated = estimated_bytes
+            item["estimatedBytes"] = estimated
+            reserve = _space_reserve_bytes(item["estimatedBytes"])
+            required = item["estimatedBytes"] + reserve
+            if item["freeBytes"] < required:
+                label = " + ".join(item["labels"])
+                raise Refusal(f"insufficient free space on {label} filesystem ({item['path']}): "
+                              f"need {required} bytes, have {item['freeBytes']} bytes, "
+                              f"short {required - item['freeBytes']} bytes")
+            report.append({"label": " + ".join(item["labels"]), "path": item["path"],
+                           "freeBytes": item["freeBytes"], "estimatedBytes": item["estimatedBytes"],
+                           "reserveBytes": reserve, "requiredBytes": required,
+                           "staticExportEstimateBytes": static_export_estimate_bytes
+                           if "temporary data" in item["labels"] else 0})
+        return report
+    by_device: dict[int, dict] = {}
+    for label, raw_path in paths.items():
+        checked_path = _existing_path(raw_path)
+        disk = shutil.disk_usage(checked_path)
+        device = checked_path.stat().st_dev
+        item = by_device.get(device)
+        if item is None:
+            item = {"label": label, "path": str(checked_path), "freeBytes": disk.free,
+                    "estimatedBytes": 0}
+            by_device[device] = item
+        else:
+            item["label"] += f" + {label}"
+            item["freeBytes"] = min(item["freeBytes"], disk.free)
+        item["estimatedBytes"] += (backup_required_bytes if label == "off-host backup"
+                                   and backup_required_bytes is not None else estimated_bytes)
+    report = []
+    for item in by_device.values():
+        reserve = _space_reserve_bytes(item["estimatedBytes"])
+        required = item["estimatedBytes"] + reserve
+        if item["freeBytes"] < required:
+            raise Refusal(f"insufficient free space on {item['label']} filesystem ({item['path']}): "
+                          f"need {required} bytes, have {item['freeBytes']} bytes, "
+                          f"short {required - item['freeBytes']} bytes")
+        item["reserveBytes"] = reserve
+        item["requiredBytes"] = required
+        report.append(item)
+    return report
+
+
+def _check_target_space(profile: str, operation_id: str, command: str) -> dict:
+    report = parse_host_json(ssh_remote(["status", "--operation-id", operation_id, "--space-preflight",
+                                         "--space-preflight-for", command],
+                                        profile=profile))
+    filesystems = report.get("filesystems")
+    if not isinstance(filesystems, list) or not filesystems:
+        raise Refusal("target free-space preflight returned no filesystem estimates")
+    for item in filesystems:
+        if (not isinstance(item, dict) or not isinstance(item.get("path"), str)
+                or type(item.get("freeBytes")) is not int or type(item.get("requiredBytes")) is not int):
+            raise Refusal("target free-space preflight returned a malformed filesystem estimate")
+        if item["freeBytes"] < item["requiredBytes"]:
+            missing = item["requiredBytes"] - item["freeBytes"]
+            raise Refusal(f"insufficient free space on target filesystem {item['path']}: "
+                          f"need {item['requiredBytes']} bytes, have {item['freeBytes']} bytes, "
+                          f"short {missing} bytes")
+    return report
+
+
+def _check_local_backup_space(backup_dir: Optional[str], profile: str, required: int) -> dict:
+    default = Path.home() / (".local/share/ikpk-production-paired/backups" if profile == "production-paired"
+                             else ".local/share/ikpk-initial-prod/backups" if profile == "initial-prod"
+                             else ".local/share/ikpk-production-static/backups" if profile == "production-static"
+                             else ".local/share/ikpk-rehearsal/staging194/backups")
+    path = Path(backup_dir).expanduser() if backup_dir else default
+    disk = shutil.disk_usage(_existing_path(path))
+    if disk.free < required:
+        raise Refusal(f"insufficient free space on off-host backup filesystem ({path}): need {required} bytes, "
+                      f"have {disk.free} bytes, short {required - disk.free} bytes")
+    return {"label": "off-host backup", "path": str(_existing_path(path)), "freeBytes": disk.free,
+            "estimatedBytes": required, "reserveBytes": 0, "requiredBytes": required}
 
 
 def verify_backup_tar(payload: bytes, expected_sha256: str) -> None:
@@ -693,21 +1270,71 @@ def browser_check(source_sha: str, operation_id: str, static_digest: str, archiv
             thread.join(timeout=5)
 
 
-def invoke(args: argparse.Namespace) -> None:
+def invoke(args: argparse.Namespace, *, admission: Optional[dict] = None) -> Optional[dict]:
     profile = getattr(args, "profile", "staging194")
+    install_host_helper = getattr(args, "install_host_helper", False)
+    if install_host_helper and (profile != "staging194" or args.command not in ("static-main", "cms-update")):
+        raise Refusal("--install-host-helper is restricted to staging194 static-main or cms-update")
+    accept_expired_rollback = getattr(args, "accept_expired_rollback", False)
+    if accept_expired_rollback and (profile != "staging194" or args.command != "static-main-recover"
+                                    or getattr(args, "rollback_committed", False)):
+        raise Refusal("expired rollback acceptance is restricted to staging194 and cannot roll back")
+    preflight_kind = getattr(args, "preflight_for", None) if args.command == "space-preflight" else args.command
     target_host = INITIAL_PROD_HOST if profile in ("initial-prod", "production-static", "production-paired") else TARGET_HOST
-    if profile == "production-static" and args.command not in ("static-main", "static-main-recover"):
+    if profile == "production-static" and not (args.command in ("static-main", "static-main-recover")
+                                                or args.command == "space-preflight" and preflight_kind == "static-main"):
         raise Refusal("production-static permits only static-main publication and recovery")
-    if profile == "production-paired" and args.command not in ("cms-update", "static-publish", "recover"):
+    if profile == "production-paired" and not (args.command in ("cms-update", "static-publish", "recover")
+                                                or args.command == "space-preflight"
+                                                and preflight_kind in ("cms-update", "static-main")):
         raise Refusal("production-paired permits only paired CMS update, static publish, and recovery")
-    if args.command in ("static-main", "static-main-recover") and profile not in ("staging194", "production-static"):
+    if (args.command in ("static-main", "static-main-recover")
+            and profile not in ("staging194", "production-static")):
         raise Refusal("static-main commands are bound to the staging194 profile or authorized production-static profile")
+    if (args.command == "space-preflight" and preflight_kind == "static-main"
+            and profile not in ("staging194", "production-static", "production-paired")):
+        raise Refusal("static-main commands are bound to the staging194 profile or authorized production-static profile")
+    if getattr(args, "release_tag", None) is not None and (profile != "production-static" or args.command != "static-main"):
+        raise Refusal("--release-tag is restricted to production-static static-main")
+    expected_installed_cms_sha = getattr(args, "expected_installed_cms_sha", None)
+    if expected_installed_cms_sha is not None:
+        if profile != "staging194" or args.command != "static-main":
+            raise Refusal("--expected-installed-cms-sha is restricted to staging194 static-main")
+        if not isinstance(expected_installed_cms_sha, str) or not SHA.fullmatch(expected_installed_cms_sha):
+            raise Refusal("--expected-installed-cms-sha must be a full lowercase commit ID")
     if args.host is not None and args.host != target_host:
         raise Refusal(f"this command is bound to the authorized {profile} host")
     if profile == "initial-prod" and (args.operation_id != INITIAL_PROD_OPERATION_ID or args.command == "recover"):
         raise Refusal("initial-prod permits only its fixed operation ID and has no DB restore command")
     if not OP.fullmatch(args.operation_id):
         raise Refusal("operation ID has invalid characters")
+    automatic_static_capacity = profile == "production-static" and args.command == "static-main"
+    helper_install_capacity = install_host_helper and profile == "staging194"
+    if args.command == "space-preflight" or automatic_static_capacity or helper_install_capacity:
+        if preflight_kind not in ("cms-update", "static-main"):
+            raise Refusal("space-preflight requires --for cms-update or --for static-main")
+        static_local_export_estimate = (profile == "production-static" and preflight_kind == "static-main")
+        if static_local_export_estimate:
+            target_space = _check_target_space(profile, args.operation_id, preflight_kind)
+            export_estimate = target_space.get("staticExportEstimateBytes")
+            if type(export_estimate) is not int or export_estimate < 0:
+                raise Refusal("target preflight omitted a valid static export estimate")
+            local_space = _check_local_space(getattr(args, "source_sha", None), profile, preflight_kind,
+                getattr(args, "backup_dir", None), static_export_estimate_bytes=export_estimate)
+        else:
+            target_space = _check_target_space(profile, args.operation_id, preflight_kind)
+            backup_required = None
+            if preflight_kind == "cms-update" and type(target_space.get("backupBytes")) is int:
+                backup_required = target_space["backupBytes"] + target_space.get("backupReserveBytes", 0)
+            if backup_required is None:
+                local_space = _check_local_space(getattr(args, "source_sha", None), profile, preflight_kind,
+                                                 getattr(args, "backup_dir", None))
+            else:
+                local_space = _check_local_space(getattr(args, "source_sha", None), profile, preflight_kind,
+                    getattr(args, "backup_dir", None), backup_required_bytes=backup_required)
+        if args.command == "space-preflight":
+            return {"operationId": args.operation_id, "operationKind": preflight_kind,
+                    "localFilesystems": local_space, "target": target_space}
     paired_old_cms = None
     if profile == "production-paired" and args.command == "cms-update":
         preflight = parse_host_json(ssh_remote(["status", "--operation-id", args.operation_id], profile=profile))
@@ -720,10 +1347,48 @@ def invoke(args: argparse.Namespace) -> None:
     if args.command == "cms-update":
         provenance = (validate_production_paired_admission(args.source_sha) if profile == "production-paired"
                       else validate_sha_and_ci(args.source_sha, profile))
-        archive, digest = make_archive(args.source_sha, provenance)
+        ci_admission = dict(provenance)
+        cms_artifact = (fetch_cms_candidate_artifact(provenance, args.source_sha)
+                        if profile in ("staging194", "production-paired") else None)
+        helper_payload = None
+        helper_identity = None
+        resume_phase = None
+        if install_host_helper:
+            # A read-only status check makes an interrupted same-ID continuation
+            # reuse the installed helper rather than replacing it on resume.
+            try:
+                status = parse_host_json(ssh_remote(["status", "--operation-id", args.operation_id], profile=profile))
+            except Refusal as error:
+                if str(error) not in FRESH_OPERATION_STATUS_ERRORS:
+                    raise
+                # The previous verified helper reports this exact refusal for a
+                # genuinely new ID. The replacement installer rechecks the
+                # journal and markers under both host locks before any writes.
+                resume_phase = "idle"
+            else:
+                if status.get("operationId") != args.operation_id:
+                    raise Refusal("host status does not match the requested operation ID")
+                resume_phase = status.get("phase")
+            helper_payload = fetch_host_helper_artifact(provenance, args.source_sha)
+            helper_evidence = provenance.get("hostHelperArtifact")
+            if not isinstance(helper_evidence, dict):
+                raise Refusal("verified host helper artifact omitted its operation evidence")
+            if cms_artifact is not None and (helper_evidence.get("runId"), helper_evidence.get("attempt")) != (
+                    provenance.get("runId"), provenance.get("attempt")):
+                raise Refusal("host helper artifact is not bound to the exact admitted Tests run and attempt")
+            helper_identity = _host_helper_runtime_identity(helper_payload)
+            provenance["hostHelperRuntimeIdentity"] = helper_identity
+            if resume_phase == "idle":
+                install_staging194_host_helper(helper_payload, helper_evidence["payloadSha256"], args.operation_id)
+            elif resume_phase not in ("acquiring", "fenced", "cms-activated"):
+                raise Refusal(f"same-ID CMS continuation is not available from host phase {resume_phase!r}")
+        archive, digest = (make_archive(args.source_sha, provenance, cms_artifact=cms_artifact)
+                           if cms_artifact is not None else make_archive(args.source_sha, provenance))
         provenance_b64 = base64.b64encode(json.dumps(provenance, sort_keys=True, separators=(",", ":")).encode()).decode("ascii")
         common = ["cms-update", "--operation-id", args.operation_id, "--source-sha", args.source_sha,
                   "--provenance-b64", provenance_b64]
+        if helper_identity is not None:
+            common.extend(["--expected-host-helper-identity", helper_identity])
         first = parse_host_json(ssh_remote(common + ["--archive-sha256", hashlib.sha256(archive).hexdigest()], profile=profile,
                                            input_bytes=archive))
         backup_dir = backup_root(args.backup_dir, profile)
@@ -752,8 +1417,12 @@ def invoke(args: argparse.Namespace) -> None:
                 return
             if profile == "production-paired":
                 current_admission = validate_production_paired_admission(args.source_sha)
-                if current_admission != provenance:
+                if current_admission != ci_admission:
                     raise Refusal("production Release/main/CI admission changed before CMS activation; operation remains fenced for same-ID recovery")
+            elif profile == "staging194":
+                current_admission = validate_sha_and_ci(args.source_sha, profile)
+                if current_admission != ci_admission:
+                    raise Refusal("staging194 exact-SHA workflow proofs changed before CMS activation; operation remains fenced for same-ID recovery")
             completed = parse_host_json(ssh_remote(common + ["--offhost-sha256", digest], profile=profile))
             if completed.get("phase") != "cms-activated":
                 raise Refusal(f"CMS command ended in an unexpected state: {completed.get('phase')}")
@@ -795,21 +1464,50 @@ def invoke(args: argparse.Namespace) -> None:
                 raise Refusal("built production snapshot differs from the fingerprint captured in the verified backup")
         current_run = (validate_production_paired_admission(args.source_sha) if profile == "production-paired"
                        else validate_sha_and_ci(args.source_sha, profile))
-        if (current_run.get("runId"), current_run.get("attempt")) != (admitted_run.get("runId"), admitted_run.get("attempt")):
+        if profile == "staging194" and current_run != admitted_run:
+            raise Refusal("canonical main source or exact-SHA workflow proofs changed during acceptance")
+        if profile != "staging194" and (current_run.get("runId"), current_run.get("attempt")) != (admitted_run.get("runId"), admitted_run.get("attempt")):
             raise Refusal("canonical exact-SHA run/attempt changed during the acceptance window")
         committed = parse_host_json(ssh_remote(common + ["--browser-digest", digest], profile=profile))
         if committed.get("phase") != "committed":
             raise Refusal(f"static publication did not reach durable commit: {committed.get('phase')}")
     elif args.command == "static-main":
-        admitted_run = validate_static_main_ci(args.source_sha)
-        provenance_b64 = base64.b64encode(json.dumps(admitted_run, sort_keys=True,
+        release_tag = getattr(args, "release_tag", None)
+        if admission is not None:
+            release_evidence = admission.get("release") if isinstance(admission, dict) else None
+            if (profile != "production-static" or release_tag is None
+                    or not isinstance(release_evidence, dict)
+                    or admission.get("sourceSha") != args.source_sha
+                    or not admission.get("historicalRelease")
+                    or release_evidence.get("tag") != release_tag):
+                raise Refusal("in-memory static admission does not match the selected production Release and SHA")
+            admitted_run = admission
+        else:
+            admitted_run = (validate_production_static_release(args.source_sha, release_tag)
+                            if release_tag is not None else validate_static_main_ci(args.source_sha))
+        journal_provenance = copy.deepcopy(admitted_run)
+        helper_payload = None
+        helper_evidence = None
+        if install_host_helper:
+            fetch_provenance = copy.deepcopy(admitted_run)
+            helper_payload = fetch_host_helper_artifact(fetch_provenance, args.source_sha)
+            helper_evidence = copy.deepcopy(fetch_provenance.get("hostHelperArtifact"))
+            if not isinstance(helper_evidence, dict):
+                raise Refusal("verified host helper artifact omitted its operation evidence")
+            fetch_provenance.pop("hostHelperArtifact", None)
+            journal_provenance["hostHelperArtifact"] = helper_evidence
+        if helper_payload is not None and helper_evidence is not None:
+            install_staging194_host_helper(helper_payload, helper_evidence["payloadSha256"], args.operation_id)
+        provenance_b64 = base64.b64encode(json.dumps(journal_provenance, sort_keys=True,
             separators=(",", ":")).encode()).decode("ascii")
         common = ["static-main", "--operation-id", args.operation_id, "--source-sha", args.source_sha,
                   "--provenance-b64", provenance_b64]
+        if expected_installed_cms_sha is not None:
+            common.extend(["--expected-installed-cms-sha", expected_installed_cms_sha])
         reuse_capture_operation_id = getattr(args, "reuse_capture_operation_id", None)
         if reuse_capture_operation_id is not None:
             common.extend(["--reuse-capture-operation-id", reuse_capture_operation_id])
-        archive, archive_sha256 = make_archive(args.source_sha, admitted_run)
+        archive, archive_sha256 = make_archive(args.source_sha, journal_provenance)
         remote_options = {} if profile == "staging194" else {"profile": profile}
         prepared = parse_host_json(ssh_remote(common + ["--archive-sha256", archive_sha256], **remote_options,
                                               input_bytes=archive))
@@ -823,16 +1521,26 @@ def invoke(args: argparse.Namespace) -> None:
         browser_profile = "production-static" if profile == "production-static" else "staging194"
         browser_check(args.source_sha, args.operation_id, digest, candidate, browser_profile, admitted_run,
                       chat_loader_src=INITIAL_PROD_CHAT_LOADER_SRC if profile == "production-static" else STAGING194_CHAT_LOADER_SRC)
-        current_run = validate_static_main_ci(args.source_sha)
-        if current_run != admitted_run:
-            raise Refusal("canonical main source, Tests run, or Release proof changed during acceptance")
+        if release_tag is None:
+            current_run = validate_static_main_ci(args.source_sha)
+            if current_run != admitted_run:
+                raise Refusal("canonical main source or exact-SHA workflow proofs changed during acceptance")
         committed = parse_host_json(ssh_remote(common + ["--browser-digest", digest], **remote_options))
         if committed.get("phase") != "committed":
             raise Refusal(f"static-main publication did not reach durable commit: {committed.get('phase')}")
     elif args.command == "static-main-recover":
         command = ["static-main-recover", "--operation-id", args.operation_id]
         expected_phase = "recovered"
-        if args.rollback_committed:
+        accept_expired_rollback = getattr(args, "accept_expired_rollback", False)
+        if accept_expired_rollback:
+            if profile != "staging194" or args.rollback_committed:
+                raise Refusal("expired rollback acceptance is restricted to staging194 and cannot roll back")
+            if (not isinstance(args.operator, str) or not args.operator.strip()
+                    or not isinstance(args.reason, str) or not args.reason.strip()):
+                raise Refusal("expired rollback acceptance requires --operator and --reason")
+            command.extend(["--accept-expired-rollback", "--operator", args.operator, "--reason", args.reason])
+            expected_phase = "rollback-target-expired"
+        elif args.rollback_committed:
             if (not isinstance(args.operator, str) or not args.operator.strip()
                     or not isinstance(args.reason, str) or not args.reason.strip()):
                 raise Refusal("committed static rollback requires --operator and --reason")
@@ -841,7 +1549,9 @@ def invoke(args: argparse.Namespace) -> None:
         elif args.operator is not None or args.reason is not None:
             raise Refusal("--operator and --reason require --rollback-committed")
         result = parse_host_json(ssh_remote(command, **({} if profile == "staging194" else {"profile": profile})))
-        allowed_phases = {expected_phase} if args.rollback_committed else {"recovered", "rolled-back"}
+        if result.get("phase") == "rollback-target-expired-cleanup-pending":
+            raise Refusal("rollback loss was durably recorded; site cleanup remains pending; retry the same recovery")
+        allowed_phases = {expected_phase} if args.rollback_committed or accept_expired_rollback else {"recovered", "rolled-back"}
         if result.get("phase") not in allowed_phases:
             raise Refusal(f"static-main recovery did not reach {expected_phase}: {result.get('phase')}")
     else:
@@ -917,22 +1627,51 @@ def main(argv: Optional[list[str]] = None) -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--profile", choices=("staging194", "initial-prod", "production-static", "production-paired"), default="staging194")
     sub = parser.add_subparsers(dest="command", required=True)
-    for action in ("cms-update", "static-publish", "static-main", "static-main-recover", "recover"):
+    for action in ("cms-update", "static-publish", "static-main", "static-main-recover", "recover", "space-preflight"):
         command = sub.add_parser(action)
         command.add_argument("--host")
         command.add_argument("--operation-id", required=True)
         command.add_argument("--backup-dir")
         if action == "static-main-recover":
             command.add_argument("--rollback-committed", action="store_true")
+            command.add_argument("--accept-expired-rollback", action="store_true")
             command.add_argument("--operator")
             command.add_argument("--reason")
-        if action not in ("recover", "static-main-recover"):
-            command.add_argument("--source-sha", required=True)
+        if action not in ("recover", "static-main-recover", "space-preflight"):
+            command.add_argument("--source-sha", required=action not in ("cms-update",))
         if action == "static-main":
             command.add_argument("--reuse-capture-operation-id")
+            command.add_argument("--release-tag")
+            command.add_argument("--expected-installed-cms-sha")
+            command.add_argument("--install-host-helper", action="store_true")
+        if action == "cms-update":
+            command.add_argument("--install-host-helper", action="store_true")
+        if action == "space-preflight":
+            command.add_argument("--for", dest="preflight_for", required=True,
+                                 choices=("cms-update", "static-main"))
+            command.add_argument("--source-sha", required=True)
     args = parser.parse_args(argv)
+    args.release_tag = getattr(args, "release_tag", None)
     try:
-        invoke(args)
+        if args.command == "cms-update" and args.source_sha is None:
+            if args.profile != "staging194":
+                raise Refusal("--source-sha is required outside the staging194 profile")
+            try:
+                status = parse_host_json(ssh_remote(["status", "--operation-id", args.operation_id]))
+            except Refusal as error:
+                if str(error) not in FRESH_OPERATION_STATUS_ERRORS:
+                    raise
+            else:
+                if (status.get("operationId") != args.operation_id
+                        or status.get("phase") != "idle"):
+                    raise Refusal("--source-sha is required to continue an existing staging194 operation")
+            args.source_sha = capture(["gh", "api", f"repos/{CANONICAL_REPOSITORY}/git/ref/heads/main",
+                                       "--jq", ".object.sha"])
+            if not SHA.fullmatch(args.source_sha):
+                raise Refusal("canonical main returned an invalid head SHA")
+        result = invoke(args)
+        if args.command == "space-preflight" and result is not None:
+            print(json.dumps(result, sort_keys=True))
         return 0
     except (Refusal, OSError, ValueError, subprocess.CalledProcessError) as error:
         print(f"ikpk-rehearsal: {error}", file=sys.stderr)

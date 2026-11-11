@@ -87,6 +87,42 @@ class RehearsalStateTests(unittest.TestCase):
         self.state.mark_cms_activated("op-1")
         self.assertEqual(self.state._read_marker()["fence"], "closed")
 
+    def test_start_journal_binds_ci_cms_artifact_identity(self):
+        artifact = {"artifactId": 42, "runId": 7, "attempt": 2,
+                    "archiveSha256": "b" * 64, "payloadSha256": "c" * 64}
+        self.state.begin("paired-artifact", SOURCE_SHA, OLD_PAIR, cms_artifact=artifact)
+        self.assertEqual(self.state._operation_rows("paired-artifact")[0]["cmsArtifact"], artifact)
+        with self.assertRaisesRegex(RehearsalRefusal, "artifact identity differs"):
+            self.state.begin("paired-artifact", SOURCE_SHA, OLD_PAIR,
+                             cms_artifact={**artifact, "payloadSha256": "d" * 64})
+
+    def test_start_journal_binds_exact_host_helper_run_attempt_and_both_digests(self):
+        cms_artifact = {"artifactId": 42, "runId": 7, "attempt": 2,
+                        "archiveSha256": "b" * 64, "payloadSha256": "c" * 64}
+        helper = {"artifactId": 43, "runId": 7, "attempt": 2,
+                  "archiveSha256": "d" * 64, "payloadSha256": "e" * 64}
+        helper_identity = "f" * 64
+        self.state.begin("paired-helper", SOURCE_SHA, OLD_PAIR, cms_artifact=cms_artifact,
+                         host_helper_artifact=helper, host_helper_identity=helper_identity)
+        start = self.state._operation_rows("paired-helper")[0]
+        self.assertEqual(start["cmsArtifact"], cms_artifact)
+        self.assertEqual(start["hostHelperArtifact"], helper)
+        self.assertEqual(start["hostHelperRuntimeIdentity"], helper_identity)
+        self.state.begin("paired-helper", SOURCE_SHA, OLD_PAIR, cms_artifact=cms_artifact,
+                         host_helper_artifact=helper, host_helper_identity=helper_identity)
+        with self.assertRaisesRegex(RehearsalRefusal, "host helper artifact identity differs"):
+            self.state.begin("paired-helper", SOURCE_SHA, OLD_PAIR, cms_artifact=cms_artifact,
+                             host_helper_artifact={**helper, "attempt": 1})
+        with self.assertRaisesRegex(RehearsalRefusal, "host helper runtime identity differs"):
+            self.state.begin("paired-helper", SOURCE_SHA, OLD_PAIR, cms_artifact=cms_artifact,
+                             host_helper_artifact=helper, host_helper_identity="a" * 64)
+        self.state.confirm_fence("paired-helper", lambda: True)
+        self.state.recover("paired-helper", lambda: True, lambda: True)
+        rows = self.state._operation_rows("paired-helper")
+        self.assertEqual(rows[0]["hostHelperArtifact"], helper)
+        self.assertEqual(rows[0]["hostHelperRuntimeIdentity"], helper_identity)
+        self.assertEqual([row["record"] for row in rows], ["start", "recovered"])
+
     def test_interrupted_start_reconstructs_acquiring_marker_for_explicit_recovery(self):
         self.state._append({"version": 1, "record": "start", "operationId": "op-crash-start",
                             "sourceSha": SOURCE_SHA, "oldPair": OLD_PAIR})

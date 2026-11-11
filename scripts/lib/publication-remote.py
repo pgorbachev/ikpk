@@ -29,6 +29,7 @@ MAX_NGINX_BYTES = 2 * 1024 ** 2
 MAX_REDIRECT_BYTES = 1024 ** 2
 MAX_READINESS_BYTES = 64 * 1024
 PROBE_TIMEOUT = 10
+HOST_PUBLICATION_MARKER = "/var/lib/ikpk-rehearsal/site-publication/host-publication.json"
 
 
 class Refusal(Exception):
@@ -38,6 +39,32 @@ class Refusal(Exception):
 def require(condition, message):
     if not condition:
         raise Refusal(message)
+
+
+def validate_publication_lock(path, fd):
+    """Accept only the pre-provisioned CMS lock inode, never create or repair it."""
+    try:
+        opened = os.fstat(fd)
+        named = os.lstat(path)
+    except OSError as error:
+        raise Refusal("shared CMS publication lock changed or is unavailable") from error
+    require(stat.S_ISREG(opened.st_mode) and opened.st_uid == os.geteuid()
+            and stat.S_IMODE(opened.st_mode) == 0o600 and opened.st_nlink == 1,
+            "shared CMS publication lock must be a CMS-owned 0600 regular single-link file")
+    require(stat.S_ISREG(named.st_mode) and named.st_uid == os.geteuid()
+            and stat.S_IMODE(named.st_mode) == 0o600 and named.st_nlink == 1
+            and (opened.st_dev, opened.st_ino) == (named.st_dev, named.st_ino),
+            "shared CMS publication lock path no longer names its validated inode")
+
+
+def site_refresh_state_path(root, destination):
+    if os.path.realpath(root) == "/var/www/ikpk":
+        if destination == "prod":
+            return "/var/www/ikpk/shared/site-refresh/state.json"
+        if destination == "stand":
+            return "/var/lib/ikpk-cms-prototype193/staging/site-refresh194/state/state.json"
+        raise Refusal("unknown IKPK publication profile")
+    return os.path.join(root, "shared", "site-refresh", "state.json")
 
 
 def reply(value=None, error=None, active_operation=None):
@@ -174,6 +201,99 @@ class PublicationSession:
         self.previous_current = None
         self.retained = {}
         self.active_operation = None
+    def assert_site_refresh_idle(self):
+        self.assert_host_publication_idle()
+        state = site_refresh_state_path(self.root, self.destination)
+        parent = os.path.dirname(state)
+        require(os.path.isdir(parent) and not os.path.islink(parent),
+                "CMS site-refresh state directory is unavailable")
+        legacy_lock = state + ".lock"
+        try:
+            os.lstat(legacy_lock)
+        except FileNotFoundError:
+            pass
+        else:
+            raise Refusal("legacy CMS site-refresh lock exists; operator recovery is required")
+        try:
+            before = os.lstat(state)
+        except FileNotFoundError:
+            return
+        require(stat.S_ISREG(before.st_mode) and before.st_nlink == 1,
+                "CMS site-refresh state is unsafe; publication refused")
+        try:
+            fd = os.open(state, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+            with os.fdopen(fd, "rb") as source:
+                opened = os.fstat(source.fileno())
+                require((opened.st_dev, opened.st_ino) == (before.st_dev, before.st_ino)
+                        and opened.st_nlink == 1 and opened.st_size <= 1024 * 1024,
+                        "CMS site-refresh state changed or exceeds its size limit")
+                record = json.loads(source.read(1024 * 1024 + 1))
+        except (OSError, ValueError, UnicodeError) as error:
+            raise Refusal("CMS site-refresh state is unreadable; publication refused") from error
+        require(isinstance(record, dict) and record.get("status") in ("idle", "succeeded", "failed"),
+                "CMS refresh, Restore, or interrupted operation is unresolved")
+        worker_pid = record.get("workerPid")
+        if worker_pid is not None:
+            require(type(worker_pid) is int and 2 <= worker_pid <= 2147483647,
+                    "CMS site-refresh worker identity is invalid")
+            try:
+                os.kill(worker_pid, 0)
+            except ProcessLookupError:
+                pass
+            except (PermissionError, OSError) as error:
+                raise Refusal("CMS site-refresh worker state is ambiguous") from error
+            else:
+                raise Refusal("CMS site-refresh worker is still active")
+        elif record.get("phase"):
+            try:
+                with os.scandir("/proc") as entries:
+                    for entry in entries:
+                        if not entry.name.isdecimal():
+                            continue
+                        try:
+                            command = open(os.path.join(entry.path, "cmdline"), "rb").read()
+                        except OSError:
+                            continue
+                        if b"site-refresh-worker.js" in command or (b"executeRefresh()" in command and b"site-refresh" in command):
+                            raise Refusal("legacy CMS site-refresh worker is still active")
+            except OSError as error:
+                raise Refusal("cannot inspect legacy CMS site-refresh workers") from error
+
+    def assert_host_publication_idle(self):
+        if os.path.realpath(self.root) != "/var/www/ikpk":
+            return
+        directory = os.path.dirname(HOST_PUBLICATION_MARKER)
+        try:
+            parent = os.lstat(directory)
+        except OSError as error:
+            raise Refusal("host publication marker directory is unavailable") from error
+        require(stat.S_ISDIR(parent.st_mode) and parent.st_uid == 0 and stat.S_IMODE(parent.st_mode) == 0o750,
+                "host publication marker directory is unsafe")
+        if parent.st_gid not in {os.getgid(), *os.getgroups()}:
+            raise Refusal("host publication marker directory is not readable by this publisher")
+        try:
+            before = os.lstat(HOST_PUBLICATION_MARKER)
+        except FileNotFoundError:
+            return
+        require(stat.S_ISREG(before.st_mode) and before.st_nlink == 1 and before.st_uid == 0
+                and before.st_gid == parent.st_gid and stat.S_IMODE(before.st_mode) == 0o640,
+                "host publication marker is unsafe")
+        try:
+            fd = os.open(HOST_PUBLICATION_MARKER, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+            with os.fdopen(fd, "rb") as source:
+                opened = os.fstat(source.fileno())
+                require((opened.st_dev, opened.st_ino) == (before.st_dev, before.st_ino)
+                        and opened.st_nlink == 1 and opened.st_size <= 65536,
+                        "host publication marker changed or exceeds its size limit")
+                marker = json.loads(source.read(65537))
+        except (OSError, ValueError, UnicodeError) as error:
+            raise Refusal("host publication marker is unreadable") from error
+        require(isinstance(marker, dict) and marker.get("version") == 1
+                and isinstance(marker.get("operationId"), str)
+                and isinstance(marker.get("profile"), str)
+                and marker.get("phase") in ("active", "cleanup-pending"),
+                "host publication marker is invalid")
+        raise Refusal("host publication is unresolved; recover it before SSH publication")
 
     def shared_directory(self):
         return os.open(os.path.join(self.root, "shared"), os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
@@ -750,6 +870,7 @@ class PublicationSession:
             command = json.loads(line)
             require(isinstance(command, dict), "invalid protocol command")
             name = command.get("command")
+            self.current_command = command
             if name == "close":
                 reply()
                 return
@@ -762,6 +883,7 @@ class PublicationSession:
                 reply(getattr(self, name.replace("-", "_"))(command))
             else:
                 require(name in ("stage", "prepare", "activate", "cancel", "cancel-recovery", "complete-recovery", "finish"), "unknown publication command")
+                self.assert_site_refresh_idle()
                 getattr(self, name.replace("-", "_"))(command)
                 reply()
 
@@ -770,9 +892,19 @@ def main():
     root, destination = sys.argv[1:]
     # The descriptor remains open for the whole SSH session, including index callbacks.
     regular_directory(root)
-    fd = os.open(os.path.join(root, ".publication.lock"), os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW, 0o600)
+    lock_path = os.path.join(root, ".publication.lock")
+    try:
+        before = os.lstat(lock_path)
+    except OSError as error:
+        raise Refusal("shared CMS publication lock is missing or unavailable") from error
+    require(stat.S_ISREG(before.st_mode) and before.st_uid == os.geteuid()
+            and stat.S_IMODE(before.st_mode) == 0o600 and before.st_nlink == 1,
+            "shared CMS publication lock must be a CMS-owned 0600 regular single-link file")
+    fd = os.open(lock_path, os.O_RDWR | os.O_NOFOLLOW | os.O_NONBLOCK)
     with os.fdopen(fd, "r+b") as lock:
+        validate_publication_lock(lock_path, lock.fileno())
         fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
+        validate_publication_lock(lock_path, lock.fileno())
         session = PublicationSession(root, destination)
         try:
             session.run()

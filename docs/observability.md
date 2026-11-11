@@ -1,5 +1,12 @@
 # Observability Plan — ikpk.su
 
+> **The CDN/Netlify and Vercel monitoring assumptions and the proposed
+> Lighthouse workflow below are outdated.** The existing CI workflow is [lighthouse.yml](../.github/workflows/lighthouse.yml).
+> Payment-specific recovery procedures are in the [payment backup runbook](runbook-payments-backup.md),
+> [secret rotation runbook](runbook-payments-secret-rotation.md), and
+> [HMAC key rotation runbook](runbook-payments-hmac-rotation.md). Verify other
+> monitoring arrangements before relying on this plan.
+
 ## Metrics to Track
 
 ### Infrastructure

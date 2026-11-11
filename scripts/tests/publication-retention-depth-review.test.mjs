@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, readFileSync, readdirSync, readlinkSync, rmSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, readlinkSync, rmSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -13,6 +13,8 @@ for (const kind of ['cancelled', 'staged-without-prepare']) test(`REVIEW: ${kind
   const root = join(temp, 'remote');
   const releases = join(root, 'releases');
   const source = join(temp, 'source');
+  mkdirSync(join(root, 'shared', 'site-refresh'), { recursive: true });
+  writeFileSync(join(root, '.publication.lock'), '', { mode: 0o600 }); chmodSync(join(root, '.publication.lock'), 0o600);
   mkdirSync(releases, { recursive: true }); mkdirSync(source);
   writeFileSync(join(source, 'index.html'), 'verified static content');
   const treeDigest = await digestTree(source, ['index.html']);

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { fork, spawnSync } from 'node:child_process';
 import {
-  existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync,
+  chmodSync, existsSync, linkSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync,
   rmSync, symlinkSync, unlinkSync, writeFileSync, cpSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -43,8 +43,11 @@ function setup(t, fault = {}) {
   const source = join(temp, 'source');
   const old = join(root, 'releases', 'old');
   mkdirSync(old, { recursive: true });
+  mkdirSync(join(root, 'shared', 'site-refresh'), { recursive: true });
   mkdirSync(join(source, 'assets'), { recursive: true });
   writeFileSync(join(old, 'index.html'), oldBody);
+  writeFileSync(join(root, '.publication.lock'), '');
+  chmodSync(join(root, '.publication.lock'), 0o600);
   writeFileSync(join(source, 'index.html'), newBody);
   writeFileSync(join(source, 'assets', 'κείμενο with space.txt'), Buffer.from([0, 1, 128, 255, 10]));
   writeFileSync(join(source, 'release.json'), JSON.stringify({ commit: 'a'.repeat(40), snapshotId: 'snapshot-new' }));
@@ -117,19 +120,81 @@ function client(t, config) {
 
 test('stage transfers exact bytes to a separate release without changing current', options, async (t) => {
   const f = setup(t);
+  const siteLock = join(f.root, 'shared', 'site-refresh', 'state.json.lock');
   await f.transport.withLock(async (session) => {
     await f.stage(session);
+    assert.equal(hostLockState(f.root), 'held', 'the shared destination flock must cover remote publication');
+    assert.equal(existsSync(siteLock), false, 'publication must not create a second state lock');
     assert.equal(f.active(), 'old');
     assert.ok(existsSync(join(f.root, 'releases', 'new')), 'stage must create the uploaded release');
     assert.equal(digest(join(f.root, 'releases', 'new')), f.operation.treeDigest);
     assert.ok(f.connections().length > 0, 'the transfer must use the SSH boundary');
   });
+  assert.equal(hostLockState(f.root), 'available', 'successful close releases the shared destination flock');
+  assert.equal(existsSync(siteLock), false);
 });
 
 test('a wrong declared digest refuses the release before activation', options, async (t) => {
   const f = setup(t);
   await assert.rejects(f.transport.withLock((session) => f.stage(session, { expectedDigest: '0'.repeat(64) })), /digest|checksum|mismatch/i);
   assert.equal(f.active(), 'old');
+});
+
+test('publication fails closed when the CMS site-refresh state directory is missing', options, async (t) => {
+  const f = setup(t);
+  rmSync(join(f.root, 'shared', 'site-refresh'), { recursive: true, force: true });
+  await assert.rejects(f.transport.withLock((session) => f.stage(session)), /CMS site-refresh state directory is unavailable/i);
+  assert.equal(f.active(), 'old');
+  assert.equal(existsSync(join(f.root, 'releases', 'new')), false);
+});
+
+test('publication fails closed when the shared destination lock inode is inaccessible', options, async (t) => {
+  if (process.getuid?.() === 0) t.skip('permission fixture requires an unprivileged publisher');
+  const f = setup(t);
+  const sharedLock = join(f.root, '.publication.lock');
+  writeFileSync(sharedLock, '');
+  chmodSync(sharedLock, 0o400);
+  await assert.rejects(f.transport.withLock((session) => f.stage(session)), /publication lock|filesystem|protocol/i);
+  assert.equal(f.active(), 'old');
+  assert.equal(existsSync(join(f.root, 'releases', 'new')), false);
+});
+
+test('publication requires the pre-existing CMS-owned lock inode and never creates it', options, async (t) => {
+  const f = setup(t);
+  const lock = join(f.root, '.publication.lock');
+  unlinkSync(lock);
+  await assert.rejects(f.transport.withLock((session) => f.stage(session)), /publication lock is missing|filesystem|protocol/i);
+  assert.equal(existsSync(lock), false);
+  assert.equal(f.active(), 'old');
+});
+
+test('publication rejects a lock with insecure permissions before taking its flock', options, async (t) => {
+  const f = setup(t);
+  chmodSync(join(f.root, '.publication.lock'), 0o640);
+  await assert.rejects(f.transport.withLock((session) => f.stage(session)), /publication lock|filesystem|protocol/i);
+  assert.equal(f.active(), 'old');
+  assert.equal(existsSync(join(f.root, 'releases', 'new')), false);
+});
+
+test('publication rejects a multiply linked lock inode', options, async (t) => {
+  const f = setup(t);
+  linkSync(join(f.root, '.publication.lock'), join(f.root, '.publication.lock-alias'));
+  await assert.rejects(f.transport.withLock((session) => f.stage(session)), /publication lock|filesystem|protocol/i);
+  assert.equal(f.active(), 'old');
+  assert.equal(existsSync(join(f.root, 'releases', 'new')), false);
+});
+
+test('publication rejects a lock path that is a symbolic link', options, async (t) => {
+  const f = setup(t);
+  const lock = join(f.root, '.publication.lock');
+  const target = join(f.root, '.publication.lock-target');
+  unlinkSync(lock);
+  writeFileSync(target, '');
+  chmodSync(target, 0o600);
+  symlinkSync(target, lock);
+  await assert.rejects(f.transport.withLock((session) => f.stage(session)), /publication lock|filesystem|protocol/i);
+  assert.equal(f.active(), 'old');
+  assert.equal(existsSync(join(f.root, 'releases', 'new')), false);
 });
 
 test('corruption on the upload channel is detected by the remote digest', options, async (t) => {

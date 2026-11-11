@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { appendFileSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readlinkSync, realpathSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs';
+import { appendFileSync, chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readlinkSync, realpathSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -25,7 +25,8 @@ async function setup(t, fault = {}) {
   mkdirSync(join(old, 'deploy'), { recursive: true });
   writeFileSync(join(old, 'index.html'), 'old body');
   writeFileSync(join(old, artifact), oldRedirects);
-  mkdirSync(join(root, 'shared'));
+  mkdirSync(join(root, 'shared', 'site-refresh'), { recursive: true });
+  writeFileSync(join(root, '.publication.lock'), '', { mode: 0o600 }); chmodSync(join(root, '.publication.lock'), 0o600);
   const fragment = join(root, 'shared', 'nginx-redirects.conf');
   writeFileSync(fragment, oldRedirects);
   symlinkSync('releases/old', join(root, 'current'));

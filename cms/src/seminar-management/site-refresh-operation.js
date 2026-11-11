@@ -1,5 +1,6 @@
-import { cpSync, existsSync, fsyncSync, lstatSync, mkdirSync, openSync, closeSync, readFileSync, readlinkSync, readdirSync, renameSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs';
-import { basename, dirname, join } from 'node:path';
+import { constants, cpSync, existsSync, fchmodSync, fstatSync, fsyncSync, ftruncateSync, lstatSync, mkdirSync, openSync, closeSync, readFileSync, readlinkSync, realpathSync, readdirSync, renameSync, symlinkSync, unlinkSync, writeFileSync, writeSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { basename, dirname, isAbsolute, join, normalize } from 'node:path';
 
 export const MESSAGES = {
   failed: 'Сборка не удалась. Действующий сайт не менялся.',
@@ -19,6 +20,7 @@ export const MESSAGES = {
   restoreVerifyFailed:
     'Возврат переключил релиз, проверка после этого не прошла. Это не автоматический откат.',
   busy: 'Обновление уже выполняется.',
+  publicationBusy: 'Публикация сайта на хосте ещё не завершена. Повторите после её завершения.',
   forbidden: 'Недостаточно прав для обновления сайта.',
   idle: 'Сайт ещё не обновлялся этой кнопкой.',
 };
@@ -42,15 +44,18 @@ export function publicView(record) {
     startedAt: record.startedAt || null,
     finishedAt: record.finishedAt || null,
     releaseId: record.releaseId || null,
+    commit: typeof record.commit === 'string' && /^[0-9a-f]{40}$/.test(record.commit) ? record.commit : null,
     previousReleaseId: record.previousReleaseId || null,
     siteUrl: record.siteUrl || null,
     detail: record.detail ? redact(record.detail) : null,
+    cleanupPending: record.cleanupPending === true ? true : null,
+    buildArtifactsCleanupPending: record.buildArtifactsCleanupPending === true ? true : null,
   };
 }
 
 export function reconcile(record, pidAlive) {
   if (!record || record.status !== 'running') return record || null;
-  if (record.pid && pidAlive(record.pid)) return record;
+  if (!Number.isInteger(record.pid) || record.pid <= 0 || pidAlive(record.pid)) return record;
   const switched = record.phase === 'switching' || record.phase === 'verifying' || record.switched === true;
   return {
     ...record,
@@ -66,12 +71,104 @@ export function refreshStatePath(env = {}) {
   return join(root, 'shared', 'site-refresh', 'state.json');
 }
 
+export function publicationLockPath(env = {}) {
+  const root = env.IKPK_WEB_ROOT || '/var/www/ikpk';
+  if (!isAbsolute(root) || normalize(root) !== root) throw new Error('site root is invalid');
+  return join(root, '.publication.lock');
+}
+
+/** Hold the existing host lock inode while an async CMS writer runs. */
+export function openPublicationLock(path) {
+  let before;
+  try { before = lstatSync(path); }
+  catch (error) { throw new Error('shared publication lock is unavailable', { cause: error }); }
+  const uid = typeof process.getuid === 'function' ? process.getuid() : null;
+  if (!before.isFile() || before.isSymbolicLink() || before.nlink !== 1 || (before.mode & 0o777) !== 0o600
+      || (uid !== null && before.uid !== uid)) throw new Error('shared publication lock has unsafe owner or permissions');
+  const fd = openSync(path, constants.O_RDWR | (constants.O_NOFOLLOW || 0));
+  try {
+    const opened = fstatSync(fd);
+    const named = lstatSync(path);
+    if (!opened.isFile() || opened.nlink !== 1 || opened.dev !== before.dev || opened.ino !== before.ino
+        || opened.dev !== named.dev || opened.ino !== named.ino || (opened.mode & 0o777) !== 0o600
+        || (uid !== null && opened.uid !== uid)) throw new Error('shared publication lock changed or has unsafe owner or permissions');
+    return fd;
+  } catch (error) {
+    closeSync(fd);
+    throw error;
+  }
+}
+
+export function validatePublicationLock(path, fd) {
+  let opened;
+  let named;
+  try { opened = fstatSync(fd); named = lstatSync(path); }
+  catch (error) { throw new Error('shared publication lock changed or is unavailable', { cause: error }); }
+  const uid = typeof process.getuid === 'function' ? process.getuid() : null;
+  if (!opened.isFile() || opened.nlink !== 1 || opened.dev !== named.dev || opened.ino !== named.ino
+      || (opened.mode & 0o777) !== 0o600 || (uid !== null && opened.uid !== uid)
+      || !named.isFile() || named.isSymbolicLink() || named.nlink !== 1 || (named.mode & 0o777) !== 0o600
+      || (uid !== null && named.uid !== uid)) throw new Error('shared publication lock changed or has unsafe owner or permissions');
+}
+
+/** @param {{ wait?: boolean, path?: string }} [options] */
+export function acquirePublicationLock(fd, options = {}) {
+  const { wait = false, path } = options;
+  const program = 'import fcntl, os, sys\ntry:\n fcntl.flock(3, fcntl.LOCK_EX | (0 if sys.argv[1] == "wait" else fcntl.LOCK_NB))\nexcept BlockingIOError:\n sys.exit(73)\n';
+  const result = spawnSync('python3', ['-c', program, wait ? 'wait' : 'nowait'], {
+    stdio: ['ignore', 'ignore', 'pipe', fd], encoding: 'utf8',
+  });
+  if (result.error) throw new Error('shared publication lock helper is unavailable', { cause: result.error });
+  if (result.status === 73) return false;
+  if (result.status !== 0) throw new Error('shared publication lock could not be acquired');
+  if (path) validatePublicationLock(path, fd);
+  return true;
+}
+
+export async function withPublicationLock(path, action, options = {}) {
+  const fd = openPublicationLock(path);
+  try {
+    if (!acquirePublicationLock(fd, { ...options, path })) {
+      const error = new Error('another publisher holds the destination lock');
+      error.code = 'LOCK_BUSY';
+      throw error;
+    }
+    return await action();
+  } finally { closeSync(fd); }
+}
+
+/** Host publications write a root-owned marker before staging and clear it only
+ * after verification and release cleanup. Any unreadable or malformed marker
+ * blocks CMS publication and Restore. */
+export function hostPublicationStatus(marker = '/var/lib/ikpk-rehearsal/site-publication/host-publication.json') {
+  try {
+    const directory = lstatSync(dirname(marker));
+    const mode = directory.mode & 0o777;
+    const groups = new Set([process.getgid(), ...process.getgroups()]);
+    if (!directory.isDirectory() || directory.uid !== 0 || mode !== 0o750 || !groups.has(directory.gid)) {
+      return { status: 'unknown' };
+    }
+    const info = lstatSync(marker);
+    if (!info.isFile() || info.isSymbolicLink() || info.nlink !== 1 || info.uid !== 0
+        || (info.mode & 0o777) !== 0o640 || !groups.has(info.gid)) return { status: 'unknown' };
+    const value = JSON.parse(readFileSync(marker, 'utf8'));
+    if (!value || value.version !== 1 || typeof value.operationId !== 'string'
+        || typeof value.profile !== 'string' || !['active', 'cleanup-pending'].includes(value.phase)) {
+      return { status: 'unknown' };
+    }
+    return value;
+  } catch (error) {
+    return error?.code === 'ENOENT' && error.path === marker ? null : { status: 'unknown' };
+  }
+}
+
 export function writeJsonAtomic(path, record) {
   const dir = dirname(path);
   mkdirSync(dir, { recursive: true });
   const tmp = join(dir, `.${basename(path)}.${process.pid}.tmp`);
-  const fd = openSync(tmp, 'w');
+  const fd = openSync(tmp, 'w', 0o600);
   try {
+    fchmodSync(fd, 0o600);
     writeFileSync(fd, `${JSON.stringify(record)}\n`);
     fsyncSync(fd);
   } catch (error) {
@@ -81,22 +178,87 @@ export function writeJsonAtomic(path, record) {
   }
   closeSync(fd);
   renameSync(tmp, path);
+  const dirFd = openSync(dir, 'r');
+  try { fsyncSync(dirFd); } finally { closeSync(dirFd); }
 }
 
-export function readStateFile(path) {
-  if (!existsSync(path)) return { readable: true, missing: true, record: null };
+// Resolve only a direct child of the configured releases directory. State may
+// contain the absolute pointer written by the paired deploy or a relative one.
+export function normalizeReleaseTarget(target, webRoot, requireDirectory = false) {
+  if (typeof target !== 'string') throw new Error('release target is invalid');
+  let id;
+  if (target.startsWith('releases/')) {
+    id = target.slice('releases/'.length);
+  } else {
+    if (!webRoot || !isAbsolute(webRoot) || normalize(webRoot) !== webRoot) throw new Error('release root is invalid');
+    const prefix = `${join(webRoot, 'releases')}/`;
+    if (!target.startsWith(prefix)) throw new Error('release target is invalid');
+    id = target.slice(prefix.length);
+  }
+  if (!/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(id) || id.includes('..')) throw new Error('release target is invalid');
+  if (requireDirectory) {
+    if (!webRoot || !isAbsolute(webRoot) || normalize(webRoot) !== webRoot) throw new Error('release root is invalid');
+    const releases = join(webRoot, 'releases');
+    const release = join(releases, id);
+    try {
+      const baseInfo = lstatSync(releases);
+      const info = lstatSync(release);
+      if (!baseInfo.isDirectory() || baseInfo.isSymbolicLink() || !info.isDirectory() || info.isSymbolicLink()
+          || realpathSync(release) !== join(realpathSync(releases), id)) throw new Error('unsafe target');
+    } catch { throw new Error('release target is invalid or unsafe'); }
+  }
+  return `releases/${id}`;
+}
+
+function validRefreshState(record, webRoot) {
+  if (!record || typeof record !== 'object' || Array.isArray(record)) return false;
+  if (['cleanupPending', 'buildArtifactsCleanupPending'].some(key =>
+    record[key] !== undefined && typeof record[key] !== 'boolean')) return false;
+  const id = value => typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(value) && !value.includes('..');
+  if (record.releaseId != null && !id(record.releaseId)) return false;
+  if (record.previousReleaseId != null) {
+    try { normalizeReleaseTarget(record.previousReleaseId, webRoot); } catch { return false; }
+  }
+  const phases = {
+    running: ['starting', 'capture', 'build', 'switching', 'verifying'],
+    failed: [undefined, 'prepare', 'capture', 'build', 'switching'],
+    interrupted: [undefined, 'starting', 'prepare', 'capture', 'build'],
+    succeeded: [undefined, 'done'],
+    'verification-failed': [undefined, 'verifying'],
+    idle: [undefined],
+  };
+  if (!Object.hasOwn(phases, record.status) || !phases[record.status].includes(record.phase)) return false;
+  if (record.status === 'idle') return record.switched === undefined || record.switched === false;
+  if (typeof record.switched !== 'boolean') return false;
+  if (record.status === 'running') {
+    if (!Number.isSafeInteger(record.pid) || record.pid <= 0) return false;
+    if ((record.phase === 'verifying') !== record.switched) return false;
+  }
+  if (['failed', 'interrupted'].includes(record.status) && record.switched) return false;
+  if (['succeeded', 'verification-failed'].includes(record.status) && (!record.switched || !id(record.releaseId))) return false;
+  return true;
+}
+
+export function readStateFile(path, webRoot = process.env.IKPK_WEB_ROOT) {
   try {
-    return { readable: true, missing: false, record: JSON.parse(readFileSync(path, 'utf8')) };
-  } catch {
+    const record = JSON.parse(readFileSync(path, 'utf8'));
+    if (!validRefreshState(record, webRoot)) throw new Error('invalid state');
+    const normalized = record.previousReleaseId == null ? record : { ...record, previousReleaseId: normalizeReleaseTarget(record.previousReleaseId, webRoot) };
+    return { readable: true, missing: false, record: normalized };
+  } catch (error) {
+    if (error?.code === 'ENOENT') {
+      try { lstatSync(path); }
+      catch (probe) { if (probe?.code === 'ENOENT') return { readable: true, missing: true, record: null }; }
+    }
     return { readable: false, missing: false, record: null };
   }
 }
 
-export function tryLock(lockPath, pid) {
+export function tryLock(lockPath, pid, token = null) {
   try {
     const fd = openSync(lockPath, 'wx');
     try {
-      writeFileSync(fd, `${pid}\n`);
+      writeFileSync(fd, token ? `${pid}\n${token}\n` : `${pid}\n`);
     } finally {
       closeSync(fd);
     }
@@ -107,41 +269,101 @@ export function tryLock(lockPath, pid) {
   }
 }
 
+function parseLock(value) {
+  const match = /^(\d+)\n(?:([a-f0-9]{32})\n)?$/.exec(String(value));
+  if (!match) return null;
+  const pid = Number(match[1]);
+  return Number.isSafeInteger(pid) && pid > 0 ? { pid, token: match[2] || null } : null;
+}
+
+function parseLockPid(value) {
+  return parseLock(value)?.pid ?? null;
+}
+
+function sameFile(a, b) {
+  return a.dev === b.dev && a.ino === b.ino;
+}
+
 export function lockPid(lockPath) {
   try {
-    const pid = Number(String(readFileSync(lockPath, 'utf8')).trim());
-    return Number.isInteger(pid) && pid > 0 ? pid : null;
+    return parseLockPid(readFileSync(lockPath, 'utf8'));
   } catch {
     return null;
   }
 }
 
-/** Живой pid операции не снимается. Мёртвый pid в записи снимает lock, даже если в файле lock ещё pid службы. Битый файл тоже снимается. */
-export function decideLock({ readable, record, lockPath, pidAlive }) {
-  const holder = lockPid(lockPath);
-  const holderAlive = holder != null && pidAlive(holder);
-  if (record?.status === 'running' && record.pid && pidAlive(record.pid)) {
-    return { releaseLock: false, record };
-  }
-  if (record?.status === 'running' && record.pid && !pidAlive(record.pid)) {
-    const reconciled = reconcile(record, () => false);
-    return { releaseLock: existsSync(lockPath), record: reconciled, persist: reconciled };
-  }
-  if (holderAlive) return { releaseLock: false, record: record || { status: 'running', message: MESSAGES.busy } };
-  if (!readable) {
-    const persist = { status: 'failed', message: MESSAGES.corrupt, switched: false };
-    return { releaseLock: true, record: persist, persist };
-  }
-  const reconciled = record?.status === 'running' ? reconcile(record, () => false) : record;
-  return { releaseLock: existsSync(lockPath), record: reconciled, persist: reconciled !== record ? reconciled : null };
+export function ownsLock(lockPath, pid, token) {
+  try {
+    const owner = parseLock(readFileSync(lockPath, 'utf8'));
+    return owner?.pid === pid && owner.token === token;
+  } catch { return false; }
 }
 
-export function unlock(lockPath) {
+/** Permission and probe errors other than ESRCH are ambiguous, so treat the PID as busy. */
+export function isPidAlive(pid, kill = process.kill) {
   try {
-    unlinkSync(lockPath);
+    kill(pid, 0);
+    return true;
   } catch (error) {
-    if (!error || error.code !== 'ENOENT') throw error;
+    return error?.code !== 'ESRCH';
   }
+}
+
+/** Rewrite only the lock inode and PID still owned by the controller. */
+export function transferLock(lockPath, fromPid, toPid, token = null) {
+  if (!Number.isInteger(fromPid) || fromPid <= 0 || !Number.isInteger(toPid) || toPid <= 0) return false;
+  let fd;
+  try {
+    fd = openSync(lockPath, 'r+');
+    const opened = fstatSync(fd);
+    const owner = parseLock(readFileSync(fd, 'utf8'));
+    if (!sameFile(opened, lstatSync(lockPath)) || owner?.pid !== fromPid || owner.token !== token) return false;
+    ftruncateSync(fd, 0);
+    const content = Buffer.from(token ? `${toPid}\n${token}\n` : `${toPid}\n`);
+    writeSync(fd, content, 0, content.length, 0);
+    fsyncSync(fd);
+    return true;
+  } catch {
+    return false;
+  } finally {
+    if (fd !== undefined) closeSync(fd);
+  }
+}
+
+/** Release only a lock whose PID still matches the caller's ownership. */
+export function unlock(lockPath, expectedPid, token = null) {
+  if (!Number.isInteger(expectedPid) || expectedPid <= 0) return false;
+  let fd;
+  try {
+    fd = openSync(lockPath, 'r');
+    const opened = fstatSync(fd);
+    const owner = parseLock(readFileSync(fd, 'utf8'));
+    if (!sameFile(opened, lstatSync(lockPath)) || owner?.pid !== expectedPid || owner.token !== token) return false;
+    if (!sameFile(opened, lstatSync(lockPath))) return false;
+    unlinkSync(lockPath);
+    return true;
+  } catch (error) {
+    if (error?.code === 'ENOENT') return false;
+    throw error;
+  } finally {
+    if (fd !== undefined) closeSync(fd);
+  }
+}
+
+/** Unknown, empty, or foreign lock ownership is retained for operator diagnosis. */
+export function decideLock({ readable, record, lockPath, pidAlive }) {
+  let exists;
+  try { lstatSync(lockPath); exists = true; }
+  catch (error) { if (error?.code !== 'ENOENT') return { releaseLock: false, record: { status: 'running', message: MESSAGES.busy } }; exists = false; }
+  // Observation never mutates state or removes a lock. A lock whose owner died
+  // is resolved explicitly by an operator, not by an asynchronous GET.
+  if (exists) {
+    return { releaseLock: false, record: record?.status === 'running' ? record : { status: 'running', message: MESSAGES.busy } };
+  }
+  if (!readable) return { releaseLock: false, record: { status: 'failed', message: MESSAGES.corrupt, switched: false } };
+  // Interrupted or lost workers require explicit recovery; do not turn a stale
+  // observation into permission for a new publication.
+  return { releaseLock: false, record: record?.status === 'running' ? record : reconcile(record, pidAlive) };
 }
 
 export function workspaceReady(workspace) {
@@ -293,13 +515,15 @@ export function siteBuildEnv(workspace, staging194 = false, production = false, 
   return env;
 }
 
-export function switchCurrent(webRoot, releaseId) {
+export function switchCurrent(webRoot, releaseId, expectedPrevious = undefined) {
   if (!releaseId || releaseId.includes('/') || releaseId.includes('..')) {
     throw new Error('release-id');
   }
   const target = join(webRoot, 'releases', releaseId);
-  const stat = lstatSync(target);
-  if (!stat.isDirectory() || stat.isSymbolicLink()) throw new Error('release-not-directory');
+  const targetInfo = lstatSync(target);
+  const releasesInfo = lstatSync(join(webRoot, 'releases'));
+  if (!releasesInfo.isDirectory() || releasesInfo.isSymbolicLink()
+      || !targetInfo.isDirectory() || targetInfo.isSymbolicLink()) throw new Error('release-not-directory');
   const link = join(webRoot, 'current');
   let previous = null;
   try {
@@ -307,8 +531,38 @@ export function switchCurrent(webRoot, releaseId) {
   } catch (error) {
     if (!error || error.code !== 'ENOENT') throw error;
   }
+  if (expectedPrevious !== undefined && previous !== expectedPrevious) throw new Error('current release changed before switch');
   const temp = join(webRoot, `.current-next-${releaseId}`);
-  symlinkSync(join('releases', releaseId), temp);
+  const targetText = join('releases', releaseId);
+  let tempInfo;
+  let orphan = false;
+  try {
+    tempInfo = lstatSync(temp);
+    orphan = true;
+  } catch (error) {
+    if (error?.code !== 'ENOENT') throw error;
+  }
+  if (orphan) {
+    if (expectedPrevious === undefined) throw new Error('orphan current pointer requires an exact previous target');
+    normalizeReleaseTarget(expectedPrevious, webRoot, true);
+    if (!tempInfo.isSymbolicLink() || tempInfo.nlink !== 1 || readlinkSync(temp) !== targetText) {
+      throw new Error('orphan current pointer is not the exact expected release symlink');
+    }
+  } else {
+    symlinkSync(targetText, temp);
+    tempInfo = lstatSync(temp);
+  }
+
+  // The caller holds the shared publication flock. Recheck both the saved
+  // source pointer and the exact temporary symlink inode before the atomic move.
+  const beforeRename = lstatSync(temp);
+  if (!sameFile(tempInfo, beforeRename) || !beforeRename.isSymbolicLink()
+      || beforeRename.nlink !== 1 || readlinkSync(temp) !== targetText) {
+    throw new Error('temporary current pointer changed before switch');
+  }
+  if (expectedPrevious !== undefined && readlinkSync(link) !== expectedPrevious) {
+    throw new Error('current release changed before switch');
+  }
   renameSync(temp, link);
   return { previous };
 }
@@ -467,33 +721,33 @@ export async function runRefresh(deps) {
       switched: false,
     });
   }
+  // Persist the exact old pointer before any switch so an interrupted worker
+  // leaves an identifiable recovery target.
+  const previousRaw = deps.readCurrent();
+  const previous = normalizeReleaseTarget(previousRaw, deps.webRoot, Boolean(deps.webRoot));
   deps.write({
     status: 'running',
     phase: 'switching',
+    previousReleaseId: previous,
     message: 'Сайт переключается.',
     startedAt,
     pid: deps.pid,
     releaseId: built.releaseId,
     switched: false,
   });
-  let previous;
   try {
-    previous = deps.switchRelease(built.releaseId).previous;
+    deps.switchRelease(built.releaseId, previousRaw);
   } catch (error) {
-    return finish(deps, {
-      status: 'failed',
-      phase: 'switching',
-      message: MESSAGES.failed,
-      detail: redact(error.message),
-      startedAt,
-      finishedAt: deps.now(),
-      switched: false,
-    });
+    // The switch outcome can be ambiguous. Retain durable intent and the lock
+    // for inspection instead of overwriting the recovery target with failure.
+    return { status: 'failed', message: MESSAGES.switchIncomplete,
+      detail: redact(error.message), recoveryRequired: true };
   }
   deps.write({
     status: 'running',
     phase: 'verifying',
     releaseId: built.releaseId,
+    commit: built.identity.commit,
     previousReleaseId: previous,
     startedAt,
     pid: deps.pid,
@@ -508,6 +762,7 @@ export async function runRefresh(deps) {
       message: MESSAGES.verificationFailed,
       detail: redact(verified.detail),
       releaseId: built.releaseId,
+      commit: built.identity.commit,
       previousReleaseId: previous,
       startedAt,
       finishedAt: deps.now(),
@@ -520,6 +775,7 @@ export async function runRefresh(deps) {
     phase: 'done',
     message: MESSAGES.succeeded,
     releaseId: built.releaseId,
+    commit: built.identity.commit,
     previousReleaseId: previous,
     siteUrl: verified.siteUrl || null,
     startedAt,
@@ -556,6 +812,8 @@ export async function runRestore(deps) {
         message: MESSAGES.restoreVerifyFailed,
         detail: redact(verified.detail),
         releaseId,
+        commit: expected.commit,
+        finishedAt: new Date().toISOString(),
         switched: true,
       });
     }
@@ -563,6 +821,8 @@ export async function runRestore(deps) {
       status: 'succeeded',
       message: MESSAGES.restored,
       releaseId,
+      commit: expected.commit,
+      finishedAt: new Date().toISOString(),
       siteUrl: verified.siteUrl || null,
       switched: true,
     });
@@ -574,6 +834,8 @@ export async function runRestore(deps) {
       message: MESSAGES.restoreVerifyFailed,
       detail: redact(error && error.message),
       releaseId,
+      commit: expected.commit,
+      finishedAt: new Date().toISOString(),
       switched: true,
     });
   }
@@ -583,11 +845,31 @@ export async function runRestore(deps) {
  * Lock и запись running живут в одном try/finally. Отказ записи снимает lock.
  * Исключение проверки после смены ссылки — ошибка проверки, не «сайт не менялся».
  */
-export async function runLockedRestore({ lock, pid, current, write, switchRelease, identityOf, verify,
+export async function runRestoreTransaction({ pid, current, readCurrent, readCurrentTarget, webRoot, write, switchRelease, identityOf, verify,
   installedCommit }) {
-  if (!tryLock(lock, pid)) return { status: 'running', message: MESSAGES.busy };
   let switched = false;
+  let switchedReleaseId = null;
   try {
+    if (readCurrent) {
+      try { current = readCurrent(); }
+      catch { return { status: 'failed', message: MESSAGES.corrupt, switched: false }; }
+    }
+    if (current?.status === 'running') return publicView({ ...current, message: MESSAGES.busy });
+    let expectedCurrent;
+    if (readCurrentTarget) {
+      try {
+        expectedCurrent = readCurrentTarget();
+        if (!current?.releaseId || normalizeReleaseTarget(expectedCurrent, webRoot, true) !== `releases/${current.releaseId}`)
+          return { status: 'failed', message: MESSAGES.restoreUnreadable, switched: false };
+      } catch { return { status: 'failed', message: MESSAGES.restoreUnreadable, switched: false }; }
+    }
+    if (current?.status === 'verification-failed') {
+      const previous = current.previousReleaseId;
+      if (!previous || !previous.startsWith('releases/')) return { status: 'failed', message: MESSAGES.restoreMissing, switched: false };
+      const identity = identityOf(previous.slice('releases/'.length));
+      if (!identity || (installedCommit !== undefined && identity.commit !== installedCommit))
+        return { status: 'failed', message: MESSAGES.restoreUnreadable, switched: false };
+    }
     write({
       status: 'running',
       phase: 'switching',
@@ -595,14 +877,16 @@ export async function runLockedRestore({ lock, pid, current, write, switchReleas
       message: 'Возвращается предыдущий релиз.',
       startedAt: new Date().toISOString(),
       switched: false,
+      releaseId: current?.releaseId || null,
       previousReleaseId: current?.previousReleaseId || null,
     });
     return await runRestore({
       read: () => current,
-      write,
+      write: record => write(!switched && current?.status === 'verification-failed' && record?.status === 'failed' ? current : record),
       switchRelease: (releaseId) => {
-        const result = switchRelease(releaseId);
+        const result = switchRelease(releaseId, expectedCurrent);
         switched = true;
+        switchedReleaseId = releaseId;
         return result;
       },
       identityOf,
@@ -616,6 +900,7 @@ export async function runLockedRestore({ lock, pid, current, write, switchReleas
           phase: 'verifying',
           message: MESSAGES.restoreVerifyFailed,
           detail: redact(error && error.message),
+          releaseId: switchedReleaseId,
           switched: true,
         }
       : {
@@ -625,12 +910,17 @@ export async function runLockedRestore({ lock, pid, current, write, switchReleas
           switched: false,
         };
     try {
-      write(failed);
+      write(!switched && current?.status === 'verification-failed' ? current : failed);
     } catch {
       // Запись недоступна. Lock снимается ниже, иначе живой pid службы останется навсегда.
     }
     return failed;
-  } finally {
-    unlock(lock);
   }
+}
+
+/** Legacy lock wrapper retained for callers that explicitly provide a lock. */
+export async function runLockedRestore(options) {
+  if (!tryLock(options.lock, options.pid)) return { status: 'running', message: MESSAGES.busy };
+  try { return await runRestoreTransaction(options); }
+  finally { unlock(options.lock, options.pid); }
 }

@@ -28,7 +28,8 @@ function fixture() {
     const jobRun = url.pathname.match(/\/actions\/runs\/([0-9]+)\/jobs$/)?.[1];
     const jobFile = workflows.find((file) => runs.get(file)?.some((run) => String(run.id) === jobRun));
     if (jobRun && jobFile) {
-      const results = jobs[jobFile].map((name) => ({ name, status: 'completed', conclusion: 'success' }));
+      const runAttempt = runs.get(jobFile)?.find((run) => String(run.id) === jobRun)?.run_attempt;
+      const results = jobs[jobFile].map((name) => ({ name, run_attempt: runAttempt, status: 'completed', conclusion: 'success' }));
       if (state.jobFault === `${jobFile}:absent`) results.shift();
       if (state.jobFault === `${jobFile}:duplicate`) results.push(results[0]);
       if (state.jobFault === `${jobFile}:skipped`) results[0].conclusion = 'skipped';
@@ -51,6 +52,41 @@ describe('release CI admission requires all mandatory canonical exact-SHA workfl
     const f = fixture();
     await expect(readCiEvidence(f.input)).resolves.toMatchObject({ commit: SHA, conclusion: 'success' });
     expect([...new Set(f.calls)].sort()).toEqual([...workflows].sort());
+  });
+
+  it('admits a selected historical Release through one exact-SHA CI evidence pass when main has moved', async () => {
+    const f = fixture(); f.base.state.main = OTHER_SHA;
+    const result = await readCiEvidence({ ...f.input, requireCurrentMain: false, operatorAdmission: true });
+    expect(result).toMatchObject({ commit: SHA, conclusion: 'success', operatorAdmission: {
+      sourceSha: SHA, ref: 'refs/heads/main', runId: 801, attempt: 1, event: 'push',
+      additionalWorkflows: expect.arrayContaining([
+        expect.objectContaining({ workflow: 'Lint and Typecheck', headSha: SHA, attempt: 1 }),
+        expect.objectContaining({ workflow: 'Security', headSha: SHA, attempt: 1 }),
+        expect.objectContaining({ workflow: 'Lighthouse CI', headSha: SHA, attempt: 1 }),
+      ]),
+    } });
+    expect(f.calls.sort()).toEqual([...workflows].sort());
+    expect(f.base.calls.some(({ url }) => url.pathname.endsWith('/git/ref/heads/main'))).toBe(false);
+  });
+
+  it('ensures the Release only after one complete exact-SHA CI evidence pass', async () => {
+    const f = fixture(); f.base.state.main = OTHER_SHA;
+    let ensureCalls = 0;
+    const result = await readCiEvidence({ ...f.input, requireCurrentMain: false, operatorAdmission: true,
+      ensureRelease: async (tag, commit) => {
+        ensureCalls++;
+        expect([tag, commit]).toEqual([TAG, SHA]);
+        expect(f.base.reportReads).toHaveLength(1);
+        expect([...new Set(f.calls)].sort()).toEqual([...workflows].sort());
+        expect(f.base.calls.some(({ url }) => url.pathname.includes('/releases/tags/'))).toBe(false);
+      } });
+    expect(ensureCalls).toBe(1);
+    expect(result).toMatchObject({ release: { tag: TAG, id: 41 }, operatorAdmission: { sourceSha: SHA } });
+  });
+
+  it('still refuses failed exact-SHA Tests evidence after main has moved', async () => {
+    const f = fixture(); f.base.state.main = OTHER_SHA; f.base.state.runPages[0][0].conclusion = 'failure';
+    await expect(readCiEvidence({ ...f.input, requireCurrentMain: false, operatorAdmission: true })).rejects.toThrow();
   });
 
   it('accepts an annotated tag only after peeling it to the exact source SHA', async () => {

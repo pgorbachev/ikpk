@@ -21,7 +21,7 @@ const SEMINAR_FIELDS = [
   ['documents_confirmation_author', 'Кто подтвердил', 6, true, ''],
   ['documents_confirmation_source', 'Основание подтверждения', 12, true, ''],
   ['schedule_entries', 'Проведения', 6, true, 'Дата и город видны в списке до открытия записи.'],
-  ['seo', 'SEO', 12, true, ''],
+  ['seo', 'SEO', 12, true, 'Можно не заполнять: сайт сам соберёт заголовок и описание из названия семинара, программы и института.'],
 ];
 
 const ENTRY_FIELDS = [

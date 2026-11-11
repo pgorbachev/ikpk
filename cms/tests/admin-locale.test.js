@@ -19,7 +19,27 @@ test('панель Content Manager включает русские действ�
     },
   }).outputText;
   const module = { exports: {} };
-  vm.runInNewContext(compiled, { module, exports: module.exports }, { filename: sourcePath });
+  // Иконка меню — обычный импорт, его компиляция в CommonJS зовёт `require`.
+  // Песочница читает только `config.locales`, поэтому соседний модуль
+  // транслируется так же и наружу не отдаётся.
+  const require = (id) => {
+    const imported = path.join(path.dirname(sourcePath), id);
+    const importedPath = fs.existsSync(imported) ? imported : `${imported}.ts`;
+    const importedModule = { exports: {} };
+    const importedSource = ts.transpileModule(fs.readFileSync(importedPath, 'utf8'), {
+      compilerOptions: {
+        module: ts.ModuleKind.CommonJS,
+        target: ts.ScriptTarget.ES2020,
+      },
+    }).outputText;
+    vm.runInNewContext(
+      importedSource,
+      { module: importedModule, exports: importedModule.exports, require },
+      { filename: importedPath },
+    );
+    return importedModule.exports;
+  };
+  vm.runInNewContext(compiled, { module, exports: module.exports, require }, { filename: sourcePath });
   const locales = module.exports.default.config.locales;
   assert.deepEqual(Array.from(locales), ['ru']);
 

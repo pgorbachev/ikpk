@@ -199,6 +199,24 @@ describe('cms-content-authoring: обязательные поля публик�
     expect(verdict.missing).toContain('seo_description');
   });
 
+  // Scenario: публикация семинара без заголовка и описания страницы принимается
+  it('семинар без заголовка и описания страницы публикуется', async () => {
+    const { checkPublication } = await loadContentValidation();
+    const verdict = checkPublication({
+      type: 'seminar',
+      record: {
+        name: 'Краниосакральная терапия',
+        identifier: 'kst',
+        course_group: 'dolgoletie',
+        description: 'Краткое описание',
+        documentsState: 'not-issued',
+      },
+    });
+    expect(verdict.ok, verdict.message).toBe(true);
+    expect(verdict.missing).not.toContain('seo_title');
+    expect(verdict.missing).not.toContain('seo_description');
+  });
+
   // Scenario: публикация события без города отклонена
   it('событие расписания без города не публикуется', async () => {
     const { checkPublication } = await loadContentValidation();
@@ -221,7 +239,7 @@ describe('cms-content-authoring: обязательные поля публик�
   // «отказ обещан для любой записи» нечем проверить.
   it.each([
     ['article', ['title', 'identifier', 'body', 'seo_title', 'seo_description', 'image', 'published_at', 'categories']],
-    ['seminar', ['name', 'identifier', 'course_group', 'description', 'seo_title', 'seo_description', 'documentsState']],
+    ['seminar', ['name', 'identifier', 'course_group', 'description', 'documentsState']],
     ['course-group', ['name', 'identifier', 'institute', 'description', 'seo_title', 'seo_description']],
     ['institute', ['name', 'identifier', 'description', 'seo_title', 'seo_description', 'order']],
     ['person', ['name', 'identifier', 'trait']],
