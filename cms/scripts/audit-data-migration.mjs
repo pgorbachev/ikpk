@@ -15,9 +15,13 @@ const CORE_STORE_TABLE = 'strapi_core_store_settings';
 const CORE_STORE_KEYS = new Set([
   'plugin_content_manager_configuration_content_types::api::promotion.promotion',
   'plugin_content_manager_configuration_content_types::api::schedule-entry.schedule-entry',
+  'plugin_content_manager_configuration_content_types::api::seminar.seminar',
   'plugin_upload_metrics',
   'strapi_content_types_schema',
 ]);
+const SEMINAR_CONFIG_KEY = 'plugin_content_manager_configuration_content_types::api::seminar.seminar';
+// Та же фраза, что `forms.ts` записывает в конфигурацию редактора при старте.
+const SEMINAR_SEO_DESCRIPTION = 'Можно не заполнять: сайт сам соберёт заголовок и описание из названия семинара, программы и института.';
 const UPLOAD_METRICS_KEY = 'plugin_upload_metrics';
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 const KNOWN_RENAMES = new Map([
@@ -541,6 +545,28 @@ function expectedCoreStoreValue(key, sourceValue) {
         editable: true,
       },
       list: { ...teacherMetadata.list, label: 'Преподаватели проведения' },
+    };
+    return expected;
+  }
+  if (key === SEMINAR_CONFIG_KEY) {
+    const seo = expected.metadatas?.seo;
+    if (!seo || typeof seo !== 'object' || !seo.edit || typeof seo.edit !== 'object'
+      || !seo.list || typeof seo.list !== 'object') return null;
+    const description = seo.edit.description;
+    if (description != null && description !== '' && description !== SEMINAR_SEO_DESCRIPTION) return null;
+    expected.metadatas = {
+      ...expected.metadatas,
+      seo: {
+        ...seo,
+        edit: {
+          ...seo.edit,
+          label: 'SEO',
+          description: SEMINAR_SEO_DESCRIPTION,
+          visible: true,
+          editable: true,
+        },
+        list: { ...seo.list, label: 'SEO' },
+      },
     };
     return expected;
   }

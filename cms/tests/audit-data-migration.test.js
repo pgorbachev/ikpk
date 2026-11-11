@@ -495,6 +495,8 @@ test('permission graph rejects unapproved fields, changed conditions, role reass
 
 const PROMOTION_CONFIG_KEY = 'plugin_content_manager_configuration_content_types::api::promotion.promotion';
 const SCHEDULE_CONFIG_KEY = 'plugin_content_manager_configuration_content_types::api::schedule-entry.schedule-entry';
+const SEMINAR_CONFIG_KEY = 'plugin_content_manager_configuration_content_types::api::seminar.seminar';
+const SEMINAR_SEO_DESCRIPTION = 'Можно не заполнять: сайт сам соберёт заголовок и описание из названия семинара, программы и института.';
 const CONTENT_SCHEMA_KEY = 'strapi_content_types_schema';
 const UPLOAD_METRICS_KEY = 'plugin_upload_metrics';
 const METRICS_LOAD_START = 1792101825410;
@@ -521,6 +523,16 @@ function coreStoreValues(candidate) {
     },
     settings: { defaultSortBy: 'startAt' },
   };
+  const seminar = {
+    layouts: { edit: [[{ name: 'name', size: 6 }], [{ name: 'seo', size: 12 }]], list: ['name', 'slug'] },
+    metadatas: {
+      seo: {
+        edit: { label: 'SEO', description: '', placeholder: '', visible: true, editable: true },
+        list: { label: 'SEO', searchable: false, sortable: false },
+      },
+    },
+    settings: { mainField: 'name', defaultSortBy: 'name', defaultSortOrder: 'ASC' },
+  };
   const schema = {
     'api::promotion.promotion': { attributes: { name: { type: 'string' } }, __schema__: { attributes: { name: { type: 'string' } } } },
     'api::schedule-entry.schedule-entry': { attributes: { startAt: { type: 'datetime' } }, __schema__: { attributes: { startAt: { type: 'datetime' } } } },
@@ -538,6 +550,7 @@ function coreStoreValues(candidate) {
     };
     schedule.metadatas.image = { edit: { label: 'Изображение', description: '', placeholder: '', visible: true, editable: true }, list: { label: 'Изображение', searchable: false, sortable: false } };
     schedule.metadatas.isEventCollection = { edit: { label: 'Исходный флаг коллекции', description: '', placeholder: '', visible: false, editable: false }, list: { label: 'Исходный флаг коллекции', searchable: true, sortable: true } };
+    seminar.metadatas.seo.edit.description = SEMINAR_SEO_DESCRIPTION;
     for (const uid of Object.keys(schema)) {
       const fields = uid === 'api::promotion.promotion'
         ? [['type', { type: 'enumeration', enum: ['SHOP', 'INSTITUTE'] }]]
@@ -551,6 +564,7 @@ function coreStoreValues(candidate) {
   return new Map([
     [PROMOTION_CONFIG_KEY, JSON.stringify(promotion)],
     [SCHEDULE_CONFIG_KEY, JSON.stringify(schedule)],
+    [SEMINAR_CONFIG_KEY, JSON.stringify(seminar)],
     [CONTENT_SCHEMA_KEY, JSON.stringify(schema)],
     [UPLOAD_METRICS_KEY, JSON.stringify({ lastWeeklyUpdate: METRICS_LOAD_START - WEEK_MS - 1, weeklySchedule: candidate ? weeklyCronAt(METRICS_LOAD_START + 15_000) : '0 0 0 * * 0' })],
     ['unrelated-key', JSON.stringify({ preserved: true })],
@@ -678,6 +692,16 @@ test('core-store rejects unapproved key changes, layout changes, and malformed t
       values.set(CONTENT_SCHEMA_KEY, JSON.stringify(schema));
     },
     (values) => values.set('unexpected-new-key', '{}'),
+    (values) => {
+      const seminar = JSON.parse(values.get(SEMINAR_CONFIG_KEY));
+      seminar.layouts.edit = [];
+      values.set(SEMINAR_CONFIG_KEY, JSON.stringify(seminar));
+    },
+    (values) => {
+      const seminar = JSON.parse(values.get(SEMINAR_CONFIG_KEY));
+      seminar.metadatas.seo.edit.description = 'другая подпись';
+      values.set(SEMINAR_CONFIG_KEY, JSON.stringify(seminar));
+    },
   ];
   for (const [index, mutate] of mutations.entries()) {
     const sourceDbPath = join(directory, `core-store-negative-source-${index}.db`);
