@@ -1,22 +1,11 @@
 import { useEffect, useState } from 'react';
 import { Box, Button, Typography } from '@strapi/design-system';
 import { useFetchClient } from '@strapi/strapi/admin';
+import { refreshStatusLines, type RefreshStatusView } from '../../seminar-management/refresh-status-copy';
 
-type Status = {
-  status?: string;
-  message?: string;
-  phase?: string | null;
+type Status = RefreshStatusView & {
   siteUrl?: string | null;
-  releaseId?: string | null;
   previousReleaseId?: string | null;
-  detail?: string | null;
-};
-
-const PHASE: Record<string, string> = {
-  capture: 'Снимается опубликованный снимок',
-  build: 'Собирается сайт',
-  switching: 'Сайт переключается',
-  verifying: 'Проверяется выложенный релиз',
 };
 
 export function SiteRefreshPage() {
@@ -53,7 +42,7 @@ export function SiteRefreshPage() {
   }
 
   const running = status?.status === 'running';
-  const phase = status?.phase ? PHASE[status.phase] : '';
+  const lines = refreshStatusLines(status ?? {});
 
   return (
     <Box padding={8} background="neutral0">
@@ -67,9 +56,9 @@ export function SiteRefreshPage() {
         </Typography>
       </Box>
       <Box paddingBottom={4}>
-        <Typography>{status?.message || 'Состояние ещё не загружено.'}</Typography>
-        {phase ? <Typography tag="p">{phase}</Typography> : null}
-        {status?.detail ? <Typography tag="p">{status.detail}</Typography> : null}
+        <Typography>{lines.message}</Typography>
+        {lines.phase ? <Typography tag="p">{lines.phase}</Typography> : null}
+        {lines.attempt ? <Typography tag="p">{lines.attempt}</Typography> : null}
         {status?.siteUrl ? (
           <Typography tag="p">
             <a href="/">Открыть сайт</a>

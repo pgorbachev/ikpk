@@ -27,6 +27,11 @@ npm run build
 
 rm -rf "$OUT"
 mkdir -p "$OUT"
+# The installed unit lists current/.strapi in ReadWritePaths. systemd refuses
+# to start when that path is missing, so the cache directory has to be in the
+# artifact before the release pointer or the live database changes.
+mkdir -p "$OUT/.strapi"
+chmod 755 "$OUT/.strapi"
 # tsconfig.json обязателен: по нему Strapi опознаёт TS-проект и берёт конфигурацию из dist.
 cp -R dist package.json package-lock.json tsconfig.json "$OUT/"
 [[ -d public ]] && cp -R public "$OUT/"
@@ -55,6 +60,11 @@ const path = require("path");
 const out = process.argv[1];
 const fail = (m) => { console.error("[artifact] " + m); process.exit(1); };
 
+const strapiCache = path.join(out, ".strapi");
+let strapiStat;
+try { strapiStat = require("fs").lstatSync(strapiCache); }
+catch (error) { fail("нет каталога .strapi: systemd ReadWritePaths не поднимет службу"); }
+if (!strapiStat.isDirectory() || strapiStat.isSymbolicLink()) fail("каталог .strapi должен быть обычным каталогом");
 if (!require("fs").existsSync(path.join(out, "tsconfig.json"))) fail("нет tsconfig.json: Strapi будет искать config/ в корне");
 if (!require("fs").existsSync(path.join(out, "dist", "config", "database.js"))) fail("нет dist/config/database.js");
 

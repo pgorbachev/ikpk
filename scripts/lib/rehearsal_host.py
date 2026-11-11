@@ -9,9 +9,11 @@ from __future__ import annotations
 
 import argparse
 import base64
+import secrets
 import io
 import hashlib
 import json
+import errno
 import fcntl
 import os
 import pwd
@@ -24,9 +26,10 @@ import sys
 import tarfile
 import tempfile
 import time
-from contextlib import contextmanager
+import uuid
+from contextlib import contextmanager, nullcontext
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 from urllib.parse import quote, urlsplit
 
 try:
@@ -45,8 +48,12 @@ INITIAL_PROD_PAYMENT_ENDPOINT = "https://ikpk.su/api"
 INITIAL_PROD_CHAT_LOADER_SRC = "https://cdn-ru.bitrix24.ru/b35315886/crm/site_button/loader_2_siutnh.js"
 STAGING194_CHAT_LOADER_SRC = INITIAL_PROD_CHAT_LOADER_SRC
 INITIAL_PROD_CMS_ENV_FILE = Path("/etc/ikpk-cms/trial.env")
+STAGING194_CMS_ENV_FILE = Path("/etc/ikpk-cms/site-build-current194.env")
 PRODUCTION_PUBLICATION_LOCK = Path("/var/www/ikpk/.publication.lock")
+STAGING194_TEMPORARY_ROOT = Path("/var/tmp/ikpk-staging194")
 PRODUCTION_PAIRED_WORKSPACE_ROOT = Path("/var/lib/ikpk-site-build/production-paired")
+SITE_PUBLICATION_MARKER = "host-publication.json"
+SITE_PUBLICATION_MARKER_DIR = Path("/var/lib/ikpk-rehearsal/site-publication")
 INITIAL_PROD_OPERATION_ID = "initial-prod-20261019-A-01"
 REQUIRED_CONFIG = {
     "stateDir", "maintenanceFlag", "releaseRoot", "currentCms", "currentStatic",
@@ -54,13 +61,31 @@ REQUIRED_CONFIG = {
     "backupRoot", "nginxBinary", "nginxService", "nginxMapFile",
     "nginxServerGateFile", "writerPrefixes", "preservePrefixes",
     "cmsHealthUrl", "siteHealthUrl", "siteBaseUrl", "siteReleaseUrl", "siteProbeUrls", "paymentStatusProbeUrl",
-    "writerProbeUrls", "preserveProbeUrl", "allowedSourceRef", "targetHost",
+    "writerProbeUrls", "preserveProbeUrl", "allowedSourceRef", "targetHost", "siteRefreshState",
+    "sitePublicationMarker", "publicationLock",
 }
 SHA_RE = re.compile(r"[a-f0-9]{40}\Z")
 SHA256_RE = re.compile(r"[a-f0-9]{64}\Z")
+STAGING194_PAIRED_HELPER_IDENTITY_CAPABILITY = "paired-helper-identity-v1"
+HOST_HELPER_RUNTIME_MODULES = ("rehearsal_host.py", "rehearsal_state.py", "housekeeping_journal.py")
+DESTINATION_LOCKED_ACTIONS = frozenset({
+    "cms-update", "static-publish", "static-main", "static-main-recover",
+    "recover", "restore", "finalize-recover", "cleanup-site",
+    "export-backup", "export-static", "export-static-main",
+})
 CONTENT_FINGERPRINT_RE = re.compile(r"sha256:[a-f0-9]{64}\Z")
 PREFIX_RE = re.compile(r"/[A-Za-z0-9_./*?=-]+\Z")
 UNIT_RE = re.compile(r"[A-Za-z0-9_.@:-]+\.service\Z")
+
+
+def _uses_staging194_temp(config: dict[str, Any]) -> bool:
+    return config.get("profile") == "staging194" and "temporaryRoot" in config or (
+        "profile" not in config and "temporaryRoot" in config)
+
+
+def _configure_profile_temp(config: dict[str, Any]) -> None:
+    if _uses_staging194_temp(config):
+        tempfile.tempdir = str(_validate_staging194_temporary_root(config))
 
 
 class HostFailure(RuntimeError):
@@ -86,6 +111,14 @@ def sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
+def _host_helper_runtime_identity() -> str:
+    module_dir = Path(__file__).resolve().parent
+    hashes = {f"scripts/lib/{name}": sha256_file(module_dir / name)
+              for name in HOST_HELPER_RUNTIME_MODULES}
+    encoded = json.dumps(hashes, sort_keys=True, separators=(",", ":")).encode()
+    return hashlib.sha256(encoded).hexdigest()
+
+
 def _maintenance_banner(config: dict[str, Any]) -> str:
     value = config.get("maintenanceBanner", "off")
     if value not in ("on", "off"):
@@ -93,7 +126,340 @@ def _maintenance_banner(config: dict[str, Any]) -> str:
     return value
 
 
-def _root_config(path: Path, expected_profile: str = "staging194") -> dict[str, Any]:
+def _filesystem_bytes(path: Path, *, required: bool = False, strict_tree: bool = False) -> int:
+    path = Path(path)
+    if path.is_symlink():
+        raise HostFailure(f"cannot estimate free-space requirement through symlink: {path}")
+    if required and not path.exists():
+        raise HostFailure(f"required space-estimate source is unavailable: {path}")
+    if path.is_file():
+        return path.stat().st_size
+    if not path.is_dir():
+        if required:
+            raise HostFailure(f"required space-estimate source is unavailable: {path}")
+        return 0
+    total = 0
+    for item in path.rglob("*"):
+        if item.is_symlink():
+            if strict_tree:
+                raise HostFailure(f"cannot estimate required free space through symlink: {item}")
+            continue
+        try:
+            if item.is_file():
+                total += item.stat().st_size
+            elif strict_tree and not item.is_dir():
+                raise HostFailure(f"required space-estimate tree contains a non-regular object: {item}")
+        except OSError as error:
+            raise HostFailure(f"cannot estimate required free space under {path}: {error}") from error
+    return total
+
+
+def _installed_paired_cms_source_sha(config: dict[str, Any]) -> Optional[str]:
+    """Trust only the service-bound operation workspace and its existing identity marker."""
+    if config.get("profile") != "production-paired":
+        return None
+    try:
+        installed_env = _paired_cms_source_env(config)
+        candidate_sha = installed_env.get("IKPK_INSTALLED_COMMIT")
+        workspace_text = installed_env.get("IKPK_BUILD_WORKSPACE")
+        trusted_root = Path(config.get("siteBuildWorkspaceRoot", ""))
+        workspace = Path(workspace_text) if isinstance(workspace_text, str) else Path("/")
+        if (not isinstance(candidate_sha, str) or not SHA_RE.fullmatch(candidate_sha)
+                or trusted_root != PRODUCTION_PAIRED_WORKSPACE_ROOT
+                or trusted_root.is_symlink() or workspace.is_symlink()
+                or workspace.parent != trusted_root):
+            return None
+        match = re.fullmatch(rf"{re.escape(candidate_sha)}-([A-Za-z0-9][A-Za-z0-9._-]{{0,127}})",
+                             workspace.name)
+        if not match:
+            return None
+        operation_id = match.group(1)
+        if workspace.resolve(strict=True).parent != trusted_root.resolve(strict=True):
+            return None
+        marker = workspace / ".ikpk-workspace-identity.json"
+        info = marker.lstat()
+        if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
+            return None
+        identity = json.loads(marker.read_text(encoding="utf-8"))
+        if identity == {"sourceSha": candidate_sha, "operationId": operation_id}:
+            release_root = Path(config["releaseRoot"]).resolve(strict=True)
+            source_root = _candidate_root(config, candidate_sha, operation_id)
+            if (source_root.is_symlink() or not source_root.is_dir()
+                    or source_root.resolve(strict=True) != source_root
+                    or source_root.parent != release_root):
+                return None
+            artifact = _cms_artifact_path(source_root, operation_id)
+            current_cms = _current_target(Path(config["currentCms"]))
+            artifact_resolved = artifact.resolve(strict=True)
+            if (artifact.is_symlink() or not artifact.is_dir()
+                    or not artifact_resolved.is_relative_to(source_root)
+                    or current_cms != artifact_resolved):
+                return None
+            return candidate_sha
+    except (HostFailure, OSError, ValueError, UnicodeError, KeyError):
+        return None
+    return None
+
+
+def _required_static_capture_tree_bytes(root: Path) -> int:
+    """Measure an entire capture source or refuse when any tree member is ambiguous."""
+    total = 0
+    pending = [root]
+    while pending:
+        directory = pending.pop()
+        try:
+            with os.scandir(directory) as entries:
+                for entry in entries:
+                    info = entry.stat(follow_symlinks=False)
+                    if stat.S_ISDIR(info.st_mode):
+                        pending.append(Path(entry.path))
+                    elif stat.S_ISREG(info.st_mode) and info.st_nlink == 1:
+                        total += info.st_size
+                    else:
+                        raise HostFailure(f"required media tree contains an unsafe object: {entry.path}")
+        except OSError as error:
+            raise HostFailure(f"cannot completely estimate required media tree under {root}: {error}") from error
+    return total
+
+
+def _space_preflight(config: dict[str, Any], operation_id: str, operation_kind: str) -> dict[str, Any]:
+    """Estimate each affected filesystem from current releases, backup inputs, and a stated reserve."""
+    needed = ("currentCms", "currentStatic", "releaseRoot", "staticReleaseRoot", "stateDir")
+    if operation_kind == "cms-update":
+        needed += ("cmsDatabase", "mediaRoots", "backupRoot")
+    production_static_capture_bytes = 0
+    production_static_capture = (operation_kind == "static-main"
+                                 and config.get("profile") in ("production-static", "production-paired"))
+    if production_static_capture:
+        needed += ("cmsDatabase", "mediaRoots")
+    if not all(key in config for key in needed):
+        raise HostFailure("host configuration is incomplete for read-only space preflight")
+    current_cms = _current_target(Path(config["currentCms"]))
+    current_static = _current_target(Path(config["currentStatic"]))
+    cms_bytes = _filesystem_bytes(current_cms) if operation_kind == "cms-update" else 0
+    static_bytes = _filesystem_bytes(current_static)
+    backup_bytes = 0
+    backup_archive_bytes = 0
+    database_bytes = 0
+    live_database_bytes = 0
+    backup_members = 0
+    if operation_kind == "cms-update":
+        database = Path(config["cmsDatabase"])
+        database_info = database.lstat()
+        if not stat.S_ISREG(database_info.st_mode):
+            raise HostFailure(f"required live database is not a regular file: {database}")
+        database_bytes = _filesystem_bytes(database, required=True)
+        live_database_bytes = database_bytes
+        backup_archive = Path(config["backupRoot"]) / operation_id / "backup.tar"
+        if backup_archive.is_file() and not backup_archive.is_symlink():
+            backup_archive_bytes = backup_archive.stat().st_size
+            backup_bytes = backup_archive_bytes
+        else:
+            capture_bytes = database_bytes
+            backup_members = 4  # database.sqlite, media directory, and the two manifests
+            for sidecar in (Path(str(database) + "-wal"), Path(str(database) + "-shm")):
+                sidecar_bytes = _filesystem_bytes(sidecar)
+                capture_bytes += sidecar_bytes
+                live_database_bytes += sidecar_bytes
+                backup_members += int(sidecar_bytes > 0)
+            for media in config["mediaRoots"]:
+                media_path = Path(media["path"])
+                if media_path.is_symlink() or not media_path.is_dir():
+                    raise HostFailure(f"required media source is unavailable or unsafe: {media_path}")
+                capture_bytes += _filesystem_bytes(media_path, required=True, strict_tree=True)
+                backup_members += sum(1 for item in media_path.rglob("*"))
+            # _backup keeps the captured database/media and a second tar containing those bytes.
+            # Per-member tar headers and padding can add up to 1 KiB per entry.
+            tar_overhead = 1024 * (backup_members + 1)
+            backup_archive_bytes = capture_bytes + tar_overhead
+            backup_bytes = capture_bytes + backup_archive_bytes
+    elif production_static_capture:
+        # Production static-main keeps the live CMS in place. Preparation writes a
+        # read-only SQLite backup snapshot, copies that snapshot into the sealed
+        # capture, and copies every configured media tree into the same source root.
+        # The first two files coexist throughout the build; the source DB/WAL remain
+        # live and are inputs only, not a CMS backup archive.
+        database = Path(config["cmsDatabase"])
+        database_info = database.lstat()
+        if not stat.S_ISREG(database_info.st_mode) or database_info.st_nlink != 1:
+            raise HostFailure(f"required live database is not a safe regular file: {database}")
+        database_bytes = _filesystem_bytes(database, required=True)
+        wal = Path(str(database) + "-wal")
+        wal_bytes = 0
+        if os.path.lexists(wal):
+            wal_info = wal.lstat()
+            if not stat.S_ISREG(wal_info.st_mode) or wal_info.st_nlink != 1:
+                raise HostFailure(f"required SQLite WAL is not a safe regular file: {wal}")
+            wal_bytes = wal_info.st_size
+        media_roots = config["mediaRoots"]
+        if not isinstance(media_roots, list) or not media_roots:
+            raise HostFailure("production-static mediaRoots must be a non-empty list")
+        media_bytes = 0
+        for item in media_roots:
+            if (not isinstance(item, dict) or not isinstance(item.get("path"), str)
+                    or not isinstance(item.get("prefix"), str)
+                    or not PREFIX_RE.fullmatch(item["prefix"])):
+                raise HostFailure("production-static mediaRoots contains an incomplete entry")
+            media_path = Path(item["path"])
+            if media_path.is_symlink() or not media_path.is_dir():
+                raise HostFailure(f"required media source is unavailable or unsafe: {media_path}")
+            media_bytes += _required_static_capture_tree_bytes(media_path)
+        # SQLite's read-only backup may materialize WAL pages into the snapshot.
+        # Bound each of the two simultaneously present DB copies by DB + WAL.
+        production_static_capture_bytes = 2 * (database_bytes + wal_bytes) + media_bytes
+    configured_reserve = config.get("spaceReserveBytes", 0)
+    if type(configured_reserve) is not int or configured_reserve < 0:
+        raise HostFailure("spaceReserveBytes must be a non-negative integer")
+    base_needed: dict[int, dict[str, Any]] = {}
+    temporary_root = (_validate_staging194_temporary_root(config)
+                      if _uses_staging194_temp(config)
+                      else Path(tempfile.gettempdir()))
+    candidates = [("temporary data", temporary_root, cms_bytes + static_bytes)]
+    if operation_kind == "cms-update":
+        candidates.append(("CMS releases", Path(config["releaseRoot"]), cms_bytes + static_bytes))
+    else:
+        candidates.append(("static source releases", Path(config["releaseRoot"]),
+                           static_bytes + production_static_capture_bytes))
+    candidates.extend((
+        ("static releases", Path(config["staticReleaseRoot"]), static_bytes),
+        ("operation state", Path(config["stateDir"]), 4096),
+    ))
+    if operation_kind == "cms-update":
+        candidates.append(("backups", Path(config["backupRoot"]), backup_bytes))
+        candidates.append(("live database replacement", Path(config["cmsDatabase"]).parent,
+                           live_database_bytes))
+        cms_home = Path(pwd.getpwnam(config["cmsUser"]).pw_dir)
+        candidates.append(("CMS npm cache", cms_home / ".npm", 0))
+    if operation_kind == "cms-update" and config.get("siteBuildWorkspaceRoot"):
+        candidates.append(("site build workspace", Path(config["siteBuildWorkspaceRoot"]), cms_bytes + static_bytes))
+    for label, path, required in candidates:
+        while not path.exists():
+            path = path.parent
+        usage = shutil.disk_usage(path)
+        device = path.stat().st_dev
+        current = base_needed.get(device)
+        if current is None:
+            base_needed[device] = {"path": str(path), "labels": [label], "freeBytes": usage.free,
+                                   "estimatedBytes": required}
+        else:
+            current["labels"].append(label)
+            current["estimatedBytes"] += required
+    for item in base_needed.values():
+        proportional_reserve = (item["estimatedBytes"] + 3) // 4
+        item["reserveBytes"] = max(1_073_741_824, configured_reserve, proportional_reserve)
+        item["requiredBytes"] = item["estimatedBytes"] + item["reserveBytes"]
+    if config.get("profile", "staging194") == "staging194":
+        installed_source_sha = None
+        try:
+            state = RehearsalState(Path(config["stateDir"]))
+            installed_source_sha = _staging194_current_cms_source_sha(config, state)
+        except (HostFailure, RehearsalRefusal, OSError, ValueError, KeyError, TypeError):
+            installed_source_sha = None
+    else:
+        installed_source_sha = _installed_paired_cms_source_sha(config)
+    report: dict[str, Any] = {"filesystems": list(base_needed.values()),
+                              "reservePolicy": "max(1 GiB, configured reserve, 25% of estimate)",
+                              "configuredReserveBytes": configured_reserve,
+                              "backupBytes": backup_archive_bytes,
+                              "installedSourceSha": installed_source_sha,
+                              "installedSourceShaStatus": "known" if installed_source_sha else "unknown"}
+    if production_static_capture:
+        report["staticCaptureBytes"] = production_static_capture_bytes
+        if config.get("profile") == "production-static":
+            # browser_check exports the current static tree and proof JSON, not
+            # the source database, WAL, or capture media. This is an estimate;
+            # the current tree does not bound the next build's dist size.
+            report["staticExportEstimateBytes"] = static_bytes
+    if operation_kind == "cms-update":
+        backup_device = Path(config["backupRoot"])
+        while not backup_device.exists():
+            backup_device = backup_device.parent
+        device_item = base_needed[backup_device.stat().st_dev]
+        report["backupReserveBytes"] = device_item["reserveBytes"]
+        if _uses_staging194_temp(config):
+            report["spaceNotes"] = [
+                "default npm cache location is shown, but cache growth and npmrc/environment overrides are not separately estimated; filesystem reserve is the only growth allowance"
+            ]
+    return report
+
+
+def _staging194_current_cms_source_sha(config: dict[str, Any], state: RehearsalState) -> Optional[str]:
+    """Return the source SHA only when journal, artifact contents, and current pointer agree."""
+    if config.get("profile", "staging194") != "staging194":
+        return None
+    try:
+        rows = state.read_journal_for_cleanup()
+        current_link = Path(config["currentCms"])
+        current_link_info = current_link.lstat()
+        initial_current = _current_target(current_link)
+        uploads = [Path(item["path"]) for item in config["mediaRoots"]
+                   if isinstance(item, dict) and item.get("prefix") == "/uploads/"
+                   and isinstance(item.get("path"), str)]
+        if len(uploads) != 1:
+            return None
+        matches = []
+        release_root = Path(config["releaseRoot"]).resolve(strict=True)
+        for bundle in rows:
+            if bundle.get("record") != "new-bundle":
+                continue
+            operation_id = bundle.get("operationId")
+            source_sha = bundle.get("sourceSha")
+            pair = bundle.get("newPair")
+            if (not isinstance(operation_id, str) or not isinstance(source_sha, str)
+                    or not SHA_RE.fullmatch(source_sha) or not isinstance(pair, dict)
+                    or pair.get("sourceSha") != source_sha or pair.get("cmsSha") != source_sha
+                    or not isinstance(pair.get("cmsPayloadSha256"), str)
+                    or not SHA256_RE.fullmatch(pair["cmsPayloadSha256"])):
+                continue
+            operation_rows = [row for row in rows if row.get("operationId") == operation_id]
+            commits = [row for row in operation_rows if row.get("record") == "committed"]
+            starts = [row for row in rows if row.get("record") == "start"
+                      and row.get("operationId") == operation_id and row.get("sourceSha") == source_sha]
+            if (len(commits) != 1 or commits[0].get("sourceSha") != source_sha or len(starts) != 1
+                    or any(row.get("record") == "recovered" for row in operation_rows)):
+                continue
+            # Require exactly one bundle and one terminal commit for this identity.
+            if sum(row.get("record") == "new-bundle" and row.get("operationId") == operation_id
+                   for row in rows) != 1:
+                continue
+            start_index, bundle_index, commit_index = (rows.index(starts[0]), rows.index(bundle), rows.index(commits[0]))
+            if not start_index < bundle_index < commit_index:
+                continue
+            try:
+                source_root = _candidate_root(config, source_sha, operation_id)
+                if source_root.is_symlink() or not source_root.is_dir() or source_root.parent != release_root:
+                    continue
+                artifact = _cms_artifact_path(source_root, operation_id)
+                if artifact.is_symlink() or not artifact.is_dir():
+                    continue
+                artifact_target = artifact.resolve(strict=True)
+                if (artifact_target != initial_current
+                        or not artifact_target.is_relative_to(source_root.resolve(strict=True))):
+                    continue
+            except (HostFailure, OSError, ValueError):
+                continue
+            matches.append((source_sha, operation_id, pair["cmsPayloadSha256"], artifact_target))
+        if len(matches) != 1:
+            return None
+        source_sha, operation_id, expected_payload, artifact_target = matches[0]
+        root_before = artifact_target.stat()
+        actual_payload = _staging194_stable_cms_payload_sha256(artifact_target, uploads[0])
+        root_after = artifact_target.stat()
+        final_link_info = current_link.lstat()
+        final_current = _current_target(current_link)
+        if ((root_before.st_dev, root_before.st_ino, root_before.st_mtime_ns)
+                != (root_after.st_dev, root_after.st_ino, root_after.st_mtime_ns)
+                or (current_link_info.st_dev, current_link_info.st_ino, current_link_info.st_mtime_ns)
+                != (final_link_info.st_dev, final_link_info.st_ino, final_link_info.st_mtime_ns)
+                or final_current != initial_current or actual_payload != expected_payload):
+            return None
+        return source_sha
+    except (HostFailure, RehearsalRefusal, OSError, ValueError, UnicodeError, KeyError, TypeError):
+        return None
+
+
+def _root_config(path: Path, expected_profile: str = "staging194", *,
+                 validate_temporary_root: bool = True) -> dict[str, Any]:
     try:
         info = path.lstat()
     except OSError as error:
@@ -104,6 +470,9 @@ def _root_config(path: Path, expected_profile: str = "staging194") -> dict[str, 
         data = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError) as error:
         raise HostFailure("host config is not valid JSON") from error
+    if data.get("profile", "staging194") == "staging194":
+        # Backward-compatible in-memory default; never rewrite the installed config.
+        data.setdefault("cmsEnvironmentFile", str(STAGING194_CMS_ENV_FILE))
     _maintenance_banner(data)
     missing = REQUIRED_CONFIG - data.keys()
     if missing:
@@ -141,16 +510,19 @@ def _root_config(path: Path, expected_profile: str = "staging194") -> dict[str, 
     profile = data.get("profile", "staging194")
     path_keys = ["stateDir", "releaseRoot", "staticReleaseRoot", "backupRoot", "maintenanceFlag", "currentCms", "currentStatic",
                  "cmsDatabase", "nginxMapFile", "nginxServerGateFile"]
-    if profile == "production-paired":
+    if profile in ("staging194", "production-static", "production-paired", "initial-prod"):
         path_keys.append("publicationLock")
-    if profile == "production-paired":
-        path_keys.extend(("cmsEnvironmentFile", "siteRefreshState"))
+    if profile in ("staging194", "production-paired"):
+        path_keys.append("cmsEnvironmentFile")
+    path_keys.extend(("siteRefreshState", "sitePublicationMarker"))
     for key in path_keys:
         value = Path(data[key])
         if not value.is_absolute() or value == Path("/"):
             raise HostFailure(f"{key} must be an absolute non-root path")
     if profile != expected_profile:
         raise HostFailure("host config does not match the selected fixed profile")
+    if profile == "staging194":
+        _validate_staging194_temporary_root(data, check_filesystem=validate_temporary_root)
     if profile in ("initial-prod", "production-static", "production-paired"):
         endpoint = data.get("paymentEndpointProd")
         try:
@@ -165,11 +537,42 @@ def _root_config(path: Path, expected_profile: str = "staging194") -> dict[str, 
     return data
 
 
+def _validate_staging194_temporary_root(config: dict[str, Any], *, check_filesystem: bool = True) -> Path:
+    """Return the fixed shared temp directory only when its ownership is safe."""
+    if config.get("temporaryRoot") != str(STAGING194_TEMPORARY_ROOT):
+        raise HostFailure("staging194 temporaryRoot must use the fixed host path")
+    if not check_filesystem:
+        return STAGING194_TEMPORARY_ROOT
+    try:
+        cms_user = pwd.getpwnam(config["cmsUser"])
+        for directory in (Path("/"), Path("/var"), STAGING194_TEMPORARY_ROOT.parent):
+            info = directory.lstat()
+            if not stat.S_ISDIR(info.st_mode) or info.st_uid != 0:
+                raise HostFailure("staging194 temporary path parents must be real root-owned directories")
+            if directory == STAGING194_TEMPORARY_ROOT.parent:
+                if not info.st_mode & stat.S_ISVTX:
+                    raise HostFailure("staging194 temporary parent must be sticky")
+            elif info.st_mode & 0o022:
+                raise HostFailure("staging194 temporary path parent is writable by group or other")
+        info = STAGING194_TEMPORARY_ROOT.lstat()
+    except OSError as error:
+        raise HostFailure(f"staging194 temporary directory is unavailable or unsafe: {error}") from error
+    if (not stat.S_ISDIR(info.st_mode) or info.st_uid != 0 or info.st_gid != cms_user.pw_gid
+            or stat.S_IMODE(info.st_mode) != 0o1770):
+        raise HostFailure("staging194 temporary directory must be root-owned, CMS-grouped, and mode 1770")
+    return STAGING194_TEMPORARY_ROOT
+
+
 def _validate_target_binding(data: dict[str, Any]) -> None:
     profile = data.get("profile", "staging194")
     if profile == "staging194":
         if data["allowedSourceRef"] not in ("refs/heads/main", "refs/heads/dev") or data["targetHost"] != TARGET_HOST:
             raise HostFailure("host config is not bound to the staging194 target/source policy")
+        if (data.get("siteRefreshState") != "/var/lib/ikpk-cms-prototype193/staging/site-refresh194/state/state.json"
+                or data.get("publicationLock") != str(PRODUCTION_PUBLICATION_LOCK)
+                or data.get("sitePublicationMarker") != "/var/lib/ikpk-rehearsal/site-publication/host-publication.json"
+                or data.get("cmsEnvironmentFile") != str(STAGING194_CMS_ENV_FILE)):
+            raise HostFailure("staging194 site publication coordination paths are not fixed")
         if data["cmsHealthUrl"] != "http://127.0.0.1:1338/_health":
             raise HostFailure("CMS health check must remain bound to the local staging194 service")
         expected_origin = f"https://{TARGET_HOST}"
@@ -179,6 +582,10 @@ def _validate_target_binding(data: dict[str, Any]) -> None:
             raise HostFailure("host config is not bound to the fixed initial-prod operation")
         if data.get("siteBaseUrl") != "https://ikpk.su" or data.get("cmsHealthUrl") != "http://127.0.0.1:1337/_health":
             raise HostFailure("initial-prod origin or local CMS health endpoint is not fixed")
+        if (data.get("siteRefreshState") != "/var/www/ikpk/shared/site-refresh/state.json"
+                or data.get("publicationLock") != str(PRODUCTION_PUBLICATION_LOCK)
+                or data.get("sitePublicationMarker") != "/var/lib/ikpk-rehearsal/site-publication/host-publication.json"):
+            raise HostFailure("initial-prod site publication coordination paths are not fixed")
         expected_origin = "https://ikpk.su"
     elif profile == "production-static":
         if data.get("allowedSourceRef") != "refs/heads/main" or data.get("targetHost") != INITIAL_PROD_HOST:
@@ -187,6 +594,9 @@ def _validate_target_binding(data: dict[str, Any]) -> None:
                 or data.get("currentCms") != "/opt/ikpk-cms/current"
                 or data.get("cmsDatabase") != "/var/lib/ikpk-cms/trial/data/data.db"
                 or data.get("currentStatic") != "/var/www/ikpk/current"
+                or data.get("siteRefreshState") != "/var/www/ikpk/shared/site-refresh/state.json"
+                or data.get("publicationLock") != str(PRODUCTION_PUBLICATION_LOCK)
+                or data.get("sitePublicationMarker") != "/var/lib/ikpk-rehearsal/site-publication/host-publication.json"
                 or data.get("staticReleaseRoot") != "/var/www/ikpk/releases"
                 or data.get("stateDir") != "/var/lib/ikpk-rehearsal/production-static"
                 or data.get("backupRoot") != "/var/lib/ikpk-rehearsal/production-static/backups"
@@ -205,6 +615,8 @@ def _validate_target_binding(data: dict[str, Any]) -> None:
                 or data.get("currentCms") != "/opt/ikpk-cms/current"
                 or data.get("cmsDatabase") != "/var/lib/ikpk-cms/trial/data/data.db"
                 or data.get("currentStatic") != "/var/www/ikpk/current"
+                or data.get("siteRefreshState") != "/var/www/ikpk/shared/site-refresh/state.json"
+                or data.get("sitePublicationMarker") != "/var/lib/ikpk-rehearsal/site-publication/host-publication.json"
                 or data.get("staticReleaseRoot") != "/var/www/ikpk/releases"
                 or data.get("stateDir") != "/var/lib/ikpk-rehearsal/production-paired"
                 or data.get("backupRoot") != "/var/lib/ikpk-rehearsal/production-paired/backups"
@@ -242,44 +654,913 @@ def _validate_target_binding(data: dict[str, Any]) -> None:
 
 
 @contextmanager
-def _destination_publication_lock(config: dict[str, Any]):
-    """Refuse to overlap an active production SSH publication during this operator step."""
-    # The legacy static-only workflow does not participate in the paired CMS
-    # maintenance window and must remain usable without a publisher lock file.
-    if config.get("profile") != "production-paired":
-        yield
-        return
+def _destination_publication_lock(config: dict[str, Any], *, wait: bool = False,
+                                  prelocked_fd: Optional[int] = None):
+    """Serialize host work with publication-remote on the fixed destination inode."""
     path = Path(config.get("publicationLock", PRODUCTION_PUBLICATION_LOCK))
     if path != PRODUCTION_PUBLICATION_LOCK:
-        raise HostFailure("production publication lock path is not fixed")
+        raise HostFailure("shared publication lock path is not fixed")
     try:
         before = path.lstat()
-    except FileNotFoundError:
-        # A manually coordinated maintenance window may run where the canonical
-        # publisher has never created its per-command lock. Do not invent a new
-        # inode/owner here: absence is only a point-in-time observation, not
-        # cross-command serialization against another operator.
-        yield
-        return
+    except FileNotFoundError as error:
+        raise HostFailure("shared publication lock is missing; writers cannot be serialized") from error
     try:
-        if (not stat.S_ISREG(before.st_mode) or before.st_nlink != 1 or before.st_uid == 0
-                or not before.st_mode & stat.S_IWUSR):
-            raise HostFailure("production publication lock must be an existing publisher-owned writable regular file")
-        fd = os.open(path, os.O_RDWR | getattr(os, "O_NOFOLLOW", 0))
+        expected_uid = pwd.getpwnam(config["cmsUser"]).pw_uid
+    except (KeyError, OSError) as error:
+        raise HostFailure("configured publication lock owner is unknown") from error
+    try:
+        if (not stat.S_ISREG(before.st_mode) or before.st_nlink != 1 or before.st_uid != expected_uid
+                or stat.S_IMODE(before.st_mode) != 0o600):
+            raise HostFailure("shared publication lock must be a 0600 regular file owned by the configured CMS user")
+        fd = (prelocked_fd if prelocked_fd is not None
+              else os.open(path, os.O_RDWR | getattr(os, "O_NOFOLLOW", 0)))
     except OSError as error:
-        raise HostFailure("production publication lock is unavailable") from error
+        raise HostFailure("shared publication lock is unavailable") from error
     try:
         info = os.fstat(fd)
         if ((info.st_dev, info.st_ino) != (before.st_dev, before.st_ino) or not stat.S_ISREG(info.st_mode)
-                or info.st_nlink != 1 or info.st_uid == 0 or not info.st_mode & stat.S_IWUSR):
-            raise HostFailure("production publication lock changed or is not writable by its non-root owner")
+                or info.st_nlink != 1 or info.st_uid != expected_uid or stat.S_IMODE(info.st_mode) != 0o600):
+            raise HostFailure("shared publication lock changed or has unsafe owner/permissions")
         try:
-            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            # The opt-in launcher acquires this same open-file-description
+            # before importing helper modules; reassert that lock here.
+            fcntl.flock(fd, fcntl.LOCK_EX if wait else fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError as error:
-            raise HostFailure("another production publisher holds the destination lock") from error
+            raise HostFailure("another publisher holds the destination lock") from error
+        opened = os.fstat(fd)
+        try:
+            named = path.lstat()
+        except OSError as error:
+            raise HostFailure("shared publication lock changed while waiting") from error
+        if ((opened.st_dev, opened.st_ino) != (named.st_dev, named.st_ino)
+                or not stat.S_ISREG(opened.st_mode) or not stat.S_ISREG(named.st_mode)
+                or opened.st_nlink != 1 or named.st_nlink != 1
+                or opened.st_uid != expected_uid or named.st_uid != expected_uid
+                or stat.S_IMODE(opened.st_mode) != 0o600 or stat.S_IMODE(named.st_mode) != 0o600):
+            raise HostFailure("shared publication lock changed or has unsafe owner/permissions")
         yield
     finally:
+        if prelocked_fd is None:
+            os.close(fd)
+
+
+def _site_marker_path(config: dict[str, Any]) -> Path:
+    expected = SITE_PUBLICATION_MARKER_DIR / SITE_PUBLICATION_MARKER
+    if config.get("sitePublicationMarker") != str(expected):
+        raise HostFailure("site-publication marker path is not the fixed protected path")
+    return expected
+
+
+def _config_path_for_profile(profile: str) -> Path:
+    paths = {
+        "staging194": CONFIG_PATH,
+        "initial-prod": INITIAL_PROD_CONFIG_PATH,
+        "production-static": PRODUCTION_STATIC_CONFIG_PATH,
+        "production-paired": PRODUCTION_PAIRED_CONFIG_PATH,
+    }
+    try:
+        return paths[profile]
+    except KeyError as error:
+        raise HostFailure("site-publication marker names an unsupported cleanup profile") from error
+
+
+def _select_cleanup_profile(config: dict[str, Any], profile: str) -> tuple[dict[str, Any], str, Optional[dict[str, Any]]]:
+    """Use the marker's fixed profile config so cleanup reads its owning journal."""
+    marker = _read_site_publication_marker(config)
+    if marker is None:
+        return config, profile, None
+    marker_profile = marker["profile"]
+    config_path = _config_path_for_profile(marker_profile)
+    if marker_profile == profile:
+        return config, profile, marker
+    selected = _root_config(config_path, expected_profile=marker_profile)
+    if (selected.get("sitePublicationMarker") != config.get("sitePublicationMarker")
+            or selected.get("staticReleaseRoot") != config.get("staticReleaseRoot")
+            or selected.get("currentStatic") != config.get("currentStatic")):
+        raise HostFailure("site-publication profile does not match the fixed cleanup target")
+    return selected, marker_profile, marker
+
+
+def _read_site_publication_marker(config: dict[str, Any]) -> Optional[dict[str, Any]]:
+    path = _site_marker_path(config)
+    try:
+        parent = path.parent.lstat()
+        cms_gid = pwd.getpwnam(config["cmsUser"]).pw_gid
+    except (OSError, KeyError) as error:
+        raise HostFailure("site-publication marker directory is unavailable; coordination is unknown") from error
+    if (not stat.S_ISDIR(parent.st_mode) or parent.st_uid != 0 or parent.st_gid != cms_gid
+            or stat.S_IMODE(parent.st_mode) != 0o750):
+        raise HostFailure("site-publication marker directory is unsafe; coordination is unknown")
+    try:
+        info = path.lstat()
+    except FileNotFoundError:
+        return None
+    if (not stat.S_ISREG(info.st_mode) or info.st_nlink != 1 or info.st_uid != 0
+            or info.st_gid != cms_gid or stat.S_IMODE(info.st_mode) != 0o640):
+        raise HostFailure("site-publication marker is unsafe; operator recovery is required")
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as error:
+        raise HostFailure("site-publication marker is unreadable; operator recovery is required") from error
+    if (not isinstance(value, dict) or value.get("version") != 1
+            or not isinstance(value.get("operationId"), str)
+            or not isinstance(value.get("profile"), str)
+            or value.get("phase") not in ("active", "cleanup-pending")
+            or (value.get("lastError") is not None and not isinstance(value.get("lastError"), str))):
+        raise HostFailure("site-publication marker is invalid; operator recovery is required")
+    return value
+
+
+def _write_site_publication_marker(config: dict[str, Any], operation_id: str, phase: str = "active",
+                                   last_error: Optional[str] = None) -> None:
+    path = _site_marker_path(config)
+    parent = path.parent.lstat()
+    cms_gid = pwd.getpwnam(config["cmsUser"]).pw_gid
+    if (not stat.S_ISDIR(parent.st_mode) or parent.st_uid != 0 or parent.st_gid != cms_gid
+            or stat.S_IMODE(parent.st_mode) != 0o750):
+        raise HostFailure("site-publication marker directory must be root-owned 0750 and readable by CMS group")
+    existing = _read_site_publication_marker(config)
+    if existing and existing["operationId"] != operation_id:
+        raise HostFailure("another site publication owns the shared marker; recover it first")
+    try:
+        directory = os.open(path.parent, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+        try:
+            fd, temporary = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
+            try:
+                os.fchmod(fd, 0o640)
+                os.fchown(fd, 0, cms_gid)
+                record = {"version": 1, "operationId": operation_id,
+                          "profile": config.get("profile", "staging194"), "phase": phase}
+                if last_error:
+                    record["lastError"] = str(last_error)[:500]
+                payload = json.dumps(record,
+                                     sort_keys=True, separators=(",", ":")).encode() + b"\n"
+                os.write(fd, payload)
+                os.fsync(fd)
+                os.replace(temporary, path)
+                os.fsync(directory)
+            finally:
+                os.close(fd)
+                try:
+                    os.unlink(temporary)
+                except FileNotFoundError:
+                    pass
+        finally:
+            os.close(directory)
+    except OSError as error:
+        raise HostFailure("could not durably write site-publication marker") from error
+
+
+def _clear_site_publication_marker(config: dict[str, Any], operation_id: str) -> None:
+    marker = _read_site_publication_marker(config)
+    if marker is None:
+        return
+    if marker["operationId"] != operation_id:
+        raise HostFailure("site-publication marker belongs to another operation")
+    path = _site_marker_path(config)
+    path.unlink()
+    directory = os.open(path.parent, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+    try:
+        os.fsync(directory)
+    finally:
+        os.close(directory)
+
+
+def _assert_site_publication_admission(config: dict[str, Any], profile: str, action: str,
+                                      operation_id: Optional[str], unfinished: set[str], *,
+                                      allow_cleanup_pending_rollback: bool = False,
+                                      allow_cleanup_pending_expiry: bool = False,
+                                      allow_cleanup_pending_finalize: bool = False,
+                                      allow_marker_recreation: bool = False) -> None:
+    if action == "cleanup-site":
+        if unfinished:
+            raise HostFailure("host publication journal has an unfinished operation; recover it first")
+        return
+    if unfinished and operation_id not in unfinished:
+        raise HostFailure("another host publication is unfinished; recover it first")
+    marker = _read_site_publication_marker(config)
+    if marker is not None:
+        same_operation = marker["profile"] == profile and marker["operationId"] == operation_id
+        if same_operation and marker["phase"] == "active":
+            return
+        if (same_operation and marker["phase"] == "cleanup-pending"
+                and action == "static-main-recover" and allow_cleanup_pending_rollback):
+            return
+        if (same_operation and marker["phase"] == "cleanup-pending"
+                and action == "static-main-recover" and allow_cleanup_pending_expiry):
+            return
+        if (same_operation and marker["phase"] == "cleanup-pending"
+                and action == "finalize-recover" and allow_cleanup_pending_finalize):
+            return
+        if not same_operation or marker["phase"] != "active":
+            raise HostFailure("another or unresolved host publication owns the shared marker")
+    recovery_actions = {"cms-update", "static-main", "static-main-recover", "static-publish",
+                        "recover", "restore", "finalize-recover"}
+    if operation_id in unfinished and action in recovery_actions and allow_marker_recreation:
+        _write_site_publication_marker(config, operation_id)
+
+
+def _consume_site_cleanup_request(config: dict[str, Any]) -> None:
+    request = Path(config["siteRefreshState"]).parent / "cleanup.request"
+    try:
+        info = request.lstat()
+    except FileNotFoundError:
+        return
+    if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
+        raise HostFailure("site cleanup request is unsafe; housekeeping refused")
+    try:
+        value = json.loads(request.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as error:
+        raise HostFailure("site cleanup request is unreadable; housekeeping refused") from error
+    if not isinstance(value, dict) or value.get("version") != 1 or not isinstance(value.get("releaseId"), str):
+        raise HostFailure("site cleanup request is malformed; housekeeping refused")
+    before = request.lstat()
+    if (before.st_dev, before.st_ino) != (info.st_dev, info.st_ino):
+        raise HostFailure("site cleanup request changed while being read")
+    request.unlink()
+    directory_fd = os.open(request.parent, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+    try:
+        os.fsync(directory_fd)
+    finally:
+        os.close(directory_fd)
+
+
+def _mount_points() -> set[Path]:
+    try:
+        lines = Path("/proc/self/mountinfo").read_text(encoding="utf-8").splitlines()
+    except OSError as error:
+        raise HostFailure("cannot inspect mount points before release cleanup") from error
+    result = set()
+    for line in lines:
+        fields = line.split()
+        if len(fields) < 5:
+            raise HostFailure("mount table is malformed; release cleanup refused")
+        decoded = re.sub(r"\\([0-7]{3})", lambda match: chr(int(match.group(1), 8)), fields[4])
+        result.add(Path(decoded))
+    return result
+
+
+def _remove_release_tree(path: Path, mount_points: set[Path]) -> None:
+    if not getattr(shutil.rmtree, "avoids_symlink_attacks", False):
+        raise HostFailure("safe symlink-resistant release removal is unavailable")
+    before = path.lstat()
+    if not stat.S_ISDIR(before.st_mode) or stat.S_ISLNK(before.st_mode):
+        raise HostFailure("release cleanup encountered a non-directory candidate")
+    if any(point == path or path in point.parents for point in mount_points):
+        raise HostFailure("release cleanup candidate contains a mount point")
+    shutil.rmtree(path)
+
+
+def _verified_cleanup_backup(directory: Path, operation_id: str, expected_database: str) -> bool:
+    """Validate an existing operation backup without extraction or writes."""
+    import sqlite3
+    try:
+        if directory.is_symlink() or not directory.is_dir():
+            return False
+        manifest_path = directory / "manifest.json"
+        database = directory / "database.sqlite"
+        media_path = directory / "media-manifest.json"
+        archive = directory / "backup.tar"
+        for path in (manifest_path, database, media_path, archive):
+            info = path.lstat()
+            if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
+                return False
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        media_doc = json.loads(media_path.read_text(encoding="utf-8"))
+        if (not isinstance(manifest, dict) or not isinstance(media_doc, dict)
+                or manifest.get("operationId") != operation_id
+                or manifest.get("database") != expected_database
+                or not SHA256_RE.fullmatch(str(manifest.get("databaseSha256", "")))
+                or not SHA256_RE.fullmatch(str(manifest.get("mediaManifestSha256", "")))
+                or not SHA256_RE.fullmatch(str(manifest.get("archiveSha256", "")))
+                or sha256_file(database) != manifest["databaseSha256"]
+                or sha256_file(media_path) != manifest["mediaManifestSha256"]
+                or sha256_file(archive) != manifest["archiveSha256"]
+                or not isinstance(media_doc.get("media"), list)
+                or manifest.get("media") != media_doc["media"]):
+            return False
+        checked = sqlite3.connect(f"file:{quote(str(database))}?mode=ro", uri=True)
+        try:
+            if checked.execute("PRAGMA integrity_check").fetchone() != ("ok",):
+                return False
+        finally:
+            checked.close()
+        expected = {"manifest.json", "database.sqlite", "media-manifest.json"}
+        for item in media_doc["media"]:
+            if not isinstance(item, dict):
+                return False
+            relative = item.get("file")
+            digest = item.get("sha256")
+            size = item.get("size")
+            if (not SHA256_RE.fullmatch(str(digest)) or relative != f"media/sha256:{digest}"
+                    or type(size) is not int or size < 0):
+                return False
+            media_file = directory / relative
+            media_info = media_file.lstat()
+            if (not stat.S_ISREG(media_info.st_mode) or media_info.st_nlink != 1
+                    or media_info.st_size != size or sha256_file(media_file) != digest):
+                return False
+            expected.add(relative)
+        with tarfile.open(archive, "r|") as bundle:
+            names = set()
+            canonical_names = set()
+            files = set()
+            for member in bundle:
+                name = member.name
+                relative = name.removeprefix("./")
+                if (name.startswith("/") or ".." in Path(name).parts or not relative
+                        or Path(relative).as_posix() != relative or relative in canonical_names or name in names
+                        or not (member.isfile() or member.isdir())):
+                    return False
+                names.add(name)
+                canonical_names.add(relative)
+                if member.isfile():
+                    files.add(relative)
+                    source = bundle.extractfile(member)
+                    if source is None:
+                        return False
+                    if relative == "manifest.json":
+                        embedded = {key: value for key, value in manifest.items() if key != "archiveSha256"}
+                        expected_manifest = (json.dumps(embedded, sort_keys=True, separators=(",", ":")) + "\n").encode()
+                        if source.read() != expected_manifest:
+                            return False
+                        continue
+                    digest = hashlib.sha256()
+                    while True:
+                        block = source.read(1024 * 1024)
+                        if not block:
+                            break
+                        digest.update(block)
+                    local = directory / relative
+                    if not local.is_file() or digest.hexdigest() != sha256_file(local):
+                        return False
+            if expected != files:
+                return False
+        return True
+    except (OSError, ValueError, KeyError, TypeError, AttributeError, tarfile.TarError, sqlite3.Error):
+        return False
+
+
+def _operation_backup_cleanup_candidates(backup_root: Path, history: list[dict], expected_database: str, *, keep: int = 2
+                                        ) -> tuple[list[Path], Optional[str]]:
+    starts = {row["operationId"]: row for row in history if row.get("record") == "start"
+              and row.get("operationKind") is None}
+    terminal_order = []
+    for row in history:
+        operation_id = row.get("operationId")
+        if (row.get("record") in ("committed", "recovered") and operation_id in starts
+                and operation_id not in terminal_order):
+            terminal_order.append(operation_id)
+    verified = []
+    for operation_id in terminal_order:
+        candidate = backup_root / operation_id
+        old_pair = starts[operation_id].get("oldPair")
+        database_proof = old_pair.get("cmsDatabaseProof") if isinstance(old_pair, dict) else None
+        journal_database = database_proof.get("database") if isinstance(database_proof, dict) else None
+        if (journal_database == expected_database
+                and _verified_cleanup_backup(candidate, operation_id, expected_database)):
+            verified.append(candidate)
+    if len(verified) < keep:
+        return [], f"found {len(verified)} verified terminal operation backups; retaining all"
+    preserve = set(verified[-keep:]) if keep else set()
+    return [path for path in verified if path not in preserve], None
+
+
+def _cleanup_operation_backups(config: dict[str, Any], history: list[dict], marker: Optional[dict],
+                               operation_id: Optional[str], mounts: set[Path]) -> list[str]:
+    backup_root = Path(config["backupRoot"])
+    root_info = backup_root.lstat()
+    if not stat.S_ISDIR(root_info.st_mode) or stat.S_ISLNK(root_info.st_mode):
+        raise HostFailure("operation backup root is unsafe; cleanup refused")
+    try:
+        expected_database = str(Path(config["cmsDatabase"]).resolve(strict=True))
+    except (OSError, KeyError, ValueError):
+        print("IKPK housekeeping: backup cleanup skipped: configured CMS database path is unavailable", file=sys.stderr)
+        return []
+    backup_candidates, retention_note = _operation_backup_cleanup_candidates(
+        backup_root, history, expected_database, keep=2)
+    if retention_note:
+        print(f"IKPK housekeeping: backup cleanup skipped: {retention_note}", file=sys.stderr)
+    protected_ids = {operation_id} if operation_id else set()
+    if marker and isinstance(marker.get("operationId"), str):
+        protected_ids.add(marker["operationId"])
+    removed_backups = []
+    for path in backup_candidates:
+        if path.name in protected_ids:
+            continue
+        _remove_release_tree(path, mounts)
+        removed_backups.append(str(path))
+    return removed_backups
+
+
+def _expire_site_restore(config: dict[str, Any], current_name: str, *, cleanup_pending: bool) -> None:
+    state_path = Path(config["siteRefreshState"])
+    try:
+        info = state_path.lstat()
+    except FileNotFoundError:
+        previous = {}
+        cms = pwd.getpwnam(config["cmsUser"])
+        owner, group, mode = cms.pw_uid, cms.pw_gid, 0o640
+    else:
+        if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
+            raise HostFailure("site-refresh state is unsafe; release cleanup refused")
+        owner, group, mode = info.st_uid, info.st_gid, stat.S_IMODE(info.st_mode)
+        try:
+            previous = json.loads(state_path.read_text(encoding="utf-8"))
+        except (OSError, ValueError) as error:
+            raise HostFailure("site-refresh state is unreadable; release cleanup refused") from error
+        if (not isinstance(previous, dict) or previous.get("status") not in
+                ("idle", "failed", "interrupted", "succeeded", "verification-failed")):
+            raise HostFailure("site-refresh state is active or unknown; release cleanup refused")
+    now = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    record = {"status": "succeeded", "phase": "done",
+              "message": ("Сайт обновлён. Удаляются предыдущие релизы после проверки."
+                          if cleanup_pending else "Сайт обновлён. Предыдущий релиз удалён после проверки."),
+              "releaseId": current_name, "previousReleaseId": None,
+              "cleanupPending": cleanup_pending,
+              "buildArtifactsCleanupPending": previous.get("buildArtifactsCleanupPending") is True,
+              "siteUrl": config.get("siteBaseUrl"),
+              "startedAt": previous.get("startedAt") or now,
+              "finishedAt": now, "switched": True}
+    directory = state_path.parent
+    if directory.is_symlink() or not directory.is_dir():
+        raise HostFailure("site-refresh state directory is unsafe; release cleanup refused")
+    fd, temporary = tempfile.mkstemp(prefix=f".{state_path.name}.", dir=directory)
+    try:
+        os.fchown(fd, owner, group)
+        os.fchmod(fd, mode)
+        payload = (json.dumps(record, sort_keys=True, separators=(",", ":")) + "\n").encode()
+        if os.write(fd, payload) != len(payload):
+            raise HostFailure("site-refresh state write was incomplete")
+        os.fsync(fd)
+        os.replace(temporary, state_path)
+        dir_fd = os.open(directory, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+        try:
+            os.fsync(dir_fd)
+        finally:
+            os.close(dir_fd)
+    finally:
         os.close(fd)
+        try:
+            os.unlink(temporary)
+        except FileNotFoundError:
+            pass
+
+
+def _current_rollback_target(root: Path, current: Path, history: list[dict],
+                             site_state: Optional[dict]) -> Optional[Path]:
+    """Verify the rollback target of the current static-main release, if one exists."""
+    current_digest = _tree_sha256(current)
+    release_info = None
+    release_file = current / "release.json"
+    try:
+        release_info_stat = release_file.lstat()
+    except FileNotFoundError:
+        pass
+    except OSError as error:
+        raise HostFailure("current static release metadata is unreadable; cleanup refused") from error
+    else:
+        if not stat.S_ISREG(release_info_stat.st_mode) or release_info_stat.st_nlink != 1:
+            raise HostFailure("current static release metadata is unsafe; cleanup refused")
+        try:
+            release_info = json.loads(release_file.read_text(encoding="utf-8"))
+        except (OSError, ValueError) as error:
+            raise HostFailure("current static release metadata is malformed; cleanup refused") from error
+        if not isinstance(release_info, dict):
+            raise HostFailure("current static release metadata is malformed; cleanup refused")
+
+    starts: dict[str, dict] = {}
+    switches: dict[str, dict] = {}
+    for row in history:
+        if row.get("operationKind") != "static-main":
+            continue
+        operation = row.get("operationId")
+        if not isinstance(operation, str):
+            continue
+        if row.get("record") == "static-main-start":
+            starts[operation] = row
+        elif row.get("record") == "static-main-switch-intent":
+            switches[operation] = row
+
+    matches = []
+    for row in history:
+        if row.get("operationKind") != "static-main" or row.get("record") != "static-main-committed":
+            continue
+        operation = row.get("operationId")
+        start = starts.get(operation) if isinstance(operation, str) else None
+        switch = switches.get(operation) if isinstance(operation, str) else None
+        if not start or not switch or row.get("sourceSha") != start.get("sourceSha"):
+            continue
+        if (switch.get("candidateStaticPath") != str(current)
+                or row.get("staticTreeSha256") != current_digest):
+            continue
+        if (release_info is not None and (release_info.get("commit") != row.get("sourceSha")
+                or release_info.get("operationId") not in (None, operation))):
+            continue
+        matches.append(start)
+
+    static_candidate_claimed = any(
+        row.get("operationKind") == "static-main" and row.get("record") == "static-main-switch-intent"
+        and row.get("candidateStaticPath") == str(current) for row in history)
+    if matches:
+        start = matches[-1]
+        raw_target = start.get("oldStaticPath")
+        expected_digest = start.get("oldStaticTreeSha256")
+    elif static_candidate_claimed:
+        raise HostFailure("current static-main candidate differs from its committed journal identity; cleanup refused")
+    else:
+        starts = {row.get("operationId"): row for row in history
+                  if row.get("record") == "start" and row.get("operationKind") is None
+                  and isinstance(row.get("operationId"), str)}
+        bundles = {row.get("operationId"): row for row in history
+                   if row.get("record") == "new-bundle" and isinstance(row.get("operationId"), str)}
+        paired_commit = None
+        paired_candidate_claimed = False
+        for row in history:
+            operation = row.get("operationId")
+            start = starts.get(operation) if isinstance(operation, str) else None
+            bundle = bundles.get(operation) if isinstance(operation, str) else None
+            new_pair = bundle.get("newPair") if isinstance(bundle, dict) else None
+            if (row.get("record") != "committed" or not start or not isinstance(new_pair, dict)
+                    or row.get("sourceSha") != start.get("sourceSha")
+                    or current.name != f"{row.get('sourceSha')}-{operation}"):
+                continue
+            paired_candidate_claimed = True
+            if new_pair.get("staticTreeSha256") != current_digest:
+                continue
+            if release_info is not None and (release_info.get("commit") != row.get("sourceSha")
+                    or release_info.get("operationId") not in (None, operation)):
+                continue
+            paired_commit = row
+        if paired_commit is not None:
+            # The paired recovery protocol is closed by its terminal commit.
+            return None
+        if paired_candidate_claimed:
+            raise HostFailure("current paired candidate differs from its committed journal identity; cleanup refused")
+        if (isinstance(site_state, dict) and site_state.get("status") == "succeeded"
+                and site_state.get("phase") == "done" and site_state.get("switched") is True
+                and site_state.get("releaseId") == current.name):
+            # The CMS workflow owns and expires its previousReleaseId in state.
+            return None
+        raise HostFailure("current static release has no matching committed identity; cleanup refused")
+
+    if (not isinstance(raw_target, str) or not Path(raw_target).is_absolute()
+            or not isinstance(expected_digest, str) or not re.fullmatch(r"[a-f0-9]{64}", expected_digest)):
+        raise HostFailure("static rollback target identity is malformed; cleanup refused")
+    target = Path(raw_target)
+    if target.parent != root or target == current or target.name in ("", ".", ".."):
+        raise HostFailure("static rollback target is outside its release root; cleanup refused")
+    operation_id = start.get("operationId")
+    expired = [row for row in history
+               if row.get("operationKind") == "static-main"
+               and row.get("operationId") == operation_id
+               and row.get("record") == "static-main-rollback-expired"]
+    if expired:
+        audit = expired[0]
+        if (len(expired) != 1 or audit.get("sourceSha") != start.get("sourceSha")
+                or audit.get("oldStaticPath") != raw_target
+                or audit.get("oldStaticTreeSha256") != expected_digest
+                or audit.get("candidateStaticPath") != str(current)
+                or audit.get("candidateStaticTreeSha256") != current_digest
+                or audit.get("committedStaticTreeSha256") != current_digest
+                or audit.get("snapshotId") != next((row.get("snapshotId") for row in history
+                    if row.get("record") == "static-main-committed"
+                    and row.get("operationId") == operation_id), None)
+                or audit.get("targetState") != "absent"
+                or not isinstance(audit.get("operator"), str) or not audit["operator"].strip()
+                or not isinstance(audit.get("reason"), str) or not audit["reason"].strip()):
+            raise HostFailure("expired rollback evidence differs from the current committed release; cleanup refused")
+        try:
+            target_info = target.lstat()
+        except FileNotFoundError:
+            return None
+        except OSError as error:
+            raise HostFailure("expired rollback target cannot be inspected; cleanup refused") from error
+        if stat.S_ISDIR(target_info.st_mode) and not stat.S_ISLNK(target_info.st_mode):
+            try:
+                if _tree_sha256(target) == expected_digest:
+                    return target
+            except OSError as error:
+                raise HostFailure("expired rollback target cannot be verified; cleanup refused") from error
+        raise HostFailure("expired rollback target reappeared with different identity; cleanup refused")
+    try:
+        target_info = target.lstat()
+        if not stat.S_ISDIR(target_info.st_mode) or stat.S_ISLNK(target_info.st_mode):
+            raise HostFailure("static rollback target expired or is unsafe; cleanup refused")
+        if _tree_sha256(target) != expected_digest:
+            raise HostFailure("static rollback target expired or changed; cleanup refused")
+    except FileNotFoundError as error:
+        raise HostFailure("static rollback target expired or unavailable; cleanup refused") from error
+    except OSError as error:
+        raise HostFailure("static rollback target cannot be verified; cleanup refused") from error
+    return target
+
+
+def _cleanup_site_releases(config: dict[str, Any], state: RehearsalState,
+                           operation_id: Optional[str], *, close_marker: bool = True) -> dict[str, list[Any]]:
+    try:
+        # This must precede every journal query: the normal reader repairs a
+        # torn tail, which could erase an unfinished rollback intent.
+        history = state.read_journal_for_cleanup(validate_history=True)
+    except RehearsalRefusal as error:
+        raise HostFailure(str(error)) from error
+
+    def operation_rows(target: str) -> list[dict]:
+        return [row for row in history if row.get("operationId") == target]
+
+    marker = _read_site_publication_marker(config)
+    if operation_id is None and marker is not None and marker["phase"] != "cleanup-pending":
+        rows = operation_rows(marker["operationId"])
+        terminal = any(row.get("record") in ("committed", "recovered", "static-main-committed",
+                                                "static-main-recovered", "static-main-rolled-back",
+                                                "static-main-rollback-completed") for row in rows)
+        if not terminal:
+            raise HostFailure("a host publication is active; CMS cleanup must retry after it finishes")
+        _write_site_publication_marker(config, marker["operationId"], "cleanup-pending")
+        marker = _read_site_publication_marker(config)
+    if operation_id is not None and marker is not None and marker["operationId"] != operation_id:
+        raise HostFailure("release cleanup marker belongs to another operation")
+    if state._unfinished_operation_ids(history):
+        raise HostFailure("another publication is unfinished; release cleanup refused")
+    configured_root = Path(config["staticReleaseRoot"])
+    root_info = configured_root.lstat()
+    if not stat.S_ISDIR(root_info.st_mode) or stat.S_ISLNK(root_info.st_mode):
+        raise HostFailure("static release root is unsafe; cleanup refused")
+    root = configured_root.resolve(strict=True)
+    current = _current_target(Path(config["currentStatic"])).resolve(strict=True)
+    if current.parent != root.resolve(strict=True):
+        raise HostFailure("current static release is not a direct child of its configured root")
+    site_state_path = Path(config["siteRefreshState"])
+    try:
+        site_state = json.loads(site_state_path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        site_state = None
+    except (OSError, ValueError) as error:
+        raise HostFailure("CMS site-refresh state is unreadable; release cleanup refused") from error
+    if site_state is not None and (not isinstance(site_state, dict) or site_state.get("status") not in
+                                   ("idle", "failed", "succeeded")):
+        raise HostFailure("CMS refresh or Restore is active or unresolved; release cleanup refused")
+    cms_success = (isinstance(site_state, dict) and site_state.get("status") == "succeeded"
+                   and site_state.get("phase") == "done" and site_state.get("switched") is True
+                   and site_state.get("releaseId") == current.name)
+    if operation_id is None:
+        if marker is None:
+            if not cms_success or site_state.get("cleanupPending") is not True:
+                return {"removedReleases": [], "retainedLegacy": []}
+            operation_id = f"cms-{current.name}"
+            _write_site_publication_marker(config, operation_id, "cleanup-pending")
+            marker = _read_site_publication_marker(config)
+        operation_id = marker["operationId"]
+        if not cms_success:
+            rows = operation_rows(operation_id)
+            terminal = any(row.get("record") in ("committed", "recovered", "static-main-committed",
+                                                    "static-main-recovered", "static-main-rolled-back",
+                                                    "static-main-rollback-completed") for row in rows)
+            if not terminal:
+                raise HostFailure("pending marker has no durable successful publication record")
+    else:
+        rows = operation_rows(operation_id)
+        terminal = any(row.get("record") in ("committed", "recovered", "static-main-committed",
+                                                "static-main-recovered", "static-main-rolled-back",
+                                                "static-main-rollback-completed") for row in rows)
+        if not terminal:
+            raise HostFailure("release cleanup requires a durable terminal publication record")
+        _write_site_publication_marker(config, operation_id, "cleanup-pending")
+        marker = _read_site_publication_marker(config)
+    rollback_target = _current_rollback_target(root, current, history, site_state)
+    protected = {current, rollback_target}
+    temporary_pointers = []
+    for pointer in root.parent.glob(".current-next-*"):
+        before = pointer.lstat()
+        if not stat.S_ISLNK(before.st_mode):
+            raise HostFailure("temporary current pointer is not a symlink; cleanup refused")
+        match = re.fullmatch(r"\.current-next-([A-Za-z0-9][A-Za-z0-9._-]{0,127})", pointer.name)
+        if not match:
+            raise HostFailure("temporary current pointer name is unknown; cleanup refused")
+        try:
+            target = pointer.resolve(strict=True)
+            link_text = os.readlink(pointer)
+        except OSError as error:
+            raise HostFailure("temporary current pointer is unreadable; cleanup refused") from error
+        if (target.parent != root or target.name != match.group(1)
+                or link_text != f"releases/{match.group(1)}"):
+            raise HostFailure("temporary current pointer target is not the exact release child")
+        after = pointer.lstat()
+        if (before.st_dev, before.st_ino) != (after.st_dev, after.st_ino):
+            raise HostFailure("temporary current pointer changed during cleanup")
+        temporary_pointers.append(pointer)
+    for pointer in root.parent.glob(".current.new-*"):
+        try:
+            if not pointer.is_symlink():
+                raise HostFailure("temporary current pointer is not a symlink; cleanup refused")
+            target = pointer.resolve(strict=True)
+        except OSError as error:
+            raise HostFailure("temporary current pointer is unreadable; cleanup refused") from error
+        if target.parent != root.resolve(strict=True):
+            raise HostFailure("temporary current pointer escapes the release root")
+        protected.add(target)
+    for key in ("siteBuildWorkspaceRoot", "releaseRoot", "backupRoot"):
+        value = config.get(key)
+        if not value:
+            continue
+        workspace = Path(value).resolve(strict=True)
+        if workspace.parent == root.resolve(strict=True):
+            protected.add(workspace)
+        elif root.resolve(strict=True) in workspace.parents:
+            protected.add(root.resolve(strict=True) / workspace.relative_to(root.resolve(strict=True)).parts[0])
+    mounts = _mount_points()
+    candidates = []
+    retained_legacy = []
+    for candidate in sorted(root.iterdir()):
+        if candidate.name.startswith("."):
+            continue
+        info = candidate.lstat()
+        if stat.S_ISLNK(info.st_mode):
+            raise HostFailure("unexpected symlink in static release root; cleanup refused")
+        if not stat.S_ISDIR(info.st_mode) or candidate in protected:
+            continue
+        release_file = candidate / "release.json"
+        try:
+            release_info = release_file.lstat()
+            release = json.loads(release_file.read_text(encoding="utf-8"))
+        except (OSError, ValueError) as error:
+            retained_legacy.append({"path": str(candidate), "reason": "release metadata is missing or unreadable"})
+            continue
+        if (not stat.S_ISREG(release_info.st_mode) or release_info.st_nlink != 1
+                or not isinstance(release, dict)
+                or not re.fullmatch(r"[a-f0-9]{40}", str(release.get("commit", "")))
+                or not isinstance(release.get("snapshotId"), str)
+                or not release["snapshotId"].startswith("snap:")):
+            retained_legacy.append({"path": str(candidate), "reason": "release metadata is not verifiable"})
+            continue
+        if any(point == candidate or candidate in point.parents for point in mounts):
+            raise HostFailure("release cleanup candidate contains a mount point; cleanup refused")
+        candidates.append(candidate)
+
+    # Validate every candidate before the first destructive action. An unknown
+    # legacy tree must not leave a partially pruned release set.
+    _expire_site_restore(config, current.name, cleanup_pending=True)
+    removed = []
+    for pointer in temporary_pointers:
+        pointer.unlink()
+        dir_fd = os.open(root.parent, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+        try:
+            os.fsync(dir_fd)
+        finally:
+            os.close(dir_fd)
+    for candidate in candidates:
+        _remove_release_tree(candidate, mounts)
+        removed.append(str(candidate))
+    if "backupRoot" in config:
+        removed.extend(_cleanup_operation_backups(config, history, marker, operation_id, mounts))
+    _expire_site_restore(config, current.name, cleanup_pending=False)
+    if close_marker and marker is not None and operation_id is not None:
+        _clear_site_publication_marker(config, operation_id)
+    return {"removedReleases": removed, "retainedLegacy": retained_legacy}
+
+
+def _release_dirs_mentioned(text: str, root: Path) -> set[Path]:
+    found = set()
+    prefix = str(root) + "/"
+    start = 0
+    while True:
+        index = text.find(prefix, start)
+        if index < 0:
+            return found
+        end = index + len(prefix)
+        while end < len(text) and text[end] not in " \t\n\r\"'":
+            end += 1
+        mentioned = Path(text[index:end])
+        try:
+            relative = mentioned.relative_to(root)
+        except ValueError:
+            start = end
+            continue
+        if relative.parts and (root / relative.parts[0]).exists():
+            found.add(root / relative.parts[0])
+        start = end
+
+
+def _restart_cms_releases(config: dict[str, Any], root: Path) -> set[Path]:
+    """Protect the workspace a restart would use, not only the running process."""
+    protected = set()
+    env_files = []
+    configured = config.get("cmsEnvironmentFile")
+    if isinstance(configured, str) and configured:
+        env_files.append(Path(configured))
+    unit = config.get("cmsUnit")
+    if isinstance(unit, str) and unit:
+        if not re.fullmatch(r"[A-Za-z0-9@:.\\_-]+", unit):
+            raise HostFailure("CMS unit name is unsafe; cleanup refused")
+        try:
+            listing = subprocess.check_output(["systemctl", "cat", unit], text=True, stderr=subprocess.DEVNULL)
+            pid_text = subprocess.check_output(
+                ["systemctl", "show", "-p", "MainPID", "--value", unit], text=True, stderr=subprocess.DEVNULL).strip()
+        except (OSError, subprocess.CalledProcessError) as error:
+            raise HostFailure("CMS unit environment is unreadable; cleanup refused") from error
+        for line in listing.splitlines():
+            stripped = line.strip()
+            if not stripped.startswith("EnvironmentFile="):
+                continue
+            value = stripped.split("=", 1)[1].strip()
+            if value.startswith("-"):
+                value = value[1:]
+            env_files.append(Path(value))
+        if pid_text not in ("", "0"):
+            if not pid_text.isdigit():
+                raise HostFailure("CMS service pid is unreadable; cleanup refused")
+            try:
+                live = Path(os.readlink(f"/proc/{pid_text}/cwd")).resolve()
+            except OSError as error:
+                raise HostFailure("live CMS workspace is unreadable; cleanup refused") from error
+            if root in live.parents:
+                protected.add(_cms_release_dir(root, live))
+    for env_file in env_files:
+        try:
+            text = env_file.read_text(encoding="utf-8", errors="replace")
+        except OSError as error:
+            raise HostFailure("CMS environment file is unreadable; cleanup refused") from error
+        protected.update(_release_dirs_mentioned(text, root))
+    return protected
+
+
+def _cms_release_dir(root: Path, path: Path) -> Path:
+    relative = path.resolve().relative_to(root)
+    if not relative.parts:
+        raise HostFailure("CMS path is the release root; cleanup refused")
+    return root / relative.parts[0]
+
+
+def _cleanup_cms_releases(config: dict[str, Any], state: RehearsalState) -> list[str]:
+    """Remove finished CMS release directories, keeping the live tree and its rollback."""
+    raw_root = config.get("releaseRoot")
+    raw_current = config.get("currentCms")
+    if not isinstance(raw_root, str) or not isinstance(raw_current, str):
+        return []
+    try:
+        history = state.read_journal_for_cleanup(validate_history=True)
+    except RehearsalRefusal as error:
+        raise HostFailure(str(error)) from error
+    if state._unfinished_operation_ids(history):
+        raise HostFailure("another publication is unfinished; CMS release cleanup refused")
+    root = Path(raw_root)
+    try:
+        root_info = root.lstat()
+        if not stat.S_ISDIR(root_info.st_mode) or stat.S_ISLNK(root_info.st_mode):
+            raise HostFailure("CMS release root is unsafe; cleanup refused")
+        root = root.resolve(strict=True)
+        current = Path(raw_current).resolve(strict=True)
+        current_release = _cms_release_dir(root, current)
+    except (OSError, ValueError) as error:
+        raise HostFailure("CMS release cleanup cannot inspect its root; cleanup refused") from error
+    committed = [row for row in history if row.get("record") == "committed"]
+    if not committed:
+        return []
+    operation_id = committed[-1].get("operationId")
+    start = next((row for row in history
+                  if row.get("operationId") == operation_id and row.get("record") == "start"), None)
+    old_raw = (start or {}).get("oldPair", {}).get("cmsPath") if isinstance(start, dict) else None
+    if not isinstance(old_raw, str):
+        return []
+    old = Path(old_raw)
+    try:
+        if not old.exists():
+            return []
+        protected = {current_release, _cms_release_dir(root, old.resolve())}
+        protected.update(_restart_cms_releases(config, root))
+    except (OSError, ValueError) as error:
+        raise HostFailure("CMS rollback target is outside its release root; cleanup refused") from error
+    mounts = _mount_points()
+    removed = []
+    for candidate in sorted(root.iterdir()):
+        if candidate.name.startswith(".") or candidate in protected:
+            continue
+        info = candidate.lstat()
+        if stat.S_ISLNK(info.st_mode) or not stat.S_ISDIR(info.st_mode):
+            raise HostFailure("unexpected entry in CMS release root; cleanup refused")
+        _remove_release_tree(candidate, mounts)
+        removed.append(str(candidate.resolve()))
+    directory = os.open(root, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+    try:
+        os.fsync(directory)
+    finally:
+        os.close(directory)
+    return removed
+
+
+def _cleanup_after_commit(config: dict[str, Any], state: RehearsalState, operation_id: str) -> dict[str, Any]:
+    try:
+        result = _cleanup_site_releases(config, state, operation_id)
+        result["removedCmsReleases"] = _cleanup_cms_releases(config, state)
+        return result
+    except (HostFailure, OSError, ValueError) as error:
+        try:
+            marker = _read_site_publication_marker(config)
+            if marker is not None and marker["operationId"] == operation_id:
+                _write_site_publication_marker(config, operation_id, "cleanup-pending", str(error))
+        except (HostFailure, OSError, ValueError):
+            pass
+        return {"cleanupPending": True, "cleanupError": str(error)[:500]}
 
 
 def _save_bytes(path: Path, payload: bytes, mode: int = 0o600) -> None:
@@ -690,12 +1971,13 @@ def _tree_sha256(root: Path) -> str:
 PAIRED_CMS_ENV_KEYS = ("IKPK_BUILD_WORKSPACE", "IKPK_INSTALLED_COMMIT", "INITIAL_PROD_PROFILE",
                        "DEPLOY_MODE", "PAYMENT_ROLE", "PAYMENT_ENDPOINT_PROD", "DEMO_FORMS",
                        "CHAT_LOADER_SRC", "CHAT_OFFLINE_MESSAGE")
+STAGING194_CMS_SOURCE_ENV_KEYS = ("IKPK_BUILD_WORKSPACE", "IKPK_INSTALLED_COMMIT")
 
 
 def _paired_cms_source_env(config: dict[str, Any]) -> dict[str, Optional[str]]:
     path = Path(config["cmsEnvironmentFile"])
     info = path.lstat()
-    if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
+    if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1 or info.st_uid != 0:
         raise HostFailure("paired CMS environment file is not a regular unlinked file")
     text = path.read_text(encoding="utf-8")
     values: dict[str, Optional[str]] = {key: None for key in PAIRED_CMS_ENV_KEYS}
@@ -759,6 +2041,127 @@ def _write_paired_cms_source_env(config: dict[str, Any], values: dict[str, Optio
             pass
 
 
+def _staging194_cms_source_env(config: dict[str, Any]) -> dict[str, Optional[str]]:
+    path = Path(config["cmsEnvironmentFile"])
+    info = path.lstat()
+    if (not stat.S_ISREG(info.st_mode) or info.st_nlink != 1 or info.st_uid != 0
+            or stat.S_IMODE(info.st_mode) != 0o600):
+        raise HostFailure("staging194 source environment must be a root-owned 0600 regular file")
+    try:
+        lines = path.read_bytes().splitlines()
+    except OSError as error:
+        raise HostFailure("staging194 source environment is unreadable") from error
+    if len(lines) != len(STAGING194_CMS_SOURCE_ENV_KEYS):
+        raise HostFailure("staging194 source environment must contain exactly two assignments")
+    values: dict[str, Optional[str]] = {}
+    for line in lines:
+        match = re.fullmatch(rb"(IKPK_BUILD_WORKSPACE|IKPK_INSTALLED_COMMIT)=([^\s]+)", line)
+        if not match:
+            raise HostFailure("staging194 source environment has an unsupported assignment layout")
+        key = match.group(1).decode("ascii")
+        if key in values:
+            raise HostFailure("staging194 source environment repeats a source key")
+        values[key] = match.group(2).decode("utf-8")
+    if set(values) != set(STAGING194_CMS_SOURCE_ENV_KEYS):
+        raise HostFailure("staging194 source environment must contain both source keys")
+    return values
+
+
+def _write_staging194_cms_source_env(config: dict[str, Any], values: dict[str, Optional[str]]) -> None:
+    if set(values) != set(STAGING194_CMS_SOURCE_ENV_KEYS):
+        raise HostFailure("staging194 source environment update must contain exactly two keys")
+    for key, value in values.items():
+        if not isinstance(value, str) or not value or "\n" in value or "\r" in value:
+            raise HostFailure(f"invalid staging194 source environment value for {key}")
+    path = Path(config["cmsEnvironmentFile"])
+    _staging194_cms_source_env(config)  # Validate owner, mode, inode count, and exact layout before replace.
+    info = path.lstat()
+    fd, temporary = tempfile.mkstemp(prefix=f".{path.name}.", dir=str(path.parent))
+    try:
+        os.fchmod(fd, 0o600)
+        os.fchown(fd, info.st_uid, info.st_gid)
+        with os.fdopen(fd, "wb") as target:
+            for key in STAGING194_CMS_SOURCE_ENV_KEYS:
+                target.write(key.encode("ascii") + b"=" + values[key].encode("utf-8") + b"\n")
+            target.flush()
+            os.fsync(target.fileno())
+        os.replace(temporary, path)
+        directory_fd = os.open(path.parent, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+        try:
+            os.fsync(directory_fd)
+        finally:
+            os.close(directory_fd)
+    finally:
+        try:
+            os.unlink(temporary)
+        except FileNotFoundError:
+            pass
+
+
+def _assert_staging194_source_env_effective(config: dict[str, Any]) -> None:
+    expected = str(Path(config["cmsEnvironmentFile"]))
+    output = run(["/usr/bin/systemctl", "show", "--property=EnvironmentFiles", "--value",
+                  config["cmsUnit"]]).stdout.strip()
+    pattern = r"(?<!\S)(-?/[A-Za-z0-9_./-]+) \(ignore_errors=(?:yes|no)\)"
+    entries = re.findall(pattern, output)
+    if re.sub(pattern, "", output).strip() or len(entries) != 3 or entries[-1].removeprefix("-") != expected:
+        raise HostFailure("staging194 source environment is not the last of the three effective unit files")
+
+
+def _assert_staging194_workspace_ready(config: dict[str, Any], workspace: str | Path) -> None:
+    workspace_path = Path(workspace)
+    if not workspace_path.is_absolute() or workspace_path.is_symlink() or not workspace_path.is_dir():
+        raise HostFailure("staging194 source workspace is unavailable")
+    required = (
+        "web/node_modules/astro/package.json", "web/node_modules/tsx/package.json",
+        "cms/scripts/capture-staging194.py", "scripts/lib/seal-staging193-capture.mjs",
+        "scripts/lib/staging193-capture-bundle.mjs", "scripts/lib/server-capture-sqlite.mjs",
+    )
+    code = ("import os,sys; root=sys.argv[1]; files=sys.argv[2:]; "
+            "sys.exit(0 if all(os.path.isfile(os.path.join(root,p)) and "
+            "os.access(os.path.join(root,p), os.R_OK) for p in files) else 1)")
+    _run_as_cms(config, workspace_path, ["/usr/bin/python3", "-c", code,
+                 str(workspace_path), *required], timeout=60, read_only_path=workspace_path)
+
+
+def _preflight_staging194_source(config: dict[str, Any], workspace: Path,
+                                 source_sha: str, operation_id: Optional[str] = None) -> None:
+    release_root = Path(config["releaseRoot"]).absolute()
+    workspace = workspace.absolute()
+    expected_name = (rf"{re.escape(source_sha)}-{re.escape(operation_id)}" if operation_id is not None
+                     else rf"{re.escape(source_sha)}-[A-Za-z0-9][A-Za-z0-9._-]{{0,127}}")
+    if workspace.parent != release_root or not re.fullmatch(expected_name, workspace.name):
+        raise HostFailure("staging194 CMS source workspace is not the versioned admitted release")
+    if any(not (workspace / part).is_file() for part in ("cms/package.json", "web/package.json")):
+        raise HostFailure("staging194 CMS source workspace is incomplete")
+    _assert_staging194_source_env_effective(config)
+    _staging194_cms_source_env(config)
+    _assert_staging194_workspace_ready(config, workspace)
+
+
+def _pre_fence_staging194_process(config: dict[str, Any]) -> None:
+    _assert_staging194_source_env_effective(config)
+    _assert_staging194_process_source_env(config, _staging194_cms_source_env(config))
+
+
+def _assert_staging194_process_source_env(config: dict[str, Any], expected: dict[str, str]) -> None:
+    pid = _service_pid(config["cmsUnit"])
+    try:
+        entries = Path(f"/proc/{pid}/environ").read_bytes().split(b"\0")
+    except OSError as error:
+        raise HostFailure("cannot read staging194 CMS process source environment") from error
+    found = {}
+    for entry in entries:
+        for key in STAGING194_CMS_SOURCE_ENV_KEYS:
+            prefix = key.encode("ascii") + b"="
+            if entry.startswith(prefix):
+                if key in found:
+                    raise HostFailure("staging194 CMS process repeats a source environment key")
+                found[key] = entry[len(prefix):].decode("utf-8", errors="strict")
+    if found != expected:
+        raise HostFailure("staging194 CMS process source environment differs from the effective file")
+
+
 def _site_refresh_worker_pids(proc_root: Path = Path("/proc")) -> set[int]:
     """Find legacy refresh workers whose terminal state predates workerPid records."""
     try:
@@ -779,11 +2182,21 @@ def _site_refresh_worker_pids(proc_root: Path = Path("/proc")) -> set[int]:
 
 
 def _verify_site_refresh_idle(config: dict[str, Any], *, recovery: bool = False) -> None:
-    if config.get("profile") != "production-paired":
-        return
     path = Path(config["siteRefreshState"])
     lock_path = Path(str(path) + ".lock")
     deadline = time.monotonic() + 3600
+    ambiguous_attempts = 0
+
+    def retry_ambiguous(message: str) -> None:
+        # A lock can be created empty or rewritten during handoff, and a
+        # worker can exit between a read and its PID probe. Never regard an
+        # ambiguous observation as idle; re-read the entire state and lock.
+        nonlocal ambiguous_attempts
+        ambiguous_attempts += 1
+        if ambiguous_attempts >= 3 or time.monotonic() >= deadline:
+            raise HostFailure(message)
+        time.sleep(1)
+
     while True:
         waiting = False
         try:
@@ -809,7 +2222,8 @@ def _verify_site_refresh_idle(config: dict[str, Any], *, recovery: bool = False)
                 try:
                     os.kill(pid, 0)
                 except ProcessLookupError:
-                    raise HostFailure("site-refresh/Restore state is stale; inspect it instead of stopping CMS")
+                    retry_ambiguous("site-refresh/Restore state is stale; inspect it instead of stopping CMS")
+                    continue
                 except PermissionError:
                     pass
                 waiting = True
@@ -851,18 +2265,30 @@ def _verify_site_refresh_idle(config: dict[str, Any], *, recovery: bool = False)
             if not stat.S_ISREG(lock_info.st_mode) or lock_info.st_nlink != 1:
                 raise HostFailure("site-refresh lock is unsafe; refusing to stop CMS")
             try:
-                lock_pid_text = lock_path.read_text(encoding="ascii").strip()
-            except OSError as error:
+                lock_text = lock_path.read_text(encoding="ascii")
+            except FileNotFoundError:
+                retry_ambiguous("site-refresh lock changed while reading; refusing to stop CMS")
+                continue
+            except (OSError, UnicodeError) as error:
                 raise HostFailure("site-refresh lock is unreadable; refusing to stop CMS") from error
-            if not lock_pid_text.isdecimal() or int(lock_pid_text) < 2:
-                raise HostFailure("site-refresh lock PID is unknown; refusing to stop CMS")
+            # Legacy writers use a PID-only file; newer workers append a
+            # 32-character lowercase token. Do not treat a partial handoff as idle.
+            legacy_lock = re.fullmatch(r"([0-9]+)\n?", lock_text)
+            token_lock = re.fullmatch(r"([0-9]+)\n[a-f0-9]{32}\n", lock_text)
+            lock_pid_text = legacy_lock.group(1) if legacy_lock else (
+                token_lock.group(1) if token_lock else "")
+            if not lock_pid_text or len(lock_pid_text) > 10 or not 2 <= int(lock_pid_text) <= 2147483647:
+                retry_ambiguous("site-refresh lock PID is unknown; refusing to stop CMS")
+                continue
             try:
                 os.kill(int(lock_pid_text), 0)
             except ProcessLookupError:
-                raise HostFailure("site-refresh lock is stale; inspect it instead of stopping CMS")
+                retry_ambiguous("site-refresh lock is stale; inspect it instead of stopping CMS")
+                continue
             except PermissionError:
                 pass
             waiting = True
+        ambiguous_attempts = 0
         if not waiting:
             return
         if time.monotonic() >= deadline:
@@ -870,10 +2296,8 @@ def _verify_site_refresh_idle(config: dict[str, Any], *, recovery: bool = False)
         time.sleep(1)
 
 
-def _assert_site_refresh_idle(config: dict[str, Any]) -> None:
+def _assert_site_refresh_idle(config: dict[str, Any], *, allow_interrupted: bool = False) -> None:
     """Read-only preflight: active, malformed, or interrupted operations refuse before fencing."""
-    if config.get("profile") != "production-paired":
-        return
     path = Path(config["siteRefreshState"])
     try:
         info = path.lstat()
@@ -886,8 +2310,10 @@ def _assert_site_refresh_idle(config: dict[str, Any]) -> None:
             record = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, ValueError) as error:
             raise HostFailure("site-refresh state is unreadable; refusing before fencing") from error
-        if not isinstance(record, dict) or record.get("status") not in (
-                "idle", "succeeded", "failed", "verification-failed"):
+        allowed_statuses = {"idle", "succeeded", "failed"}
+        if allow_interrupted:
+            allowed_statuses.add("interrupted")
+        if not isinstance(record, dict) or record.get("status") not in allowed_statuses:
             raise HostFailure("site-refresh is active or unknown; resolve it before starting paired maintenance")
     lock_path = Path(str(path) + ".lock")
     if lock_path.exists() or lock_path.is_symlink():
@@ -906,6 +2332,23 @@ def _assert_site_refresh_idle(config: dict[str, Any]) -> None:
             raise HostFailure("terminal refresh worker is still active; resolve it before maintenance")
         else:
             raise HostFailure("terminal refresh worker is still active; resolve it before maintenance")
+    if record and record.get("status") == "interrupted":
+        owner_pid = record.get("pid")
+        if isinstance(owner_pid, bool) or not isinstance(owner_pid, int) or owner_pid < 2:
+            raise HostFailure("interrupted refresh state has an invalid owner PID")
+        try:
+            os.kill(owner_pid, 0)
+        except ProcessLookupError:
+            pass
+        except PermissionError:
+            raise HostFailure("interrupted refresh owner is still active; recovery refused")
+        else:
+            raise HostFailure("interrupted refresh owner is still active; recovery refused")
+    site_root = Path(config["staticReleaseRoot"]).parent
+    for name in (".publication-pending.json", ".publication-preparation.json"):
+        evidence = site_root / name
+        if evidence.exists() or evidence.is_symlink():
+            raise HostFailure("SSH publication is unfinished; recover it before host publication")
 
 
 def _old_pair(config: dict[str, Any]) -> dict[str, Any]:
@@ -922,7 +2365,9 @@ def _old_pair(config: dict[str, Any]) -> dict[str, Any]:
             "databaseSha256": sha256_file(database), "staticTreeSha256": _tree_sha256(static),
             "configSha256": _config_sha256(config),
             "cmsDatabaseProof": db_proof}
-    if config.get("profile") == "production-paired":
+    if config.get("profile", "staging194") == "staging194":
+        result["cmsSourceEnvironment"] = _staging194_cms_source_env(config)
+    elif config.get("profile") == "production-paired":
         result["cmsSourceEnvironment"] = _paired_cms_source_env(config)
         result["mediaStateSha256"] = _media_state_sha256(_media_inventory(config))
     return result
@@ -966,25 +2411,92 @@ def _record_fenced_baseline(config: dict[str, Any], state: RehearsalState,
                    "sourceSha": source_sha, "oldPair": baseline})
 
 
-def _switch_pointer(pointer: Path, target: Path, allowed_root: Path) -> None:
-    target = target.resolve(strict=True)
-    allowed_root = allowed_root.resolve(strict=True)
-    if target == allowed_root or allowed_root not in target.parents:
-        raise HostFailure(f"release target escapes configured root: {target}")
-    temporary = pointer.with_name(f".{pointer.name}.new-{os.getpid()}")
+def _atomic_switch_pointer(pointer: Path, target: Path, *, owner: Optional[tuple[int, int]],
+                           staging: Optional[Path] = None) -> None:
+    temporary = (staging / f"{pointer.name}-{uuid.uuid4().hex}" if staging is not None
+                 else pointer.with_name(f".{pointer.name}.new-{os.getpid()}-{uuid.uuid4().hex}"))
+    temporary_identity = None
     try:
         temporary.symlink_to(target, target_is_directory=True)
+        temporary_info = temporary.lstat()
+        temporary_identity = (temporary_info.st_dev, temporary_info.st_ino)
+        if owner is not None:
+            # WEB_ROOT has the sticky bit. Chown in the root-private staging
+            # directory so the CMS user cannot substitute the link before rename.
+            os.chown(temporary, *owner, follow_symlinks=False)
+            current_info = temporary.lstat()
+            if ((current_info.st_dev, current_info.st_ino) != temporary_identity
+                    or not stat.S_ISLNK(current_info.st_mode)
+                    or (current_info.st_uid, current_info.st_gid) != owner):
+                raise HostFailure("release pointer staging link changed before activation")
+            stage_fd = os.open(temporary.parent, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+            try:
+                os.fsync(stage_fd)
+            finally:
+                os.close(stage_fd)
         os.replace(temporary, pointer)
+        temporary_identity = None
         fd = os.open(pointer.parent, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
         try:
             os.fsync(fd)
         finally:
             os.close(fd)
+        if staging is not None:
+            stage_fd = os.open(staging, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+            try:
+                os.fsync(stage_fd)
+            finally:
+                os.close(stage_fd)
     finally:
+        # Never unlink a replacement entry if symlink creation collided or the
+        # staging name changed. A crash-left entry stays private and inert.
+        if temporary_identity is not None:
+            try:
+                current_info = temporary.lstat()
+                if ((current_info.st_dev, current_info.st_ino) == temporary_identity
+                        and stat.S_ISLNK(current_info.st_mode)):
+                    temporary.unlink()
+            except FileNotFoundError:
+                pass
+
+
+def _switch_pointer(pointer: Path, target: Path, allowed_root: Path,
+                    owner: Optional[tuple[int, int]] = None) -> None:
+    target = target.resolve(strict=True)
+    allowed_root = allowed_root.resolve(strict=True)
+    if target == allowed_root or allowed_root not in target.parents:
+        raise HostFailure(f"release target escapes configured root: {target}")
+    if owner is not None:
+        uid, gid = owner
+        if type(uid) is not int or type(gid) is not int or uid < 0 or gid < 0:
+            raise HostFailure("release pointer owner is invalid")
+        staging = Path(tempfile.mkdtemp(prefix=".ikpk-pointer-stage-", dir=pointer.parent))
         try:
-            temporary.unlink()
-        except FileNotFoundError:
-            pass
+            staging_info = staging.lstat()
+            staging_mode = stat.S_IMODE(staging_info.st_mode)
+            special_mode = staging_mode & 0o7000
+            if (not stat.S_ISDIR(staging_info.st_mode) or staging_info.st_uid != os.geteuid()
+                    or staging_info.st_dev != pointer.parent.stat().st_dev
+                    or staging_mode & 0o777 != 0o700
+                    or special_mode not in (0, stat.S_ISGID)):
+                raise HostFailure("release pointer staging directory is not private and same-filesystem")
+            _atomic_switch_pointer(pointer, target, owner=owner, staging=staging)
+        finally:
+            # Remove only an empty directory. If its temporary link was replaced,
+            # leave that inode in an inaccessible, inert directory for inspection.
+            try:
+                staging.rmdir()
+            except OSError as error:
+                if error.errno not in (errno.ENOTEMPTY, errno.EEXIST):
+                    raise
+    else:
+        _atomic_switch_pointer(pointer, target, owner=None)
+
+
+def _switch_static_pointer(config: dict[str, Any], pointer: Path, target: Path,
+                           allowed_root: Path) -> None:
+    user = pwd.getpwnam(config["cmsUser"])
+    _switch_pointer(pointer, target, allowed_root, owner=(user.pw_uid, user.pw_gid))
 
 
 def _copy_atomic(source: Path, destination: Path) -> None:
@@ -1179,7 +2691,10 @@ def _run_as_cms(config: dict[str, Any], cwd: Path, argv: list[str], timeout: int
                 raise HostFailure("transient read-only path must be canonical")
             resolved_paths.append(str(resolved))
         command.append(f"--property=ReadOnlyPaths={' '.join(resolved_paths)}")
-    for key, value in (environment or {}).items():
+    child_environment = dict(environment or {})
+    if _uses_staging194_temp(config):
+        child_environment.setdefault("TMPDIR", str(_validate_staging194_temporary_root(config)))
+    for key, value in child_environment.items():
         if not re.fullmatch(r"[A-Z0-9_]+", key) or "\x00" in value:
             raise HostFailure("invalid unprivileged command environment")
         command.extend(["--setenv", f"{key}={value}"])
@@ -1289,6 +2804,214 @@ def _cms_artifact_path(source_root: Path, operation_id: str) -> Path:
     return source_root / ".staging193-rehearsal" / operation_id / "migration" / "cms-artifact"
 
 
+def _trusted_cms_artifact(provenance: dict[str, Any]) -> dict[str, Any]:
+    evidence = provenance.get("cmsArtifact")
+    if (not isinstance(evidence, dict)
+            or set(evidence) != {"artifactId", "runId", "attempt", "archiveSha256", "payloadSha256"}
+            or type(evidence.get("artifactId")) is not int or evidence["artifactId"] <= 0
+            or type(evidence.get("runId")) is not int or evidence["runId"] != provenance.get("runId")
+            or type(evidence.get("attempt")) is not int or evidence["attempt"] != provenance.get("attempt")
+            or not SHA256_RE.fullmatch(str(evidence.get("archiveSha256", "")))
+            or not SHA256_RE.fullmatch(str(evidence.get("payloadSha256", "")))):
+        raise HostFailure("trusted CI provenance lacks a valid CMS artifact identity")
+    return {key: evidence[key] for key in
+            ("artifactId", "runId", "attempt", "archiveSha256", "payloadSha256")}
+
+
+def _trusted_host_helper_artifact(provenance: dict[str, Any], expected_identity: str) -> dict[str, Any]:
+    evidence = provenance.get("hostHelperArtifact")
+    if (not isinstance(evidence, dict)
+            or set(evidence) != {"artifactId", "runId", "attempt", "archiveSha256", "payloadSha256"}
+            or type(evidence.get("artifactId")) is not int or evidence["artifactId"] <= 0
+            or type(evidence.get("runId")) is not int or evidence["runId"] != provenance.get("runId")
+            or type(evidence.get("attempt")) is not int or evidence["attempt"] != provenance.get("attempt")
+            or not SHA256_RE.fullmatch(str(evidence.get("archiveSha256", "")))
+            or not SHA256_RE.fullmatch(str(evidence.get("payloadSha256", "")))):
+        raise HostFailure("trusted CI provenance lacks a valid host helper artifact identity")
+    if (not SHA256_RE.fullmatch(expected_identity)
+            or provenance.get("hostHelperRuntimeIdentity") != expected_identity):
+        raise HostFailure("host helper runtime identity does not match the exact artifact admission")
+    return {key: evidence[key] for key in
+            ("artifactId", "runId", "attempt", "archiveSha256", "payloadSha256")}
+
+
+def _cms_tar_members(payload: bytes) -> tuple[tarfile.TarFile, list[tarfile.TarInfo]]:
+    try:
+        archive = tarfile.open(fileobj=io.BytesIO(payload), mode="r:gz")
+        members = archive.getmembers()
+    except (OSError, tarfile.TarError) as error:
+        raise HostFailure("CI CMS artifact payload is not a readable gzip tar") from error
+    seen: set[str] = set()
+    for member in members:
+        name = member.name
+        relative = Path(name)
+        if (not name or "\\" in name or relative.is_absolute()
+                or any(part == "" for part in name.rstrip("/").split("/"))
+                or any(part in ("", ".", "..") for part in relative.parts)
+                or any(part.lower() in ("node_modules", "uploads") for part in relative.parts)):
+            archive.close()
+            raise HostFailure("CI CMS artifact contains an unsafe or forbidden path")
+        normalized = relative.as_posix().rstrip("/")
+        if normalized in seen:
+            archive.close()
+            raise HostFailure("CI CMS artifact contains duplicate paths")
+        seen.add(normalized)
+        if not (member.isdir() or member.isfile()):
+            archive.close()
+            raise HostFailure("CI CMS artifact contains a link or unsupported archive member")
+    return archive, members
+
+
+def _verify_cms_artifact_bytes(source_root: Path, artifact: Path, expected: dict[str, Any], *,
+                               allow_runtime_updater: bool = False,
+                               cms_uid: Optional[int] = None) -> bytes:
+    archive_path = source_root / ".ikpk-cms-artifact.tar.gz"
+    try:
+        if source_root.is_symlink() or source_root.resolve(strict=True) != source_root:
+            raise HostFailure("CI CMS source candidate path is unsafe")
+        try:
+            relative_artifact = artifact.relative_to(source_root)
+        except ValueError as error:
+            raise HostFailure("CI CMS artifact path is outside its operation candidate") from error
+        if (len(relative_artifact.parts) != 4
+                or relative_artifact.parts[0] != ".staging193-rehearsal"
+                or relative_artifact.parts[2:] != ("migration", "cms-artifact")):
+            raise HostFailure("CI CMS artifact path is outside its operation candidate")
+        RehearsalState._validate_identity(relative_artifact.parts[1])
+        for parent in (artifact.parent.parent.parent, artifact.parent.parent, artifact.parent):
+            if parent.is_symlink() or parent.resolve(strict=True) != parent:
+                raise HostFailure("CI CMS artifact path contains a symlink")
+        info = archive_path.lstat()
+        if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
+            raise HostFailure("CI CMS artifact archive is missing or unsafe")
+        payload = archive_path.read_bytes()
+    except OSError as error:
+        raise HostFailure("CI CMS artifact archive is missing or unreadable") from error
+    if sha256_file_bytes(payload) != expected["payloadSha256"]:
+        raise HostFailure("CI CMS artifact payload digest differs from trusted provenance")
+    if allow_runtime_updater and (type(cms_uid) is not int or cms_uid < 0):
+        raise HostFailure("runtime Strapi updater verification requires the CMS service UID")
+    tar, members = _cms_tar_members(payload)
+    try:
+        if artifact.is_symlink() or not artifact.is_dir():
+            raise HostFailure("prepared CI CMS artifact directory is missing or unsafe")
+        expected_paths: set[str] = set()
+        for member in members:
+            relative = Path(member.name)
+            name = relative.as_posix().rstrip("/")
+            expected_paths.add(name)
+            expected_paths.update(parent.as_posix() for parent in relative.parents if str(parent) != ".")
+            target = artifact / relative
+            if member.isdir():
+                if target.is_symlink() or not target.is_dir():
+                    raise HostFailure("prepared CI CMS artifact differs from its admitted payload")
+                continue
+            source = tar.extractfile(member)
+            if source is None or target.is_symlink() or not target.is_file():
+                raise HostFailure("prepared CI CMS artifact differs from its admitted payload")
+            target_info = target.lstat()
+            if not stat.S_ISREG(target_info.st_mode) or target_info.st_nlink != 1:
+                raise HostFailure("prepared CI CMS artifact contains an unsafe file")
+            with target.open("rb") as actual:
+                while True:
+                    expected_block = source.read(1024 * 1024)
+                    if not expected_block:
+                        break
+                    actual_block = actual.read(len(expected_block))
+                    if actual_block != expected_block:
+                        raise HostFailure("prepared CI CMS artifact bytes differ from its admitted payload")
+                if actual.read(1):
+                    raise HostFailure("prepared CI CMS artifact bytes differ from its admitted payload")
+        for path in artifact.rglob("*"):
+            relative = path.relative_to(artifact).as_posix()
+            if relative == "node_modules" or relative.startswith("node_modules/"):
+                continue
+            if relative == "public/uploads":
+                continue
+            info = path.lstat()
+            if (allow_runtime_updater and relative == ".strapi-updater.json"
+                    and relative not in expected_paths):
+                if (not stat.S_ISREG(info.st_mode) or info.st_nlink != 1 or info.st_uid != cms_uid
+                        or stat.S_IMODE(info.st_mode) != 0o600):
+                    raise HostFailure("runtime Strapi updater file is not a CMS-owned single-link regular file")
+                continue
+            if relative not in expected_paths:
+                raise HostFailure("prepared CI CMS artifact has files outside its admitted payload")
+            if stat.S_ISLNK(info.st_mode):
+                raise HostFailure("prepared CI CMS artifact contains an unexpected symlink")
+        required = ("package.json", "package-lock.json", "tsconfig.json", "dist/config/database.js",
+                    "database/.migrations-expected", "scripts/run-data-migrations.mjs")
+        if any(not (artifact / name).is_file() or (artifact / name).is_symlink() for name in required):
+            raise HostFailure("CI CMS artifact is structurally incomplete")
+        strapi_cache = artifact / ".strapi"
+        if ".strapi" not in expected_paths or strapi_cache.is_symlink() or not strapi_cache.is_dir():
+            raise HostFailure("CI CMS artifact is missing the .strapi directory required by the CMS service")
+        if cms_uid is not None:
+            cache_info = strapi_cache.lstat()
+            if cache_info.st_uid != cms_uid or stat.S_IMODE(cache_info.st_mode) != 0o755:
+                raise HostFailure("CI CMS artifact .strapi directory is not writable by the CMS service user")
+        return payload
+    finally:
+        tar.close()
+
+
+def _extract_ci_cms_artifact(config: dict[str, Any], source_root: Path, operation_id: str,
+                             expected: dict[str, Any]) -> Path:
+    artifact = _cms_artifact_path(source_root, operation_id)
+    operation_root = artifact.parent
+    if any(path.is_symlink() for path in (source_root, artifact.parent, artifact.parent.parent,
+                                          artifact.parent.parent.parent)):
+        raise HostFailure("CI CMS artifact preparation path contains a symlink")
+    operation_root.mkdir(mode=0o700, parents=True, exist_ok=True)
+    if os.path.lexists(artifact):
+        _verify_cms_artifact_bytes(source_root, artifact, expected)
+        return artifact
+    archive_path = source_root / ".ikpk-cms-artifact.tar.gz"
+    try:
+        payload = archive_path.read_bytes()
+    except OSError as error:
+        raise HostFailure("CI CMS artifact archive is missing or unreadable") from error
+    if sha256_file_bytes(payload) != expected["payloadSha256"]:
+        raise HostFailure("CI CMS artifact payload digest differs from trusted provenance")
+    tar, members = _cms_tar_members(payload)
+    temporary = artifact.with_name(f".cms-artifact.new-{os.getpid()}")
+    if os.path.lexists(temporary):
+        tar.close()
+        raise HostFailure("CI CMS artifact temporary extraction path already exists")
+    temporary.mkdir(mode=0o700)
+    try:
+        for member in members:
+            target = temporary / Path(member.name)
+            if member.isdir():
+                target.mkdir(parents=True, exist_ok=True, mode=0o755)
+                continue
+            target.parent.mkdir(parents=True, exist_ok=True, mode=0o755)
+            source = tar.extractfile(member)
+            if source is None:
+                raise HostFailure("cannot read CI CMS artifact member")
+            fd = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0),
+                         0o755 if member.mode & 0o111 else 0o644)
+            with os.fdopen(fd, "wb") as output:
+                shutil.copyfileobj(source, output, 1024 * 1024)
+                output.flush()
+                os.fsync(output.fileno())
+        for directory in sorted((item for item in temporary.rglob("*") if item.is_dir()),
+                                key=lambda item: len(item.parts), reverse=True):
+            os.chmod(directory, 0o755)
+        os.chmod(temporary, 0o755)
+        user = pwd.getpwnam(config["cmsUser"])
+        for path in [temporary, *temporary.rglob("*")]:
+            os.chown(path, user.pw_uid, user.pw_gid, follow_symlinks=False)
+        os.replace(temporary, artifact)
+    except Exception:
+        shutil.rmtree(temporary, ignore_errors=True)
+        raise
+    finally:
+        tar.close()
+    _verify_cms_artifact_bytes(source_root, artifact, expected)
+    return artifact
+
+
 def _validate_prepared_web_dependencies(source_root: Path) -> Path:
     web_dependencies = source_root / "web/node_modules"
     if web_dependencies.is_symlink() or not web_dependencies.is_dir():
@@ -1324,7 +3047,8 @@ def _has_main_release_admission(provenance: dict[str, Any], source_sha: str) -> 
 
 
 def _validate_prepared_cms_candidate(config: dict[str, Any], source_root: Path, operation_id: str,
-                                     provenance: Optional[dict[str, Any]] = None) -> tuple[Path, Path, Path]:
+                                     provenance: Optional[dict[str, Any]] = None, *,
+                                     allow_runtime_updater: bool = False) -> tuple[Path, Path, Path]:
     marker = source_root / ".ikpk-rehearsal-ci.json"
     try:
         admitted = json.loads(marker.read_text(encoding="utf-8"))
@@ -1349,6 +3073,11 @@ def _validate_prepared_cms_candidate(config: dict[str, Any], source_root: Path, 
     artifact = _cms_artifact_path(source_root, operation_id)
     if artifact.is_symlink() or not artifact.is_dir():
         raise HostFailure("prepared CMS artifact is missing or unsafe")
+    if config.get("profile", "staging194") in ("staging194", "production-paired"):
+        evidence = _trusted_cms_artifact(admitted)
+        _verify_cms_artifact_bytes(source_root, artifact, evidence,
+            allow_runtime_updater=allow_runtime_updater,
+            cms_uid=pwd.getpwnam(config["cmsUser"]).pw_uid if allow_runtime_updater else None)
     if sha256_file(source_cms / "package-lock.json") != sha256_file(artifact / "package-lock.json"):
         raise HostFailure("CMS artifact package-lock differs from the operation source lock")
     required = (artifact / "package.json", artifact / "tsconfig.json", artifact / "dist/config/database.js",
@@ -1381,6 +3110,45 @@ def _validate_prepared_cms_candidate(config: dict[str, Any], source_root: Path, 
 
 def _prepare_cms_candidate(config: dict[str, Any], source_root: Path, operation_id: str,
                            provenance: dict[str, Any]) -> tuple[Path, Path, Path]:
+    if config.get("profile", "staging194") in ("staging194", "production-paired"):
+        evidence = _trusted_cms_artifact(provenance)
+        artifact = _extract_ci_cms_artifact(config, source_root, operation_id, evidence)
+        source_cms = source_root / "cms"
+        if sha256_file(source_cms / "package-lock.json") != sha256_file(artifact / "package-lock.json"):
+            raise HostFailure("CI CMS artifact package-lock differs from the operation source lock")
+        dependencies = _prepare_cms_build_dependencies(config, source_root)
+        source_dependencies = source_cms / "node_modules"
+        if os.path.lexists(source_dependencies):
+            if not source_dependencies.is_symlink() or source_dependencies.resolve(strict=True) != dependencies:
+                raise HostFailure("operation CMS dependencies are not the canonical lock generation")
+        else:
+            source_dependencies.symlink_to(dependencies, target_is_directory=True)
+        if os.path.lexists(artifact / "node_modules"):
+            artifact_dependencies = artifact / "node_modules"
+            try:
+                canonical_artifact_dependencies = (artifact_dependencies.is_symlink()
+                                                   and artifact_dependencies.resolve(strict=True) == dependencies)
+            except OSError:
+                canonical_artifact_dependencies = False
+            if not canonical_artifact_dependencies:
+                raise HostFailure("CI CMS artifact node_modules is not the canonical lock generation")
+        else:
+            artifact.joinpath("node_modules").symlink_to(dependencies, target_is_directory=True)
+        user = pwd.getpwnam(config["cmsUser"])
+        operation_root = artifact.parent
+        private_root = operation_root.parent
+        rehearsal_root = private_root.parent
+        for directory in (rehearsal_root, private_root, operation_root):
+            os.chown(directory, user.pw_uid, user.pw_gid)
+            os.chmod(directory, 0o700)
+        _run_as_cms(config, artifact, [config.get("nodeBinary", "/usr/bin/node"), "-e",
+            "const Database = require('better-sqlite3'); "
+            "const db = new Database(':memory:'); db.close(); require('sharp');"], timeout=120)
+        web_dependencies = source_root / "web/node_modules"
+        if web_dependencies.is_symlink():
+            raise HostFailure("operation web dependencies must be a private source install")
+        _run_as_cms(config, source_root / "web", ["/usr/bin/npm", "ci", "--no-audit", "--no-fund"], timeout=1800)
+        return _validate_prepared_cms_candidate(config, source_root, operation_id, provenance)
     artifact = _cms_artifact_path(source_root, operation_id)
     if os.path.lexists(artifact):
         return _validate_prepared_cms_candidate(config, source_root, operation_id, provenance)
@@ -1420,16 +3188,29 @@ def _prepare_cms_candidate(config: dict[str, Any], source_root: Path, operation_
 
 
 def _start_acquisition(config: dict[str, Any], state: RehearsalState, operation_id: str,
-                       source_sha: str, *, recovery: bool = False) -> dict[str, Any]:
+                       source_sha: str, *, recovery: bool = False,
+                       cms_artifact: Optional[dict[str, Any]] = None,
+                       host_helper_artifact: Optional[dict[str, Any]] = None,
+                       host_helper_identity: Optional[str] = None) -> dict[str, Any]:
     if not recovery:
         _assert_site_refresh_idle(config)
     prior = next((row for row in state._operation_rows(operation_id) if row.get("record") == "start"), None)
     old_pair = prior.get("oldPair") if prior else _old_pair(config)
-    state.begin(operation_id, source_sha, old_pair)
+    _write_site_publication_marker(config, operation_id)
+    if host_helper_artifact is None and host_helper_identity is None:
+        if cms_artifact is None:
+            state.begin(operation_id, source_sha, old_pair)
+        else:
+            state.begin(operation_id, source_sha, old_pair, cms_artifact=cms_artifact)
+    else:
+        state.begin(operation_id, source_sha, old_pair, cms_artifact=cms_artifact,
+                    host_helper_artifact=host_helper_artifact,
+                    host_helper_identity=host_helper_identity)
     _set_flag(config, True)
     _write_gate(config, True)
     _verify_site_refresh_idle(config, recovery=recovery)
     _stop_writers(config)
+    _verify_site_refresh_idle(config, recovery=recovery)
     _verify_fence(config)
     state.confirm_fence(operation_id, lambda: all(
         run(["/usr/bin/systemctl", "is-active", unit], check=False).returncode != 0
@@ -1562,8 +3343,84 @@ def _cms_payload_sha256(root: Path, uploads: Path, expected_dependencies: Path |
     return digest.hexdigest()
 
 
+def _cms_payload_metadata(root: Path) -> dict[str, tuple[Any, ...]]:
+    """Capture the non-dependency payload namespace without following symlinks."""
+    root = Path(root)
+    snapshot: dict[str, tuple[Any, ...]] = {}
+    root_info = root.lstat()
+    if not stat.S_ISDIR(root_info.st_mode):
+        raise HostFailure("CMS payload root is no longer a real directory")
+    snapshot["."] = (root_info.st_dev, root_info.st_ino, stat.S_IFMT(root_info.st_mode), root_info.st_size,
+                     root_info.st_mtime_ns, root_info.st_ctime_ns, None)
+    pending = [Path(root)]
+    while pending:
+        directory = pending.pop()
+        with os.scandir(directory) as entries:
+            for entry in entries:
+                path = Path(entry.path)
+                relative = path.relative_to(root).as_posix()
+                if relative.startswith("node_modules/"):
+                    continue
+                info = entry.stat(follow_symlinks=False)
+                mode_type = stat.S_IFMT(info.st_mode)
+                link_target = os.readlink(path) if stat.S_ISLNK(info.st_mode) else None
+                snapshot[relative] = (info.st_dev, info.st_ino, mode_type, info.st_size,
+                                      info.st_mtime_ns, info.st_ctime_ns, link_target)
+                if stat.S_ISDIR(info.st_mode) and relative != "node_modules":
+                    pending.append(path)
+    return snapshot
+
+
+def _staging194_stable_cms_payload_sha256(root: Path, uploads: Path) -> str:
+    """Retain the CMS payload digest only if its tree metadata stays unchanged while read."""
+    before = _cms_payload_metadata(root)
+    digest = _cms_payload_sha256(root, uploads)
+    after = _cms_payload_metadata(root)
+    if before != after:
+        raise HostFailure("CMS payload tree changed while its provenance digest was read")
+    return digest
+
+
+def _ensure_empty_candidate_upload_directory(config: dict[str, Any], artifact_root: Path) -> Path:
+    """Give pre-activation CMS checks an empty writable uploads directory, without media."""
+    if artifact_root.is_symlink() or not artifact_root.is_dir():
+        raise HostFailure("prepared CMS artifact directory is missing or unsafe")
+    public = artifact_root / "public"
+    try:
+        public_info = public.lstat()
+    except OSError as error:
+        raise HostFailure("prepared CMS artifact public directory is missing") from error
+    if not stat.S_ISDIR(public_info.st_mode):
+        raise HostFailure("prepared CMS artifact public path is not a real directory")
+    uploads = public / "uploads"
+    if os.path.lexists(uploads):
+        try:
+            uploads_info = uploads.lstat()
+        except OSError as error:
+            raise HostFailure("prepared CMS artifact uploads path is unavailable") from error
+        if not stat.S_ISDIR(uploads_info.st_mode):
+            raise HostFailure("prepared CMS artifact uploads path must be a real directory")
+        entries = list(uploads.iterdir())
+        if any(item.name != ".gitkeep" or item.is_symlink() or not item.is_file() for item in entries):
+            raise HostFailure("prepared CMS artifact uploads path contains unexpected data")
+    else:
+        code = "import os,sys; os.mkdir(sys.argv[1],0o755)"
+        _run_as_cms(config, artifact_root, ["/usr/bin/python3", "-c", code, str(uploads)], timeout=60)
+        try:
+            uploads_info = uploads.lstat()
+        except OSError as error:
+            raise HostFailure("CMS user could not create the candidate uploads directory") from error
+        if not stat.S_ISDIR(uploads_info.st_mode):
+            raise HostFailure("CMS user candidate uploads path is not a real directory")
+    return uploads
+
+
 def _config_sha256(config: dict[str, Any]) -> str:
-    payload = json.dumps(config, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    stable_config = dict(config)
+    if stable_config.get("profile", "staging194") == "staging194":
+        # The source environment path is fixed by profile; older configs omit it.
+        stable_config.pop("cmsEnvironmentFile", None)
+    payload = json.dumps(stable_config, sort_keys=True, separators=(",", ":")).encode("utf-8")
     return sha256_file_bytes(payload)
 
 
@@ -1581,6 +3438,7 @@ def _install_migrated_database(config: dict[str, Any], source_root: Path, operat
     receipt = operation_root / "receipt.json"
     if any(os.path.lexists(path) for path in (candidate, receipt)):
         raise HostFailure("CMS migration candidate already exists; inspect the operation before retrying")
+    _ensure_empty_candidate_upload_directory(config, artifact_dir)
     runner = artifact_dir / "scripts/run-data-migrations.mjs"
     common = ["--operation-id", operation_id, "--source-db", str(live), "--source-cms-root", str(old_cms_root),
               "--candidate-db", str(candidate), "--artifact-dir", str(artifact_dir), "--receipt", str(receipt)]
@@ -1610,7 +3468,19 @@ def _install_migrated_database(config: dict[str, Any], source_root: Path, operat
 def _activate_cms(config: dict[str, Any], cms_release: Path, candidate_db: Path,
                   capture: Path, source_root: Optional[Path] = None,
                   source_sha: Optional[str] = None,
-                  site_workspace: Optional[Path] = None) -> dict[str, Any]:
+                  site_workspace: Optional[Path] = None,
+                  cms_artifact: Optional[dict[str, Any]] = None) -> dict[str, Any]:
+    if config.get("profile", "staging194") in ("staging194", "production-paired"):
+        if source_root is None or cms_artifact is None:
+            raise HostFailure("paired CMS activation lacks its journal-bound CI artifact identity")
+        try:
+            admitted = json.loads((source_root / ".ikpk-rehearsal-ci.json").read_text(encoding="utf-8"))
+        except (OSError, ValueError) as error:
+            raise HostFailure("paired CMS activation lacks admitted source provenance") from error
+        if _trusted_cms_artifact(admitted) != cms_artifact:
+            raise HostFailure("paired CMS activation artifact identity differs from the operation journal")
+        _verify_cms_artifact_bytes(source_root, cms_release, cms_artifact,
+            allow_runtime_updater=True, cms_uid=pwd.getpwnam(config["cmsUser"]).pw_uid)
     live = Path(config["cmsDatabase"]).resolve(strict=True)
     _assert_no_database_handles(live)
     _copy_atomic(candidate_db, live)
@@ -1632,8 +3502,18 @@ def _activate_cms(config: dict[str, Any], cms_release: Path, candidate_db: Path,
             "INITIAL_PROD_PROFILE": "1", "DEPLOY_MODE": "prod", "PAYMENT_ROLE": "prod",
             "PAYMENT_ENDPOINT_PROD": payment_endpoint, "DEMO_FORMS": None,
             "CHAT_LOADER_SRC": chat_loader, "CHAT_OFFLINE_MESSAGE": None})
+    elif config.get("profile", "staging194") == "staging194":
+        if source_root is None or source_sha is None or not SHA_RE.fullmatch(source_sha):
+            raise HostFailure("staging194 CMS activation lacks its admitted source workspace")
+        workspace = source_root.absolute()
+        _preflight_staging194_source(config, workspace, source_sha)
+        _write_staging194_cms_source_env(config, {
+            "IKPK_BUILD_WORKSPACE": str(workspace), "IKPK_INSTALLED_COMMIT": source_sha})
     run(["/usr/bin/systemctl", "start", config["cmsUnit"]], timeout=120)
     _wait_health(config["cmsHealthUrl"])
+    if config.get("profile", "staging194") == "staging194":
+        _assert_staging194_process_source_env(config, {
+            "IKPK_BUILD_WORKSPACE": str(workspace), "IKPK_INSTALLED_COMMIT": source_sha})
     proof = _database_process_proof(_service_pid(config["cmsUnit"]), live)
     inventory = json.loads((capture / "media-manifest.json").read_text(encoding="utf-8")).get("media")
     if not isinstance(inventory, list) or not inventory:
@@ -1711,7 +3591,6 @@ def _build_static(config: dict[str, Any], source_root: Path, capture: Path,
     dist = web / dist_name
     if not dist.is_dir() or dist.is_symlink():
         raise HostFailure(f"static build did not produce a real {dist_name} directory")
-    _preserve_hashed_assets(config, dist)
     snapshot = json.loads((web / ".snapshot/snapshot.json").read_text(encoding="utf-8"))
     source_identity = json.loads((source_root / ".ikpk-rehearsal-ci.json").read_text(encoding="utf-8"))
     if initial_prod or production_static:
@@ -1737,68 +3616,6 @@ def _build_static(config: dict[str, Any], source_root: Path, capture: Path,
     os.chmod(dist / "release.json", 0o644)
     digest = _tree_sha256(dist)
     return dist, digest
-
-
-def _preserve_hashed_assets(config: dict[str, Any], destination: Path) -> set[str]:
-    root = Path(config["staticReleaseRoot"]).resolve(strict=True)
-    asset_pattern = re.compile(r".+\.[A-Za-z0-9_-]{8,}\.(?:js|css|mjs|woff2?|ttf|svg|png|webp|avif)\Z")
-    pagefind_pattern = re.compile(r".+[._-][a-f0-9]{7,}\.pf_(?:fragment|index|meta)\Z")
-    copied: set[str] = set()
-    for release in sorted(root.iterdir()):
-        if not release.is_dir() or release.is_symlink():
-            continue
-        asset_roots = [(release / "_astro", "_astro", asset_pattern),
-                       (release / "public/_astro", "_astro", asset_pattern),
-                       (release / "pagefind", "pagefind", pagefind_pattern),
-                       (release / "public/pagefind", "pagefind", pagefind_pattern)]
-        for asset_root, public_prefix, pattern in asset_roots:
-            if not asset_root.is_dir() or asset_root.is_symlink():
-                continue
-            for asset in sorted(asset_root.rglob("*")):
-                info = asset.lstat()
-                if stat.S_ISDIR(info.st_mode):
-                    continue
-                if not stat.S_ISREG(info.st_mode):
-                    raise HostFailure("retained release hashed asset tree contains an unsafe object")
-                if not pattern.fullmatch(asset.name):
-                    continue
-                relative = asset.relative_to(asset_root)
-                target = destination / public_prefix / relative
-                target.parent.mkdir(parents=True, exist_ok=True)
-                if target.exists():
-                    if target.is_symlink() or not target.is_file() or sha256_file(target) != sha256_file(asset):
-                        raise HostFailure("same hashed asset URL has different retained bytes")
-                else:
-                    shutil.copy2(asset, target)
-                copied.add("/" + public_prefix + "/" + relative.as_posix())
-    return copied
-
-
-def _verify_retained_hashed_assets(config: dict[str, Any]) -> None:
-    root = Path(config["staticReleaseRoot"]).resolve(strict=True)
-    asset_pattern = re.compile(r".+\.[A-Za-z0-9_-]{8,}\.(?:js|css|mjs|woff2?|ttf|svg|png|webp|avif)\Z")
-    pagefind_pattern = re.compile(r".+[._-][a-f0-9]{7,}\.pf_(?:fragment|index|meta)\Z")
-    urls: set[str] = set()
-    for release in sorted(root.iterdir()):
-        if not release.is_dir() or release.is_symlink():
-            continue
-        for asset_root, public_prefix, pattern in ((release / "_astro", "_astro", asset_pattern),
-                                                   (release / "public/_astro", "_astro", asset_pattern),
-                                                   (release / "pagefind", "pagefind", pagefind_pattern),
-                                                   (release / "public/pagefind", "pagefind", pagefind_pattern)):
-            if not asset_root.is_dir() or asset_root.is_symlink():
-                continue
-            for asset in asset_root.rglob("*"):
-                info = asset.lstat()
-                if stat.S_ISREG(info.st_mode) and pattern.fullmatch(asset.name):
-                    urls.add("/" + public_prefix + "/" + asset.relative_to(asset_root).as_posix())
-    if not urls:
-        raise HostFailure("no retained hashed asset URLs were found for post-switch verification")
-    for path in sorted(urls):
-        response = run(["/usr/bin/curl", "--silent", "--output", "/dev/null", "--write-out", "%{http_code}",
-                        "--max-time", "15", config["siteBaseUrl"].rstrip("/") + path], timeout=20)
-        if response.stdout.strip() not in ("200", "304"):
-            raise HostFailure(f"retained hashed asset is unavailable after static switch: {path}")
 
 
 def _served_release_matches(config: dict[str, Any], source_sha: str, operation_id: str,
@@ -1948,6 +3765,9 @@ def _import_offhost_backup(config: dict[str, Any], operation_id: str, payload: b
 
 
 def _cms_update(config: dict[str, Any], state: RehearsalState, args: argparse.Namespace) -> dict[str, Any]:
+    if _uses_staging194_temp(config):
+        tempfile.tempdir = str(_validate_staging194_temporary_root(config))
+    profile = config.get("profile", "staging194")
     op, sha = args.operation_id, args.source_sha
     if not SHA_RE.fullmatch(sha):
         raise HostFailure("source SHA must be a full lowercase commit ID")
@@ -1955,6 +3775,14 @@ def _cms_update(config: dict[str, Any], state: RehearsalState, args: argparse.Na
         provenance = json.loads(base64.b64decode(args.provenance_b64, validate=True))
     except (ValueError, TypeError) as error:
         raise HostFailure("source CI provenance is not valid base64 JSON") from error
+    expected_helper_identity = getattr(args, "expected_host_helper_identity", None)
+    helper_artifact = None
+    if expected_helper_identity is not None:
+        if profile != "staging194":
+            raise HostFailure("expected host helper identity is supported only for staging194 CMS update")
+        helper_artifact = _trusted_host_helper_artifact(provenance, expected_helper_identity)
+    elif profile == "staging194" and "hostHelperArtifact" in provenance:
+        raise HostFailure("staging194 host helper provenance requires under-lock identity admission")
     if config.get("profile", "staging194") == "initial-prod":
         if op != INITIAL_PROD_OPERATION_ID:
             raise HostFailure("initial-prod accepts only its fixed single-use operation ID")
@@ -1965,14 +3793,30 @@ def _cms_update(config: dict[str, Any], state: RehearsalState, args: argparse.Na
                 or not isinstance(provenance.get("attempt"), int) or provenance["attempt"] <= 0):
             raise HostFailure("initial-prod source admission must bind exact canonical main push run")
     main_release_admission = _has_main_release_admission(provenance, sha)
-    if config.get("profile", "staging194") in ("staging194", "production-paired") and not main_release_admission:
-        raise HostFailure("paired source archive lacks stable Release and exact-main admission evidence")
+    cms_artifact = None
+    if profile in ("staging194", "production-paired"):
+        _validate_paired_ci_workflows(sha, provenance)
+        if profile == "production-paired" and not main_release_admission:
+            raise HostFailure("production-paired source archive lacks stable Release and exact-main admission evidence")
+        cms_artifact = _trusted_cms_artifact(provenance)
     try:
         phase = state.phase(op)
     except RehearsalRefusal:
         phase = None
     if phase and phase.get("sourceSha") not in (None, sha):
         raise HostFailure("operation ID is already bound to another source SHA")
+    source_root = _candidate_root(config, sha, op)
+    if phase:
+        start_record = next((row for row in state._operation_rows(op) if row.get("record") == "start"), None)
+        if profile in ("staging194", "production-paired"):
+            if not start_record or start_record.get("cmsArtifact") != cms_artifact:
+                raise HostFailure("operation journal CMS artifact identity differs from trusted provenance")
+            if ((helper_artifact is not None or "hostHelperArtifact" in start_record)
+                    and (start_record.get("hostHelperArtifact") != helper_artifact
+                         or start_record.get("hostHelperRuntimeIdentity") != expected_helper_identity)):
+                raise HostFailure("operation journal host helper identity differs from trusted provenance")
+            _validate_prepared_cms_candidate(config, source_root, op, provenance,
+                allow_runtime_updater=phase.get("phase") == "cms-activated")
     if phase and phase.get("phase") == "cms-activated":
         manifest = _backup_manifest(config, op)
         _verify_fence(config)
@@ -1985,7 +3829,6 @@ def _cms_update(config: dict[str, Any], state: RehearsalState, args: argparse.Na
             raise HostFailure("operator-confirmed off-host backup digest differs from actual captured bytes")
         return {"operationId": op, "sourceSha": sha, "phase": "cms-activated",
                 "backupSha256": manifest["archiveSha256"], "cmsDatabaseProof": proof}
-    source_root = _candidate_root(config, sha, op)
     if phase is None:
         if args.offhost_sha256:
             raise HostFailure("off-host confirmation cannot precede initial source preparation and backup")
@@ -1995,7 +3838,7 @@ def _cms_update(config: dict[str, Any], state: RehearsalState, args: argparse.Na
         archive_bytes = sys.stdin.buffer.read()
         if not archive_bytes:
             raise HostFailure("admitted source archive is required before acquisition")
-        if main_release_admission:
+        if profile == "production-paired":
             source_root = _extract_source_archive(config, sha, op, archive_bytes, args.archive_sha256,
                                                  provenance, expected_ref="refs/heads/main")
         else:
@@ -2007,7 +3850,22 @@ def _cms_update(config: dict[str, Any], state: RehearsalState, args: argparse.Na
         _validate_prepared_cms_candidate(config, source_root, op, provenance)
     site_workspace = (_prepare_paired_site_workspace(config, source_root, sha, op)
                       if config.get("profile") == "production-paired" else None)
-    phase = _start_acquisition(config, state, op, sha)
+    if profile in ("staging194", "production-paired"):
+        _validate_prepared_cms_candidate(config, source_root, op, provenance)
+    if profile == "staging194" and phase is not None:
+        resumed_start = next((row for row in state._operation_rows(op) if row.get("record") == "start"), None)
+        resumed_old_pair = resumed_start.get("oldPair") if resumed_start else None
+        if not isinstance(resumed_old_pair, dict) or "cmsSourceEnvironment" not in resumed_old_pair:
+            raise HostFailure("legacy staging194 operation lacks a source environment snapshot; recover it before activation")
+    if profile == "staging194" and phase is None:
+        _pre_fence_staging194_process(config)
+    if helper_artifact is not None:
+        phase = _start_acquisition(config, state, op, sha, cms_artifact=cms_artifact,
+            host_helper_artifact=helper_artifact, host_helper_identity=expected_helper_identity)
+    elif cms_artifact is not None:
+        phase = _start_acquisition(config, state, op, sha, cms_artifact=cms_artifact)
+    else:
+        phase = _start_acquisition(config, state, op, sha)
     backup_manifest_path = Path(config["backupRoot"]) / op / "manifest.json"
     if not backup_manifest_path.exists():
         _verify_fence(config)
@@ -2022,10 +3880,16 @@ def _cms_update(config: dict[str, Any], state: RehearsalState, args: argparse.Na
     start = next((row for row in state._operation_rows(op) if row.get("record") == "start"), None)
     if not start or not isinstance(start.get("oldPair", {}).get("cmsPath"), str):
         raise HostFailure("operation journal has no recorded old CMS release for migration provenance")
+    if profile == "staging194":
+        _preflight_staging194_source(config, source_root, sha, op)
     old_cms_root = Path(start["oldPair"]["cmsPath"])
     candidate_db, cms_release, cms_payload_sha = _install_migrated_database(config, source_root, op, old_cms_root)
     capture = _create_capture_bundle(config, op, sha, source_root, candidate_db)
-    proof = _activate_cms(config, cms_release, candidate_db, capture, source_root, sha, site_workspace)
+    if profile in ("staging194", "production-paired"):
+        _validate_prepared_cms_candidate(config, source_root, op, provenance,
+            allow_runtime_updater=True)
+    proof = _activate_cms(config, cms_release, candidate_db, capture, source_root, sha, site_workspace,
+                          cms_artifact=cms_artifact)
     _wait_health(config["cmsHealthUrl"], 1200)
     _verify_fence(config)
     state.mark_cms_activated(op)
@@ -2065,6 +3929,40 @@ STATIC_MAIN_REQUIRED_JOBS = {
 STATIC_MAIN_ADDITIONAL_WORKFLOWS = ("Lint and Typecheck", "Security", "Lighthouse CI")
 
 
+def _validate_paired_ci_workflows(source_sha: str, provenance: dict[str, Any],
+                                  subject: str = "paired") -> None:
+    if (not SHA_RE.fullmatch(source_sha) or provenance.get("repository") != "pgorbachev/ikpk"
+            or provenance.get("ref") != "refs/heads/main" or provenance.get("sourceSha") != source_sha
+            or provenance.get("workflow") != "Tests" or provenance.get("workflowName") != "Tests"
+            or provenance.get("event") != "push" or provenance.get("headBranch") != "main"
+            or provenance.get("status") != "completed" or provenance.get("conclusion") != "success"
+            or type(provenance.get("runId")) is not int or provenance["runId"] <= 0
+            or type(provenance.get("attempt")) is not int or provenance["attempt"] <= 0
+            or provenance.get("requiredJobs") != sorted(STATIC_MAIN_REQUIRED_JOBS)):
+        raise HostFailure(f"{subject} source provenance must bind exact-SHA successful main push CI")
+    expected_url = f"https://github.com/pgorbachev/ikpk/actions/runs/{provenance['runId']}"
+    if provenance.get("runUrl") != expected_url:
+        raise HostFailure(f"{subject} Tests run URL does not match its exact run ID")
+    additional = provenance.get("additionalWorkflows")
+    if not isinstance(additional, list) or len(additional) != len(STATIC_MAIN_ADDITIONAL_WORKFLOWS):
+        raise HostFailure(f"{subject} provenance must include Lint and Typecheck, Security, and Lighthouse CI")
+    by_name = {proof.get("workflow"): proof for proof in additional if isinstance(proof, dict)}
+    if set(by_name) != set(STATIC_MAIN_ADDITIONAL_WORKFLOWS):
+        raise HostFailure(f"{subject} provenance is missing an exact main CI workflow proof")
+    for workflow in STATIC_MAIN_ADDITIONAL_WORKFLOWS:
+        proof = by_name[workflow]
+        jobs = proof.get("requiredJobs")
+        if (proof.get("headSha") != source_sha or proof.get("event") != "push"
+                or proof.get("headBranch") != "main" or proof.get("status") != "completed"
+                or proof.get("conclusion") != "success" or type(proof.get("runId")) is not int
+                or proof["runId"] <= 0 or type(proof.get("attempt")) is not int or proof["attempt"] <= 0
+                or not isinstance(jobs, list) or not jobs
+                or any(not isinstance(job, str) or not job for job in jobs)
+                or jobs != sorted(set(jobs))
+                or proof.get("runUrl") != f"https://github.com/pgorbachev/ikpk/actions/runs/{proof['runId']}"):
+            raise HostFailure(f"{subject} {workflow} proof does not bind successful exact-main jobs")
+
+
 def _static_main_release_policy(config: dict[str, Any]) -> str:
     policy = config.get("staticMainReleasePolicy")
     if policy != "ci-only-approved":
@@ -2077,36 +3975,7 @@ def _validate_static_main_admission(config: dict[str, Any], source_sha: str,
     if config.get("profile", "staging194") not in ("staging194", "production-static"):
         raise HostFailure("static-main is bound to the staging194 or production-static host profile")
     policy = _static_main_release_policy(config)
-    if (not SHA_RE.fullmatch(source_sha) or provenance.get("repository") != "pgorbachev/ikpk"
-            or provenance.get("ref") != "refs/heads/main" or provenance.get("sourceSha") != source_sha
-            or provenance.get("workflow") != "Tests" or provenance.get("workflowName") != "Tests"
-            or provenance.get("event") != "push" or provenance.get("headBranch") != "main"
-            or provenance.get("status") != "completed" or provenance.get("conclusion") != "success"
-            or type(provenance.get("runId")) is not int or provenance["runId"] <= 0
-            or type(provenance.get("attempt")) is not int or provenance["attempt"] <= 0
-            or provenance.get("requiredJobs") != sorted(STATIC_MAIN_REQUIRED_JOBS)):
-        raise HostFailure("static-main provenance must bind current canonical main and every successful Tests job")
-    expected_url = f"https://github.com/pgorbachev/ikpk/actions/runs/{provenance['runId']}"
-    if provenance.get("runUrl") != expected_url:
-        raise HostFailure("static-main Tests run URL does not match its exact run ID")
-    additional = provenance.get("additionalWorkflows")
-    if not isinstance(additional, list) or len(additional) != len(STATIC_MAIN_ADDITIONAL_WORKFLOWS):
-        raise HostFailure("static-main provenance must include Lint and Typecheck, Security, and Lighthouse CI")
-    by_name = {proof.get("workflow"): proof for proof in additional if isinstance(proof, dict)}
-    if set(by_name) != set(STATIC_MAIN_ADDITIONAL_WORKFLOWS):
-        raise HostFailure("static-main provenance is missing an exact main CI workflow proof")
-    for workflow in STATIC_MAIN_ADDITIONAL_WORKFLOWS:
-        proof = by_name[workflow]
-        jobs = proof.get("requiredJobs")
-        if (proof.get("headSha") != source_sha or proof.get("event") != "push"
-                or proof.get("headBranch") != "main" or proof.get("status") != "completed"
-                or proof.get("conclusion") != "success" or type(proof.get("runId")) is not int
-                or proof["runId"] <= 0 or type(proof.get("attempt")) is not int or proof["attempt"] <= 0
-                or not isinstance(jobs, list) or not jobs
-                or any(not isinstance(job, str) or not job for job in jobs)
-                or jobs != sorted(set(jobs))
-                or proof.get("runUrl") != f"https://github.com/pgorbachev/ikpk/actions/runs/{proof['runId']}"):
-            raise HostFailure(f"static-main {workflow} proof does not bind successful exact-main jobs")
+    _validate_paired_ci_workflows(source_sha, provenance, subject="static-main")
 
 
 def _static_main_cms_fingerprint(config: dict[str, Any]) -> dict[str, Any]:
@@ -2597,10 +4466,13 @@ def _static_main_rollback(config: dict[str, Any], state: RehearsalState, start: 
     pointer = Path(config["currentStatic"])
     if _current_target(pointer) != candidate.resolve(strict=True):
         raise HostFailure("static-main rollback refused because currentStatic no longer points to this candidate")
-    old = Path(start["oldStaticPath"]).resolve(strict=True)
+    try:
+        old = Path(start["oldStaticPath"]).resolve(strict=True)
+    except OSError as error:
+        raise HostFailure("static-main rollback target expired/unavailable; no switch was attempted") from error
     if _tree_sha256(old) != start.get("oldStaticTreeSha256"):
         raise HostFailure("static-main rollback target differs from the exact old static tree")
-    _switch_pointer(pointer, old, Path(config["staticReleaseRoot"]))
+    _switch_static_pointer(config, pointer, old, Path(config["staticReleaseRoot"]))
     if _current_target(pointer) != old:
         raise HostFailure("static-main rollback did not restore the old static tree")
     record = {"version": 1, "record": terminal_record, "operationKind": "static-main",
@@ -2612,7 +4484,8 @@ def _static_main_rollback(config: dict[str, Any], state: RehearsalState, start: 
 
 
 def _static_main_rollback_committed(config: dict[str, Any], state: RehearsalState, operation_id: str,
-                                   operator_name: Optional[str], reason: Optional[str]) -> dict[str, Any]:
+                                   operator_name: Optional[str], reason: Optional[str],
+                                   before_intent: Optional[Callable[[], None]] = None) -> dict[str, Any]:
     if (not isinstance(operator_name, str) or not operator_name.strip() or len(operator_name) > 120
             or any(ord(char) < 32 or ord(char) == 127 for char in operator_name)):
         raise HostFailure("committed static rollback requires a valid operator name")
@@ -2626,7 +4499,10 @@ def _static_main_rollback_committed(config: dict[str, Any], state: RehearsalStat
         raise HostFailure("committed static rollback requires a matching durable release record")
     source_sha = start["sourceSha"]
     candidate = Path(config["staticReleaseRoot"]) / f"{source_sha}-{operation_id}"
-    old = Path(start["oldStaticPath"]).resolve(strict=True)
+    try:
+        old = Path(start["oldStaticPath"]).resolve(strict=True)
+    except OSError as error:
+        raise HostFailure("static-main rollback target expired/unavailable; no rollback intent was written") from error
     if candidate.is_symlink() or not candidate.is_dir():
         raise HostFailure("committed static rollback candidate is missing or unsafe")
     candidate_digest = _tree_sha256(candidate)
@@ -2657,6 +4533,8 @@ def _static_main_rollback_committed(config: dict[str, Any], state: RehearsalStat
     if not intent:
         if current != candidate.resolve(strict=True):
             raise HostFailure("static-main rollback refused because currentStatic no longer points to this candidate")
+        if before_intent is not None:
+            before_intent()
         state._append({"version": 1, "record": "static-main-rollback-intent", "operationKind": "static-main",
                        "operationId": operation_id, "sourceSha": source_sha, **details})
     if current == candidate.resolve(strict=True):
@@ -2672,6 +4550,112 @@ def _static_main_rollback_committed(config: dict[str, Any], state: RehearsalStat
     else:
         raise HostFailure("static-main recovery refused to replace a newer foreign static pointer")
     return {"operationId": operation_id, "phase": "rolled-back", "restoredStaticPath": str(old)}
+
+
+def _static_main_accept_expired_rollback(config: dict[str, Any], state: RehearsalState,
+                                         operation_id: str, operator_name: str,
+                                         reason: str) -> dict[str, Any]:
+    """Durably accept loss of a missing staging rollback tree without switching current."""
+    if (not isinstance(operator_name, str) or not operator_name.strip() or len(operator_name) > 120
+            or any(ord(char) < 32 or ord(char) == 127 for char in operator_name)):
+        raise HostFailure("expired static rollback requires a valid operator name")
+    if (not isinstance(reason, str) or not reason.strip() or len(reason) > 1000
+            or any(ord(char) < 32 or ord(char) == 127 for char in reason)):
+        raise HostFailure("expired static rollback requires a valid reason")
+    if config.get("profile", "staging194") != "staging194":
+        raise HostFailure("accepting an expired static rollback is restricted to staging194")
+
+    try:
+        history = state.read_journal_for_cleanup(validate_history=True)
+    except RehearsalRefusal as error:
+        raise HostFailure(str(error)) from error
+    rows = [row for row in history if row.get("operationId") == operation_id]
+    start = next((row for row in rows if row.get("record") == "static-main-start"), None)
+    prepared = next((row for row in rows if row.get("record") == "static-main-prepared"), None)
+    switch = next((row for row in rows if row.get("record") == "static-main-switch-intent"), None)
+    committed = next((row for row in rows if row.get("record") == "static-main-committed"), None)
+    if (not start or not prepared or not switch or not committed
+            or start.get("operationKind") != "static-main"
+            or start.get("sourceSha") != committed.get("sourceSha")
+            or start.get("sourceSha") != prepared.get("sourceSha")
+            or start.get("sourceSha") != switch.get("sourceSha")
+            or any(row.get("record") in ("static-main-rollback-intent", "static-main-rollback-completed",
+                                           "static-main-rolled-back", "static-main-recovered") for row in rows)):
+        raise HostFailure("expired static rollback requires one matching committed operation")
+
+    release_root = Path(config["staticReleaseRoot"])
+    if release_root.is_symlink() or not release_root.is_dir():
+        raise HostFailure("static release root is unavailable or unsafe")
+    release_root = release_root.resolve(strict=True)
+    source_sha = start["sourceSha"]
+    old_path_value = start.get("oldStaticPath")
+    old_digest = start.get("oldStaticTreeSha256")
+    candidate = release_root / f"{source_sha}-{operation_id}"
+    old = Path(old_path_value) if isinstance(old_path_value, str) else Path(".")
+    try:
+        old_parent = old.parent.resolve(strict=True)
+    except OSError as error:
+        raise HostFailure("expired static rollback target parent is unavailable") from error
+    if (not isinstance(old_path_value, str) or not old.is_absolute()
+            or old != Path(os.path.normpath(old_path_value)) or old_parent != release_root
+            or old == candidate or old.name in ("", ".", "..")
+            or not isinstance(old_digest, str) or not SHA256_RE.fullmatch(old_digest)):
+        raise HostFailure("expired static rollback target identity is malformed or outside the release root")
+    if (switch.get("oldStaticPath") != old_path_value
+            or switch.get("candidateStaticPath") != str(candidate)
+            or switch.get("staticTreeSha256") != prepared.get("staticTreeSha256")
+            or committed.get("staticTreeSha256") != prepared.get("staticTreeSha256")
+            or committed.get("snapshotId") != prepared.get("snapshotId")):
+        raise HostFailure("expired static rollback journal identity is inconsistent")
+    if (candidate.is_symlink() or not candidate.is_dir()
+            or candidate.resolve(strict=True) != candidate):
+        raise HostFailure("committed static candidate is missing or unsafe")
+    candidate_digest = _tree_sha256(candidate)
+    if (not isinstance(committed.get("staticTreeSha256"), str)
+            or candidate_digest != committed.get("staticTreeSha256")):
+        raise HostFailure("current static candidate differs from its committed tree digest")
+    release_file = candidate / "release.json"
+    try:
+        release_info_stat = release_file.lstat()
+        if not stat.S_ISREG(release_info_stat.st_mode) or release_info_stat.st_nlink != 1:
+            raise HostFailure("current static candidate metadata is unsafe")
+        release_info = json.loads(release_file.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as error:
+        raise HostFailure("current static candidate metadata is unavailable or malformed") from error
+    if (not isinstance(release_info, dict) or release_info.get("commit") != source_sha
+            or release_info.get("operationId") != operation_id
+            or release_info.get("staticTreeSha256") != candidate_digest
+            or release_info.get("snapshotId") != committed.get("snapshotId")):
+        raise HostFailure("current static candidate metadata differs from committed journal identity")
+    pointer = Path(config["currentStatic"])
+    if _current_target(pointer) != candidate:
+        raise HostFailure("static rollback expiry refused because currentStatic no longer points to this candidate")
+
+    try:
+        old.lstat()
+    except FileNotFoundError:
+        pass
+    except OSError as error:
+        raise HostFailure("expired static rollback target cannot be inspected") from error
+    else:
+        raise HostFailure("static rollback target still exists; expiry was not recorded")
+
+    audit = {"version": 1, "record": "static-main-rollback-expired", "operationKind": "static-main",
+             "operationId": operation_id, "sourceSha": source_sha,
+             "oldStaticPath": old_path_value, "oldStaticTreeSha256": old_digest,
+             "candidateStaticPath": str(candidate), "candidateStaticTreeSha256": candidate_digest,
+             "committedStaticTreeSha256": committed["staticTreeSha256"],
+             "snapshotId": committed.get("snapshotId"), "targetState": "absent",
+             "operator": operator_name.strip(), "reason": reason.strip()}
+    existing = [row for row in rows if row.get("record") == "static-main-rollback-expired"]
+    if existing:
+        if len(existing) != 1 or any(existing[0].get(key) != value for key, value in audit.items()):
+            raise HostFailure("expired static rollback evidence already exists with different details")
+    else:
+        state._append(audit)
+    return {"operationId": operation_id, "phase": "rollback-target-expired",
+            "oldStaticPath": old_path_value, "oldStaticTreeSha256": old_digest,
+            "currentStaticPath": str(candidate), "currentStaticTreeSha256": candidate_digest}
 
 
 def _static_main_commit(config: dict[str, Any], state: RehearsalState, operation_id: str,
@@ -2708,7 +4692,7 @@ def _static_main_commit(config: dict[str, Any], state: RehearsalState, operation
                    "operationId": operation_id, "sourceSha": source_sha,
                    "oldStaticPath": start["oldStaticPath"], "candidateStaticPath": str(candidate),
                    "staticTreeSha256": digest})
-    _switch_pointer(pointer, candidate, Path(config["staticReleaseRoot"]))
+    _switch_static_pointer(config, pointer, candidate, Path(config["staticReleaseRoot"]))
     if _current_target(pointer) != candidate.resolve(strict=True):
         raise HostFailure("static-main candidate did not become currentStatic")
     state._append({"version": 1, "record": "static-main-switched", "operationKind": "static-main",
@@ -2740,7 +4724,6 @@ def _static_main_commit(config: dict[str, Any], state: RehearsalState, operation
             raise HostFailure("CMS fingerprint changed during static-main activation")
         if _current_target(pointer) != candidate.resolve(strict=True):
             raise HostFailure("static-main currentStatic changed during served-release probes")
-        _verify_retained_hashed_assets(config)
     except Exception as error:
         _static_main_rollback(config, state, start, candidate)
         raise HostFailure(f"static-main activation failed and the old static tree was restored: {error}") from error
@@ -2781,17 +4764,29 @@ def _static_main_export(config: dict[str, Any], state: RehearsalState, operation
 
 def _static_main_recover(config: dict[str, Any], state: RehearsalState, operation_id: str, *,
                          rollback_committed: bool = False, operator_name: Optional[str] = None,
-                         reason: Optional[str] = None) -> dict[str, Any]:
+                         reason: Optional[str] = None,
+                         accept_expired_rollback: bool = False,
+                         before_rollback_intent: Optional[Callable[[], None]] = None) -> dict[str, Any]:
     rows = _static_main_rows(state, operation_id)
     start = _static_main_start(rows)
     if not start:
         raise HostFailure("static-main recovery has no matching durable operation")
     if any(row.get("record") == "static-main-committed" for row in rows):
+        if accept_expired_rollback:
+            return _static_main_accept_expired_rollback(config, state, operation_id,
+                                                        operator_name or "", reason or "")
+        if any(row.get("record") == "static-main-rollback-expired" for row in rows):
+            if rollback_committed:
+                raise HostFailure("committed rollback is forbidden after the rollback target was accepted as expired")
+            return {"operationId": operation_id, "phase": "rollback-target-expired"}
         if rollback_committed:
-            return _static_main_rollback_committed(config, state, operation_id, operator_name, reason)
+            return _static_main_rollback_committed(config, state, operation_id, operator_name, reason,
+                                                   before_rollback_intent)
         if any(row.get("record") == "static-main-rollback-completed" for row in rows):
             return {"operationId": operation_id, "phase": "rolled-back"}
         return {"operationId": operation_id, "phase": "committed"}
+    if accept_expired_rollback:
+        raise HostFailure("expired static rollback requires a matching committed operation")
     if rollback_committed:
         raise HostFailure("committed static rollback requires a matching durable release record")
     if any(row.get("record") in ("static-main-recovered", "static-main-rolled-back") for row in rows):
@@ -2799,7 +4794,10 @@ def _static_main_recover(config: dict[str, Any], state: RehearsalState, operatio
     intent = next((row for row in rows if row.get("record") == "static-main-switch-intent"), None)
     pointer = Path(config["currentStatic"])
     current = _current_target(pointer)
-    old = Path(start["oldStaticPath"]).resolve(strict=True)
+    try:
+        old = Path(start["oldStaticPath"]).resolve(strict=True)
+    except OSError as error:
+        raise HostFailure("static-main rollback target expired/unavailable; recovery cannot switch") from error
     if intent:
         candidate = Path(intent["candidateStaticPath"]).resolve(strict=True)
         if current == candidate:
@@ -2852,7 +4850,7 @@ def _static_publish(config: dict[str, Any], state: RehearsalState, args: argpars
                     or retained_info.get("snapshotId") != snapshot_id
                     or snapshot.get("captureProof", {}).get("captureId") != op
                     or capture.get("operationId") != op or capture.get("sourceSha") != sha
-                    or capture.get("profile") != expected_capture_profile):
+                    or capture.get("profile", "staging194") != expected_capture_profile):
                 raise HostFailure("retained static candidate differs from its sealed operation capture")
             return {"operationId": op, "sourceSha": sha, "phase": "browser-check-required",
                     "staticTreeSha256": digest, "snapshotId": snapshot_id}
@@ -2881,7 +4879,8 @@ def _static_publish(config: dict[str, Any], state: RehearsalState, args: argpars
     provenance = json.loads((_candidate_root(config, sha, op) / ".ikpk-rehearsal-ci.json").read_text(encoding="utf-8"))
     if provenance.get("sourceSha") != sha or provenance.get("repository") != "pgorbachev/ikpk":
         raise HostFailure("static candidate provenance no longer matches the pinned source identity")
-    _switch_pointer(Path(config["currentStatic"]), release, Path(config["staticReleaseRoot"]))
+    _switch_static_pointer(config, Path(config["currentStatic"]), release,
+                           Path(config["staticReleaseRoot"]))
     _wait_health(config["cmsHealthUrl"], 1200)
     cms_proof = _database_process_proof(_service_pid(config["cmsUnit"]), Path(config["cmsDatabase"]))
     _wait_health(config["siteHealthUrl"], 1200)
@@ -2907,7 +4906,6 @@ def _static_publish(config: dict[str, Any], state: RehearsalState, args: argpars
                         "--max-time", "15", config["siteBaseUrl"].rstrip("/") + quote(media_url, safe="/%")], timeout=20)
         if response.stdout.strip() not in ("200", "304"):
             raise HostFailure(f"captured media is not served after static switch: {media_url}")
-    _verify_retained_hashed_assets(config)
     marker = state._read_marker() or {}
     if not marker.get("newPairAccepted"):
         cms_root = _current_target(Path(config["currentCms"]))
@@ -3012,6 +5010,21 @@ def _recover(config: dict[str, Any], state: RehearsalState, operation_id: str,
     old_pair = _effective_old_pair(state, operation_id)
     live = Path(config["cmsDatabase"]).resolve(strict=True)
     already_recovered = state._is_recovered(operation_id)
+    staging194_previous_environment = None
+    if config.get("profile", "staging194") == "staging194":
+        if "cmsSourceEnvironment" in old_pair:
+            _assert_staging194_source_env_effective(config)
+            _staging194_cms_source_env(config)
+            journaled_environment = old_pair["cmsSourceEnvironment"]
+            if (not isinstance(journaled_environment, dict)
+                    or not set(STAGING194_CMS_SOURCE_ENV_KEYS).issubset(journaled_environment)):
+                raise HostFailure("operation journal has an invalid prior staging194 source environment")
+            staging194_previous_environment = {
+                key: journaled_environment[key] for key in STAGING194_CMS_SOURCE_ENV_KEYS}
+            if any(not isinstance(value, str) or not value or "\n" in value or "\r" in value
+                   for value in staging194_previous_environment.values()):
+                raise HostFailure("operation journal has invalid staging194 source environment values")
+            _assert_staging194_workspace_ready(config, staging194_previous_environment["IKPK_BUILD_WORKSPACE"])
     paired_uploads = None
     if config.get("profile") == "production-paired":
         paired_uploads = next((Path(item["path"]).resolve(strict=True) for item in config.get("mediaRoots", [])
@@ -3032,8 +5045,13 @@ def _recover(config: dict[str, Any], state: RehearsalState, operation_id: str,
             if not isinstance(previous_environment, dict) or set(previous_environment) != set(PAIRED_CMS_ENV_KEYS):
                 raise HostFailure("operation journal lacks the prior CMS source environment")
             _write_paired_cms_source_env(config, previous_environment)
+        elif config.get("profile", "staging194") == "staging194":
+            if "cmsSourceEnvironment" in old_pair:
+                _write_staging194_cms_source_env(config, staging194_previous_environment)
         run(["/usr/bin/systemctl", "start", config["cmsUnit"]], timeout=120)
         _wait_health(config["cmsHealthUrl"], 1200)
+        if config.get("profile", "staging194") == "staging194" and staging194_previous_environment is not None:
+            _assert_staging194_process_source_env(config, staging194_previous_environment)
         _database_process_proof(_service_pid(config["cmsUnit"]), live)
         if str(_current_target(Path(config["currentCms"]))) != old_pair["cmsPath"]:
             raise HostFailure("old CMS release is not selected during recovery reopen")
@@ -3157,7 +5175,8 @@ def _recover(config: dict[str, Any], state: RehearsalState, operation_id: str,
         _copy_atomic(database, live)
         _restore_media(config, backup_dir, manifest)
         _switch_pointer(Path(config["currentCms"]), Path(old_pair["cmsPath"]), Path(config["releaseRoot"]))
-        _switch_pointer(Path(config["currentStatic"]), Path(old_pair["staticPath"]), Path(config["staticReleaseRoot"]))
+        _switch_static_pointer(config, Path(config["currentStatic"]), Path(old_pair["staticPath"]),
+                               Path(config["staticReleaseRoot"]))
         expected_database_sha = manifest["databaseSha256"]
     else:
         # No destructive work starts before the final backup. If acquisition was interrupted
@@ -3192,28 +5211,182 @@ def _recover(config: dict[str, Any], state: RehearsalState, operation_id: str,
     return {"operationId": operation_id, "phase": "recovered", "restoredPair": old_pair}
 
 
+def _status_or_idle_if_fresh(state: RehearsalState, operation_id: str,
+                            config: dict[str, Any]) -> dict[str, Any]:
+    try:
+        return state.phase(operation_id)
+    except RehearsalRefusal as error:
+        if str(error) != "operation has no maintenance marker or terminal journal record":
+            raise
+        history = state.read_journal_for_cleanup(validate_history=True)
+        if (state._read_marker() is not None
+                or any(row.get("operationId") == operation_id for row in history)
+                or state._unfinished_operation_ids(history)
+                or os.path.lexists(config["maintenanceFlag"])):
+            raise
+        if _read_site_publication_marker(config) is not None:
+            raise HostFailure("site publication marker exists; operation status is unknown")
+        return {"operationId": operation_id, "phase": "idle"}
+
+
 def dispatch(args: argparse.Namespace) -> dict[str, Any]:
     if os.geteuid() != 0:
         raise HostFailure("host command must run through the installed root-owned entrypoint")
-    RehearsalState._validate_identity(args.operation_id, getattr(args, "source_sha", None))
+    if args.action != "cleanup-site":
+        RehearsalState._validate_identity(args.operation_id, getattr(args, "source_sha", None))
     profile = getattr(args, "profile", "staging194")
+    accept_expired_rollback = getattr(args, "accept_expired_rollback", False)
+    if accept_expired_rollback and (profile != "staging194" or args.action != "static-main-recover"
+                                    or getattr(args, "rollback_committed", False)):
+        raise HostFailure("accepting an expired static rollback is restricted to staging194 recovery")
+    expected_installed_cms_sha = getattr(args, "expected_installed_cms_sha", None)
+    if expected_installed_cms_sha is not None:
+        if profile != "staging194" or args.action != "static-main":
+            raise HostFailure("expected installed CMS SHA is supported only for staging194 static-main")
+        if not isinstance(expected_installed_cms_sha, str) or not SHA_RE.fullmatch(expected_installed_cms_sha):
+            raise HostFailure("expected installed CMS SHA must be a full lowercase commit ID")
+    expected_helper_identity = getattr(args, "expected_host_helper_identity", None)
+    if expected_helper_identity is not None:
+        if (profile != "staging194" or args.action != "cms-update"
+                or not isinstance(expected_helper_identity, str)
+                or not SHA256_RE.fullmatch(expected_helper_identity)):
+            raise HostFailure("expected host helper identity is restricted to staging194 cms-update")
+        prelocked_fd = getattr(args, "_publication_lock_fd", None)
+        if type(prelocked_fd) is not int or prelocked_fd < 0:
+            raise HostFailure("paired host helper requires the publication lock before helper import")
     config_path = (INITIAL_PROD_CONFIG_PATH if profile == "initial-prod" else
                    PRODUCTION_STATIC_CONFIG_PATH if profile == "production-static" else
                    PRODUCTION_PAIRED_CONFIG_PATH if profile == "production-paired" else CONFIG_PATH)
-    config = _root_config(config_path, expected_profile=profile)
+    config = (_root_config(config_path, expected_profile=profile, validate_temporary_root=False)
+              if args.action == "cleanup-site" else
+              _root_config(config_path, expected_profile=profile))
+    cleanup_marker_snapshot = None
+    if args.action == "cleanup-site":
+        config, profile, cleanup_marker_snapshot = _select_cleanup_profile(config, profile)
+    # cleanup-site writes only to explicitly configured state/marker paths; its
+    # systemd unit uses PrivateTmp, so the host's shared staging temp root is
+    # intentionally not visible or needed here.
+    if args.action != "cleanup-site":
+        _configure_profile_temp(config)
     if profile == "production-static" and args.action not in (
-            "static-main", "static-main-recover", "export-static-main", "status"):
+            "static-main", "static-main-recover", "export-static-main", "status", "cleanup-site"):
         raise HostFailure("production-static permits only static-main publication and recovery")
     if profile == "production-paired" and args.action not in (
             "cms-update", "static-publish", "export-backup", "export-static", "recover", "restore",
-            "finalize-recover", "status"):
+            "finalize-recover", "status", "cleanup-site"):
         raise HostFailure("production-paired permits only paired CMS update, static publish, and recovery")
     if profile == "initial-prod" and args.action == "recover":
         raise HostFailure("initial-prod recovery is disabled; keep the production fence closed for owner direction")
-    if profile == "initial-prod" and args.action not in ("validate-config",) and args.operation_id != INITIAL_PROD_OPERATION_ID:
+    if (profile == "initial-prod" and args.action not in ("validate-config", "cleanup-site")
+            and args.operation_id != INITIAL_PROD_OPERATION_ID):
         raise HostFailure("initial-prod accepts only its fixed single-use operation ID")
+    if getattr(args, "space_preflight", False):
+        operation_kind = getattr(args, "space_preflight_for", None)
+        if args.action != "status" or operation_kind not in ("cms-update", "static-main"):
+            raise HostFailure("space preflight is available only through status")
+        return _space_preflight(config, args.operation_id, operation_kind)
     state = RehearsalState(Path(config["stateDir"]))
-    with _destination_publication_lock(config), state.lock():
+    prelocked_fd = getattr(args, "_publication_lock_fd", None)
+    if args.action != "status" and args.action not in DESTINATION_LOCKED_ACTIONS:
+        raise HostFailure("host action has no destination lock policy")
+    destination_lock = (nullcontext() if args.action == "status" else
+        _destination_publication_lock(config, prelocked_fd=prelocked_fd))
+    with destination_lock, state.lock():
+        if profile == "staging194" and args.action == "cms-update":
+            try:
+                admitted_provenance = json.loads(base64.b64decode(args.provenance_b64, validate=True))
+            except (AttributeError, ValueError, TypeError) as error:
+                raise HostFailure("source CI provenance is not valid base64 JSON") from error
+            has_helper_evidence = isinstance(admitted_provenance, dict) and "hostHelperArtifact" in admitted_provenance
+            if (has_helper_evidence != (expected_helper_identity is not None)):
+                raise HostFailure("host helper provenance and under-lock identity admission must be supplied together")
+            if expected_helper_identity is not None:
+                _trusted_host_helper_artifact(admitted_provenance, expected_helper_identity)
+        if expected_helper_identity is not None and _host_helper_runtime_identity() != expected_helper_identity:
+            raise HostFailure("installed host helper identity changed before the destination lock was acquired")
+        try:
+            # The ordinary journal reader repairs torn tails. Validate before
+            # any dispatch path (including status/export) can call it.
+            history = state.read_journal_for_cleanup()
+        except RehearsalRefusal as error:
+            raise HostFailure(str(error)) from error
+        if args.action == "static-main" and expected_installed_cms_sha is not None:
+            installed_cms_sha = _staging194_current_cms_source_sha(config, state)
+            if installed_cms_sha != expected_installed_cms_sha:
+                raise HostFailure("installed CMS source SHA is unknown or differs from the expected revision")
+        unfinished = RehearsalState._unfinished_operation_ids(history)
+        marker = _read_site_publication_marker(config)
+        if accept_expired_rollback:
+            matching_expiry_audit = any(
+                row.get("operationId") == args.operation_id
+                and row.get("record") == "static-main-rollback-expired"
+                for row in history)
+            marker_matches = (marker is not None and marker.get("profile") == "staging194"
+                              and marker.get("operationId") == args.operation_id
+                              and marker.get("phase") == "cleanup-pending")
+            if not marker_matches and not (marker is None and matching_expiry_audit):
+                raise HostFailure("expired rollback acceptance requires this operation's cleanup-pending marker")
+            if not getattr(args, "operator", None) or not getattr(args, "reason", None):
+                raise HostFailure("expired rollback acceptance requires --operator and --reason")
+        recovery_actions = ("recover", "restore", "finalize-recover", "static-main-recover")
+        matching_rows = [row for row in history if row.get("operationId") == getattr(args, "operation_id", None)]
+        if (args.action in recovery_actions and marker is not None
+                and marker.get("phase") == "active" and marker.get("profile") == profile
+                and marker.get("operationId") == getattr(args, "operation_id", None)
+                and not matching_rows and not unfinished):
+            if args.action == "recover":
+                if getattr(args, "backup_sha256", None) is not None or getattr(args, "restore_fingerprint", None) is not None:
+                    raise HostFailure("marker-only recovery cannot import or finalize a restore")
+            elif args.action == "static-main-recover":
+                if (getattr(args, "rollback_committed", False)
+                        or getattr(args, "accept_expired_rollback", False)
+                        or getattr(args, "operator", None) is not None
+                        or getattr(args, "reason", None) is not None):
+                    raise HostFailure("marker-only recovery has no committed rollback evidence")
+            else:
+                raise HostFailure("marker-only recovery is supported only for recover actions")
+            _assert_site_refresh_idle(config)
+            _clear_site_publication_marker(config, args.operation_id)
+            return {"operationId": args.operation_id, "phase": "recovered"}
+        state_writers = ("cms-update", "static-publish", "recover", "restore", "finalize-recover",
+                         "static-main", "static-main-recover", "cleanup-site")
+        if args.action in state_writers:
+            _assert_site_refresh_idle(config, allow_interrupted=(
+                args.action == "recover" and args.operation_id in unfinished))
+            committed_main = any(row.get("operationId") == getattr(args, "operation_id", None)
+                                 and row.get("record") == "static-main-committed"
+                                 and row.get("operationKind") == "static-main" for row in history)
+            prepared_restore = any(row.get("operationId") == getattr(args, "operation_id", None)
+                                   and row.get("record") == "restore-prepared" for row in history)
+            has_paired_start = any(row.get("operationId") == getattr(args, "operation_id", None)
+                                   and row.get("record") == "start"
+                                   and row.get("operationKind") != "static-main" for row in history)
+            has_static_main_start = any(row.get("operationId") == getattr(args, "operation_id", None)
+                                        and row.get("record") == "static-main-start"
+                                        and row.get("operationKind") == "static-main" for row in history)
+            marker_continuation = (
+                (args.action in ("cms-update", "static-publish", "recover", "restore") and has_paired_start)
+                or (args.action in ("static-main", "static-main-recover") and has_static_main_start)
+                or (args.action == "finalize-recover" and profile == "production-paired" and prepared_restore))
+            _assert_site_publication_admission(
+                config, profile, args.action, getattr(args, "operation_id", None),
+                unfinished,
+                allow_cleanup_pending_rollback=(args.action == "static-main-recover"
+                    and getattr(args, "rollback_committed", False) is True and committed_main),
+                allow_cleanup_pending_expiry=(args.action == "static-main-recover"
+                    and accept_expired_rollback and profile == "staging194" and committed_main),
+                allow_cleanup_pending_finalize=(args.action == "finalize-recover"
+                    and profile == "production-paired" and prepared_restore
+                    and isinstance(getattr(args, "restore_fingerprint", None), str)
+                    and CONTENT_FINGERPRINT_RE.fullmatch(args.restore_fingerprint)),
+                allow_marker_recreation=marker_continuation)
+        if args.action == "cleanup-site":
+            if _read_site_publication_marker(config) != cleanup_marker_snapshot:
+                raise HostFailure("site-publication marker changed while housekeeping was acquiring locks; retry required")
+            _consume_site_cleanup_request(config)
+            static_result = _cleanup_site_releases(config, state, None)
+            return {"status": "succeeded", **static_result,
+                    "removedCmsReleases": _cleanup_cms_releases(config, state)}
         rows = state._operation_rows(args.operation_id)
         static_main_owned = any(row.get("operationKind") == "static-main" for row in rows)
         if static_main_owned and args.action in ("cms-update", "static-publish", "recover", "restore", "finalize-recover"):
@@ -3225,8 +5398,11 @@ def dispatch(args: argparse.Namespace) -> dict[str, Any]:
                 raise HostFailure("static-main source provenance is not valid base64 JSON") from error
             _validate_static_main_admission(config, args.source_sha, provenance)
             if args.browser_digest:
-                return _static_main_commit(config, state, args.operation_id, args.source_sha,
-                                           provenance, args.browser_digest)
+                result = _static_main_commit(config, state, args.operation_id, args.source_sha,
+                                             provenance, args.browser_digest)
+                if result.get("phase") == "committed":
+                    result.update(_cleanup_after_commit(config, state, args.operation_id))
+                return result
             if rows:
                 return _static_main_prepare(config, state, args.operation_id, args.source_sha, provenance,
                                             args.reuse_capture_operation_id)
@@ -3235,6 +5411,9 @@ def dispatch(args: argparse.Namespace) -> dict[str, Any]:
             archive_bytes = sys.stdin.buffer.read()
             if not archive_bytes:
                 raise HostFailure("static-main source archive is required before preparation")
+            if hashlib.sha256(archive_bytes).hexdigest() != args.archive_sha256:
+                raise HostFailure("static-main source archive SHA-256 does not match")
+            _write_site_publication_marker(config, args.operation_id)
             source_root = _extract_source_archive(config, args.source_sha, args.operation_id, archive_bytes,
                                                   args.archive_sha256, provenance, "refs/heads/main")
             del archive_bytes
@@ -3243,14 +5422,52 @@ def dispatch(args: argparse.Namespace) -> dict[str, Any]:
         if args.action == "export-static-main":
             return {"_bytes": _static_main_export(config, state, args.operation_id, args.source_sha)}
         if args.action == "static-main-recover":
+            if accept_expired_rollback:
+                if getattr(args, "operator", None) is None or getattr(args, "reason", None) is None:
+                    raise HostFailure("expired rollback acceptance requires --operator and --reason")
+                result = _static_main_recover(config, state, args.operation_id,
+                    accept_expired_rollback=True, operator_name=args.operator, reason=args.reason)
+                if marker is None:
+                    return {**result, "idempotent": True}
+                cleanup = _cleanup_after_commit(config, state, args.operation_id)
+                if cleanup.get("cleanupPending"):
+                    return {**result, **cleanup, "phase": "rollback-target-expired-cleanup-pending"}
+                _clear_site_publication_marker(config, args.operation_id)
+                return {**result, "cleanup": cleanup}
             if args.rollback_committed:
                 if not args.operator or not args.reason:
                     raise HostFailure("committed static rollback requires --operator and --reason")
-                return _static_main_recover(config, state, args.operation_id, rollback_committed=True,
-                                            operator_name=args.operator, reason=args.reason)
+                def prepare_rollback_marker() -> None:
+                    marker_now = _read_site_publication_marker(config)
+                    if marker_now is None:
+                        _write_site_publication_marker(config, args.operation_id)
+                    elif (marker_now.get("profile") != profile
+                          or marker_now.get("operationId") != args.operation_id):
+                        raise HostFailure("another site publication owns the shared marker")
+                result = _static_main_recover(config, state, args.operation_id, rollback_committed=True,
+                                              operator_name=args.operator, reason=args.reason,
+                                              before_rollback_intent=prepare_rollback_marker)
+                if result.get("phase") == "rolled-back":
+                    _clear_site_publication_marker(config, args.operation_id)
+                return result
             if args.operator is not None or args.reason is not None:
                 raise HostFailure("--operator and --reason require --rollback-committed")
-            return _static_main_recover(config, state, args.operation_id)
+            result = _static_main_recover(config, state, args.operation_id)
+            if result.get("phase") == "recovered":
+                _clear_site_publication_marker(config, args.operation_id)
+            elif result.get("phase") in ("committed", "rollback-target-expired"):
+                cleanup = _cleanup_after_commit(config, state, args.operation_id)
+                if cleanup.get("cleanupPending"):
+                    result.update(cleanup)
+                    if result.get("phase") == "rollback-target-expired":
+                        result["phase"] = "rollback-target-expired-cleanup-pending"
+                else:
+                    if result.get("phase") == "rollback-target-expired":
+                        _clear_site_publication_marker(config, args.operation_id)
+                        result["cleanup"] = cleanup
+                    else:
+                        result.update(cleanup)
+            return result
         if args.action == "export-backup":
             manifest = _backup_manifest(config, args.operation_id)
             return {"_stream": str(Path(config["backupRoot"]) / args.operation_id / "backup.tar"),
@@ -3266,16 +5483,30 @@ def dispatch(args: argparse.Namespace) -> dict[str, Any]:
                 _import_offhost_backup(config, args.operation_id, payload, backup_sha)
                 del payload
             if profile == "production-paired" and args.action == "restore":
-                return _recover(config, state, args.operation_id, stage_only=True,
-                                expected_fingerprint=args.restore_fingerprint)
-            return _recover(config, state, args.operation_id)
+                result = _recover(config, state, args.operation_id, stage_only=True,
+                                  expected_fingerprint=args.restore_fingerprint)
+            else:
+                result = _recover(config, state, args.operation_id)
+            if result.get("phase") == "recovered":
+                marker = _read_site_publication_marker(config)
+                if marker and marker["operationId"] == args.operation_id:
+                    _clear_site_publication_marker(config, args.operation_id)
+            return result
         if args.action == "finalize-recover":
-            return _recover(config, state, args.operation_id,
-                            finalize_restore_fingerprint=args.restore_fingerprint)
+            result = _recover(config, state, args.operation_id,
+                              finalize_restore_fingerprint=args.restore_fingerprint)
+            if result.get("phase") == "recovered":
+                marker = _read_site_publication_marker(config)
+                if marker and marker["operationId"] == args.operation_id:
+                    _clear_site_publication_marker(config, args.operation_id)
+            return result
         if args.action == "cms-update":
             return _cms_update(config, state, args)
         if args.action == "static-publish":
-            return _static_publish(config, state, args)
+            result = _static_publish(config, state, args)
+            if result.get("phase") == "committed":
+                result.update(_cleanup_after_commit(config, state, args.operation_id))
+            return result
         if args.action == "status":
             if profile == "production-paired":
                 try:
@@ -3287,17 +5518,20 @@ def dispatch(args: argparse.Namespace) -> dict[str, Any]:
                 start = next((row for row in state._operation_rows(args.operation_id) if row.get("record") == "start"), None)
                 if start and isinstance(start.get("oldPair"), dict):
                     phase["oldPair"] = start["oldPair"]
+            elif profile == "staging194":
+                phase = _status_or_idle_if_fresh(state, args.operation_id, config)
             else:
                 phase = state.phase(args.operation_id)
             return phase
     raise HostFailure("unsupported bounded host action")
 
 
-def main(argv: Optional[list[str]] = None) -> int:
+def main(argv: Optional[list[str]] = None, *, publication_lock_fd: Optional[int] = None) -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--profile", choices=("staging194", "initial-prod", "production-static", "production-paired"), default="staging194")
     sub = parser.add_subparsers(dest="action", required=True)
     sub.add_parser("validate-config")
+    sub.add_parser("cleanup-site")
     for name in ("cms-update", "static-publish", "static-main"):
         command = sub.add_parser(name)
         command.add_argument("--operation-id", required=True)
@@ -3307,10 +5541,12 @@ def main(argv: Optional[list[str]] = None) -> int:
             command.add_argument("--provenance-b64", required=True)
             if name == "cms-update":
                 command.add_argument("--offhost-sha256")
+                command.add_argument("--expected-host-helper-identity")
             else:
                 command.add_argument("--browser-digest")
             if name == "static-main":
                 command.add_argument("--reuse-capture-operation-id")
+                command.add_argument("--expected-installed-cms-sha")
         else:
             command.add_argument("--browser-digest")
     for name in ("export-backup", "export-static", "export-static-main", "recover", "restore",
@@ -3327,9 +5563,14 @@ def main(argv: Optional[list[str]] = None) -> int:
             command.add_argument("--restore-fingerprint", required=True)
         if name == "static-main-recover":
             command.add_argument("--rollback-committed", action="store_true")
+            command.add_argument("--accept-expired-rollback", action="store_true")
             command.add_argument("--operator")
             command.add_argument("--reason")
+        if name == "status":
+            command.add_argument("--space-preflight", action="store_true")
+            command.add_argument("--space-preflight-for", choices=("cms-update", "static-main"))
     args = parser.parse_args(argv)
+    args._publication_lock_fd = publication_lock_fd
     try:
         if args.action == "validate-config":
             if os.geteuid() != 0:
@@ -3338,6 +5579,8 @@ def main(argv: Optional[list[str]] = None) -> int:
                            PRODUCTION_STATIC_CONFIG_PATH if args.profile == "production-static" else
                            PRODUCTION_PAIRED_CONFIG_PATH if args.profile == "production-paired" else CONFIG_PATH)
             config = _root_config(config_path, expected_profile=args.profile)
+            if args.profile == "staging194":
+                tempfile.tempdir = str(_validate_staging194_temporary_root(config))
             for key in ("stateDir", "releaseRoot", "staticReleaseRoot", "backupRoot"):
                 path = Path(config[key])
                 if not path.is_dir() or path.is_symlink():

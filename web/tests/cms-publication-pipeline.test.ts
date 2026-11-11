@@ -102,9 +102,9 @@ function headBuildInvocations(): { wf: Workflow; job: WorkflowJob; step: Workflo
 describe('закреплённый снимок обязательного CI', () => {
   const tests = (): Workflow => requiredTestWorkflows(workflows)[0];
 
-  it('обязательный прогон содержит все пять обязательных джобов и не пишет публикации', () => {
+  it('обязательный прогон содержит все обязательные джобы и не пишет публикации', () => {
     expect(Object.keys(tests().jobs).sort()).toEqual([
-      'content-snapshot', 'dependency-invariants', 'e2e-smoke', 'scripts-unit', 'unit-and-build',
+      'cms-artifact', 'content-snapshot', 'dependency-invariants', 'e2e-smoke', 'host-helper-artifact', 'scripts-unit', 'unit-and-build',
     ]);
     expect(tests().permissions).toEqual({ contents: 'read' });
     for (const job of Object.values(tests().jobs)) {

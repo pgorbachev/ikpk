@@ -15,6 +15,7 @@
   "cmsDatabase": "/var/lib/ikpk-cms/trial/data/data.db",
   "cmsEnvironmentFile": "/etc/ikpk-cms/trial.env",
   "siteRefreshState": "/var/www/ikpk/shared/site-refresh/state.json",
+  "sitePublicationMarker": "/var/lib/ikpk-rehearsal/site-publication/host-publication.json",
   "mediaRoots": [
     {
       "path": "/opt/ikpk-cms/shared/uploads",

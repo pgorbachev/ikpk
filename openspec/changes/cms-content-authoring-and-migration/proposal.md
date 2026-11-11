@@ -2,7 +2,7 @@
 
 Сайт нельзя редактировать. Контент читается из снимка `discovery/entities/*.json` при сборке
 (`web/src/lib/data.ts:47`, `const WEB_ROOT = process.cwd()`), сборка уже читает снимок контента (change `cms-content-publication`); Strapi к фронту не подключён нигде, а канал
-обновления discovery — `web/scripts/refresh-catalog.ts:45`, `const ORIGIN = 'https://ikpk.su'` — тянет данные с **старого бэкенда** по
+обновления discovery — `web/scripts/refresh-catalog.ts:21`, `const ORIGIN = 'https://ikpk.su'` — тянет данные с **старого бэкенда** по
 адресу `https://ikpk.su`, то есть по тому самому адресу, который новый сайт забирает себе при
 переключении DNS.
 

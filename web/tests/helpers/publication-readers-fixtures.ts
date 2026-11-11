@@ -15,17 +15,21 @@ export const CANARY = 'test-only-arbitrary-credential-canary';
 
 export function ciFixture() {
   const run = {
-    id: 801, head_sha: SHA, head_branch: 'main', event: 'push', status: 'completed', conclusion: 'success',
+    id: 801, run_attempt: 1, head_sha: SHA, head_branch: 'main', event: 'push', status: 'completed', conclusion: 'success',
     path: '.github/workflows/test.yml', repository: { full_name: 'pgorbachev/ikpk' },
     head_repository: { full_name: 'pgorbachev/ikpk' },
   };
+  const startedAt = '2026-11-02T17:13:18Z';
+  const completedAt = '2026-11-02T17:34:46Z';
   const jobs = PUBLICATION_CI_POLICY.requiredJobs.map((name, id) => ({
-    id: id + 1, name, status: 'completed', conclusion: 'success',
+    id: id + 1, name, run_attempt: 1, status: 'completed', conclusion: 'success',
+    started_at: startedAt, completed_at: completedAt,
     steps: Array.from({ length: 20 }, (_, number) => ({ name: `step-${number}`, conclusion: 'success' })),
   }));
   const artifact: CiArtifact = {
     id: 901, name: 'publication-ci-counts', expired: false,
-    archive_download_url: `${API}/actions/artifacts/901/zip`, workflow_run: { id: 801, head_sha: SHA },
+    archive_download_url: `${API}/actions/artifacts/901/zip`, created_at: '2026-11-02T17:20:00Z',
+    workflow_run: { id: 801, head_sha: SHA },
   };
   const reports: Record<string, unknown> = Object.fromEntries(REPORT_NAMES.map((name, i) => [name, {
     success: true, numPassedTests: [7, 11, 13][i], numFailedTests: 0,
@@ -51,10 +55,10 @@ export function ciFixture() {
     else if (url.pathname === '/repos/pgorbachev/ikpk/git/ref/tags/v1.2.3') value = { ref: 'refs/tags/v1.2.3', object: { type: 'commit', sha: SHA } };
     else if (RELEASE_CI_WORKFLOWS.some((policy) => url.pathname.endsWith(`/workflows/${policy.file}/runs`))) {
       const index = RELEASE_CI_WORKFLOWS.findIndex((policy) => url.pathname.endsWith(`/workflows/${policy.file}/runs`));
-      value = { total_count: 1, workflow_runs: [{ ...run, id: 810 + index, path: `.github/workflows/${RELEASE_CI_WORKFLOWS[index].file}` }] };
+      value = { total_count: 1, workflow_runs: [{ ...run, run_attempt: 1, id: 810 + index, path: `.github/workflows/${RELEASE_CI_WORKFLOWS[index].file}` }] };
     } else if (/\/actions\/runs\/81[0-2]\/jobs$/.test(url.pathname)) {
       const index = Number(url.pathname.match(/\/runs\/(\d+)\//)![1]) - 810;
-      const required = RELEASE_CI_WORKFLOWS[index].jobs.map((name) => ({ name, status: 'completed', conclusion: 'success' }));
+      const required = RELEASE_CI_WORKFLOWS[index].jobs.map((name) => ({ name, run_attempt: 1, status: 'completed', conclusion: 'success' }));
       value = { total_count: required.length, jobs: required };
     } else if (/\/actions\/workflows\/test.yml\/runs$/.test(url.pathname)) {
       value = { total_count: state.runPages.flat().length, workflow_runs: state.runPages[page - 1] ?? [] };

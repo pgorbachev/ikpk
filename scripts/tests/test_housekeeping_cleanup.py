@@ -1,0 +1,590 @@
+import json
+import os
+import shutil
+import sqlite3
+import stat
+import tempfile
+import unittest
+from argparse import Namespace
+from contextlib import nullcontext
+from pathlib import Path
+from unittest.mock import patch
+
+from scripts.lib import rehearsal_host as host
+from scripts.lib.rehearsal_state import RehearsalState
+
+
+class ReleaseCleanupTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory(prefix='ikpk-release-cleanup-')
+        self.addCleanup(self.tmp.cleanup)
+        root = Path(self.tmp.name)
+        self.releases = root / 'releases'
+        self.releases.mkdir()
+        self.current = self.releases / ('a' * 40 + '-flow-one')
+        self.old = self.releases / ('b' * 40 + '-flow-zero')
+        self.current.mkdir()
+        (self.current / 'index.html').write_text('current release')
+        self.current_static_payload_digest = host._tree_sha256(self.current)
+        (self.current / 'release.json').write_text(json.dumps({'commit': 'a' * 40,
+            'operationId': 'flow-one', 'snapshotId': 'snap:test',
+            'staticTreeSha256': self.current_static_payload_digest}))
+        self.old.mkdir()
+        (self.old / 'index.html').write_text('previous release')
+        (self.old / 'release.json').write_text(json.dumps({'commit': 'b' * 40,
+            'operationId': 'flow-zero', 'snapshotId': 'snap:old'}))
+        self.pointer = root / 'current'
+        self.pointer.symlink_to(self.current)
+        self.next_pointer = root / f'.current-next-{self.old.name}'
+        self.next_pointer.symlink_to(f'releases/{self.old.name}')
+        self.state_dir = root / 'operations'
+        self.state_dir.mkdir()
+        self.state = RehearsalState(self.state_dir)
+        old_digest = host._tree_sha256(self.old)
+        current_digest = host._tree_sha256(self.current)
+        self.state._append({'version': 1, 'record': 'static-main-start', 'operationKind': 'static-main',
+                            'operationId': 'flow-one', 'sourceSha': 'a' * 40,
+                            'oldStaticPath': str(self.old.resolve()), 'oldStaticTreeSha256': old_digest})
+        self.state._append({'version': 1, 'record': 'static-main-prepared', 'operationKind': 'static-main',
+                            'operationId': 'flow-one', 'sourceSha': 'a' * 40,
+                            'staticTreeSha256': current_digest, 'snapshotId': 'snap:test'})
+        self.state._append({'version': 1, 'record': 'static-main-switch-intent', 'operationKind': 'static-main',
+                            'operationId': 'flow-one', 'sourceSha': 'a' * 40,
+                            'oldStaticPath': str(self.old.resolve()), 'candidateStaticPath': str(self.current.resolve()),
+                            'staticTreeSha256': current_digest})
+        self.state._append({'version': 1, 'record': 'static-main-switched', 'operationKind': 'static-main',
+                            'operationId': 'flow-one', 'sourceSha': 'a' * 40,
+                            'staticTreeSha256': current_digest})
+        self.state._append({'version': 1, 'record': 'static-main-committed', 'operationKind': 'static-main',
+                            'operationId': 'flow-one', 'sourceSha': 'a' * 40,
+                            'staticTreeSha256': current_digest, 'snapshotId': 'snap:test'})
+        self.cms_state = root / 'refresh' / 'state.json'
+        self.cms_state.parent.mkdir()
+        self.cms_state.write_text(json.dumps({'status': 'succeeded', 'phase': 'done', 'switched': True,
+            'releaseId': self.current.name, 'previousReleaseId': 'releases/' + self.old.name,
+            'cleanupPending': True, 'startedAt': '2026-01-01T00:00:00Z'}))
+        self.marker_dir = root / 'marker'
+        self.marker_dir.mkdir(mode=0o750)
+        self.marker = self.marker_dir / host.SITE_PUBLICATION_MARKER
+        self.marker.write_text(json.dumps({'version': 1, 'operationId': 'flow-one',
+            'profile': 'staging194', 'phase': 'active'}))
+        self.config = {'profile': 'staging194', 'cmsUser': 'root',
+            'sitePublicationMarker': str(self.marker), 'siteRefreshState': str(self.cms_state),
+            'staticReleaseRoot': str(self.releases), 'currentStatic': str(self.pointer),
+            'stateDir': str(self.state_dir)}
+        real_lstat = Path.lstat
+        def lstat(path, *args, **kwargs):
+            result = real_lstat(path, *args, **kwargs)
+            if path in (self.marker_dir, self.marker):
+                fields = list(result)
+                fields[0] = stat.S_IFDIR | 0o750 if path == self.marker_dir else stat.S_IFREG | 0o640
+                fields[4] = fields[5] = 0
+                return os.stat_result(fields)
+            return result
+        self.stack = patch.object(Path, 'lstat', lstat)
+        self.stack.start()
+        self.addCleanup(self.stack.stop)
+        self.fchown = patch.object(host.os, 'fchown')
+        self.fchown.start()
+        self.addCleanup(self.fchown.stop)
+        self.marker_root = patch.object(host, 'SITE_PUBLICATION_MARKER_DIR', self.marker_dir)
+        self.marker_root.start()
+        self.addCleanup(self.marker_root.stop)
+        self.mounts = patch.object(host, '_mount_points', return_value=set())
+        self.mounts.start()
+        self.addCleanup(self.mounts.stop)
+
+    def test_previous_target_is_closed_before_delete_and_cleanup_retries_after_io_failure(self):
+        stale = self.releases / ('c' * 40 + '-stale')
+        stale.mkdir()
+        (stale / 'release.json').write_text(json.dumps({'commit': 'c' * 40, 'snapshotId': 'snap:stale'}))
+        real_remove = host._remove_release_tree
+        calls = []
+        def fail_first(path, mounts):
+            calls.append(path)
+            if len(calls) == 1:
+                raise host.HostFailure('simulated unlink failure')
+            return real_remove(path, mounts)
+        with patch.object(host, '_remove_release_tree', side_effect=fail_first):
+            with self.assertRaisesRegex(host.HostFailure, 'simulated unlink failure'):
+                host._cleanup_site_releases(self.config, self.state, 'flow-one')
+        partial = json.loads(self.cms_state.read_text())
+        self.assertIsNone(partial['previousReleaseId'])
+        self.assertTrue(partial['cleanupPending'])
+        self.assertTrue(self.marker.exists())
+        self.assertFalse(self.next_pointer.exists())
+        self.assertEqual(json.loads(self.marker.read_text())['phase'], 'cleanup-pending')
+
+        result = host._cleanup_site_releases(self.config, self.state, None)
+        self.assertEqual(result['removedReleases'], [str(stale.resolve())])
+        self.assertTrue(self.old.exists(), 'the rollback target survives retry')
+        self.assertFalse(stale.exists())
+        self.assertTrue(self.current.exists())
+        finished = json.loads(self.cms_state.read_text())
+        self.assertFalse(finished['cleanupPending'])
+        self.assertIsNone(finished['previousReleaseId'])
+        self.assertFalse(self.marker.exists())
+
+    def test_static_main_cleanup_retains_exact_journal_rollback_target(self):
+        stale = self.releases / ('c' * 40 + '-stale')
+        stale.mkdir()
+        (stale / 'release.json').write_text(json.dumps({'commit': 'c' * 40, 'snapshotId': 'snap:stale'}))
+
+        result = host._cleanup_site_releases(self.config, self.state, 'flow-one')
+
+        self.assertEqual(result['removedReleases'], [str(stale.resolve())])
+        self.assertTrue(self.current.is_dir(), 'the active release must remain')
+        self.assertTrue(self.old.is_dir(), 'the journal-bound previous release must remain rollbackable')
+        self.assertEqual(host._tree_sha256(self.old), self.state._operation_rows('flow-one')[0]['oldStaticTreeSha256'])
+        self.assertFalse(stale.exists(), 'unrelated verified stale releases remain eligible for cleanup')
+
+    def test_journal_identified_legacy_rollback_tree_is_retained_without_manifest(self):
+        (self.old / 'release.json').unlink()
+        rows = self.state.read_journal_for_cleanup()
+        rows[0]['oldStaticTreeSha256'] = host._tree_sha256(self.old)
+        self.state.journal_path.write_text('')
+        for row in rows:
+            self.state._append(row)
+        stale = self.releases / ('c' * 40 + '-stale')
+        stale.mkdir()
+        (stale / 'release.json').write_text(json.dumps({'commit': 'c' * 40, 'snapshotId': 'snap:stale'}))
+
+        result = host._cleanup_site_releases(self.config, self.state, 'flow-one')
+
+        self.assertEqual(result['removedReleases'], [str(stale.resolve())])
+        self.assertTrue(self.current.is_dir())
+        self.assertTrue(self.old.is_dir(), 'the old path and recorded tree digest identify this legacy rollback target')
+        self.assertFalse((self.old / 'release.json').exists(), 'retention must not fabricate release metadata')
+        self.assertFalse(stale.exists())
+
+    def test_unidentified_legacy_directory_is_retained_and_reported_while_verified_cleanup_continues(self):
+        stale = self.releases / ('c' * 40 + '-stale')
+        stale.mkdir()
+        (stale / 'release.json').write_text(json.dumps({'commit': 'c' * 40, 'snapshotId': 'snap:stale'}))
+        unknown = self.releases / 'legacy-unidentified'
+        unknown.mkdir()
+        (unknown / 'payload.txt').write_text('unidentified data')
+
+        result = host._cleanup_after_commit(self.config, self.state, 'flow-one')
+
+        self.assertEqual(result['removedReleases'], [str(stale.resolve())])
+        self.assertEqual(result['retainedLegacy'], [{
+            'path': str(unknown.resolve()), 'reason': 'release metadata is missing or unreadable'}])
+        self.assertTrue(self.current.is_dir())
+        self.assertTrue(self.old.is_dir())
+        self.assertFalse(stale.exists(), 'verified old releases remain eligible for cleanup')
+        self.assertTrue(unknown.is_dir())
+        self.assertFalse(self.next_pointer.exists())
+        self.assertFalse(self.marker.exists(), 'cleanup completes while explicitly reporting retained legacy data')
+
+    def test_missing_journal_rollback_target_reports_degraded_before_cleanup(self):
+        shutil.rmtree(self.old)
+        stale = self.releases / ('c' * 40 + '-stale')
+        stale.mkdir()
+        (stale / 'release.json').write_text(json.dumps({'commit': 'c' * 40, 'snapshotId': 'snap:stale'}))
+
+        result = host._cleanup_after_commit(self.config, self.state, 'flow-one')
+
+        self.assertTrue(result['cleanupPending'])
+        self.assertIn('rollback target expired or unavailable', result['cleanupError'])
+        self.assertTrue(self.current.is_dir())
+        self.assertTrue(stale.is_dir(), 'unavailable rollback must prevent cleanup from claiming success')
+        self.assertTrue(self.next_pointer.is_symlink())
+        self.assertTrue(self.marker.exists())
+        self.assertEqual(json.loads(self.marker.read_text())['phase'], 'cleanup-pending')
+
+    def test_tampered_static_candidate_cannot_fall_back_to_matching_cms_state(self):
+        (self.current / 'tampered.txt').write_text('changed after commit')
+        stale = self.releases / ('c' * 40 + '-stale')
+        stale.mkdir()
+        (stale / 'release.json').write_text(json.dumps({'commit': 'c' * 40, 'snapshotId': 'snap:stale'}))
+
+        result = host._cleanup_after_commit(self.config, self.state, 'flow-one')
+
+        self.assertTrue(result['cleanupPending'])
+        self.assertIn('static-main candidate differs', result['cleanupError'])
+        self.assertTrue(self.current.is_dir())
+        self.assertTrue(self.old.is_dir())
+        self.assertTrue(stale.is_dir())
+        self.assertEqual(json.loads(self.marker.read_text())['phase'], 'cleanup-pending')
+
+    def test_tampered_paired_candidate_cannot_fall_back_to_matching_cms_state(self):
+        digest = 'd' * 64
+        database = self.state_dir / 'cms.sqlite'
+        database.write_bytes(b'fixture database')
+        old_pair = {'cmsPath': str(self.old.resolve()), 'staticPath': str(self.old.resolve()),
+                    'staticTreeSha256': host._tree_sha256(self.old)}
+        new_pair = {'sourceSha': 'a' * 40, 'cmsSha': 'a' * 40, 'staticSha': 'a' * 40,
+                    'cmsPayloadSha256': digest, 'staticTreeSha256': host._tree_sha256(self.current),
+                    'cmsDatabaseSha256': digest, 'cmsMediaManifestSha256': digest,
+                    'cmsCaptureBundleSha256': digest, 'oldDatabaseSha256': digest,
+                    'oldMediaManifestSha256': digest, 'configSha256': digest,
+                    'snapshotId': 'snap:test',
+                    'cmsDatabaseProof': {'pid': 123, 'device': 1, 'inode': 1, 'database': str(database)}}
+        paired_rows = [
+            {'version': 1, 'record': 'start', 'operationId': 'flow-one', 'sourceSha': 'a' * 40,
+             'oldPair': old_pair},
+            {'version': 1, 'record': 'new-bundle', 'operationId': 'flow-one',
+             'sourceSha': 'a' * 40, 'newPair': new_pair},
+            {'version': 1, 'record': 'committed', 'operationId': 'flow-one', 'sourceSha': 'a' * 40},
+        ]
+        self.state.journal_path.write_text('')
+        for row in paired_rows:
+            self.state._append(row)
+        (self.current / 'tampered.txt').write_text('changed after commit')
+        stale = self.releases / ('c' * 40 + '-stale')
+        stale.mkdir()
+        (stale / 'release.json').write_text(json.dumps({'commit': 'c' * 40, 'snapshotId': 'snap:stale'}))
+
+        result = host._cleanup_after_commit(self.config, self.state, 'flow-one')
+
+        self.assertTrue(result['cleanupPending'])
+        self.assertIn('paired candidate differs', result['cleanupError'])
+        self.assertTrue(self.current.is_dir())
+        self.assertTrue(self.old.is_dir())
+        self.assertTrue(stale.is_dir())
+        self.assertEqual(json.loads(self.marker.read_text())['phase'], 'cleanup-pending')
+
+    def test_cms_refresh_cleanup_accepts_current_identity_without_static_main_journal(self):
+        self.state.journal_path.write_text('')
+        self.marker.write_text(json.dumps({'version': 1, 'operationId': 'flow-one',
+            'profile': 'staging194', 'phase': 'cleanup-pending'}))
+        stale = self.releases / ('c' * 40 + '-stale')
+        stale.mkdir()
+        (stale / 'release.json').write_text(json.dumps({'commit': 'c' * 40, 'snapshotId': 'snap:stale'}))
+
+        result = host._cleanup_site_releases(self.config, self.state, None)
+
+        self.assertEqual(result['removedReleases'], [str(self.old.resolve()), str(stale.resolve())])
+        self.assertEqual(result['retainedLegacy'], [])
+        self.assertTrue(self.current.is_dir())
+        self.assertFalse(self.old.exists())
+        self.assertFalse(self.marker.exists())
+
+    def test_paired_terminal_commit_cleanup_does_not_require_static_main_journal(self):
+        self.state.journal_path.write_text('')
+        database = self.state_dir / 'cms.sqlite'
+        database.write_bytes(b'fixture database')
+        old_pair = {'cmsPath': str(self.old.resolve()), 'staticPath': str(self.old.resolve()),
+                    'staticTreeSha256': host._tree_sha256(self.old)}
+        digest = 'd' * 64
+        new_pair = {'sourceSha': 'a' * 40, 'cmsSha': 'a' * 40, 'staticSha': 'a' * 40,
+                    'cmsPayloadSha256': digest, 'staticTreeSha256': host._tree_sha256(self.current),
+                    'cmsDatabaseSha256': digest, 'cmsMediaManifestSha256': digest,
+                    'cmsCaptureBundleSha256': digest, 'oldDatabaseSha256': digest,
+                    'oldMediaManifestSha256': digest, 'configSha256': digest,
+                    'snapshotId': 'snap:test',
+                    'cmsDatabaseProof': {'pid': 123, 'device': 1, 'inode': 1, 'database': str(database)}}
+        for row in (
+            {'version': 1, 'record': 'start', 'operationId': 'flow-one', 'sourceSha': 'a' * 40,
+             'oldPair': old_pair},
+            {'version': 1, 'record': 'new-bundle', 'operationId': 'flow-one', 'sourceSha': 'a' * 40,
+             'newPair': new_pair},
+            {'version': 1, 'record': 'committed', 'operationId': 'flow-one', 'sourceSha': 'a' * 40},
+        ):
+            self.state._append(row)
+        stale = self.releases / ('c' * 40 + '-stale')
+        stale.mkdir()
+        (stale / 'release.json').write_text(json.dumps({'commit': 'c' * 40, 'snapshotId': 'snap:stale'}))
+
+        result = host._cleanup_site_releases(self.config, self.state, 'flow-one')
+
+        self.assertEqual(result['removedReleases'], [str(self.old.resolve()), str(stale.resolve())])
+        self.assertEqual(result['retainedLegacy'], [])
+        self.assertTrue(self.current.is_dir())
+
+    def test_backup_retention_keeps_two_verified_terminal_operations_and_skips_unknown(self):
+        backup_root = self.state_dir / 'backups'
+        backup_root.mkdir()
+        for operation in ('old-op', 'middle-op', 'latest-op', 'older-op', 'incomplete-op', 'static-op'):
+            (backup_root / operation).mkdir()
+        history = []
+        database_path = str((self.state_dir / 'cms.sqlite').resolve())
+        for operation, sha in (('older-op', '1' * 40), ('old-op', '2' * 40),
+                               ('middle-op', '3' * 40), ('latest-op', '4' * 40)):
+            history.extend((
+                {'operationId': operation, 'record': 'start', 'sourceSha': sha,
+                 'oldPair': {'cmsDatabaseProof': {'database': database_path}}},
+                {'operationId': operation, 'record': 'new-bundle', 'sourceSha': sha},
+                {'operationId': operation, 'record': 'committed', 'sourceSha': sha},
+            ))
+        history.append({'operationId': 'incomplete-op', 'record': 'start', 'sourceSha': '5' * 40,
+                        'oldPair': {'cmsDatabaseProof': {'database': database_path}}})
+        history.extend((
+            {'operationId': 'static-op', 'record': 'static-main-start', 'sourceSha': '6' * 40,
+             'operationKind': 'static-main'},
+            {'operationId': 'static-op', 'record': 'static-main-committed', 'sourceSha': '6' * 40,
+             'operationKind': 'static-main'},
+        ))
+
+        with patch.object(host, '_verified_cleanup_backup', side_effect=lambda path, op, db: op != 'middle-op'):
+            candidates, reason = host._operation_backup_cleanup_candidates(backup_root, history, database_path, keep=2)
+
+        self.assertEqual(candidates, [backup_root / 'older-op'])
+        self.assertIsNone(reason)
+        self.assertTrue((backup_root / 'old-op').exists())
+        self.assertTrue((backup_root / 'middle-op').exists())
+        self.assertTrue((backup_root / 'incomplete-op').exists())
+        self.assertTrue((backup_root / 'static-op').exists())
+
+        with patch.object(host, '_verified_cleanup_backup', return_value=False):
+            skipped, reason = host._operation_backup_cleanup_candidates(backup_root, history, database_path, keep=2)
+        self.assertEqual(skipped, [])
+        self.assertIn('0 verified terminal operation backups', reason)
+
+        other_database_history = [
+            {'operationId': 'latest-op', 'record': 'start', 'sourceSha': '4' * 40,
+             'oldPair': {'cmsDatabaseProof': {'database': '/different/database.sqlite'}}},
+            {'operationId': 'latest-op', 'record': 'new-bundle', 'sourceSha': '4' * 40},
+            {'operationId': 'latest-op', 'record': 'committed', 'sourceSha': '4' * 40},
+        ]
+        with patch.object(host, '_verified_cleanup_backup', return_value=True) as verify:
+            mismatched, reason = host._operation_backup_cleanup_candidates(
+                backup_root, other_database_history, database_path, keep=2)
+        self.assertEqual(mismatched, [])
+        self.assertIn('0 verified terminal operation backups', reason)
+        verify.assert_not_called()
+
+    def test_backup_verification_checks_archive_database_and_media_without_extracting(self):
+        backup_root = self.state_dir / 'backups'
+        backup_root.mkdir()
+        database = self.state_dir / 'cms.sqlite'
+        media_root = self.state_dir / 'uploads'
+        media_root.mkdir()
+        (media_root / 'proof.txt').write_bytes(b'preserved media')
+        connection = sqlite3.connect(database)
+        connection.execute('CREATE TABLE proof (value TEXT)')
+        connection.execute("INSERT INTO proof VALUES ('ok')")
+        connection.commit()
+        connection.close()
+        with patch.object(host, '_assert_no_database_handles'):
+            host._backup({'cmsDatabase': str(database), 'backupRoot': str(backup_root),
+                          'mediaRoots': [{'path': str(media_root), 'prefix': '/uploads/'}]}, 'valid-op')
+        backup = backup_root / 'valid-op'
+
+        self.assertTrue(host._verified_cleanup_backup(backup, 'valid-op', str(database.resolve())))
+        backup_database = backup / 'database.sqlite'
+        backup_database.write_bytes(backup_database.read_bytes() + b'corruption')
+        self.assertFalse(host._verified_cleanup_backup(backup, 'valid-op', str(database.resolve())))
+        self.assertFalse(host._verified_cleanup_backup(backup, 'valid-op', '/different/database.sqlite'))
+
+    def test_cleanup_marker_survives_backup_stage_failure_after_site_cleanup_and_retry(self):
+        cms_release_root = self.state_dir / 'cms-releases'
+        cms_release_root.mkdir()
+        stale_cms = cms_release_root / ('c' * 40 + '-cms-old')
+        stale_cms.mkdir()
+        stale_site = self.releases / ('c' * 40 + '-stale')
+        stale_site.mkdir()
+        (stale_site / 'release.json').write_text(json.dumps({'commit': 'c' * 40, 'snapshotId': 'snap:stale'}))
+        backup_root = self.state_dir / 'backups'
+        backup_root.mkdir()
+        database = self.state_dir / 'cms.sqlite'
+        database.write_bytes(b'fixture')
+        self.config['backupRoot'] = str(backup_root)
+        self.config['cmsDatabase'] = str(database)
+
+        with patch.object(host, '_operation_backup_cleanup_candidates',
+                          side_effect=[host.HostFailure('simulated backup inspection failure'), ([], None)]):
+            with self.assertRaisesRegex(host.HostFailure, 'simulated backup inspection failure'):
+                host._cleanup_site_releases(self.config, self.state, 'flow-one')
+            self.assertTrue(self.old.exists(), 'the rollback target survives a later backup-stage failure')
+            self.assertFalse(stale_site.exists(), 'the verified site cleanup stage completed before backup failure')
+            self.assertTrue(self.current.exists())
+            self.assertTrue(stale_cms.exists())
+            self.assertTrue(self.marker.exists())
+            self.assertEqual(json.loads(self.marker.read_text())['phase'], 'cleanup-pending')
+
+            host._cleanup_site_releases(self.config, self.state, None)
+
+        self.assertTrue(stale_cms.exists())
+        self.assertTrue(self.current.exists())
+        self.assertFalse(self.marker.exists())
+
+    def test_unfinished_operation_blocks_cleanup_before_pointer_expiry(self):
+        unfinished = RehearsalState(self.state_dir)
+        unfinished._append({'version': 1, 'record': 'static-main-start', 'operationKind': 'static-main',
+                            'operationId': 'in-flight', 'sourceSha': 'c' * 40})
+        before = json.loads(self.cms_state.read_text())
+        with self.assertRaisesRegex(host.HostFailure, 'unfinished|inconsistent'):
+            host._cleanup_site_releases(self.config, unfinished, 'flow-one')
+        self.assertEqual(json.loads(self.cms_state.read_text()), before)
+        self.assertTrue(self.old.exists())
+
+    def test_partial_rollback_intent_is_read_only_and_blocks_cleanup(self):
+        raw = self.state.journal_path.read_bytes() + (
+            b'{"version":1,"record":"static-main-rollback-intent",'
+            b'"operationKind":"static-main","operationId":"flow-one",'
+            b'"oldStaticPath":"'
+        )
+        self.state.journal_path.write_bytes(raw)
+        with self.assertRaisesRegex(host.HostFailure, "incomplete tail"):
+            host._cleanup_site_releases(self.config, self.state, "flow-one")
+        self.assertEqual(self.state.journal_path.read_bytes(), raw)
+        self.assertTrue(self.old.exists())
+        self.assertEqual(json.loads(self.marker.read_text())["phase"], "active")
+
+    def test_dispatch_preflights_torn_rollback_before_any_repairing_journal_reader(self):
+        raw = self.state.journal_path.read_bytes() + (
+            b'{"version":1,"record":"static-main-rollback-intent",'
+            b'"operationKind":"static-main","operationId":"flow-one",'
+            b'"oldStaticPath":"'
+        )
+        self.state.journal_path.write_bytes(raw)
+        publication_lock = self.state_dir / ".publication.lock"
+        publication_lock.write_bytes(b"")
+        publication_lock.chmod(0o600)
+        config = {**self.config, "publicationLock": str(publication_lock)}
+        with patch.object(host.os, "geteuid", return_value=0), \
+             patch.object(host, "_root_config", return_value=config), \
+             patch.object(host, "_destination_publication_lock", return_value=nullcontext()), \
+             patch.object(host, "_remove_release_tree") as remove:
+            with self.assertRaisesRegex(host.HostFailure, "incomplete tail"):
+                host.dispatch(Namespace(profile="staging194", action="static-main", operation_id="flow-one"))
+        self.assertEqual(self.state.journal_path.read_bytes(), raw)
+        self.assertTrue(self.old.exists())
+        remove.assert_not_called()
+
+    def test_cleanup_rejects_rollback_intent_without_valid_operation_identity(self):
+        row = {"version": 1, "record": "static-main-rollback-intent",
+               "operationKind": "static-main", "operationId": "invalid id"}
+        self.state._append(row)
+        before = self.state.journal_path.read_bytes()
+        with self.assertRaisesRegex(host.HostFailure, "malformed"):
+            host._cleanup_site_releases(self.config, self.state, "flow-one")
+        self.assertEqual(self.state.journal_path.read_bytes(), before)
+        self.assertTrue(self.old.exists())
+
+    def test_cleanup_rejects_terminal_record_before_start_for_each_writer_family(self):
+        for terminal, start in (
+            ({'version': 1, 'record': 'committed', 'operationId': 'orphan-paired', 'sourceSha': 'c' * 40},
+             {'version': 1, 'record': 'start', 'operationId': 'orphan-paired', 'sourceSha': 'c' * 40}),
+            ({'version': 1, 'record': 'static-main-committed', 'operationKind': 'static-main',
+              'operationId': 'orphan-static', 'sourceSha': 'd' * 40},
+             {'version': 1, 'record': 'static-main-start', 'operationKind': 'static-main',
+              'operationId': 'orphan-static', 'sourceSha': 'd' * 40}),
+        ):
+            with self.subTest(kind=terminal['record']):
+                state = RehearsalState(self.state_dir)
+                state._append(terminal)
+                state._append(start)
+                before = state.journal_path.read_bytes()
+                with self.assertRaisesRegex(host.HostFailure, 'inconsistent'):
+                    host._cleanup_site_releases(self.config, state, 'flow-one')
+                self.assertEqual(state.journal_path.read_bytes(), before)
+                self.assertTrue(self.old.exists())
+
+    def test_cleanup_rejects_rollback_intent_after_completed_rollback(self):
+        source_sha = 'a' * 40
+        old_digest = host._tree_sha256(self.old)
+        candidate_digest = host._tree_sha256(self.current)
+        details = {'version': 1, 'operationKind': 'static-main', 'operationId': 'flow-one',
+                   'sourceSha': source_sha, 'oldStaticPath': str(self.old.resolve()),
+                   'oldStaticTreeSha256': old_digest, 'candidateStaticPath': str(self.current.resolve()),
+                   'candidateStaticTreeSha256': candidate_digest, 'committedStaticTreeSha256': candidate_digest,
+                   'snapshotId': 'snap:test', 'operator': 'operator', 'reason': 'recovery test'}
+        self.state._append({'record': 'static-main-rollback-intent', **details})
+        self.state._append({'record': 'static-main-rollback-completed', 'restoredStaticPath': str(self.old.resolve()),
+                            **details})
+        self.state._append({'record': 'static-main-rollback-intent', **details})
+        before = self.state.journal_path.read_bytes()
+        with self.assertRaisesRegex(host.HostFailure, 'inconsistent'):
+            host._cleanup_site_releases(self.config, self.state, 'flow-one')
+        self.assertEqual(self.state.journal_path.read_bytes(), before)
+        self.assertTrue(self.old.exists())
+
+    def test_status_then_cleanup_never_repairs_torn_rollback_intent(self):
+        raw = self.state.journal_path.read_bytes() + (
+            b'{"version":1,"record":"static-main-rollback-intent",'
+            b'"operationKind":"static-main","operationId":"flow-one",'
+            b'"oldStaticPath":"'
+        )
+        self.state.journal_path.write_bytes(raw)
+        config = {**self.config, "publicationLock": str(self.state_dir / ".publication.lock")}
+        (self.state_dir / ".publication.lock").write_bytes(b"")
+        (self.state_dir / ".publication.lock").chmod(0o600)
+        with patch.object(host.os, "geteuid", return_value=0), \
+             patch.object(host, "_root_config", return_value=config), \
+             patch.object(host, "_destination_publication_lock", side_effect=AssertionError("status must not take destination lock")) as destination_lock:
+            with self.assertRaisesRegex(host.HostFailure, "incomplete tail"):
+                host.dispatch(Namespace(profile="staging194", action="status", operation_id="flow-one"))
+            destination_lock.assert_not_called()
+            with self.assertRaisesRegex(host.HostFailure, "incomplete tail"):
+                host._cleanup_site_releases(config, self.state, "flow-one")
+        self.assertEqual(self.state.journal_path.read_bytes(), raw)
+        self.assertTrue(self.old.exists())
+
+
+class CmsReleaseCleanupTests(unittest.TestCase):
+    def _state(self, history, unfinished=()):
+        return type("State", (), {
+            "read_journal_for_cleanup": lambda self, validate_history=False: history,
+            "_unfinished_operation_ids": staticmethod(lambda _rows: set(unfinished)),
+        })()
+
+    def _layout(self):
+        temporary = tempfile.TemporaryDirectory(prefix="ikpk-cms-cleanup-")
+        self.addCleanup(temporary.cleanup)
+        root = Path(temporary.name) / "releases"
+        root.mkdir()
+        current = root / "current-release"
+        rollback = root / "rollback-release"
+        stale = root / "stale-release"
+        for directory in (current, rollback, stale):
+            directory.mkdir()
+            (directory / "marker").write_text(directory.name, encoding="utf-8")
+        pointer = Path(temporary.name) / "current"
+        pointer.symlink_to(current / "cms-artifact")
+        (current / "cms-artifact").mkdir()
+        history = [{
+            "record": "start", "operationId": "op-current",
+            "oldPair": {"cmsPath": str((rollback / "cms-artifact").resolve())},
+        }, {
+            "record": "committed", "operationId": "op-current",
+        }]
+        (rollback / "cms-artifact").mkdir()
+        config = {"releaseRoot": str(root), "currentCms": str(pointer)}
+        return config, current, rollback, stale, history
+
+    def test_cms_cleanup_removes_only_finished_release_outside_current_and_rollback(self):
+        config, current, rollback, stale, history = self._layout()
+        with patch.object(host, "_mount_points", return_value=set()):
+            removed = host._cleanup_cms_releases(config, self._state(history))
+        self.assertEqual(removed, [str(stale.resolve())])
+        self.assertTrue(current.exists())
+        self.assertTrue(rollback.exists())
+        self.assertFalse(stale.exists())
+
+    def test_cms_cleanup_refuses_while_a_publication_is_unfinished(self):
+        config, current, rollback, stale, history = self._layout()
+        with self.assertRaisesRegex(host.HostFailure, "unfinished"):
+            host._cleanup_cms_releases(config, self._state(history, unfinished={"op-next"}))
+        self.assertTrue(stale.exists())
+        self.assertTrue(current.exists())
+        self.assertTrue(rollback.exists())
+
+    def test_cms_cleanup_deletes_nothing_when_rollback_target_is_already_gone(self):
+        config, current, rollback, stale, history = self._layout()
+        shutil.rmtree(rollback)
+        removed = host._cleanup_cms_releases(config, self._state(history))
+        self.assertEqual(removed, [])
+        self.assertTrue(stale.exists())
+        self.assertTrue(current.exists())
+
+    def test_cms_cleanup_keeps_restart_workspace_named_by_the_environment_file(self):
+        config, current, rollback, stale, history = self._layout()
+        restart = stale.parent / "restart-release"
+        restart.mkdir()
+        env_file = stale.parent.parent / "cms.env"
+        env_file.write_text(f"CMS_DIR={(restart / 'cms-artifact').resolve()}\n", encoding="utf-8")
+        config["cmsEnvironmentFile"] = str(env_file)
+        with patch.object(host, "_mount_points", return_value=set()):
+            removed = host._cleanup_cms_releases(config, self._state(history))
+        self.assertEqual(removed, [str(stale.resolve())])
+        self.assertTrue(restart.exists())
+
+    def test_cms_cleanup_skips_when_the_profile_has_no_cms_root(self):
+        self.assertEqual(host._cleanup_cms_releases({}, self._state([])), [])
+
+
+if __name__ == '__main__':
+    unittest.main()

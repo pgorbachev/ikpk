@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Narrow, reversible migration for the staging194 source-ref policy."""
+"""Narrow, reversible migration for rehearsal host configuration."""
 import json
 import os
 import stat
@@ -7,6 +7,8 @@ import sys
 import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
+
+PRODUCTION_PROFILES = {"initial-prod", "production-static", "production-paired"}
 
 
 def _migration(current: Path, template: Path) -> tuple[dict, bool]:
@@ -16,13 +18,45 @@ def _migration(current: Path, template: Path) -> tuple[dict, bool]:
     expected = json.loads(template.read_text(encoding="utf-8"))
     if actual == expected:
         return actual, False
-    if actual.get("allowedSourceRef") != "refs/heads/dev" or expected.get("allowedSourceRef") != "refs/heads/main":
-        raise ValueError("existing rehearsal config differs from the reviewed versioned template")
     normalized = dict(actual)
-    normalized["allowedSourceRef"] = "refs/heads/main"
-    if normalized != expected:
+    changed = False
+    if normalized.get("allowedSourceRef") == "refs/heads/dev" and expected.get("allowedSourceRef") == "refs/heads/main":
+        normalized["allowedSourceRef"] = "refs/heads/main"
+        changed = True
+    for key in ("siteRefreshState", "sitePublicationMarker", "publicationLock"):
+        if key not in expected:
+            continue
+        if key not in normalized:
+            normalized[key] = expected[key]
+            changed = True
+        elif (key == "siteRefreshState"
+              and normalized[key] == "/var/lib/ikpk-cms-prototype193/staging/site-refresh194/state"
+              and expected[key] == "/var/lib/ikpk-cms-prototype193/staging/site-refresh194/state/state.json"):
+            normalized[key] = expected[key]
+            changed = True
+    if "temporaryRoot" in expected and "temporaryRoot" not in normalized:
+        normalized["temporaryRoot"] = expected["temporaryRoot"]
+        changed = True
+    if (expected.get("profile", "staging194") == "staging194"
+            and normalized.get("profile", "staging194") == "staging194"
+            and "cmsEnvironmentFile" in expected and "cmsEnvironmentFile" not in normalized):
+        normalized["cmsEnvironmentFile"] = expected["cmsEnvironmentFile"]
+        changed = True
+    if normalized != expected and not _preserves_existing_payment_probe(actual, expected, normalized):
         raise ValueError("existing rehearsal config has unrelated differences; refusing migration")
-    return actual, True
+    return normalized, changed
+
+
+def _preserves_existing_payment_probe(actual: dict, expected: dict, normalized: dict) -> bool:
+    """Keep an already installed production probe URL and accept no other drift."""
+    profile = expected.get("profile")
+    if profile not in PRODUCTION_PROFILES or normalized.get("profile") != profile:
+        return False
+    if "paymentStatusProbeUrl" not in actual or normalized.get("paymentStatusProbeUrl") != actual["paymentStatusProbeUrl"]:
+        return False
+    comparable = dict(normalized)
+    comparable["paymentStatusProbeUrl"] = expected.get("paymentStatusProbeUrl")
+    return comparable == expected
 
 
 def check(current: str, template: str) -> None:
@@ -36,7 +70,7 @@ def migrate(current: str, template: str) -> None:
     actual, needed = _migration(path, Path(template))
     if not needed:
         return
-    backup = path.with_name(path.name + ".pre-main-" + datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ") + ".bak")
+    backup = path.with_name(path.name + ".pre-update-" + datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ") + ".bak")
     source = path.read_bytes()
     fd = os.open(backup, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
     try:
@@ -47,7 +81,6 @@ def migrate(current: str, template: str) -> None:
     except Exception:
         backup.unlink(missing_ok=True)
         raise
-    actual["allowedSourceRef"] = "refs/heads/main"
     fd, temporary = tempfile.mkstemp(prefix=path.name + ".new-", dir=path.parent)
     try:
         os.fchmod(fd, stat.S_IMODE(path.stat().st_mode))

@@ -421,7 +421,12 @@ test.describe('3.10a-2 удержание переживает перезагр�
     await expect(page.locator(STATE('succeeded'))).toBeVisible();
     await openForm(page);
     await fillValid(page);
+    const secondPost = page.waitForResponse((response) =>
+      response.request().method() === 'POST'
+      && new URL(response.url()).pathname.endsWith('/payments'),
+    );
     await page.locator(`${FORM} [type="submit"]`).click();
+    await secondPost;
     expect(new Set(ids).size).toBeGreaterThan(1);
   });
 
@@ -1530,6 +1535,8 @@ test.describe('remove-payment-venue: built form and saved attempts', () => {
       for (let n = 1; n <= 3; n += 1) {
         await resumeVenueForm(page);
         await submitVenueForm(page);
+        await expect.poll(() => posts.length).toBe(n);
+        await expect(page.locator(FORM)).toBeHidden();
         await expect(page.locator(STATE('verification_required'))).toBeVisible();
         expect(posts).toHaveLength(n);
         expect(posts[n - 1]).toMatchObject({ requestId: id, venue: 'Москва' });

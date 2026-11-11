@@ -367,23 +367,20 @@ describe('доверенный перенос в собранном Strapi', { t
     assert.equal(published.course_group.documentId, publishedProgram.documentId);
   });
 
-  test('замена SEO-компонента без id проверяет заменённые поля и сохраняет старую публикацию при отказе', async () => {
+  test('замена SEO-компонента без описания публикует семинар', async () => {
     const seminarDoc = await createPublishedSeminar({ name: 'Семинар для замены SEO', slug: 'publication-seo-replace' });
-    await assert.rejects(
-      () => app.documents(SEMINAR).update({
-        documentId: seminarDoc.documentId,
-        status: 'published',
-        data: { seo: { seo_title: 'Новый заголовок без описания' } },
-      }),
-      /seo_description|обязательные поля/i,
-    );
+    await app.documents(SEMINAR).update({
+      documentId: seminarDoc.documentId,
+      status: 'published',
+      data: { seo: { seo_title: 'Новый заголовок без описания' } },
+    });
     let published = await app.documents(SEMINAR).findOne({
       documentId: seminarDoc.documentId,
       status: 'published',
       populate: { seo: true },
     });
-    assert.equal(published.seo.seo_title, 'Семинар для проверки');
-    assert.equal(published.seo.seo_description, 'Описание для проверки');
+    assert.equal(published.seo.seo_title, 'Новый заголовок без описания');
+    assert.ok(!published.seo.seo_description);
 
     await app.documents(SEMINAR).update({
       documentId: seminarDoc.documentId,

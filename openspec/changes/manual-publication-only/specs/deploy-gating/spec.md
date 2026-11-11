@@ -1,17 +1,54 @@
+## ADDED Requirements
+
+### Requirement: Host helper is installed from a provenance-bound release artifact
+
+The host helper SHALL be packaged as `host-helper.tar.gz` from the existing installer, modules, and configuration templates. For each use, its CI evidence SHALL bind it to the exact SHA admitted by that mode and the successful canonical `main` `Tests` push run and attempt for that SHA. Staging194 static-only SHALL retain its current-head requirement; paired staging194 SHALL retain its selected eligible ancestor revision without a GitHub Release; production SHALL retain the existing current-head or explicitly selected older stable Release rules for the applicable operator path. Artifact retrieval SHALL reuse the existing CMS artifact admission checks: exactly one artifact for the run, unexpired, bound to its workflow run/head SHA, GitHub's digest for the downloaded ZIP verified, and exactly the expected helper payload in that ZIP. The verified payload SHA-256 SHALL be recorded for the operation. CI SHALL upload the artifact without host credentials. Staging194 may use the exact-SHA CI artifact without a GitHub Release; production SHALL use the same payload bytes attached to the GitHub Release, and SHALL verify the Release asset SHA-256 matches the verified CI payload SHA-256. Destination configurations remain separate. Installation SHALL use the existing installer and SHALL NOT replace installed lock/configuration state, weaken admission gates, or introduce a new delivery service or transport. The existing operator has no self-update behavior. Installation SHALL proceed only over an existing channel proven to be permitted for the destination; an unknown or forbidden channel SHALL cause refusal before installation. Calling the installed helper remotely is not by itself evidence that helper-update delivery is available.
+
+#### Scenario: staging194 static-only installs the exact current-head CI artifact
+
+- **WHEN** the exact current canonical `main` head SHA, successful `Tests` push run/attempt, unique unexpired run-bound artifact, downloaded ZIP GitHub digest, and exact expected helper payload all verify, and an existing delivery channel is proven permitted
+- **THEN** the existing explicit staging194 publication command obtains/verifies that CI artifact, invokes the existing installer through the proven channel, and continues the existing publication flow
+- **AND** staging194-specific configuration remains separate
+- **AND** acceptance verifies the actually served release and required routes
+
+#### Scenario: paired staging194 uses an eligible ancestor artifact without a Release
+
+- **WHEN** paired staging194 admits an eligible ancestor SHA under its existing source and CI gates, the helper artifact is bound to that exact SHA and its successful canonical `main` `Tests` run/attempt, artifact integrity checks pass, and a permitted delivery channel is evidenced
+- **THEN** the existing paired operation can use the CI artifact without requiring a GitHub Release
+- **AND** the admitted SHA remains pinned under the existing paired-operation rules
+
+#### Scenario: production reuses the CI artifact in a GitHub Release
+
+- **WHEN** the verified CI helper payload for a SHA admitted by the existing production mode (including an eligible explicitly selected older stable Release) is attached to its GitHub Release, the canonical `main` push run/attempt is successful for that exact SHA, the Release asset SHA-256 matches the verified CI payload SHA-256, and an existing delivery channel is proven permitted
+- **THEN** production installs those same artifact bytes through the existing installer with production-specific configuration
+
+#### Scenario: artifact channel is not permitted
+
+- **WHEN** the artifact channel is forbidden or unknown for the destination, the exact-SHA/CI/integrity evidence is missing, or the production Release asset digest differs from the verified CI payload
+- **THEN** the existing publication command refuses before installation or changing installed helper, lock, or configuration state; if no permitted delivery channel can be evidenced, the change remains blocked on that concrete channel decision
+
 ## MODIFIED Requirements
 
 ### Requirement: Публикация только после успешного прогона тестов
 
-Успешный canonical push `Tests` run является необходимым свидетельством, но SHALL NOT запускать публикацию. Каждая публикация требует явной команды оператора вне GitHub Actions. CI SHALL NOT иметь host credentials. Для ordinary production публикации команда принимает только exact full SHA на canonical `main`, текущую main head и успешный run, где все обязательные jobs завершились успешно без `skipped` или `cancelled`. Отдельный approved `initial-prod` профиль использует тот же gate для exact current `main`, но закреплён за одним protected operation ID и production destination и становится permanently unavailable после commit. Для paired rehearsal staging194 принимается только exact current `main` SHA, стабильный опубликованный GitHub Release на этот SHA, успешные четыре required CI workflow и `release-preflight`; CMS и static outputs используют один source SHA. Owner-approved static-only main mode на staging194 (`194.226.99.10`) и production-static (`89.111.184.196`) требует exact current canonical `main` full SHA и успешных push runs для `Tests`, `Lint and Typecheck`, `Security` и `Lighthouse CI`, включая успешные required jobs без `skipped` или `cancelled`; он обновляет только static output, а production-static использует отдельные config, state и capture namespaces. Run ID и attempt фиксируются. Для всех режимов у назначенной публикации записываются соответствующие SHA, CI evidence и digests. Перед ordinary production release CMS/static source tree SHALL совпадать после curated squash в `main`, но новый main SHA требует собственного canonical `Tests` run. GitHub Release и `release-preflight` SHALL завершиться до production deployment.
+Успешный canonical push `Tests` run является необходимым свидетельством, но SHALL NOT запускать публикацию. Каждая публикация требует явной команды оператора вне GitHub Actions. CI SHALL NOT иметь host credentials. Для ordinary production публикации команда принимает только exact full SHA на canonical `main`, текущую main head и успешный run, где все обязательные jobs завершились успешно без `skipped` или `cancelled`. Отдельный approved `initial-prod` профиль использует тот же gate для exact current `main`, но закреплён за одним protected operation ID и production destination и становится permanently unavailable после commit. Для paired rehearsal staging194 по умолчанию выбирается exact full SHA текущего canonical `main`; оператор может явно выбрать полный SHA, остающийся предком canonical `main`. Для выбранного SHA обязательны успешные четыре canonical push CI workflow с записанными run/attempt; GitHub Release и `release-preflight` не требуются. Выбранный SHA фиксируется за operation, CMS и static outputs используют его один; дальнейшее продвижение `main` само по себе не отменяет операцию, но потеря ancestry SHALL приводить к отказу. Совместимость миграции проверяется на candidate после fence и проверенного backup; при отсутствии подтверждения переключение SHALL NOT выполняться, а fenced recovery state сохраняется. Owner-approved staging194 static-only mode (`194.226.99.10`) requires exact current canonical `main` full SHA and successful push runs for `Tests`, `Lint and Typecheck`, `Security`, and `Lighthouse CI`, including successful required jobs without `skipped` or `cancelled`. For the shared tag-based production-static operator workflow (`--release-tag` plus validated in-memory Release admission), the default source is the green exact full SHA on canonical `main` at operation start; an operator may explicitly select an older stable published GitHub Release when the same four push workflows pass for that exact SHA and existing compatibility checks pass. The workflow records applicable run/attempt and Release evidence and continues with its tag-admitted SHA if `main` advances later. The legacy direct production-static `static-main` path without `--release-tag` retains its current-main pre-switch check. Both modes update only static output; production-static uses separate config, state, and capture namespaces. Run ID и attempt фиксируются. Для всех режимов у назначенной публикации записываются соответствующие SHA, CI evidence и digests. Перед ordinary production release CMS/static source tree SHALL совпадать после curated squash в `main`, но новый main SHA требует собственного canonical `Tests` run. GitHub Release и `release-preflight` SHALL завершиться до production deployment.
 
 #### Scenario: тесты прошли и коммит остаётся вершиной
 
 - **WHEN** canonical обязательный run успешен для текущего source SHA
 - **THEN** публикация не запускается до явной локальной команды
 
+#### Scenario: staging194 paired uses an explicitly selected revision without Release
+
+- **WHEN** the operator selects a full SHA that remains on canonical `main` and its four exact-SHA push workflows succeeded
+- **THEN** paired staging194 admits and pins that SHA without a GitHub Release or `release-preflight`
+- **AND** a later advance of `main` does not replace the pinned SHA
+- **AND** missing ancestry, CI or compatible artifact evidence causes refusal before fencing
+- **AND** migration compatibility is checked after fence and verified backup; absent evidence refuses activation and preserves fenced recovery
+
 #### Scenario: тесты прошли, но коммит уже перекрыт
 
-- **WHEN** source SHA перестал быть допущенным head к моменту команды
+- **WHEN** source SHA is no longer the current canonical head at command time in a source-selection mode that requires a current head (ordinary production, initial-prod, staging194 static-only, or legacy direct production-static without `--release-tag`)
 - **THEN** команда отказывает до host mutation
 
 #### Scenario: тесты упали
@@ -31,15 +68,15 @@
 
 #### Scenario: только exact source и полный зелёный run допускают команду
 
-- **WHEN** оператор выбирает ordinary production SHA, fixed initial-prod SHA, staging194 paired rehearsal SHA, staging194 static-only main SHA или production-static main SHA
-- **THEN** команда подтверждает назначенный canonical ref, exact full SHA, run/attempt и успех всех обязательных jobs без пропусков или отмен
+- **WHEN** оператор выбирает ordinary production SHA, fixed initial-prod SHA, staging194 paired rehearsal SHA, staging194 static-only main SHA, production-static SHA through the tag-based operator workflow, or a production-static SHA through the legacy direct no-tag path
+- **THEN** команда подтверждает назначенный canonical ref (including the selected Release tag where applicable), exact full SHA, run/attempt и успех всех обязательных jobs без пропусков или отмен
 - **AND** несовпадение отказывает до исполнения candidate code или host mutation
 
 ### Requirement: Ручная публикация остаётся доступной
 
 Публикация доступна только явной локальной команде доверенного оператора. GitHub `workflow_dispatch`, `workflow_run`, CMS webhook и календарное событие SHALL NOT публиковать сайт. Команда SHALL закрепить назначение и source до исполнения candidate code, проверить admission по предыдущему требованию, построить static candidate на сервере из admitted SHA как непривилегированный пользователь, выполнить local candidate checks для sealed snapshot и записать их исход вместе с source, snapshot и digest. Browser checks SHALL use the same sealed static bytes later served; canonical CI run proves the source SHA, а local checks prove the captured content pair. Для paired staging194 rehearsal CMS update и static publication используют один operation ID и fence; global commit разрешён только после приёмки обоих. До commit разрешена только явная recovery; после commit восстановление старой DB запрещено. Существующие production rules для provenance, freshness и подтверждённого rollback сохраняются за пределами scoped staging194 исключений.
 
-Для staging194 и production-static main mode команда использует свежий read-only CMS/content/media capture и выполняет необходимые локальные и browser checks той же static-кандидатуры. Она SHALL switch только `currentStatic`; CMS release/symlink, service, environment, DB/WAL, uploads и CMS identities SHALL оставаться неизменными. Режим не требует CMS-кандидата, CMS-миграции, paired CMS/static SHA или writer fence; отдельный durable journal сохраняет старый static tree, а rollback требует явной причины и восстанавливает его только если pointer всё ещё указывает на принятый candidate. Production-static запрещает CMS-mutating commands. Paired staging194 rehearsal uses the source admission defined above; ordinary production admission remains unchanged.
+Для staging194 static-only и production-static команда использует свежий read-only CMS/content/media capture и выполняет необходимые локальные и browser checks той же static-кандидатуры. Она SHALL switch только `currentStatic`; CMS release/symlink, service, environment, DB/WAL, uploads и CMS identities SHALL оставаться неизменными. Режим не требует CMS-кандидата, CMS-миграции, paired CMS/static SHA или writer fence; отдельный durable journal сохраняет старый static tree, а rollback требует явной причины и восстанавливает его только если pointer всё ещё указывает на принятый candidate. Production-static запрещает CMS-mutating commands. Paired staging194 rehearsal uses the source admission defined above; ordinary production admission remains unchanged.
 
 #### Scenario: ручной запуск, вершина не сдвинулась
 
@@ -58,9 +95,9 @@
 - **AND** the existing CMS code, service, environment, DB/WAL, uploads, roles, and users remain unchanged without a writer fence or paired CMS update
 - **AND** explicit rollback restores the exact prior static tree only while the current pointer still identifies this candidate
 
-#### Scenario: production-static main preserves CMS
+#### Scenario: production-static source preserves CMS
 
-- **WHEN** exact current `main` SHA has all four required CI workflows and production-static capture plus candidate checks pass
+- **WHEN** the shared tag-based workflow's current-main SHA fixed at operation start, or explicitly selected stable older Release SHA, passes all four required workflows for that exact SHA and production-static capture plus candidate checks pass; or the legacy direct no-tag path's exact current-main SHA passes all four required workflows, remains current through its pre-switch check, and production-static capture plus candidate checks pass
 - **THEN** the operator atomically serves only the candidate static tree on production
 - **AND** CMS code, service, environment, DB/WAL, uploads, roles, and users remain unchanged
 - **AND** CMS-mutating actions refuse before host mutation and explicit rollback uses the separate production-static journal
@@ -92,11 +129,11 @@
 
 ### Requirement: Устаревший результат не откатывает сайт
 
-An operator publication command SHALL recheck that its exact SHA remains the admitted canonical head immediately before the atomic switch; a stale run SHALL NOT publish. Serialize publication commands so they cannot race or silently replace a pending candidate. If the source advances after the final check, the selected release remains identifiable by its exact SHA and the site is not automatically changed again. Returning to the new head requires a new explicit local command and successful checks. An older saved release remains available only through the separately confirmed rollback path; its original CI and artifact evidence must remain valid.
+An operator publication command whose source-selection mode requires the current canonical head SHALL recheck that its exact SHA remains that head immediately before the atomic switch; a stale run SHALL NOT publish. This includes the legacy direct production-static `static-main` path without `--release-tag`. The shared tag-based production-static workflow (`--release-tag` plus validated in-memory Release admission) fixes its source SHA at operation start and SHALL NOT recheck whether that SHA remains current before switching. State-changing publication, deploy, restore, cleanup, and CMS refresh commands for a target site SHALL use its same existing host flock as the single shared writer gate; journal-specific locks protect journal integrity and do not replace this gate. GET and status requests SHALL NOT wait for a busy shared writer gate or mutate operation/site state while another state-changing operation holds it. An existing nonblocking probe MAY acquire the gate briefly to diagnose an unresolved same-process Restore. This does not promise availability while an existing journal-specific lock is held. Each state-changing command SHALL acquire the flock before inspecting durable operation state for admission. If the shared flock is busy, each state-changing command SHALL refuse without changing site state; a cleanup refusal SHALL leave its request retryable through the existing timer. Read-only cleanup-profile selection is not admission and SHALL NOT require the writer gate. Admission SHALL fail closed when durable state shows an active or unfinished operation, except for an already-supported continuation or recovery that verifies the existing operation identity where one is defined. Cleanup MAY complete an already-confirmed terminal cleanup-pending operation under the lock; admission relies on that verified terminal state, never on deleting or resetting its marker or journal. Cleanup under the lock SHALL preserve `current` and rollback targets protected by the existing contract or an unfinished operation. A process restart or released OS flock does not by itself clear unfinished state. Operations whose existing contract requires a storage-space preflight SHALL complete it before their first mutation; this requirement does not add a space preflight to restore or cleanup. Preserve existing rollback confirmation, target checks, and verified backup requirements. If the source advances after the final applicable head check, the selected release remains identifiable by its exact SHA and the site is not automatically changed again. Returning to the new head requires a new explicit local command and the checks applicable to that source-selection mode. An older production pair remains available only through the separately confirmed rollback path; its original CI and artifact evidence must remain valid. The tag-based production-static workflow's explicit older stable Release selection is governed by its exact-SHA CI and compatibility checks above.
 
 #### Scenario: вершина сдвинулась, пока шла сборка
 
-- **WHEN** the admitted SHA is no longer the canonical head at the final pre-switch check
+- **WHEN** the admitted SHA is no longer the canonical head at the final pre-switch check for a source-selection mode that requires a current head
 - **THEN** publication refuses before switching
 
 #### Scenario: вершина сдвинулась после последней сверки
@@ -106,7 +143,7 @@ An operator publication command SHALL recheck that its exact SHA remains the adm
 
 #### Scenario: перезапуск старого прогона
 
-- **WHEN** a successful test run is restarted for a SHA that is no longer the admitted head
+- **WHEN** a successful test run is restarted for a SHA that is no longer the admitted head in a source-selection mode that requires a current head
 - **THEN** the local command refuses to publish it
 
 #### Scenario: подтверждённый откат на перекрытый коммит

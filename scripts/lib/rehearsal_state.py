@@ -14,6 +14,11 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Callable, Iterator, Optional
 
+try:
+    from .housekeeping_journal import validate_journal_history
+except ImportError:  # Installed wrapper places both files in one private module directory.
+    from housekeeping_journal import validate_journal_history
+
 
 class RehearsalRefusal(RuntimeError):
     pass
@@ -142,6 +147,76 @@ class RehearsalState:
             raise RehearsalRefusal("append-only operation journal is malformed") from error
         return rows
 
+    def read_journal_for_cleanup(self, *, validate_history: bool = False) -> list[dict]:
+        """Read the journal without repair; destructive cleanup must fail closed."""
+        try:
+            before = self.journal_path.lstat()
+        except FileNotFoundError:
+            return []
+        if not stat.S_ISREG(before.st_mode) or before.st_nlink != 1:
+            raise RehearsalRefusal("journal must be a regular unlinked file")
+        try:
+            fd = os.open(self.journal_path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+        except OSError as error:
+            raise RehearsalRefusal("append-only operation journal is unreadable") from error
+        try:
+            opened = os.fstat(fd)
+            if (not stat.S_ISREG(opened.st_mode) or opened.st_nlink != 1
+                    or (opened.st_dev, opened.st_ino) != (before.st_dev, before.st_ino)):
+                raise RehearsalRefusal("journal changed during cleanup inspection")
+            chunks = []
+            while True:
+                block = os.read(fd, 65536)
+                if not block:
+                    break
+                chunks.append(block)
+            raw = b"".join(chunks)
+            after = os.fstat(fd)
+            named = self.journal_path.lstat()
+            if ((after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns)
+                    != (opened.st_dev, opened.st_ino, opened.st_size, opened.st_mtime_ns)
+                    or (named.st_dev, named.st_ino) != (opened.st_dev, opened.st_ino)):
+                raise RehearsalRefusal("journal changed during cleanup inspection")
+        finally:
+            os.close(fd)
+        if raw and not raw.endswith(b"\n"):
+            raise RehearsalRefusal("operation journal has an incomplete tail; recover it before cleanup")
+        rows = []
+        known_records = {
+            "start", "fenced-baseline", "new-bundle", "committed", "recovered",
+            "static-main-start", "static-main-prepared", "static-main-switch-intent",
+            "static-main-switched", "static-main-committed", "static-main-recovered",
+            "static-main-rolled-back", "static-main-rollback-intent",
+            "static-main-rollback-completed", "static-main-rollback-expired",
+            "restore-prepared",
+        }
+        try:
+            for line in raw.splitlines():
+                value = json.loads(line.decode("utf-8"))
+                if (not isinstance(value, dict) or value.get("version") != 1
+                        or value.get("record") not in known_records):
+                    raise ValueError("unknown journal record")
+                record = value["record"]
+                operation_id = value.get("operationId")
+                if not isinstance(operation_id, str) or not OPERATION_ID.fullmatch(operation_id):
+                    raise ValueError("operation identity is missing or malformed")
+                if record.startswith("static-main-") and value.get("operationKind") != "static-main":
+                    raise ValueError("static-main phase has no matching operation kind")
+                if value.get("operationKind") not in (None, "static-main"):
+                    raise ValueError("unknown operation kind")
+                rows.append(value)
+        except (UnicodeDecodeError, ValueError) as error:
+            raise RehearsalRefusal("append-only operation journal is malformed or has an unknown phase") from error
+        if validate_history:
+            try:
+                validate_journal_history(rows)
+            except ValueError as error:
+                message = ("operation journal contains an unfinished operation"
+                           if str(error) == "incomplete operation" else
+                           "operation journal history is inconsistent")
+                raise RehearsalRefusal(message) from error
+        return rows
+
     def _repair_incomplete_tail(self) -> None:
         try:
             info = self.journal_path.lstat()
@@ -223,7 +298,7 @@ class RehearsalState:
         static_terminal = {row["operationId"] for row in history
                            if row.get("operationKind") == "static-main"
                            and row.get("record") in ("static-main-committed", "static-main-recovered",
-                                                     "static-main-rolled-back")
+                                                     "static-main-rolled-back", "static-main-rollback-expired")
                            and isinstance(row.get("operationId"), str)}
         static_rollback_intents = {row["operationId"] for row in history
                                    if row.get("operationKind") == "static-main"
@@ -274,7 +349,10 @@ class RehearsalState:
             if self._unfinished_operation_ids(history):
                 raise RehearsalRefusal("another unfinished operation owns recovery")
 
-    def begin(self, operation_id: str, source_sha: str, old_pair: dict) -> dict:
+    def begin(self, operation_id: str, source_sha: str, old_pair: dict,
+              cms_artifact: Optional[dict] = None,
+              host_helper_artifact: Optional[dict] = None,
+              host_helper_identity: Optional[str] = None) -> dict:
         self._validate_identity(operation_id, source_sha)
         if not isinstance(old_pair, dict) or not old_pair:
             raise RehearsalRefusal("start record must identify the old CMS/static pair")
@@ -286,15 +364,29 @@ class RehearsalState:
                 self._require_mutable(operation_id)
                 if current.get("sourceSha") != source_sha:
                     raise RehearsalRefusal("operation ID is already bound to another source SHA")
-                if not any(row.get("record") == "start" and row.get("sourceSha") == source_sha
-                           for row in self._operation_rows(operation_id)):
+                start = next((row for row in self._operation_rows(operation_id)
+                              if row.get("record") == "start" and row.get("sourceSha") == source_sha), None)
+                if start is None:
                     raise RehearsalRefusal("maintenance marker has no matching journal start record")
+                if cms_artifact is not None and start.get("cmsArtifact") != cms_artifact:
+                    raise RehearsalRefusal("operation CMS artifact identity differs from its journal start")
+                if (host_helper_artifact is not None
+                        and start.get("hostHelperArtifact") != host_helper_artifact):
+                    raise RehearsalRefusal("operation host helper artifact identity differs from its journal start")
+                if (host_helper_identity is not None
+                        and start.get("hostHelperRuntimeIdentity") != host_helper_identity):
+                    raise RehearsalRefusal("operation host helper runtime identity differs from its journal start")
                 return current
             history = self._journal()
             unfinished = self._unfinished_operation_ids(history)
             if operation_id in unfinished:
                 start = next(row for row in history if row.get("record") == "start" and row.get("operationId") == operation_id)
-                if start.get("sourceSha") != source_sha or start.get("oldPair") != old_pair:
+                if (start.get("sourceSha") != source_sha or start.get("oldPair") != old_pair
+                        or (cms_artifact is not None and start.get("cmsArtifact") != cms_artifact)
+                        or (host_helper_artifact is not None
+                            and start.get("hostHelperArtifact") != host_helper_artifact)
+                        or (host_helper_identity is not None
+                            and start.get("hostHelperRuntimeIdentity") != host_helper_identity)):
                     raise RehearsalRefusal("interrupted operation identity does not match its journal start")
                 current = {
                     "version": 1,
@@ -318,8 +410,15 @@ class RehearsalState:
                 "newPairAccepted": False,
                 "committed": False,
             }
-            self._append({"version": 1, "record": "start", "operationId": operation_id,
-                          "sourceSha": source_sha, "oldPair": old_pair})
+            start = {"version": 1, "record": "start", "operationId": operation_id,
+                     "sourceSha": source_sha, "oldPair": old_pair}
+            if cms_artifact is not None:
+                start["cmsArtifact"] = cms_artifact
+            if host_helper_artifact is not None:
+                start["hostHelperArtifact"] = host_helper_artifact
+            if host_helper_identity is not None:
+                start["hostHelperRuntimeIdentity"] = host_helper_identity
+            self._append(start)
             durable_json(self.marker_path, current)
             return current
 

@@ -66,28 +66,20 @@ nginx сжимает его всегда, повторение дало бы п�
 `application/javascript` — каноническое написание для обоих оказалось не тем, что отдаёт
 хост.
 
-**Security-заголовки и CSP из раздела ниже по-прежнему только намерение** — они
-намеренно вне scope `serving-cache-headers` (идут отдельным change вместе с HTTPS, по
-находке B4 `docs/security-audit-2026-08-08.md`) и остаются описанными только здесь.
+CSP, X-Content-Type-Options, X-Frame-Options, Referrer-Policy и Permissions-Policy
+были вне области `serving-cache-headers` и `prod-serving-on-nginx`; их наличие в
+конкретном развёртывании нужно проверять отдельно. `openspec/specs/static-serving/spec.md`
+отдельно запрещает добавлять HSTS в конфигурацию раздачи в рамках этого требования.
 
 ## CSP (Этап 1 report-only → Этап 5 enforce): frame-src
 
 Видео-фасад встраивает RUTUBE-плеер по клику. В `Content-Security-Policy`
 `frame-src` должен включать `https://rutube.ru` (иначе плеер не загрузится
-под enforce). Основной видео-канал (ссылки, не iframe) — VK Видео
-`vkvideo.ru/@clubikpk`.
+под enforce). Ссылка на видео ВКонтакте ведёт в сообщество `vk.com/clubikpk`;
+источник адреса — `web/src/lib/social.ts`.
 
-## Деплой превью-сборки (временный, до полноценного staging Этапа 1)
+## Публикация и стенд
 
-Атомарный деплой статики: `scripts/deploy-web.sh <host>`
-(builds → tar в `releases/<ts>` → swap symlink `current` → `nginx -t` + reload,
-хранит 5 релизов). Ключ — через `SSH_KEY` (тело ключа только локально в
-`~/.ssh`, в репозиторий не коммитится).
-
-Гейт-нюансы:
-- Если порты 80/443 на сервере уже заняты другим сервисом/реверс-прокси,
-  vhost сайта поднимается на отдельном порту (напр. 8080) — деплой файлов
-  этим не затрагивается, меняется только `listen` в nginx-конфиге сайта.
-  Это **временное превью**, без HTTPS/редиректов/заголовков.
-- Полноценный `staging.ikpk.su` (выделенный VPS + HTTPS + gzip/brotli +
-  security/cache headers + 301-map из url_map.csv) — задача Этапа 1.
+Порядок допуска версии и публикации описан в [релизном процессе](release-process.md)
+и [runbook публикации](deploy-vps.md). Установка на демостенд описана в
+[отдельном runbook](runbook-stand-demo-install.md).

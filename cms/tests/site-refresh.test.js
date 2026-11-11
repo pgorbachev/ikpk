@@ -45,6 +45,7 @@ function harness(overrides = {}) {
       releaseId: 'content-1',
       identity: { commit: 'a'.repeat(40), snapshotId: 'snap:new' },
     }),
+    readCurrent: () => 'releases/old',
     switchRelease: (releaseId) => {
       calls.push({ switchedTo: releaseId });
       return { previous: 'releases/old' };
@@ -188,12 +189,27 @@ test('без настроенной проверки релиз не перек�
 });
 
 test('ошибка проверки после переключения не называется успехом', async () => {
-  const { deps } = harness({ verify: async () => ({ ok: false, detail: 'HTTP 500' }) });
+  const { deps } = harness({ verify: async () => ({ ok: false, detail: 'HTTP 301' }) });
   const result = await runRefresh(deps);
   assert.equal(result.status, 'verification-failed');
   assert.equal(result.switched, true);
   assert.equal(result.message, MESSAGES.verificationFailed);
   assert.match(result.message, /не автоматический откат/);
+  assert.equal(result.detail, 'HTTP 301');
+  assert.equal(result.releaseId, 'content-1');
+  assert.equal(result.commit, 'a'.repeat(40));
+  assert.equal(result.finishedAt, '2026-09-27T00:00:00.000Z');
+  assert.equal(publicView(result).commit, 'a'.repeat(40));
+});
+
+test('успешное обновление запоминает релиз и коммит этой попытки', async () => {
+  const { deps } = harness();
+  const result = await runRefresh(deps);
+  assert.equal(result.status, 'succeeded');
+  assert.equal(result.releaseId, 'content-1');
+  assert.equal(result.commit, 'a'.repeat(40));
+  assert.equal(result.finishedAt, '2026-09-27T00:00:00.000Z');
+  assert.equal(publicView(result).releaseId, 'content-1');
 });
 
 test('повторное нажатие показывает уже идущую сборку', () => {
@@ -311,7 +327,7 @@ test('проверка релиза принимает штатную пару �
   assert.equal(releaseIdentity({ releaseId: 'content-1' }), null);
 });
 
-test('живой lock возврата не снимается, битый файл со мёртвым pid снимается', () => {
+test('наблюдение никогда не снимает живой, неразбираемый или мёртвый lock', () => {
   const root = mkdtempSync(join(tmpdir(), 'ikpk-lock-'));
   try {
     const state = join(root, 'state.json');
@@ -331,20 +347,23 @@ test('живой lock возврата не снимается, битый фа�
       lockPath: lock,
       pidAlive: () => false,
     });
-    assert.equal(stale.releaseLock, true);
-    assert.equal(stale.persist.message.includes('повреждена'), true);
+    assert.equal(stale.releaseLock, false);
+    assert.equal(stale.persist, undefined);
     writeJsonAtomic(state, { status: 'idle', message: 'целое' });
     assert.deepEqual(JSON.parse(readFileSync(state, 'utf8')), { status: 'idle', message: 'целое' });
     assert.equal(existsSync(state), true);
-    tryLock(lock, 77);
+    unlock(lock, 77);
+    tryLock(lock, 55);
     const deadWorker = decideLock({
       readable: true,
       record: { status: 'running', phase: 'build', pid: 55, switched: false },
       lockPath: lock,
       pidAlive: (pid) => pid === 77,
     });
-    assert.equal(deadWorker.releaseLock, true);
-    assert.equal(deadWorker.persist.status, 'interrupted');
+    assert.equal(deadWorker.releaseLock, false);
+    assert.equal(deadWorker.persist, undefined);
+    unlock(lock, 55);
+    tryLock(lock, 77);
     const restoreHolds = decideLock({
       readable: true,
       record: { status: 'running', phase: 'switching', pid: 77, switched: false },
@@ -433,7 +452,7 @@ test('первый клик content-admin без дерева не старту�
     assert.equal(begun.releaseLock, true);
     assert.equal(begun.body.message, MESSAGES.notPrepared);
     assert.equal(begun.body.switched, false);
-    unlock(lock);
+    unlock(lock, 77);
     assert.equal(existsSync(lock), false);
   } finally {
     rmSync(root, { recursive: true, force: true });

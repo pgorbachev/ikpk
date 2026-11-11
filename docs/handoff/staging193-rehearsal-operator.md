@@ -2,6 +2,10 @@
 
 This legacy-named runbook now describes the custom staging194 operator: its root-owned config and SSH binding target `https://194.226.99.10`. The existing dev `cms-update`/`static-publish` sequence remains unchanged and still admits only exact `dev` plus its successful `Tests` push run. `staging.ikpk.su` resolves to a different host and is not used here. CMS migration/build runs under the CMS account; the bounded host helper performs systemd, Nginx, database, and pointer operations only for that existing dev workflow.
 
+## Staging194 helper lock cutover
+
+Before the first helper installation that replaces a legacy staging194 launcher, require an explicit exclusive owner handoff confirming that no legacy helper command remains in flight. The legacy launcher imported its host modules before acquiring the destination lock, so the lock by itself cannot exclude a process that already loaded the old helper and has not yet reached the lock. Do not perform that first replacement without the handoff. After cutover, the generated staging194 launcher acquires the existing `/var/www/ikpk/.publication.lock` before importing the helper for every host action that uses that destination lock. `status`, `space-preflight`, and `validate-config` remain outside this pre-import lock path; production profiles are unchanged.
+
 After reviewed code and exact candidate CI are ready, install the bounded helper and prepare the existing CMS unit to use `/opt/ikpk-cms-prototype193/current`:
 
 ```sh

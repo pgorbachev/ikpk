@@ -34,7 +34,8 @@ test('REVIEW: broker-delivered agent socket reaches authorized transport without
   const broker = join(dirname(installed), 'broker.mjs'); const brokerTrace = join(temp, 'broker-called');
   const host = join(temp, 'host'); const ssh = join(dirname(installed), 'ssh.mjs'); const trace = join(temp, 'ssh-trace.json');
   const hosts = join(dirname(installed), 'known_hosts');
-  mkdirSync(repo); mkdirSync(host); mkdirSync(dirname(installed));
+  mkdirSync(repo); mkdirSync(host); mkdirSync(join(host, 'shared', 'site-refresh'), { recursive: true }); mkdirSync(dirname(installed));
+  writeFileSync(join(host, '.publication.lock'), '', { mode: 0o600 }); chmodSync(join(host, '.publication.lock'), 0o600);
   copyFileSync(join(REPO, 'scripts/publication-launcher.mjs'), installed); chmodSync(installed, 0o700); write(hosts, '# local test adapter\n');
   for (const file of ['publication-launcher.mjs', 'publication-transport.mjs', 'lib/publication-remote.py']) {
     mkdirSync(dirname(join(repo, 'scripts', file)), { recursive: true }); copyFileSync(join(REPO, 'scripts', file), join(repo, 'scripts', file));
@@ -67,7 +68,9 @@ catch(error){if(error.code!=='EBADF'&&error.code!=='EINVAL'&&error.code!=='ENXIO
   assert.equal(control.status, 0, control.stderr); assert.equal(JSON.parse(readFileSync(trace)).agentVerified, true);
   assert.equal(JSON.parse(readFileSync(trace)).brokerCalled, false);
   assert.equal(readFileSync(join(host, 'releases/agent-probe/index.html'), 'utf8'), 'checked bytes');
-  rmSync(join(repo, 'fixture-tree'), { recursive: true }); rmSync(host, { recursive: true }); mkdirSync(host); rmSync(trace);
+  rmSync(join(repo, 'fixture-tree'), { recursive: true }); rmSync(host, { recursive: true }); mkdirSync(host);
+  mkdirSync(join(host, 'shared', 'site-refresh'), { recursive: true });
+  writeFileSync(join(host, '.publication.lock'), '', { mode: 0o600 }); chmodSync(join(host, '.publication.lock'), 0o600); rmSync(trace);
 
   const result = await run([installed, 'publish', '--config', configPath, '--source-url', remote, '--source-ref', 'main', '--release-tag', 'v1.2.3'], { cwd: temp, env: cleanEnv() });
   assert.equal(result.status, 0, `authorized agent handoff failed: ${result.stderr}`);

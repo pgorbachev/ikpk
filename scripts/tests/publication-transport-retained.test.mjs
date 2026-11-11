@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
-import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, readlinkSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, readlinkSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { isAbsolute, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -28,6 +28,8 @@ function digest(tree) {
 function fixture(t, fault = {}) {
   const temp = mkdtempSync(join(tmpdir(), 'ikpk-retained-test-'));
   const root = join(temp, 'remote');
+  mkdirSync(join(root, 'shared', 'site-refresh'), { recursive: true });
+  writeFileSync(join(root, '.publication.lock'), ''); chmodSync(join(root, '.publication.lock'), 0o600);
   const retained = join(root, 'releases', 'retained');
   mkdirSync(join(retained, 'assets'), { recursive: true });
   mkdirSync(join(root, 'releases', 'current-release'));

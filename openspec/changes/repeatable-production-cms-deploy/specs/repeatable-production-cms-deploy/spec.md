@@ -27,10 +27,10 @@ The production paired operator SHALL accept only an explicit local invocation bo
 
 ### Requirement: CMS candidates are prepared before the writer fence
 
-Before creating the operation marker or closing CMS writers, the operator SHALL validate and extract the admitted source, prepare web dependencies with the existing `npm ci` in the extracted source tree, and prepare CMS dependencies with `npm ci` from the official `registry.npmjs.org` or reuse a complete immutable CMS dependency generation whose lock hash and completeness the existing helper verifies. It SHALL then build the CMS artifact as the configured unprivileged user. The existing immutable-generation fallback applies to CMS only; web dependencies SHALL use the existing source-tree `npm ci` path. The operator SHALL NOT use a third-party registry mirror or change persistent npm configuration. If web `npm ci`, CMS preparation, or CMS artifact build fails, or if CMS `npm ci` is unavailable and no complete verified CMS generation is usable, it SHALL refuse with CMS writers open and without creating an operation journal/marker or changing live state.
+Before creating the operation marker or closing CMS writers, the operator SHALL validate and extract the admitted source, prepare web dependencies with the existing `npm ci` in the extracted source tree, and validate a compatible CI-built CMS artifact bound to that source and its trusted CI evidence under the CI-built CMS artifact requirements in this change. Any required target-side CMS dependencies SHALL be complete, compatible and verified against the admitted lockfile; if installed on the host, npm SHALL use the official `registry.npmjs.org` or the existing verified immutable CMS generation. The operator SHALL NOT build the CMS artifact on the destination, use a third-party registry mirror or change persistent npm configuration. If web or CMS preparation, artifact validation or compatibility verification fails, it SHALL refuse with CMS writers open and without creating an operation journal/marker or changing live state.
 
 #### Scenario: Web preparation or CMS preparation is unavailable
-- **WHEN** web `npm ci` fails, or CMS `npm ci` cannot reach `registry.npmjs.org` and the existing CMS lock-hash generation is missing, incomplete, or incompatible
+- **WHEN** web `npm ci` fails, the CI-built CMS artifact cannot be verified, or required compatible CMS dependencies are unavailable
 - **THEN** the operation refuses before fencing writers or creating its marker/journal
 - **AND** persistent npm configuration and live CMS/site state remain unchanged
 
@@ -62,7 +62,7 @@ The paired operation SHALL capture the live production SQLite database and uploa
 
 ### Requirement: CMS and static site commit as one fenced operation
 
-Before the first live side effect, the paired operator SHALL durably record the operation and its host journal/maintenance state and fail closed on malformed or mismatched operation state. If present, the existing destination publication lock is held for each host command only; it is not a cross-publisher lock or destination-visible marker. The operator SHALL keep production CMS writers fenced after candidate activation until CMS health and runtime database proof, static candidate checks, browser checks against the exact candidate bytes, served release identity, routes, and referenced media have passed. The static candidate SHALL use the validated production form/payment settings and configured production chat loader; it SHALL NOT use staging demo form stubs or `CHAT_LOADER_SRC=none`. Browser checks SHALL NOT submit payment, CRM, or other external write actions. Activation SHALL update `IKPK_BUILD_WORKSPACE`, `IKPK_INSTALLED_COMMIT`, `INITIAL_PROD_PROFILE=1`, `DEPLOY_MODE=prod`, `PAYMENT_ROLE=prod`, `PAYMENT_ENDPOINT_PROD`, and `CHAT_LOADER_SRC` from the validated production profile, and clear `DEMO_FORMS` and `CHAT_OFFLINE_MESSAGE` for the production site build. The operation SHALL record prior values for these nine keys and restore them during recovery, preserving unrelated environment values without exposing secrets. It SHALL verify that the next CMS site-refresh uses the ready workspace, exact installed source SHA, and production build settings. It SHALL record one durable operation journal tying old and new CMS, database, media, environment, and static identities to the source and backup. The operation SHALL commit once both CMS and static candidates are accepted; only then may it reopen writers. Static-only publication SHALL NOT be treated as completion of a paired CMS release.
+Before the first live side effect, the paired operator SHALL durably record the operation and its host journal/maintenance state and fail closed on malformed or mismatched operation state. The paired operation journal/maintenance state owns paired recovery; the separate existing shared site-publication marker is consumed by CMS publishers and SSH publication commands to block conflicting operations. Each paired host-side state-changing command SHALL acquire and validate the same existing destination publication lock used by CMS refresh and Restore; a missing or unsafe lock SHALL refuse the command. If the shared flock is busy, every state-changing command refuses without changing site state. A refused `cleanup-site` leaves its request retryable through the existing timer. The lock serializes individual host commands, is not held across separate commands in the paired workflow, and is not itself a destination-visible marker. The operator SHALL keep production CMS writers fenced after candidate activation until CMS health and runtime database proof, static candidate checks, browser checks against the exact candidate bytes, served release identity, routes, and referenced media have passed. The static candidate SHALL use the validated production form/payment settings and configured production chat loader; it SHALL NOT use staging demo form stubs or `CHAT_LOADER_SRC=none`. Browser checks SHALL NOT submit payment, CRM, or other external write actions. Activation SHALL update `IKPK_BUILD_WORKSPACE`, `IKPK_INSTALLED_COMMIT`, `INITIAL_PROD_PROFILE=1`, `DEPLOY_MODE=prod`, `PAYMENT_ROLE=prod`, `PAYMENT_ENDPOINT_PROD`, and `CHAT_LOADER_SRC` from the validated production profile, and clear `DEMO_FORMS` and `CHAT_OFFLINE_MESSAGE` for the production site build. The operation SHALL record prior values for these nine keys and restore them during recovery, preserving unrelated environment values without exposing secrets. It SHALL verify that the next CMS site-refresh uses the ready workspace, exact installed source SHA, and production build settings. It SHALL record one durable operation journal tying old and new CMS, database, media, environment, and static identities to the source and backup. The operation SHALL commit once both CMS and static candidates are accepted; only then may it reopen writers. Static-only publication SHALL NOT be treated as completion of a paired CMS release.
 
 #### Scenario: Both candidates pass acceptance
 - **WHEN** CMS health and database proof pass and the same-source static candidate passes its checks
@@ -97,11 +97,11 @@ Before the first live side effect, the paired operator SHALL durably record the 
 #### Scenario: Crash at an operation boundary
 - **WHEN** the process stops after operation-marker creation, fence activation, backup, CMS activation, static switch, commit, or writer reopen
 - **THEN** the same journal-owned operation can safely recover or finalize its next phase without starting a different operation
-- **AND** a damaged or mismatched operation journal blocks paired continuation until explicit repair through that operation; other publishers remain excluded by the manual maintenance window, not a technical global marker
+- **AND** a damaged or mismatched operation journal blocks paired continuation until explicit repair through that operation; the shared lock serializes host-side commands, and the manual maintenance window covers the intervals between paired commands
 
 ### Requirement: Paired publication uses a manual single-operator maintenance window
 
-The paired workflow SHALL be run inside one manually coordinated maintenance window by one operator. The operator SHALL prevent other CMS or static publications, including CMS site-refresh and UI Restore, from starting until the paired operation commits or verified recovery completes. If the destination `.publication.lock` exists, each host command SHALL take its existing inode nonblockingly after validating it; the operator SHALL NOT replace or change its ownership or mode. If it is absent, the operator MAY continue only after confirming no canonical publisher is active, without creating a new lock inode. This is a point-in-time observation and operational condition, not a host-enforced cross-publisher lock: the existing destination publication lock is held for each individual host command, not across the complete `cms-update`/`static-publish` sequence, and CMS site-refresh/Restore do not acquire it. The host SHALL retain its operation journal and SHALL fail closed for active, malformed, or unknown paired-operation state. The manual window SHALL NOT be described as technical serialization against another operator or publisher.
+The paired workflow SHALL be run inside one manually coordinated maintenance window by one operator. The operator SHALL prevent other CMS or static publications, including CMS site-refresh and UI Restore, from starting until the paired operation commits or verified recovery completes. Every host-side state-changing command SHALL acquire and validate the existing destination `.publication.lock` inode; if it is missing or unsafe, the command SHALL refuse, and the operator SHALL NOT replace or change its ownership or mode. If the shared flock is busy, every state-changing command refuses without changing site state. A refused `cleanup-site` leaves its request retryable through the existing timer. The shared lock serializes host-side commands but is released between commands in the paired sequence, so the maintenance window remains necessary across the sequence. The host SHALL retain its operation journal and SHALL fail closed for active, malformed, or unknown paired-operation state.
 
 #### Scenario: Another publication is active or state is unknown
 - **WHEN** the operator observes an active or unknown site-refresh/Restore worker, lock, or paired journal state
@@ -161,3 +161,50 @@ Before global commit, an explicit recovery command SHALL verify operation owners
 - **WHEN** an operator requests database or code/static rollback through this profile after global commit
 - **THEN** the command refuses; this change defines no rollback path after commit
 - **AND** any future rollback requires a separately admitted operation with proven schema compatibility and preservation of production writes
+
+
+### Requirement: The CMS artifact is built without live inputs
+
+For reusable production paired CMS deployment, the delivery process SHALL build the complete CMS candidate from the admitted source in a trusted CI run without access to live databases, uploads or production secrets. It SHALL include the configuration, migrations and migration-runner payload required by the existing artifact checks. Live media and host-specific paths SHALL remain outside the artifact. For reusable production paired CMS deployment, the destination SHALL NOT build the CMS candidate. The fixed historical initial production operation retains its original contract.
+
+#### Scenario: CI build lacks production data
+- **WHEN** the CMS candidate is built in CI
+- **THEN** no production database, media or production secret is supplied to the build
+- **AND** the existing artifact and migration payload checks pass on the produced candidate
+
+### Requirement: Only a verified compatible artifact is admitted
+
+For reusable production paired CMS deployment, the operator SHALL bind the artifact and its integrity evidence to the exact admitted source revision and trusted CI run and attempt. Before fencing writers or changing live state, it SHALL verify the artifact bytes, the lockfile identity and compatibility of the runtime and all native dependencies with the target. It SHALL bind the admitted artifact digest to the operation and ensure the exact verified bytes are consumed at migration, activation and retry, using revalidation or equivalent immutable staging. Missing, mismatched, untrusted or unverifiable evidence SHALL cause refusal before the relevant mutation.
+
+#### Scenario: Artifact does not match the admitted source
+- **WHEN** the artifact digest, source, CI run or lockfile identity differs from the admitted evidence
+- **THEN** deployment refuses before fencing writers or changing live state
+
+#### Scenario: Native runtime is incompatible
+- **WHEN** the target operating system, architecture, Node runtime or native dependency ABI cannot be shown compatible
+- **THEN** deployment refuses before fencing writers or changing live state
+
+#### Scenario: Prepared bytes change before use
+- **WHEN** the staged CMS candidate no longer matches the digest bound to the admitted operation before migration, activation or retry
+- **THEN** the operator refuses to consume the changed candidate and preserves the existing fenced recovery state
+
+### Requirement: CI preparation does not replace data safety or recovery
+
+Reusable production paired CMS deployment SHALL keep the existing mutually exclusive admission, writer fence, verified backup, candidate database migration, activation, health and media checks, and explicit recovery or rollback contracts. Static-only publication retains its existing separate contract. A successful artifact build SHALL NOT be treated as proof that a live migration or deployment succeeded.
+
+#### Scenario: Artifact succeeds but migration fails
+- **WHEN** a verified artifact is admitted but candidate migration or post-activation verification fails
+- **THEN** the existing fenced failure and recovery rules apply
+- **AND** the deployment is not reported as successful
+
+#### Scenario: Workspace and rollback targets survive deployment and cleanup
+- **WHEN** a paired CMS release is prepared, activated, recovered or cleaned up
+- **THEN** the previous CMS and site releases, the current and next-start CMS workspaces, and required rollback targets remain protected until no longer required by the existing recovery contract
+- **AND** update and rollback keep the CMS version and its workspace path consistent
+- **AND** uncertain workspace identity prevents automatic CMS release deletion
+- **AND** publication, deploy, restore and cleanup use the existing shared lock and refuse without site-state changes when it is busy; successful publication requests cleanup, and a busy or interrupted cleanup request remains retryable through the existing timer
+
+#### Scenario: CMS administration configuration differs
+- **WHEN** staging or production needs a different public administration configuration
+- **THEN** deployment uses only an artifact whose compiled administration behavior is verified compatible with that environment
+- **AND** no production secret is embedded in the artifact
