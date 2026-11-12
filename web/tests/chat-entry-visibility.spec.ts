@@ -1442,6 +1442,87 @@ test.describe('chat entry visibility approved contract', () => {
     await testInfo.attach('history-visible-image-control', { path: tracePath, contentType: 'application/json' });
   });
 
+  test('diagnostic: map observer timing around history scroll restoration', async ({ browser }, testInfo) => {
+    const cases = ['normal', 'map-io-suppressed', 'map-preloaded-before-700'] as const;
+    const results: Array<Record<string, unknown>> = [];
+    for (const scenario of cases) {
+      const page = await browser.newPage({ viewport: { width: 375, height: 812 } });
+      await protectThirdParties(page);
+      await page.addInitScript((suppressMapObserver) => {
+        if (suppressMapObserver && 'IntersectionObserver' in window) {
+          const NativeObserver = window.IntersectionObserver;
+          window.IntersectionObserver = class extends NativeObserver {
+            observe(target: Element) {
+              if (target instanceof HTMLElement && target.matches('.contact-shell-map')) return;
+              super.observe(target);
+            }
+          };
+        }
+        const log: Array<Record<string, unknown>> = [];
+        const snapshot = (phase: string, detail?: unknown) => {
+          const port = document.querySelector<HTMLElement>('[data-page-scrollport]');
+          const map = document.querySelector<HTMLElement>('.contact-shell-map');
+          const rect = (selector: string) => document.querySelector<HTMLElement>(selector)?.getBoundingClientRect().toJSON() ?? null;
+          log.push({ phase, now: performance.now(), url: location.href,
+            scrollTop: port?.scrollTop ?? null, scrollHeight: port?.scrollHeight ?? null,
+            clientHeight: port?.clientHeight ?? null, mapPlaceholder: Boolean(map?.querySelector('.contact-shell-map-placeholder')),
+            mapIframe: Boolean(map?.querySelector('iframe')), mapRect: rect('.contact-shell-map'),
+            infoRect: rect('.contact-shell-info'), mainRect: rect('main'), detail: detail ?? null });
+          try { sessionStorage.setItem('__pr312MapAB', JSON.stringify(log)); } catch { /* diagnostic only */ }
+        };
+        const portSelector = '[data-page-scrollport]';
+        document.addEventListener('scroll', (event) => {
+          if (event.target === document.querySelector(portSelector)) snapshot('scroll-event');
+        }, true);
+        const mutationObserver = new MutationObserver((records) => {
+          if (records.some((record) => [...record.addedNodes, ...record.removedNodes].some((node) =>
+            node instanceof HTMLElement && (node.matches('.contact-shell-map-placeholder, iframe') || node.closest('.contact-shell-map'))))) {
+            snapshot('map-dom-mutation');
+          }
+        });
+        document.addEventListener('DOMContentLoaded', () => mutationObserver.observe(document.body, { childList: true, subtree: true }));
+        window.addEventListener('pagehide', () => snapshot('pagehide-capture'), true);
+        window.addEventListener('pageshow', () => snapshot('pageshow-capture'), true);
+        document.addEventListener('focusin', (event) => snapshot('focusin', (event.target as HTMLElement)?.tagName ?? null), true);
+        const nativeScrollTo = HTMLElement.prototype.scrollTo;
+        HTMLElement.prototype.scrollTo = function (...args: Parameters<typeof nativeScrollTo>) {
+          if (this.matches(portSelector)) snapshot('scrollTo-call', { args: args.map((arg) => typeof arg === 'object' ? arg : arg), stack: new Error().stack?.split('\n').slice(0, 5) });
+          return nativeScrollTo.apply(this, args);
+        };
+        (window as Window & { __pr312MapSnapshot?: (phase: string) => void }).__pr312MapSnapshot = snapshot;
+      }, scenario === 'map-io-suppressed');
+
+      await page.goto(activeUrl('/raspisanie-i-tseny'));
+      const scheduleUrl = page.url();
+      await page.goto(activeUrl('/kontakty'));
+      const port = page.locator('[data-page-scrollport]');
+      await expect(port).toHaveCount(1);
+      if (scenario === 'map-preloaded-before-700') {
+        await page.locator('.contact-shell-map').scrollIntoViewIfNeeded();
+        await expect(page.locator('.contact-shell-map iframe')).toHaveCount(1);
+        await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
+      }
+      await port.evaluate((el: HTMLElement) => el.scrollTo({ top: 700, behavior: 'instant' }));
+      await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
+      const before = await page.evaluate(() => {
+        (window as Window & { __pr312MapSnapshot?: (phase: string) => void }).__pr312MapSnapshot?.('before-leave-two-frames');
+        return { events: JSON.parse(sessionStorage.getItem('__pr312MapAB') ?? '[]'), scrollTop: document.querySelector<HTMLElement>('[data-page-scrollport]')?.scrollTop ?? null };
+      });
+      await page.goto(scheduleUrl);
+      await page.goBack();
+      await expect(page).toHaveURL(/kontakty/);
+      const after = await page.evaluate(() => {
+        (window as Window & { __pr312MapSnapshot?: (phase: string) => void }).__pr312MapSnapshot?.('after-back');
+        return { events: JSON.parse(sessionStorage.getItem('__pr312MapAB') ?? '[]'), scrollTop: document.querySelector<HTMLElement>('[data-page-scrollport]')?.scrollTop ?? null };
+      });
+      results.push({ scenario, before, after });
+      await page.close();
+    }
+    const tracePath = testInfo.outputPath('history-map-timing-ab.json');
+    await writeFile(tracePath, JSON.stringify(results, null, 2));
+    await testInfo.attach('history-map-timing-ab', { path: tracePath, contentType: 'application/json' });
+  });
+
   test('history restores distinct scroll positions for separate entries with the same URL', async ({ page }, testInfo) => {
     await protectThirdParties(page);
     const diagnosticKey = '__pr312HistoryTraceV2';
