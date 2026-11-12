@@ -909,10 +909,16 @@ jobs:
           retention-days: 7
 
   pr312-image-route-probe:
-    name: PR 312 fixture image decode probe
+    name: PR 312 history image A/B
     if: github.event_name == 'pull_request' && github.event.pull_request.number == 477 && github.event.pull_request.draft == true && github.event.pull_request.head.ref == 'codex/pr312-history-diagnostic'
+    needs: content-snapshot
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 45
+    env:
+      CONTENT_SNAPSHOT_DIR: ${{ github.workspace }}/content-snapshot
+    defaults:
+      run:
+        working-directory: web
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
@@ -923,31 +929,38 @@ jobs:
           cache-dependency-path: web/package-lock.json
 
       - name: Install web dependencies
-        run: npm ci --prefix web
+        run: npm ci
+
+      - name: Download pinned content snapshot
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: content-snapshot
+          path: ${{ github.workspace }}/content-snapshot
 
       - name: Install pinned Chromium and Linux dependencies
-        working-directory: web
         env:
           PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/web/.playwright-browsers
           PLAYWRIGHT_SKIP_BROWSER_GC: '1'
         run: ./node_modules/.bin/playwright install --with-deps chromium
 
-      - name: Run one local fixture image decode probe
-        id: pr312-route-probe
-        working-directory: web
+      - name: Build smoke-equivalent site and media derivatives
+        run: npm run build
+
+      - name: Run full history sequence with natural-404 and valid-GIF image arms
+        id: pr312-history-image-ab
         env:
           GITHUB_SHA: ${{ github.sha }}
           GITHUB_EVENT_PULL_REQUEST_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          PR312_ROUTE_PROBE_LOG: ${{ runner.temp }}/pr312-image-route-probe.jsonl
+          PR312_HISTORY_IMAGE_AB_LOG: ${{ runner.temp }}/pr312-history-image-ab.jsonl
           PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/web/.playwright-browsers
           PLAYWRIGHT_SKIP_BROWSER_GC: '1'
-        run: ./node_modules/.bin/playwright test diagnostics/pr312-image-route-probe.spec.ts --config=playwright.pr312-route-probe.config.ts --project=mobile-route-probe --workers=1
+        run: ./node_modules/.bin/playwright test diagnostics/pr312-history-image-route.spec.ts --config=playwright.pr312-history-image-ab.config.ts --project=desktop --project=mobile --workers=1
 
-      - name: Upload PR 312 image decode probe
-        if: always() && steps.pr312-route-probe.outcome != 'skipped'
+      - name: Upload PR 312 full history image A/B
+        if: always() && steps.pr312-history-image-ab.outcome != 'skipped'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
-          name: pr312-image-route-probe-${{ github.run_id }}-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/pr312-image-route-probe.jsonl
+          name: pr312-history-image-ab-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/pr312-history-image-ab.jsonl
           if-no-files-found: error
           retention-days: 7
