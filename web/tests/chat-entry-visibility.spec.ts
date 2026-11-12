@@ -1340,19 +1340,22 @@ test.describe('chat entry visibility approved contract', () => {
         if (!logPath) throw new Error('PR312_HISTORY_DIAGNOSTIC_LOG is required for this diagnostic');
         test.setTimeout(2 * 60 * 1000);
 
-        const { mkdir, appendFile } = await import('node:fs/promises');
+        const { mkdir, appendFile, readFile } = await import('node:fs/promises');
         const { dirname } = await import('node:path');
         await mkdir(dirname(logPath), { recursive: true });
         const browserVersion = page.context().browser()?.version() ?? 'unknown';
+        const packageVersion = async (name: string) => JSON.parse(
+          await readFile(new URL(`../node_modules/${name}/package.json`, import.meta.url), 'utf8'),
+        ).version as string;
         const metadata = {
           event: 'start', mode, iteration, timestamp: new Date().toISOString(),
           pullRequestHeadSha: process.env.GITHUB_EVENT_PULL_REQUEST_HEAD_SHA ?? null,
           workflowSha: process.env.GITHUB_SHA ?? null,
           browserVersion, project: testInfo.project.name, title: testInfo.title,
           workerIndex: testInfo.workerIndex, parallelIndex: testInfo.parallelIndex, retry: testInfo.retry,
-          playwrightTestVersion: process.env.PR312_PLAYWRIGHT_TEST_VERSION ?? null,
-          playwrightVersion: process.env.PR312_PLAYWRIGHT_VERSION ?? null,
-          playwrightCoreVersion: process.env.PR312_PLAYWRIGHT_CORE_VERSION ?? null,
+          playwrightTestVersion: await packageVersion('@playwright/test'),
+          playwrightVersion: await packageVersion('playwright'),
+          playwrightCoreVersion: await packageVersion('playwright-core'),
           viewport: { width: 375, height: 812 },
         };
         await appendFile(logPath, `${JSON.stringify(metadata)}\n`);
@@ -1460,7 +1463,7 @@ test.describe('chat entry visibility approved contract', () => {
             captureError = error instanceof Error ? error.message : String(error);
           }
           await appendFile(logPath, `${JSON.stringify({ ...metadata, event: 'finish', timestamp: new Date().toISOString(),
-            status: testError ? 'failed' : 'passed', error: testError, captureError, timeline })}\n`);
+            status: testError !== null ? 'failed' : 'passed', error: testError, captureError, timeline })}\n`);
         }
       });
     }
