@@ -166,5 +166,54 @@
     "cpu": "x64",
     "libc": "",
     "reason": "Correct missing lockfile libc metadata to musl for unchanged @astrojs/compiler-binding-linux-x64-musl@0.3.2; published metadata already declares it, with matching integrity and tarball. Source: https://registry.npmjs.org/@astrojs/compiler-binding-linux-x64-musl/0.3.2. No package or platform removed."
+  },
+  {
+    "packageName": "@rolldown/binding-linux-arm64-gnu",
+    "os": "linux",
+    "cpu": "arm64",
+    "libc": "",
+    "reason": "Astro 7.4.2 moves rolldown 1.1.5 -> 1.2.15; the published @rolldown/binding-linux-arm64-gnu@1.2.15 declares libc=glibc, so the unconstrained-libc tuple becomes the glibc tuple. Same package, OS and CPU; no platform removed. Source: https://registry.npmjs.org/@rolldown/binding-linux-arm64-gnu/1.2.15"
+  },
+  {
+    "packageName": "@rolldown/binding-linux-arm64-musl",
+    "os": "linux",
+    "cpu": "arm64",
+    "libc": "",
+    "reason": "Astro 7.4.2 moves rolldown 1.1.5 -> 1.2.15; the published @rolldown/binding-linux-arm64-musl@1.2.15 declares libc=musl, so the unconstrained-libc tuple becomes the musl tuple. Same package, OS and CPU; no platform removed. Source: https://registry.npmjs.org/@rolldown/binding-linux-arm64-musl/1.2.15"
+  },
+  {
+    "packageName": "@rolldown/binding-linux-ppc64-gnu",
+    "os": "linux",
+    "cpu": "ppc64",
+    "libc": "",
+    "reason": "Astro 7.4.2 moves rolldown 1.1.5 -> 1.2.15; the published @rolldown/binding-linux-ppc64-gnu@1.2.15 declares libc=glibc, so the unconstrained-libc tuple becomes the glibc tuple. Same package, OS and CPU; no platform removed. Source: https://registry.npmjs.org/@rolldown/binding-linux-ppc64-gnu/1.2.15"
+  },
+  {
+    "packageName": "@rolldown/binding-linux-s390x-gnu",
+    "os": "linux",
+    "cpu": "s390x",
+    "libc": "",
+    "reason": "Astro 7.4.2 moves rolldown 1.1.5 -> 1.2.15; the published @rolldown/binding-linux-s390x-gnu@1.2.15 declares libc=glibc, so the unconstrained-libc tuple becomes the glibc tuple. Same package, OS and CPU; no platform removed. Source: https://registry.npmjs.org/@rolldown/binding-linux-s390x-gnu/1.2.15"
+  },
+  {
+    "packageName": "@rolldown/binding-linux-x64-gnu",
+    "os": "linux",
+    "cpu": "x64",
+    "libc": "",
+    "reason": "Astro 7.4.2 moves rolldown 1.1.5 -> 1.2.15; the published @rolldown/binding-linux-x64-gnu@1.2.15 declares libc=glibc, so the unconstrained-libc tuple becomes the glibc tuple. Same package, OS and CPU; no platform removed. Source: https://registry.npmjs.org/@rolldown/binding-linux-x64-gnu/1.2.15"
+  },
+  {
+    "packageName": "@rolldown/binding-linux-x64-musl",
+    "os": "linux",
+    "cpu": "x64",
+    "libc": "",
+    "reason": "Astro 7.4.2 moves rolldown 1.1.5 -> 1.2.15; the published @rolldown/binding-linux-x64-musl@1.2.15 declares libc=musl, so the unconstrained-libc tuple becomes the musl tuple. Same package, OS and CPU; no platform removed. Source: https://registry.npmjs.org/@rolldown/binding-linux-x64-musl/1.2.15"
+  },
+  {
+    "packageName": "@rolldown/binding-wasm32-wasi",
+    "os": "",
+    "cpu": "wasm32",
+    "libc": "",
+    "reason": "rolldown 1.2.15 no longer declares @rolldown/binding-wasm32-wasi in optionalDependencies (upstream removal; 1.2.15 publishes it without a cpu constraint). The WASM fallback is not used here: CI, servers and local development run on platforms with native rolldown bindings. Source: https://registry.npmjs.org/rolldown/1.2.15"
   }
 ]
