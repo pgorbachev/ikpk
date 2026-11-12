@@ -1380,7 +1380,7 @@ test.describe('chat entry visibility approved contract', () => {
     }>();
     let captureImageRequests = false;
     page.on('request', (request) => {
-      if (!captureImageRequests || request.resourceType() !== 'image' || !request.url().includes('/media/')) return;
+      if (!captureImageRequests || request.resourceType() !== 'image' || !request.url().split('/').includes('media')) return;
       let resolve = () => {};
       const settled = new Promise<void>((done) => { resolve = done; });
       requestStates.set(request, { url: request.url(), status: 'pending', startedAt: Date.now(), settled, resolve });
