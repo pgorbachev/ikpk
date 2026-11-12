@@ -753,7 +753,8 @@ jobs:
         env:
           PR312_HISTORY_DIAGNOSTIC_LOG: ${{ runner.temp }}/pr312-history-diagnostic.jsonl
           GITHUB_SHA: ${{ github.sha }}
-        run: npx playwright test tests/chat-entry-visibility.spec.ts --project=mobile --grep "diagnostic: history restores same-URL positions"
+          GITHUB_EVENT_PULL_REQUEST_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: npx playwright test tests/chat-entry-visibility.spec.ts --project=mobile --grep "PR312 history diagnostic" --workers=1
 
       - name: Upload PR 312 history diagnostic
         if: always() && steps.pr312-history-diagnostic.outcome != 'skipped'
