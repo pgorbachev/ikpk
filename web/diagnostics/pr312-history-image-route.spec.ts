@@ -131,6 +131,8 @@ for (const { arm, iteration } of cases) {
           const port = document.querySelector<HTMLElement>('[data-page-scrollport]');
           const state = history.state && typeof history.state === 'object' ? history.state as Record<string, unknown> : {};
           const saved = state.__ikpkChatPageScroll;
+          const historyEntryId = saved && typeof saved === 'object' && typeof (saved as { id?: unknown }).id === 'string'
+            ? (saved as { id: string }).id : null;
           const map = document.querySelector<HTMLElement>('.contact-shell-map');
           const rect = (element: Element | null) => {
             if (!element) return null;
@@ -157,7 +159,7 @@ for (const { arm, iteration } of cases) {
           }
           const item = { event, marker: marker ?? null, timestamp: new Date().toISOString(),
             documentId: String(performance.timeOrigin), url: location.href, historyLength: history.length,
-            savedEntry: saved ?? null, scrollTop: port?.scrollTop ?? null, scrollHeight: port?.scrollHeight ?? null,
+            historyEntryId, savedEntry: saved ?? null, scrollTop: port?.scrollTop ?? null, scrollHeight: port?.scrollHeight ?? null,
             clientWidth: port?.clientWidth ?? null, viewportWidth: innerWidth,
             mapRect: ['pageshow', 'pagehide', 'popstate', 'checkpoint', 'scroll-target'].includes(event) ? rect(map) : null,
             image: image ?? null, targetImage };
@@ -226,9 +228,9 @@ for (const { arm, iteration } of cases) {
       await expect(page).toHaveURL(/kontakty/);
       reachedCheckpoints.push('back-1-contacts-url');
       attemptedCheckpoint = 'back-1-contacts-700';
+      reachedCheckpoints.push('back-1-contacts-700-assertion-attempted');
       await expect.poll(() => contactsPort.evaluate((el: HTMLElement) => el.scrollTop),
         'back restores the intermediary entry position').toBe(700);
-      reachedCheckpoints.push('back-1-contacts-700');
       attemptedCheckpoint = 'back-2-navigation';
       await page.goBack();
       await expect(page).toHaveURL(entryUrl);
@@ -250,9 +252,9 @@ for (const { arm, iteration } of cases) {
       await expect(page).toHaveURL(entryUrl);
       reachedCheckpoints.push('forward-2-schedule-url');
       attemptedCheckpoint = 'forward-2-schedule-1300';
+      reachedCheckpoints.push('forward-2-schedule-1300-assertion-attempted');
       await expect.poll(() => port.evaluate((el: HTMLElement) => el.scrollTop),
         'forward restores the second same-URL entry position').toBe(1300);
-      reachedCheckpoints.push('forward-2-schedule-1300');
     } catch (error) {
       failure = error instanceof Error ? error.stack ?? error.message : String(error);
       throw error;
@@ -284,16 +286,23 @@ for (const { arm, iteration } of cases) {
         { reached: 'back-2-schedule-url', documentMarker: 'schedule-400-assigned' },
         { reached: 'forward-2-schedule-url', documentMarker: 'schedule-1300-assigned' },
       ].filter(({ reached }) => reachedCheckpoints.includes(reached)).map(({ reached, documentMarker }) => {
-        const documentId = String(traceEvents.find((event) => event.marker === documentMarker)?.documentId ?? '');
-        const popstateIndex = traceEvents.findIndex((event) => event.documentId === documentId && event.event === 'popstate');
-        const restoreEvent = popstateIndex < 0 ? undefined : traceEvents.slice(popstateIndex).reverse().find((event) =>
-          event.documentId === documentId && ['popstate', 'scroll-target'].includes(String(event.event))
+        const entryId = traceEvents.find((event) => event.marker === documentMarker)?.historyEntryId;
+        const entryPageShows = traceEvents.filter((event) => event.event === 'pageshow' && event.historyEntryId === entryId
           && String(event.url).includes('/raspisanie-i-tseny'));
+        const restoreShow = entryPageShows[1];
+        const restoreShowIndex = restoreShow ? traceEvents.indexOf(restoreShow) : -1;
+        const nextDeparture = restoreShowIndex < 0 ? -1 : traceEvents.findIndex((event, index) => index > restoreShowIndex
+          && event.event === 'pagehide' && event.historyEntryId === entryId);
+        const restoreWindow = restoreShowIndex < 0 ? [] : traceEvents.slice(restoreShowIndex + 1,
+          nextDeparture < 0 ? undefined : nextDeparture);
+        const restoreEvent = [...restoreWindow].reverse().find((event) => event.event === 'scroll-target'
+          && event.historyEntryId === entryId) ?? restoreShow;
+        const documentId = String(restoreEvent?.documentId ?? '');
         const target = restoreEvent?.targetImage as { src?: string; complete?: boolean; naturalWidth?: number; naturalHeight?: number } | null;
         const imageEvent = target?.src ? imageEvidence.find((image) => image.documentId === documentId && image.src === target.src
           && image.complete && mediaResponses.some((response) => response.url === image.src
             && response.status === (arm === 'forced-404' ? 404 : 200))) : undefined;
-        return { reached, documentId, restoreEvent: restoreEvent?.event ?? null, scrollTop: restoreEvent?.scrollTop ?? null,
+        return { reached, entryId: entryId ?? null, documentId, restoreEvent: restoreEvent?.event ?? null, scrollTop: restoreEvent?.scrollTop ?? null,
           target: target ?? null, imageEvent: imageEvent ?? null };
       });
       const expectedStatus = arm === 'forced-404' ? 404 : 200;
@@ -311,32 +320,42 @@ for (const { arm, iteration } of cases) {
       const imageArmValid = responseTreatmentValid && documentImageTreatmentValid;
       const assignmentMarkersPresent = assignmentMarkers.length > 0 && assignmentMarkers.every((marker) => traceEvents.some((event) =>
         event.event === 'checkpoint' && event.marker === marker));
-      const pagehideEvidence = traceEvents.filter((event) => event.event === 'pagehide')
-        .map((event) => String(event.documentId));
-      const pagehideRequirements = new Map<string, number>();
-      const requirePagehide = (marker: string, count: number) => {
-        const documentId = String(traceEvents.find((event) => event.marker === marker)?.documentId ?? '');
-        if (documentId) pagehideRequirements.set(documentId, Math.max(pagehideRequirements.get(documentId) ?? 0, count));
-      };
-      if (reachedCheckpoints.includes('schedule-1300-assigned')) {
-        requirePagehide('schedule-400-assigned', 1);
-        requirePagehide('contacts-700-assigned', 1);
-      }
-      if (reachedCheckpoints.includes('back-1-contacts-url')) requirePagehide('schedule-1300-assigned', 1);
-      if (reachedCheckpoints.includes('back-2-schedule-url')) requirePagehide('contacts-700-assigned', 2);
-      if (reachedCheckpoints.includes('forward-1-contacts-url')) requirePagehide('schedule-400-assigned', 2);
-      if (reachedCheckpoints.includes('forward-2-schedule-url')) requirePagehide('contacts-700-assigned', 3);
-      const pagehideByDocumentComplete = [...pagehideRequirements].every(([documentId, expectedCount]) =>
-        pagehideEvidence.filter((observedId) => observedId === documentId).length >= expectedCount);
+      const entryIdFor = (marker: string) => traceEvents.find((event) => event.marker === marker)?.historyEntryId;
+      const schedule400Id = entryIdFor('schedule-400-assigned');
+      const contacts700Id = entryIdFor('contacts-700-assigned');
+      const schedule1300Id = entryIdFor('schedule-1300-assigned');
+      const expectedPageShows = [
+        ...(reachedCheckpoints.includes('schedule-400-assigned') ? [schedule400Id] : []),
+        ...(reachedCheckpoints.includes('contacts-700-assigned') ? [contacts700Id] : []),
+        ...(reachedCheckpoints.includes('schedule-1300-assigned') ? [schedule1300Id] : []),
+        ...(reachedCheckpoints.includes('back-1-contacts-url') ? [contacts700Id] : []),
+        ...(reachedCheckpoints.includes('back-2-schedule-url') ? [schedule400Id] : []),
+        ...(reachedCheckpoints.includes('forward-1-contacts-url') ? [contacts700Id] : []),
+        ...(reachedCheckpoints.includes('forward-2-schedule-url') ? [schedule1300Id] : []),
+      ].filter((id): id is string => typeof id === 'string');
+      const expectedPageHides = [
+        ...(reachedCheckpoints.includes('schedule-1300-assigned') ? [schedule400Id, contacts700Id] : []),
+        ...(reachedCheckpoints.includes('back-1-contacts-url') ? [schedule1300Id] : []),
+        ...(reachedCheckpoints.includes('back-2-schedule-url') ? [contacts700Id] : []),
+        ...(reachedCheckpoints.includes('forward-1-contacts-url') ? [schedule400Id] : []),
+        ...(reachedCheckpoints.includes('forward-2-schedule-url') ? [contacts700Id] : []),
+      ].filter((id): id is string => typeof id === 'string');
+      const actualPageShows = traceEvents.filter((event) => event.event === 'pageshow' && typeof event.historyEntryId === 'string')
+        .map((event) => event.historyEntryId as string);
+      const actualPageHides = traceEvents.filter((event) => event.event === 'pagehide' && typeof event.historyEntryId === 'string')
+        .map((event) => event.historyEntryId as string);
+      const pageShowSequenceComplete = expectedPageShows.length > 0
+        && expectedPageShows.every((id, index) => actualPageShows[index] === id);
+      const pageHideSequenceComplete = expectedPageHides.every((id, index) => actualPageHides[index] === id);
       const timelineComplete = captureError === null && reachedCheckpoints.length > 0
-        && assignmentMarkersPresent && pagehideByDocumentComplete;
-      const reachedBackOne = reachedCheckpoints.includes('back-1-contacts-url') || attemptedCheckpoint.startsWith('back-1-');
+        && assignmentMarkersPresent && pageShowSequenceComplete && pageHideSequenceComplete;
+      const reachedBackOne = reachedCheckpoints.includes('back-1-contacts-700-assertion-attempted');
       const assertionFailed = failure !== null;
       const resultStatus = !timelineComplete || !imageArmValid ? 'invalid'
         : assertionFailed && !reachedBackOne ? 'censored'
           : assertionFailed ? 'failed' : 'passed';
-      const contactsEligible = reachedCheckpoints.includes('back-1-contacts-url');
-      const scheduleEligible = reachedCheckpoints.includes('forward-2-schedule-url');
+      const contactsEligible = reachedCheckpoints.includes('back-1-contacts-700-assertion-attempted');
+      const scheduleEligible = reachedCheckpoints.includes('forward-2-schedule-1300-assertion-attempted');
       const result = { ...start, event: 'finish', timestamp: new Date().toISOString(),
         status: resultStatus, historyAssertionStatus: assertionFailed ? reachedBackOne ? 'failed' : 'not-reached' : 'passed',
         error: failure, captureError,
@@ -345,8 +364,8 @@ for (const { arm, iteration } of cases) {
         invalidReasons: [...(!timelineComplete ? ['incomplete-history-timeline'] : []),
           ...(!imageArmValid ? ['image-treatment-not-validated'] : [])],
         completeness: { timelineEvents: timeline.length, timelineComplete, mediaResponses: mediaResponses.length,
-          mediaFailures: mediaFailures.length, assignmentMarkersPresent, pagehideByDocumentComplete,
-          pagehideRequirements: Object.fromEntries(pagehideRequirements),
+          mediaFailures: mediaFailures.length, assignmentMarkersPresent, pageShowSequenceComplete, pageHideSequenceComplete,
+          expectedPageShows, actualPageShows, expectedPageHides, actualPageHides,
           responseTreatmentValid, documentImageTreatmentValid, imageArmValid }, mediaResponses, mediaFailures,
         targetImageEvidence, imageEvidence, timeline };
       await appendFile(logPath!, `${JSON.stringify(result)}\n`);
