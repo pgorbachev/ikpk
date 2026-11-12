@@ -1349,9 +1349,14 @@ test.describe('chat entry visibility approved contract', () => {
           pullRequestHeadSha: process.env.GITHUB_EVENT_PULL_REQUEST_HEAD_SHA ?? null,
           workflowSha: process.env.GITHUB_SHA ?? null,
           browserVersion, project: testInfo.project.name, title: testInfo.title,
+          workerIndex: testInfo.workerIndex, parallelIndex: testInfo.parallelIndex, retry: testInfo.retry,
+          playwrightTestVersion: process.env.PR312_PLAYWRIGHT_TEST_VERSION ?? null,
+          playwrightVersion: process.env.PR312_PLAYWRIGHT_VERSION ?? null,
+          playwrightCoreVersion: process.env.PR312_PLAYWRIGHT_CORE_VERSION ?? null,
           viewport: { width: 375, height: 812 },
         };
         await appendFile(logPath, `${JSON.stringify(metadata)}\n`);
+        let testError: string | null = null;
 
         try {
           await protectThirdParties(page);
@@ -1402,19 +1407,29 @@ test.describe('chat entry visibility approved contract', () => {
             });
             addEventListener('popstate', () => queueMicrotask(() => record('popstate-after-handlers')));
             addEventListener('load', () => record('load'));
+            addEventListener('pr312-history-diagnostic', (event) => record('scroll-assignment', (event as CustomEvent<string>).detail));
           }, { mode, key: '__pr312HistoryDiagnostic' });
           await page.setViewportSize({ width: 375, height: 812 });
           await page.goto(activeUrl('/raspisanie-i-tseny'));
           const port = page.locator('[data-page-scrollport]');
           await expect(port).toHaveCount(1);
-          await port.evaluate((el: HTMLElement) => el.scrollTo({ top: 400, behavior: 'instant' }));
+          await port.evaluate((el: HTMLElement) => {
+            el.scrollTo({ top: 400, behavior: 'instant' });
+            window.dispatchEvent(new CustomEvent('pr312-history-diagnostic', { detail: 'schedule-400-assigned' }));
+          });
           const entryUrl = page.url();
           await page.goto(activeUrl('/kontakty'));
           const contactsPort = page.locator('[data-page-scrollport]');
-          await contactsPort.evaluate((el: HTMLElement) => el.scrollTo({ top: 700, behavior: 'instant' }));
+          await contactsPort.evaluate((el: HTMLElement) => {
+            el.scrollTo({ top: 700, behavior: 'instant' });
+            window.dispatchEvent(new CustomEvent('pr312-history-diagnostic', { detail: 'contacts-700-assigned' }));
+          });
           await page.goto(entryUrl);
           await expect(port).toHaveCount(1);
-          await port.evaluate((el: HTMLElement) => el.scrollTo({ top: 1300, behavior: 'instant' }));
+          await port.evaluate((el: HTMLElement) => {
+            el.scrollTo({ top: 1300, behavior: 'instant' });
+            window.dispatchEvent(new CustomEvent('pr312-history-diagnostic', { detail: 'schedule-1300-assigned' }));
+          });
 
           await page.goBack();
           await expect(page).toHaveURL(/kontakty/);
@@ -1432,14 +1447,20 @@ test.describe('chat entry visibility approved contract', () => {
           await expect(page).toHaveURL(entryUrl);
           await expect.poll(() => port.evaluate((el: HTMLElement) => el.scrollTop),
             'forward restores the second same-URL entry position').toBe(1300);
+        } catch (error) {
+          testError = error instanceof Error ? error.message : String(error);
+          throw error;
         } finally {
           let timeline: unknown = [];
+          let captureError: string | null = null;
           try {
             timeline = await page.evaluate(() => JSON.parse(sessionStorage.getItem('__pr312HistoryDiagnostic') || '[]'));
+            if (Array.isArray(timeline) && timeline.length === 0) captureError = 'timeline-empty';
           } catch (error) {
-            timeline = { captureError: error instanceof Error ? error.message : String(error) };
+            captureError = error instanceof Error ? error.message : String(error);
           }
-          await appendFile(logPath, `${JSON.stringify({ ...metadata, event: 'finish', timeline })}\n`);
+          await appendFile(logPath, `${JSON.stringify({ ...metadata, event: 'finish', timestamp: new Date().toISOString(),
+            status: testError ? 'failed' : 'passed', error: testError, captureError, timeline })}\n`);
         }
       });
     }
