@@ -1296,63 +1296,179 @@ test.describe('chat entry visibility approved contract', () => {
 
   test('history restores distinct scroll positions for separate entries with the same URL', async ({ page }) => {
     await protectThirdParties(page);
-    const diagnosticKey = '__pr312HistoryTrace';
+    const diagnosticKey = '__pr312HistoryTraceV2';
     await page.addInitScript((key) => {
-      const snapshot = (phase: string, persisted?: boolean) => {
-        const port = document.querySelector<HTMLElement>('[data-page-scrollport]');
+      type TraceScope = Window & {
+        __pr312HistoryTrace?: {
+          record: (phase: string, detail?: unknown, full?: boolean) => void;
+          flush: () => void;
+        };
+      };
+      const pending: Array<Record<string, unknown>> = [];
+      let scrollFramePending = false;
+      const portElement = () => document.querySelector<HTMLElement>('[data-page-scrollport]');
+      const stateEntry = () => {
         const state = history.state && typeof history.state === 'object' ? history.state.__ikpkChatPageScroll : null;
-        const event = {
+        return state && typeof state === 'object' ? state : null;
+      };
+      const fontStatus = () => ({
+        status: document.fonts.status,
+        interCheck: document.fonts.check('16px Inter', 'Контактная информация'),
+        faces: [...document.fonts].map((face) => ({ family: face.family, status: face.status, weight: face.weight })).slice(0, 8),
+      });
+      const snapshot = (phase: string, detail?: unknown, full = false) => {
+        const port = document.querySelector<HTMLElement>('[data-page-scrollport]');
+        const event: Record<string, unknown> = {
           phase,
+          now: performance.now(),
+          timeOrigin: performance.timeOrigin,
+          documentId: String(performance.timeOrigin),
           url: location.href,
-          persisted: persisted ?? null,
+          historyEntry: stateEntry(),
           scrollTop: port?.scrollTop ?? null,
           scrollHeight: port?.scrollHeight ?? null,
           clientHeight: port?.clientHeight ?? null,
           windowScrollY: window.scrollY,
-          viewport: { width: innerWidth, height: innerHeight, dpr: devicePixelRatio },
-          historyState: state ?? null,
+          viewport: {
+            width: innerWidth, height: innerHeight, dpr: devicePixelRatio,
+            visualWidth: window.visualViewport?.width ?? null,
+            visualHeight: window.visualViewport?.height ?? null,
+            visualOffsetTop: window.visualViewport?.offsetTop ?? null,
+          },
+          activeElement: document.activeElement ? `${document.activeElement.tagName.toLowerCase()}#${(document.activeElement as HTMLElement).id}` : null,
+          fontStatus: document.fonts.status,
           readyState: document.readyState,
-          timeOrigin: performance.timeOrigin,
+          detail: detail ?? null,
         };
+        if (full) {
+          event.fonts = fontStatus();
+          event.images = [...document.images].map((image) => ({
+            src: image.currentSrc || image.src,
+            complete: image.complete,
+            naturalWidth: image.naturalWidth,
+            naturalHeight: image.naturalHeight,
+            loading: image.loading,
+          }));
+          event.map = (() => {
+            const map = document.querySelector<HTMLElement>('.contact-shell-map');
+            const rect = map?.getBoundingClientRect();
+            return map ? {
+              rect: rect?.toJSON() ?? null,
+              placeholder: Boolean(map.querySelector('.contact-shell-map-placeholder')),
+              iframe: Boolean(map.querySelector('iframe')),
+              iframeHeight: map.querySelector('iframe')?.getBoundingClientRect().height ?? null,
+            } : null;
+          })();
+          event.bounds = ['[data-page-scrollport]', 'header.topnav', 'main', '.contact-shell-info', '.contact-shell-map', 'footer.footer']
+            .map((selector) => {
+              const element = document.querySelector<HTMLElement>(selector);
+              return { selector, rect: element?.getBoundingClientRect().toJSON() ?? null };
+            });
+          event.resources = performance.getEntriesByType('resource')
+            .map((entry) => entry as PerformanceResourceTiming)
+            .filter((entry) => ['font', 'img', 'iframe'].includes(entry.initiatorType))
+            .slice(-24)
+            .map((entry) => ({
+              name: entry.name,
+              initiatorType: entry.initiatorType,
+              startTime: entry.startTime,
+              responseEnd: entry.responseEnd,
+              duration: entry.duration,
+              transferSize: entry.transferSize,
+              decodedBodySize: entry.decodedBodySize,
+            }));
+        }
+        pending.push(event);
+      };
+      const recordLayoutShift = (entry: PerformanceEntry) => {
+        const shift = entry as PerformanceEntry & {
+          value?: number;
+          hadRecentInput?: boolean;
+          sources?: Array<{ node?: Node | null; previousRect?: DOMRectReadOnly; currentRect?: DOMRectReadOnly }>;
+        };
+        snapshot('layout-shift', {
+          startTime: shift.startTime,
+          value: shift.value ?? null,
+          hadRecentInput: shift.hadRecentInput ?? null,
+          sources: shift.sources?.map((source) => ({
+            node: source.node instanceof HTMLElement ? `${source.node.tagName.toLowerCase()}#${source.node.id}.${source.node.className}` : null,
+            previousRect: source.previousRect?.toJSON() ?? null,
+            currentRect: source.currentRect?.toJSON() ?? null,
+          })) ?? [],
+        });
+      };
+      let layoutObserver: PerformanceObserver | null = null;
+      const flush = () => {
+        if (pending.length === 0) return;
         try {
-          const events = JSON.parse(sessionStorage.getItem(key) ?? '[]');
-          events.push(event);
-          sessionStorage.setItem(key, JSON.stringify(events));
+          const existing = JSON.parse(sessionStorage.getItem(key) ?? '[]') as Array<Record<string, unknown>>;
+          sessionStorage.setItem(key, JSON.stringify(existing.concat(pending.splice(0))));
         } catch {
           // Diagnostics must not affect the history behavior under test.
         }
       };
+      const trace = window as TraceScope;
+      trace.__pr312HistoryTrace = { record: snapshot, flush };
       window.addEventListener('pagehide', (event) => {
-        queueMicrotask(() => snapshot('pagehide-after-listeners', event.persisted));
+        layoutObserver?.takeRecords().forEach(recordLayoutShift);
+        snapshot('pagehide-window-capture', { persisted: event.persisted }, true);
+        flush();
+      }, true);
+      window.addEventListener('pagehide', (event) => {
+        snapshot('pagehide-window-bubble-early', { persisted: event.persisted });
+        flush();
       });
       window.addEventListener('pageshow', (event) => {
-        snapshot('pageshow-before-listeners', event.persisted);
-        queueMicrotask(() => snapshot('pageshow-after-listeners', event.persisted));
+        snapshot('pageshow-window-capture', { persisted: event.persisted }, true);
+        flush();
+      }, true);
+      window.addEventListener('pageshow', (event) => {
+        snapshot('pageshow-window-bubble-early', { persisted: event.persisted });
+        flush();
+        window.setTimeout(() => { snapshot('pageshow-next-task', { persisted: event.persisted }); flush(); }, 0);
       });
-    }, diagnosticKey);
-    const mark = async (phase: string) => page.evaluate(({ key, label }) => {
-      const port = document.querySelector<HTMLElement>('[data-page-scrollport]');
-      const state = history.state && typeof history.state === 'object' ? history.state.__ikpkChatPageScroll : null;
-      const event = {
-        phase: label,
-        url: location.href,
-        scrollTop: port?.scrollTop ?? null,
-        scrollHeight: port?.scrollHeight ?? null,
-        clientHeight: port?.clientHeight ?? null,
-        windowScrollY: window.scrollY,
-        viewport: { width: innerWidth, height: innerHeight, dpr: devicePixelRatio },
-        historyState: state ?? null,
-        readyState: document.readyState,
-        timeOrigin: performance.timeOrigin,
-      };
+      window.addEventListener('popstate', () => {
+        snapshot('popstate-window-capture', null, true);
+        flush();
+      }, true);
+      window.addEventListener('popstate', () => {
+        snapshot('popstate-window-bubble-early');
+        flush();
+        window.setTimeout(() => window.setTimeout(() => { snapshot('popstate-two-tasks-later', null, true); flush(); }, 0), 0);
+      });
+      window.addEventListener('resize', () => snapshot('window-resize'));
+      window.addEventListener('focus', () => snapshot('window-focus'));
+      window.addEventListener('blur', () => snapshot('window-blur'));
+      window.visualViewport?.addEventListener('resize', () => snapshot('visual-viewport-resize'));
+      window.visualViewport?.addEventListener('scroll', () => snapshot('visual-viewport-scroll'));
+      document.addEventListener('focusin', (event) => snapshot('focusin', (event.target as HTMLElement)?.tagName ?? null));
+      document.addEventListener('focusout', (event) => snapshot('focusout', (event.target as HTMLElement)?.tagName ?? null));
+      document.addEventListener('scroll', (event) => {
+        if (event.target !== portElement()) return;
+        snapshot('scroll-document-capture');
+        if (scrollFramePending) return;
+        scrollFramePending = true;
+        requestAnimationFrame(() => {
+          scrollFramePending = false;
+          snapshot('scroll-next-animation-frame');
+        });
+      }, true);
+      document.fonts.addEventListener('loadingdone', () => snapshot('fonts-loadingdone', null, true));
+      document.fonts.addEventListener('loadingerror', () => snapshot('fonts-loadingerror', null, true));
       try {
-        const events = JSON.parse(sessionStorage.getItem(key) ?? '[]');
-        events.push(event);
-        sessionStorage.setItem(key, JSON.stringify(events));
+        layoutObserver = new PerformanceObserver((list) => {
+          list.getEntries().forEach(recordLayoutShift);
+        });
+        layoutObserver.observe({ type: 'layout-shift', buffered: true });
       } catch {
-        // Diagnostics must not affect the history behavior under test.
+        snapshot('layout-shift-observer-unavailable');
       }
-    }, { key: diagnosticKey, label: phase });
+    }, diagnosticKey);
+    const mark = async (phase: string) => page.evaluate((label) => {
+      const trace = (window as Window & { __pr312HistoryTrace?: { record: (name: string, detail?: unknown, full?: boolean) => void; flush: () => void } }).__pr312HistoryTrace;
+      trace?.record(label, null, true);
+      trace?.flush();
+    }, phase);
     await page.setViewportSize({ width: 375, height: 812 });
     await page.goto(activeUrl('/raspisanie-i-tseny'));
     const port = page.locator('[data-page-scrollport]');
