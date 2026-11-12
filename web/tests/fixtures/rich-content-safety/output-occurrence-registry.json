@@ -1,7 +1,7 @@
 {
   "status": "dist-reviewed",
   "generatedFrom": "source AST + built output; CI must not regenerate",
-  "generatedFromSha": "a42aef5045dd5061b57b760e2c68720d742c619f",
+  "generatedFromSha": "eabd0945109f77fdd3a5243f6b3b5f7d90e10ab4",
   "distRoots": [
     "web/dist",
     "web/dist-demo"
@@ -50143,7 +50143,7 @@
       "slotId": "src:components/ArticleCard.astro:L39:C1:style",
       "route": "/kontakty",
       "placement": "doc-order:6:style",
-      "identity": "style|body:0dbaa1fa1dc5743f",
+      "identity": "style|body:ed83e3d5b549979a",
       "count": 1,
       "builds": [
         "production",
@@ -50361,7 +50361,7 @@
       "slotId": "src:components/home/sections/News.astro:L139:C1:script",
       "route": "/kontakty",
       "placement": "after:#header-search-close",
-      "identity": "script|type=module|body:23509eac567e44af",
+      "identity": "script|type=module|body:a99d5576f15bcc77",
       "count": 1,
       "builds": [
         "production",
@@ -61785,7 +61785,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/raspisanie-i-tseny",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/raspisanie-i-tseny.BjqSBFIs.css|rel=stylesheet",
+      "identity": "link|href=/_astro/raspisanie-i-tseny.Bj_lQgdh.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",

@@ -302,7 +302,7 @@ const isFreePrice = priceLabel.trim().toLowerCase() === 'бесплатно';
 
   @media (max-width: 900px) {
     .schedule-card {
-      grid-template-columns: 1fr;
+      grid-template-columns: minmax(0, 1fr);
       gap: 0;
     }
 
