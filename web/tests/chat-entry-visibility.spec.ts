@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { execFileSync } from 'node:child_process';
+import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { serveStatic, type StaticSite } from './helpers/static-serve';
 import { PROBE_CHAT_LOADER_SRC, buildProbe, type ProbeBuild } from './helpers/widget-probe-build';
@@ -1514,7 +1515,9 @@ test.describe('chat entry visibility approved contract', () => {
             });
           }
         }
-        await testInfo.attach(name, { body: Buffer.from(boundedTrace), contentType: 'application/json' });
+        const tracePath = testInfo.outputPath(`${name}.json`);
+        await writeFile(tracePath, boundedTrace);
+        await testInfo.attach(name, { path: tracePath, contentType: 'application/json' });
       } catch (error) {
         console.warn(`Could not attach ${name}:`, error);
       }
