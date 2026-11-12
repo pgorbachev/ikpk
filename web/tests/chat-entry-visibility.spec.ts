@@ -1294,7 +1294,7 @@ test.describe('chat entry visibility approved contract', () => {
     }
   });
 
-  test('history restores distinct scroll positions for separate entries with the same URL', async ({ page }) => {
+  test('history restores distinct scroll positions for separate entries with the same URL', async ({ page }, testInfo) => {
     await protectThirdParties(page);
     const diagnosticKey = '__pr312HistoryTraceV2';
     await page.addInitScript((key) => {
@@ -1302,6 +1302,7 @@ test.describe('chat entry visibility approved contract', () => {
         __pr312HistoryTrace?: {
           record: (phase: string, detail?: unknown, full?: boolean) => void;
           flush: () => void;
+          serialize: () => string;
         };
       };
       const pending: Array<Record<string, unknown>> = [];
@@ -1402,13 +1403,23 @@ test.describe('chat entry visibility approved contract', () => {
         if (pending.length === 0) return;
         try {
           const existing = JSON.parse(sessionStorage.getItem(key) ?? '[]') as Array<Record<string, unknown>>;
-          sessionStorage.setItem(key, JSON.stringify(existing.concat(pending.splice(0))));
+          sessionStorage.setItem(key, JSON.stringify(existing.concat(pending)));
+          pending.length = 0;
         } catch {
           // Diagnostics must not affect the history behavior under test.
         }
       };
+      const serialize = () => {
+        let existing: Array<Record<string, unknown>> = [];
+        try {
+          existing = JSON.parse(sessionStorage.getItem(key) ?? '[]') as Array<Record<string, unknown>>;
+        } catch {
+          // Keep the in-memory timeline if sessionStorage is unavailable or full.
+        }
+        return JSON.stringify(existing.concat(pending));
+      };
       const trace = window as TraceScope;
-      trace.__pr312HistoryTrace = { record: snapshot, flush };
+      trace.__pr312HistoryTrace = { record: snapshot, flush, serialize };
       window.addEventListener('pagehide', (event) => {
         layoutObserver?.takeRecords().forEach(recordLayoutShift);
         snapshot('pagehide-window-capture', { persisted: event.persisted }, true);
@@ -1469,6 +1480,45 @@ test.describe('chat entry visibility approved contract', () => {
       trace?.record(label, null, true);
       trace?.flush();
     }, phase);
+    const attachHistoryTrace = async (name: string) => {
+      const trace = await page.evaluate((key) => {
+        const value = (window as Window & { __pr312HistoryTrace?: { serialize: () => string } }).__pr312HistoryTrace;
+        value?.record('pre-assertion-attachment', { name });
+        value?.flush();
+        return value?.serialize() ?? sessionStorage.getItem(key) ?? '[]';
+      }, name);
+      try {
+        const events = JSON.parse(trace) as Array<Record<string, unknown>>;
+        let boundedTrace = trace;
+        if (Buffer.byteLength(boundedTrace) > 500_000) {
+          const originalBytes = Buffer.byteLength(boundedTrace);
+          const compact = (event: Record<string, unknown>) => ({
+            ...Object.fromEntries(
+              ['phase', 'now', 'timeOrigin', 'documentId', 'url', 'historyEntry', 'scrollTop', 'scrollHeight', 'clientHeight', 'viewport', 'fontStatus']
+                .filter((key) => key in event).map((key) => [key, event[key]]),
+            ),
+            ...(event.detail === undefined ? {} : { detail: JSON.stringify(event.detail).slice(0, 1_000) }),
+          });
+          boundedTrace = JSON.stringify({
+            truncated: true,
+            originalBytes,
+            first: events.slice(0, 12).map(compact),
+            last: events.slice(-80).map(compact),
+          });
+          if (Buffer.byteLength(boundedTrace) > 500_000) {
+            boundedTrace = JSON.stringify({
+              truncated: true,
+              originalBytes,
+              first: events.slice(0, 6).map(compact),
+              last: events.slice(-24).map(compact),
+            });
+          }
+        }
+        await testInfo.attach(name, { body: Buffer.from(boundedTrace), contentType: 'application/json' });
+      } catch (error) {
+        console.warn(`Could not attach ${name}:`, error);
+      }
+    };
     await page.setViewportSize({ width: 375, height: 812 });
     await page.goto(activeUrl('/raspisanie-i-tseny'));
     const port = page.locator('[data-page-scrollport]');
@@ -1488,6 +1538,7 @@ test.describe('chat entry visibility approved contract', () => {
     await page.goBack();
     await expect(page).toHaveURL(/kontakty/);
     await mark('back-to-contacts-before-assertion');
+    await attachHistoryTrace('history-timeline-back-to-contacts');
     try {
       await expect.poll(() => contactsPort.evaluate((el: HTMLElement) => el.scrollTop),
         'back restores the intermediary entry position').toBe(700);
@@ -1500,6 +1551,8 @@ test.describe('chat entry visibility approved contract', () => {
       'back restores the first same-URL entry position').toBe(400);
     await page.goForward();
     await expect(page).toHaveURL(/kontakty/);
+    await mark('forward-to-contacts-before-assertion');
+    await attachHistoryTrace('history-timeline-forward-to-contacts');
     await expect.poll(() => contactsPort.evaluate((el: HTMLElement) => el.scrollTop),
       'forward restores the intermediary entry position').toBe(700);
     await page.goForward();
