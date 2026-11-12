@@ -12,18 +12,33 @@ let site: StaticSite;
 
 test.beforeAll(async () => {
   test.setTimeout(10 * 60 * 1000);
-  build = buildProbe('non-demo preview payment plus chat', {
-    CHAT_LOADER_SRC: PROBE_CHAT_LOADER_SRC,
-    PAYMENT_ROLE: 'preview',
-    DEMO_FORMS: 'stub',
-    DEMO_OUTPUT: undefined,
-  }, { keepOnDisk: true });
-  execFileSync(join(process.cwd(), 'node_modules/.bin/pagefind'), ['--site', build.root!], {
-    cwd: process.cwd(),
-    stdio: 'pipe',
-    encoding: 'utf8',
-  });
-  site = await serveStatic(build.root!);
+  const logPath = process.env.PR312_ROUTE_PROBE_LOG;
+  if (logPath) {
+    await mkdir(dirname(logPath), { recursive: true });
+    await appendFile(logPath, `${JSON.stringify({ event: 'setup-start', timestamp: new Date().toISOString(),
+      githubSha: process.env.GITHUB_SHA ?? null, pullRequestHeadSha: process.env.GITHUB_EVENT_PULL_REQUEST_HEAD_SHA ?? null,
+      nodeVersion: process.version, preparation: 'direct buildProbe preview fixture; no prebuild/derivative step' })}\n`);
+  }
+  await mkdir(join(process.cwd(), '.astro'), { recursive: true });
+  try {
+    build = buildProbe('non-demo preview payment plus chat', {
+      CHAT_LOADER_SRC: PROBE_CHAT_LOADER_SRC,
+      PAYMENT_ROLE: 'preview',
+      DEMO_FORMS: 'stub',
+      DEMO_OUTPUT: undefined,
+    }, { keepOnDisk: true });
+    execFileSync(join(process.cwd(), 'node_modules/.bin/pagefind'), ['--site', build.root!], {
+      cwd: process.cwd(),
+      stdio: 'pipe',
+      encoding: 'utf8',
+    });
+    site = await serveStatic(build.root!);
+    if (logPath) await appendFile(logPath, `${JSON.stringify({ event: 'fixture-ready', timestamp: new Date().toISOString(), root: build.root, origin: site.origin })}\n`);
+  } catch (error) {
+    if (logPath) await appendFile(logPath, `${JSON.stringify({ event: 'fixture-build-failure', timestamp: new Date().toISOString(),
+      error: error instanceof Error ? error.stack ?? error.message : String(error) })}\n`);
+    throw error;
+  }
 });
 
 test.afterAll(async () => {
@@ -77,11 +92,12 @@ test('a local fixture image response decodes in the guarded mobile browser', asy
       role: 'preview',
       chatLoader: 'probe stub',
       paymentForms: 'stub',
+      scope: 'same-origin route response and browser image decode only; not the prebuilt full history smoke fixture',
     },
   };
   await appendFile(logPath, `${JSON.stringify(metadata)}\n`);
 
-  const routeResponses: { url: string; status: number; contentType: string; bytes: number; signature: string }[] = [];
+  const routeResponses: { url: string; status: number; contentType: string; bytes: number; signature: string; bodyError?: string }[] = [];
   const responseTasks: Promise<void>[] = [];
   const decodeEvents: Record<string, unknown>[] = [];
   const routeHits: string[] = [];
@@ -98,6 +114,10 @@ test('a local fixture image response decodes in the guarded mobile browser', asy
         routeResponses.push({ url: response.url(), status: response.status(),
           contentType: response.headers()['content-type'] ?? '', bytes: body.length,
           signature: body.subarray(0, 8).toString('hex') });
+      }).catch((error: unknown) => {
+        routeResponses.push({ url: response.url(), status: response.status(),
+          contentType: response.headers()['content-type'] ?? '', bytes: 0, signature: '',
+          bodyError: error instanceof Error ? error.message : String(error) });
       }));
     });
     await page.route((url) => url.hostname === '127.0.0.1' && url.port === new URL(site.origin).port
@@ -133,7 +153,7 @@ test('a local fixture image response decodes in the guarded mobile browser', asy
     failure = error instanceof Error ? error.stack ?? error.message : String(error);
     throw error;
   } finally {
-    await Promise.all(responseTasks);
+    const settledTasks = await Promise.allSettled(responseTasks);
     const exactResponse = routeResponses.find((response) => response.url === probeUrl);
     const result = {
       event: 'finish',
@@ -143,6 +163,8 @@ test('a local fixture image response decodes in the guarded mobile browser', asy
       probeUrl,
       routeHits,
       routeResponses,
+      responseTaskErrors: settledTasks.filter((task) => task.status === 'rejected')
+        .map((task) => task.status === 'rejected' ? String(task.reason) : null),
       exactResponse: exactResponse ?? null,
       expectedImage: { mime: 'image/gif', bytes: gif.length, signature: gif.subarray(0, 8).toString('hex') },
       decodeEvents,
