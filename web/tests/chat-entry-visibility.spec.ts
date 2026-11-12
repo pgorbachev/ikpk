@@ -1329,15 +1329,18 @@ test.describe('chat entry visibility approved contract', () => {
 
   const registerPr312HistoryDiagnostic = () => {
     const cases = [
-      ['baseline', 1, false], ['map-observe-suppressed', 1, true],
-      ['baseline', 2, false], ['map-observe-suppressed', 2, true],
-      ['baseline', 3, false], ['map-observe-suppressed', 3, true],
+      ['baseline', 1], ['map-observe-suppressed', 1],
+      ['baseline', 2], ['map-observe-suppressed', 2],
+      ['baseline', 3], ['map-observe-suppressed', 3],
     ] as const;
 
-    for (const [mode, iteration, suppressMap] of cases) {
+    for (const [mode, iteration] of cases) {
       test(`${mode} iteration ${iteration}`, async ({ page }, testInfo) => {
         const logPath = process.env.PR312_HISTORY_DIAGNOSTIC_LOG;
-        if (!logPath) throw new Error('PR312_HISTORY_DIAGNOSTIC_LOG is required for this diagnostic');
+        if (!logPath) {
+          test.skip(true, 'Only run in the dedicated PR 312 diagnostic workflow');
+          return;
+        }
         test.setTimeout(2 * 60 * 1000);
 
         const { mkdir, appendFile, readFile } = await import('node:fs/promises');
@@ -1470,9 +1473,9 @@ test.describe('chat entry visibility approved contract', () => {
   };
 
   if (process.env.PR312_HISTORY_DIAGNOSTIC_LOG) {
-    test.describe('PR312 history diagnostic', registerPr312HistoryDiagnostic);
+    test.describe('PR312-history-diagnostic', registerPr312HistoryDiagnostic);
   } else {
-    test.describe.skip('PR312 history diagnostic', registerPr312HistoryDiagnostic);
+    test.describe.skip('PR312-history-diagnostic', registerPr312HistoryDiagnostic);
   }
 
   test('native same-document hash Back and Forward restore the shared scrollport', async ({ page }) => {
