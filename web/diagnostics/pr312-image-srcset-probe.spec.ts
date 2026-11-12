@@ -53,10 +53,13 @@ for (const arm of ['tiny-gif', 'fixture-raster'] as const) {
     test.setTimeout(90_000);
     const imageEvents: Record<string, unknown>[] = [];
     const responseRows: Record<string, unknown>[] = [];
-    const responseBodies = new Map<string, Promise<{ status: number; contentType: string; body: Buffer }>>();
+    const responseBodies = new Map<string, Map<string, Promise<{ status: number; contentType: string; body: Buffer }>>>([
+      ['fixture-load', new Map()], ['treatment-reload', new Map()],
+    ]);
     const pageErrors: string[] = [];
     const imgEventKey = '__pr312SrcsetImageEvents';
     let responsePhase = 'fixture-load';
+    let routeHit = false;
     const started = {
       event: 'start', arm, project: testInfo.project.name, title: testInfo.title, retry: testInfo.retry,
       timestamp: new Date().toISOString(), githubSha: process.env.GITHUB_SHA ?? null,
@@ -76,6 +79,7 @@ for (const arm of ['tiny-gif', 'fixture-raster'] as const) {
     let treatmentResponse: Record<string, unknown> | null = null;
     let decodeError: string | null = null;
     let treatmentSnapshot: Record<string, unknown> | null = null;
+    let testStatus: 'passed' | 'failed' = 'failed';
 
     await page.setViewportSize({ width: 375, height: 812 });
     await page.addInitScript((key: string) => {
@@ -98,7 +102,7 @@ for (const arm of ['tiny-gif', 'fixture-raster'] as const) {
       const phase = responsePhase;
       const task = response.body().then((body) => ({ status: response.status(),
         contentType: response.headers()['content-type'] ?? '', body }));
-      responseBodies.set(url, task);
+      responseBodies.get(phase)?.set(url, task);
       void task.then((row) => responseRows.push({ url, status: row.status, contentType: row.contentType,
         bytes: row.body.length, sha256: createHash('sha256').update(row.body).digest('hex'), phase }))
         .catch((error: unknown) => responseRows.push({ url, bodyError: String(error), phase }));
@@ -114,16 +118,19 @@ for (const arm of ['tiny-gif', 'fixture-raster'] as const) {
         naturalWidth: img.naturalWidth, naturalHeight: img.naturalHeight,
         rect: (() => { const r = img.getBoundingClientRect(); return { width: r.width, height: r.height }; })() }));
       targetUrl = String(sourceSnapshot.currentSrc);
-      const originalResponse = await responseBodies.get(targetUrl);
+      const originalResponse = await responseBodies.get('fixture-load')?.get(targetUrl);
       if (!originalResponse || originalResponse.status !== 200 || !originalResponse.contentType.startsWith('image/'))
         throw new Error(`fixture srcset candidate had no successful image response: ${targetUrl}`);
       if (arm === 'fixture-raster' && (sourceSnapshot.naturalWidth as number) <= 0)
         throw new Error('fixture source image did not decode before the controlled reload');
+      imageEvents.push(...await page.evaluate((key: string) =>
+        (window as unknown as Record<string, Record<string, unknown>[]>)[key] ?? [], imgEventKey));
 
       const body = arm === 'tiny-gif' ? tinyGif : originalResponse.body;
       const contentType = arm === 'tiny-gif' ? 'image/gif' : originalResponse.contentType;
       responsePhase = 'treatment-reload';
       await page.route((url) => url.href === targetUrl, async (route) => {
+        routeHit = true;
         await route.fulfill({ status: 200, contentType, body });
       });
       await page.reload();
@@ -132,25 +139,35 @@ for (const arm of ['tiny-gif', 'fixture-raster'] as const) {
       } catch (error) {
         decodeError = error instanceof Error ? error.message : String(error);
       }
-      const actualTreatmentResponse = await responseBodies.get(targetUrl);
       treatmentSnapshot = await image.evaluate((img: HTMLImageElement) => ({ src: img.src, currentSrc: img.currentSrc,
         srcset: img.srcset, sizes: img.sizes, complete: img.complete,
         naturalWidth: img.naturalWidth, naturalHeight: img.naturalHeight,
         rect: (() => { const r = img.getBoundingClientRect(); return { width: r.width, height: r.height }; })() }));
-      treatmentResponse = actualTreatmentResponse ? { targetUrl, status: actualTreatmentResponse.status,
+      const actualTreatmentResponse = await responseBodies.get('treatment-reload')?.get(targetUrl);
+      if (!routeHit || treatmentSnapshot.currentSrc !== targetUrl || !actualTreatmentResponse)
+        throw new Error('controlled target URL was not requested and observed during treatment reload');
+      treatmentResponse = { targetUrl, status: actualTreatmentResponse.status,
         contentType: actualTreatmentResponse.contentType, bytes: actualTreatmentResponse.body.length,
-        sha256: createHash('sha256').update(actualTreatmentResponse.body).digest('hex'), treatment: arm }
-        : { targetUrl, treatment: arm, responseMissing: true };
-      expect(actualTreatmentResponse?.status).toBe(200);
-      if (arm === 'fixture-raster') expect(treatmentSnapshot.naturalWidth).toBeGreaterThan(0);
+        sha256: createHash('sha256').update(actualTreatmentResponse.body).digest('hex'), treatment: arm };
+      expect(actualTreatmentResponse.status).toBe(200);
+      expect(actualTreatmentResponse.contentType).toBe(contentType);
+      expect(actualTreatmentResponse.body.length).toBe(body.length);
+      expect(treatmentResponse.sha256).toBe(createHash('sha256').update(body).digest('hex'));
+      if (arm === 'fixture-raster') {
+        expect(decodeError).toBeNull();
+        expect(treatmentSnapshot.naturalWidth).toBeGreaterThan(0);
+      }
+      testStatus = 'passed';
     } catch (error) {
       decodeError ??= error instanceof Error ? error.stack ?? error.message : String(error);
       throw error;
     } finally {
       imageEvents.push(...await page.evaluate((key: string) =>
         (window as unknown as Record<string, Record<string, unknown>[]>)[key] ?? [], imgEventKey).catch(() => []));
-      const result = { event: 'finish', ...started, sourceSnapshot, targetUrl, treatmentResponse,
-        treatmentSnapshot, decodeError, responseRows, imageEvents, pageErrors };
+      const result = { ...started, event: 'finish', status: testStatus, sourceSnapshot, targetUrl, treatmentResponse,
+        treatmentSnapshot, treatmentImageDecodeStatus: decodeError ? 'decode-rejected'
+          : (Number(treatmentSnapshot?.naturalWidth) > 0 ? 'decoded' : 'natural-width-zero'),
+        decodeError, responseRows, imageEvents, pageErrors, routeHit };
       await appendFile(logPath!, `${JSON.stringify(result)}\n`);
     }
   });
