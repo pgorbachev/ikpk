@@ -750,6 +750,7 @@ jobs:
       # test success; synchronous measurements can affect timing.
       - name: Run PR 312 history scroll diagnostic
         id: pr312-history-diagnostic
+        if: github.event_name != 'pull_request' || github.event.pull_request.number != 477
         continue-on-error: true
         env:
           PR312_HISTORY_DIAGNOSTIC_LOG: ${{ runner.temp }}/pr312-history-diagnostic.jsonl
@@ -758,7 +759,7 @@ jobs:
         run: npx playwright test tests/chat-entry-visibility.spec.ts --project desktop mobile --grep PR312-history-diagnostic --workers=1
 
       - name: Upload PR 312 history diagnostic
-        if: always() && steps.pr312-history-diagnostic.outcome != 'skipped'
+        if: always() && (github.event_name != 'pull_request' || github.event.pull_request.number != 477) && steps.pr312-history-diagnostic.outcome != 'skipped'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: pr312-history-diagnostic-${{ github.run_id }}-${{ github.run_attempt }}
@@ -905,4 +906,48 @@ jobs:
         with:
           name: playwright-smoke-report
           path: web/test-results/
+          retention-days: 7
+
+  pr312-image-route-probe:
+    name: PR 312 fixture image decode probe
+    if: github.event_name == 'pull_request' && github.event.pull_request.number == 477 && github.event.pull_request.draft == true && github.event.pull_request.head.ref == 'codex/pr312-history-diagnostic'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install web dependencies
+        run: npm ci --prefix web
+
+      - name: Install pinned Chromium and Linux dependencies
+        working-directory: web
+        env:
+          PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/web/.playwright-browsers
+          PLAYWRIGHT_SKIP_BROWSER_GC: '1'
+        run: ./node_modules/.bin/playwright install --with-deps chromium
+
+      - name: Run one local fixture image decode probe
+        id: pr312-route-probe
+        working-directory: web
+        env:
+          GITHUB_SHA: ${{ github.sha }}
+          GITHUB_EVENT_PULL_REQUEST_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR312_ROUTE_PROBE_LOG: ${{ runner.temp }}/pr312-image-route-probe.jsonl
+          PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/web/.playwright-browsers
+          PLAYWRIGHT_SKIP_BROWSER_GC: '1'
+        run: ./node_modules/.bin/playwright test diagnostics/pr312-image-route-probe.spec.ts --config=playwright.pr312-route-probe.config.ts --project=mobile-route-probe --workers=1
+
+      - name: Upload PR 312 image decode probe
+        if: always() && steps.pr312-route-probe.outcome != 'skipped'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: pr312-image-route-probe-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/pr312-image-route-probe.jsonl
+          if-no-files-found: error
           retention-days: 7
