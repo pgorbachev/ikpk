@@ -1295,6 +1295,153 @@ test.describe('chat entry visibility approved contract', () => {
     }
   });
 
+  test('diagnostic: schedule geometry after visible lazy images settle', async ({ page }, testInfo) => {
+    await protectThirdParties(page);
+    const diagnosticKey = '__pr312VisibleImageControl';
+    await page.addInitScript((key) => {
+      const pending: Array<Record<string, unknown>> = [];
+      const flush = () => {
+        if (!pending.length) return;
+        try {
+          const previous = JSON.parse(sessionStorage.getItem(key) ?? '[]') as Array<Record<string, unknown>>;
+          sessionStorage.setItem(key, JSON.stringify(previous.concat(pending)));
+          pending.length = 0;
+        } catch {
+          // Keep the diagnostic best-effort if browser storage is unavailable.
+        }
+      };
+      const snapshot = (phase: string) => {
+        const port = document.querySelector<HTMLElement>('[data-page-scrollport]');
+        const main = document.querySelector<HTMLElement>('main');
+        const items = Array.from(document.querySelectorAll<HTMLElement>('[data-schedule-item]')).slice(0, 30);
+        pending.push({
+          phase,
+          now: performance.now(),
+          timeOrigin: performance.timeOrigin,
+          documentId: String(performance.timeOrigin),
+          url: location.href,
+          visibilityState: document.visibilityState,
+          scrollTop: port?.scrollTop ?? null,
+          scrollHeight: port?.scrollHeight ?? null,
+          clientHeight: port?.clientHeight ?? null,
+          mainHeight: main?.getBoundingClientRect().height ?? null,
+          scheduleItems: items.map((item) => {
+            const rect = item.getBoundingClientRect();
+            const image = item.querySelector<HTMLImageElement>('img');
+            const imageRect = image?.getBoundingClientRect();
+            return {
+              startAt: item.dataset.startAt ?? null,
+              startAvailable: item.dataset.startAvailable ?? null,
+              hidden: item.hidden,
+              top: rect.top,
+              height: rect.height,
+              image: image ? {
+                src: image.currentSrc || image.src,
+                loading: image.loading,
+                complete: image.complete,
+                naturalWidth: image.naturalWidth,
+                width: image.getAttribute('width'),
+                height: image.getAttribute('height'),
+                top: imageRect?.top ?? null,
+                boxHeight: imageRect?.height ?? null,
+              } : null,
+            };
+          }),
+        });
+        flush();
+      };
+      const trace = window as Window & { __pr312VisibleImageTrace?: { record: (phase: string) => void; serialize: () => string } };
+      trace.__pr312VisibleImageTrace = {
+        record: snapshot,
+        serialize: () => sessionStorage.getItem(key) ?? '[]',
+      };
+      document.addEventListener('visibilitychange', () => snapshot('visibilitychange-capture'), true);
+      document.addEventListener('visibilitychange', () => {
+        snapshot('visibilitychange-bubble-early');
+        queueMicrotask(() => snapshot('visibilitychange-after-dispatch'));
+      });
+      document.addEventListener('scroll', (event) => {
+        if (event.target === document.querySelector('[data-page-scrollport]')) snapshot('scroll');
+      }, true);
+      window.addEventListener('pagehide', (event) => {
+        snapshot(`pagehide-capture-persisted-${event.persisted}`);
+      }, true);
+    }, diagnosticKey);
+    await page.setViewportSize({ width: 375, height: 812 });
+    await page.goto(activeUrl('/raspisanie-i-tseny'));
+    const requestStates = new Map<object, {
+      url: string;
+      status: 'pending' | 'finished' | 'failed';
+      failure?: string;
+      startedAt: number;
+      endedAt?: number;
+      settled: Promise<void>;
+      resolve: () => void;
+    }>();
+    let captureImageRequests = false;
+    page.on('request', (request) => {
+      if (!captureImageRequests || request.resourceType() !== 'image' || !request.url().includes('/media/')) return;
+      let resolve = () => {};
+      const settled = new Promise<void>((done) => { resolve = done; });
+      requestStates.set(request, { url: request.url(), status: 'pending', startedAt: Date.now(), settled, resolve });
+    });
+    page.on('requestfinished', (request) => {
+      const state = requestStates.get(request);
+      if (state) {
+        state.status = 'finished';
+        state.endedAt = Date.now();
+        state.resolve();
+      }
+    });
+    page.on('requestfailed', (request) => {
+      const state = requestStates.get(request);
+      if (state) {
+        state.status = 'failed';
+        state.failure = request.failure()?.errorText;
+        state.endedAt = Date.now();
+        state.resolve();
+      }
+    });
+    const port = page.locator('[data-page-scrollport]');
+    await expect(port).toHaveCount(1);
+    captureImageRequests = true;
+    await port.evaluate((el: HTMLElement) => el.scrollTo({ top: 1300, behavior: 'instant' }));
+    const record = async (phase: string) => page.evaluate((label) => {
+      const trace = (window as Window & { __pr312VisibleImageTrace?: { record: (phase: string) => void } }).__pr312VisibleImageTrace;
+      trace?.record(label);
+    }, phase);
+    const twoFrames = async () => page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
+    await twoFrames();
+    await record('after-scroll-two-frames-visible');
+    let stableChecks = 0;
+    for (let attempt = 0; attempt < 4 && stableChecks < 1; attempt += 1) {
+      const sizeBefore = requestStates.size;
+      const pending = [...requestStates.values()].filter((state) => state.status === 'pending');
+      if (pending.length) {
+        let timeoutId: ReturnType<typeof setTimeout> | undefined;
+        await Promise.race([
+          Promise.all(pending.map((state) => state.settled)),
+          new Promise<void>((resolve) => { timeoutId = setTimeout(resolve, 5_000); }),
+        ]);
+        if (timeoutId) clearTimeout(timeoutId);
+      }
+      await twoFrames();
+      stableChecks = requestStates.size === sizeBefore
+        && ![...requestStates.values()].some((state) => state.status === 'pending') ? stableChecks + 1 : 0;
+    }
+    captureImageRequests = false;
+    await record('after-image-requests-settled-while-visible');
+    const requestLog = [...requestStates.values()].map(({ url, status, failure, startedAt, endedAt }) => ({ url, status, failure, startedAt, endedAt }));
+    await page.goto(activeUrl('/kontakty'));
+    const timeline = await page.evaluate((key) => {
+      const trace = (window as Window & { __pr312VisibleImageTrace?: { serialize: () => string } }).__pr312VisibleImageTrace;
+      return trace?.serialize() ?? sessionStorage.getItem(key) ?? '[]';
+    }, diagnosticKey);
+    const tracePath = testInfo.outputPath('history-visible-image-control.json');
+    await writeFile(tracePath, JSON.stringify({ timeline: JSON.parse(timeline), imageRequests: requestLog, stableChecks }, null, 2));
+    await testInfo.attach('history-visible-image-control', { path: tracePath, contentType: 'application/json' });
+  });
+
   test('history restores distinct scroll positions for separate entries with the same URL', async ({ page }, testInfo) => {
     await protectThirdParties(page);
     const diagnosticKey = '__pr312HistoryTraceV2';
@@ -1331,6 +1478,7 @@ test.describe('chat entry visibility approved contract', () => {
           scrollHeight: port?.scrollHeight ?? null,
           clientHeight: port?.clientHeight ?? null,
           windowScrollY: window.scrollY,
+          visibilityState: document.visibilityState,
           viewport: {
             width: innerWidth, height: innerHeight, dpr: devicePixelRatio,
             visualWidth: window.visualViewport?.width ?? null,
@@ -1343,6 +1491,28 @@ test.describe('chat entry visibility approved contract', () => {
           detail: detail ?? null,
         };
         if (full) {
+          event.scheduleItems = Array.from(document.querySelectorAll<HTMLElement>('[data-schedule-item]')).slice(0, 30).map((item) => {
+            const rect = item.getBoundingClientRect();
+            const image = item.querySelector<HTMLImageElement>('img');
+            const imageRect = image?.getBoundingClientRect();
+            return {
+              startAt: item.dataset.startAt ?? null,
+              startAvailable: item.dataset.startAvailable ?? null,
+              hidden: item.hidden,
+              top: rect.top,
+              height: rect.height,
+              image: image ? {
+                src: image.currentSrc || image.src,
+                loading: image.loading,
+                complete: image.complete,
+                naturalWidth: image.naturalWidth,
+                width: image.getAttribute('width'),
+                height: image.getAttribute('height'),
+                top: imageRect?.top ?? null,
+                boxHeight: imageRect?.height ?? null,
+              } : null,
+            };
+          });
           event.fonts = fontStatus();
           event.images = [...document.images].map((image) => ({
             src: image.currentSrc || image.src,
@@ -1465,6 +1635,13 @@ test.describe('chat entry visibility approved contract', () => {
           snapshot('scroll-next-animation-frame');
         });
       }, true);
+      document.addEventListener('visibilitychange', () => {
+        snapshot('visibilitychange-window-capture', { visibilityState: document.visibilityState }, true);
+      }, true);
+      document.addEventListener('visibilitychange', () => {
+        snapshot('visibilitychange-document-bubble-early', { visibilityState: document.visibilityState }, true);
+        queueMicrotask(() => { snapshot('visibilitychange-after-dispatch', { visibilityState: document.visibilityState }, true); flush(); });
+      });
       document.fonts.addEventListener('loadingdone', () => snapshot('fonts-loadingdone', null, true));
       document.fonts.addEventListener('loadingerror', () => snapshot('fonts-loadingerror', null, true));
       try {
@@ -1560,6 +1737,8 @@ test.describe('chat entry visibility approved contract', () => {
       'forward restores the intermediary entry position').toBe(700);
     await page.goForward();
     await expect(page).toHaveURL(entryUrl);
+    await mark('forward-to-second-schedule-before-assertion');
+    await attachHistoryTrace('history-timeline-forward-to-second-schedule');
     await expect.poll(() => port.evaluate((el: HTMLElement) => el.scrollTop),
       'forward restores the second same-URL entry position').toBe(1300);
   });
