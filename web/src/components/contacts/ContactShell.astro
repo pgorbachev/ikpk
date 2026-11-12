@@ -116,11 +116,11 @@ const {
       (IntersectionObserver) — кросс-браузерно, в т.ч. Safari, где нативный
       iframe loading="lazy" не работает и тяжёлый виджет грузился бы сразу. */}
   <div class="contact-shell-map" data-map-src={mapSrc}>
-    <div class="contact-shell-map-placeholder" aria-hidden="true">
-      <span class="contact-shell-map-pin">
+    <div class="contact-shell-map-placeholder">
+      <span class="contact-shell-map-pin" aria-hidden="true">
         <svg viewBox="0 0 24 24" width="34" height="34"><path d="M12 2a7 7 0 0 0-7 7c0 5 7 13 7 13s7-8 7-13a7 7 0 0 0-7-7zm0 9.5A2.5 2.5 0 1 1 12 6.5a2.5 2.5 0 0 1 0 5z" fill="currentColor"/></svg>
       </span>
-      <span class="contact-shell-map-loading">Загрузка карты…</span>
+      <span class="contact-shell-map-loading" aria-hidden="true">Загрузка карты…</span>
     </div>
     {mapOpenUrl && (
       <a class="contact-shell-map-link" href={mapOpenUrl} target="_blank" rel="noopener">
@@ -147,8 +147,7 @@ const {
         iframe.src = src;
         iframe.title = 'Карта ИКПК';
         iframe.referrerPolicy = 'no-referrer-when-downgrade';
-        box.querySelector('.contact-shell-map-placeholder')?.remove();
-        box.prepend(iframe);
+        box.querySelector('.contact-shell-map-placeholder')?.append(iframe);
       };
       if ('IntersectionObserver' in window) {
         const io = new IntersectionObserver((entries, obs) => {
@@ -277,6 +276,7 @@ const {
   }
 
   .contact-shell-map-placeholder {
+    position: relative;
     flex: 1;
     min-height: 26rem;
     display: flex;
@@ -288,6 +288,11 @@ const {
       radial-gradient(circle at 50% 42%, rgb(53 122 56 / 8%), transparent 60%),
       var(--color-light-300);
     color: var(--color-gray-500);
+  }
+
+  .contact-shell-map-placeholder :global(iframe) {
+    position: absolute;
+    inset: 0;
   }
   .contact-shell-map-pin { color: var(--color-accent-500); }
   .contact-shell-map-loading { font-size: var(--font-s); }
