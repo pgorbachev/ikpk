@@ -48,11 +48,12 @@ test.afterAll(async () => {
   build?.dispose();
 });
 
-type Arm = 'natural-404' | 'valid-gif';
+type Arm = 'natural-control' | 'forced-404' | 'valid-gif';
 const cases: readonly { arm: Arm; iteration: number }[] = [
-  { arm: 'natural-404', iteration: 1 }, { arm: 'valid-gif', iteration: 1 },
-  { arm: 'natural-404', iteration: 2 }, { arm: 'valid-gif', iteration: 2 },
-  { arm: 'natural-404', iteration: 3 }, { arm: 'valid-gif', iteration: 3 },
+  { arm: 'natural-control', iteration: 0 },
+  { arm: 'forced-404', iteration: 1 }, { arm: 'valid-gif', iteration: 1 },
+  { arm: 'forced-404', iteration: 2 }, { arm: 'valid-gif', iteration: 2 },
+  { arm: 'forced-404', iteration: 3 }, { arm: 'valid-gif', iteration: 3 },
 ];
 
 async function sha256(path: string): Promise<string> {
@@ -76,7 +77,9 @@ for (const { arm, iteration } of cases) {
       chromiumVersion: browser?.version() ?? null,
       projectDefaultViewport: testInfo.project.use.viewport ?? null,
       effectiveViewport: { width: 375, height: 812 },
-      intervention: arm === 'valid-gif' ? 'same-origin /media/ requests return valid 1x1 GIF' : 'unmodified static fixture responses',
+      intervention: arm === 'natural-control' ? 'unmodified smoke fixture responses'
+        : arm === 'forced-404' ? 'same-origin /media/ requests return controlled HTTP 404'
+          : 'same-origin /media/ requests return valid 1x1 GIF',
       assertions: 'same sequence and exact restore assertions as original history test',
       sourceHashes: {
         diagnostic: await sha256(new URL('./pr312-history-image-route.spec.ts', import.meta.url).pathname),
@@ -95,6 +98,13 @@ for (const { arm, iteration } of cases) {
     const mediaFailures: { url: string; error: string }[] = [];
     const traceKey = '__pr312HistoryImageAB';
     let failure: string | null = null;
+    let attemptedCheckpoint = 'before-navigation';
+    const reachedCheckpoints: string[] = [];
+    const markCheckpoint = async (marker: string) => {
+      attemptedCheckpoint = marker;
+      await page.evaluate((detail) => window.dispatchEvent(new CustomEvent('pr312-history-image-ab', { detail })), marker);
+      reachedCheckpoints.push(marker);
+    };
 
     try {
       await installThirdPartyGuard(page, { chatLoaderSrc: PROBE_CHAT_LOADER_SRC });
@@ -110,10 +120,13 @@ for (const { arm, iteration } of cases) {
         if (url.hostname === '127.0.0.1' && url.pathname.startsWith('/media/'))
           mediaFailures.push({ url: request.url(), error: request.failure()?.errorText ?? 'unknown' });
       });
-      if (arm === 'valid-gif') {
+      if (arm !== 'natural-control') {
+        const treatment = arm === 'forced-404'
+          ? { status: 404, contentType: 'text/plain', body: 'PR312 controlled image failure' }
+          : { status: 200, contentType: 'image/gif', body: gif };
         await page.route((url) => url.hostname === '127.0.0.1' && url.port === new URL(site.origin).port
           && url.pathname.startsWith('/media/'), async (route) => {
-          await route.fulfill({ status: 200, contentType: 'image/gif', body: gif });
+          await route.fulfill(treatment);
         });
       }
       await page.addInitScript((key: string) => {
@@ -131,7 +144,7 @@ for (const { arm, iteration } of cases) {
             documentId: String(performance.timeOrigin), url: location.href, historyLength: history.length,
             savedEntry: saved ?? null, scrollTop: port?.scrollTop ?? null, scrollHeight: port?.scrollHeight ?? null,
             clientWidth: port?.clientWidth ?? null, viewportWidth: innerWidth,
-            mapRect: ['pageshow', 'pagehide', 'popstate', 'scroll-assignment'].includes(event) ? rect(map) : null,
+            mapRect: ['pageshow', 'pagehide', 'popstate', 'checkpoint'].includes(event) ? rect(map) : null,
             image: image ?? null };
           try {
             const items = JSON.parse(sessionStorage.getItem(key) || '[]') as unknown[];
@@ -142,7 +155,7 @@ for (const { arm, iteration } of cases) {
         addEventListener('pageshow', () => record('pageshow'));
         addEventListener('pagehide', () => record('pagehide'));
         addEventListener('popstate', () => queueMicrotask(() => record('popstate')));
-        addEventListener('pr312-history-image-ab', (event) => record('scroll-assignment', (event as CustomEvent<string>).detail));
+        addEventListener('pr312-history-image-ab', (event) => record('checkpoint', (event as CustomEvent<string>).detail));
         addEventListener('load', (event) => {
           if (event.target instanceof HTMLImageElement && event.target.currentSrc.includes('/media/')) {
             const image = event.target;
@@ -163,56 +176,62 @@ for (const { arm, iteration } of cases) {
       await page.goto(scheduleUrl);
       const port = page.locator('[data-page-scrollport]');
       await expect(port).toHaveCount(1);
+      attemptedCheckpoint = 'schedule-400-assigned';
       await port.evaluate((el: HTMLElement) => {
         el.scrollTo({ top: 400, behavior: 'instant' });
         window.dispatchEvent(new CustomEvent('pr312-history-image-ab', { detail: 'schedule-400-assigned' }));
       });
+      reachedCheckpoints.push('schedule-400-assigned');
       const entryUrl = page.url();
       await page.goto(`${site.origin}/kontakty`);
       const contactsPort = page.locator('[data-page-scrollport]');
+      attemptedCheckpoint = 'contacts-700-assigned';
       await contactsPort.evaluate((el: HTMLElement) => {
         el.scrollTo({ top: 700, behavior: 'instant' });
         window.dispatchEvent(new CustomEvent('pr312-history-image-ab', { detail: 'contacts-700-assigned' }));
       });
+      reachedCheckpoints.push('contacts-700-assigned');
       await page.goto(entryUrl);
       await expect(port).toHaveCount(1);
+      attemptedCheckpoint = 'schedule-1300-assigned';
       await port.evaluate((el: HTMLElement) => {
         el.scrollTo({ top: 1300, behavior: 'instant' });
         window.dispatchEvent(new CustomEvent('pr312-history-image-ab', { detail: 'schedule-1300-assigned' }));
       });
+      reachedCheckpoints.push('schedule-1300-assigned');
 
+      attemptedCheckpoint = 'back-1-navigation';
       await page.goBack();
       await expect(page).toHaveURL(/kontakty/);
+      await markCheckpoint('back-1-contacts-url');
+      attemptedCheckpoint = 'back-1-contacts-700';
       await expect.poll(() => contactsPort.evaluate((el: HTMLElement) => el.scrollTop),
         'back restores the intermediary entry position').toBe(700);
+      await markCheckpoint('back-1-contacts-700');
+      attemptedCheckpoint = 'back-2-navigation';
       await page.goBack();
       await expect(page).toHaveURL(entryUrl);
+      await markCheckpoint('back-2-schedule-url');
+      attemptedCheckpoint = 'back-2-schedule-400';
       await expect.poll(() => port.evaluate((el: HTMLElement) => el.scrollTop),
         'back restores the first same-URL entry position').toBe(400);
+      await markCheckpoint('back-2-schedule-400');
+      attemptedCheckpoint = 'forward-1-navigation';
       await page.goForward();
       await expect(page).toHaveURL(/kontakty/);
+      await markCheckpoint('forward-1-contacts-url');
+      attemptedCheckpoint = 'forward-1-contacts-700';
       await expect.poll(() => contactsPort.evaluate((el: HTMLElement) => el.scrollTop),
         'forward restores the intermediary entry position').toBe(700);
+      await markCheckpoint('forward-1-contacts-700');
+      attemptedCheckpoint = 'forward-2-navigation';
       await page.goForward();
       await expect(page).toHaveURL(entryUrl);
+      await markCheckpoint('forward-2-schedule-url');
+      attemptedCheckpoint = 'forward-2-schedule-1300';
       await expect.poll(() => port.evaluate((el: HTMLElement) => el.scrollTop),
         'forward restores the second same-URL entry position').toBe(1300);
-      if (arm === 'natural-404') {
-        expect(mediaResponses.length, 'A must observe fixture media responses').toBeGreaterThan(0);
-        expect(mediaResponses.every((response) => response.status === 404), 'A must preserve the fixture 404 responses').toBe(true);
-      } else {
-        const currentImages = await page.locator('[data-schedule-item] img').evaluateAll((images) => images.map((image) => ({
-          src: (image as HTMLImageElement).currentSrc,
-          complete: (image as HTMLImageElement).complete,
-          naturalWidth: (image as HTMLImageElement).naturalWidth,
-          naturalHeight: (image as HTMLImageElement).naturalHeight,
-        })));
-        expect(mediaResponses.length, 'B must intercept at least one fixture media request').toBeGreaterThan(0);
-        expect(mediaResponses.every((response) => response.status === 200
-          && response.contentType.startsWith('image/gif')), 'B responses must carry the valid GIF treatment').toBe(true);
-        expect(currentImages.some((image) => image.src.includes('/media/') && image.complete
-          && image.naturalWidth > 0 && image.naturalHeight > 0), 'B must decode an actual schedule image element').toBe(true);
-      }
+      await markCheckpoint('forward-2-schedule-1300');
     } catch (error) {
       failure = error instanceof Error ? error.stack ?? error.message : String(error);
       throw error;
@@ -224,31 +243,44 @@ for (const { arm, iteration } of cases) {
       } catch (error) {
         captureError = error instanceof Error ? error.message : String(error);
       }
-      const decodedImages = timeline.flatMap((event) => event && typeof event === 'object'
-        && (event as { image?: unknown }).image && typeof (event as { image: unknown }).image === 'object'
-        ? [(event as { image: { src: string; complete: boolean; naturalWidth: number; naturalHeight: number } }).image]
+      const traceEvents = timeline.filter((event): event is Record<string, unknown> => Boolean(event && typeof event === 'object'));
+      const imageEvidence = traceEvents.flatMap((event) => event.image && typeof event.image === 'object'
+        ? [{ documentId: String(event.documentId), event: String(event.event),
+          ...(event.image as { src: string; complete: boolean; naturalWidth: number; naturalHeight: number }) }]
         : []);
-      const imageArmValid = arm === 'natural-404'
-        ? mediaResponses.length > 0 && mediaResponses.every((response) => response.status === 404)
-        : mediaResponses.length > 0
-          && mediaResponses.every((response) => response.status === 200 && response.contentType.startsWith('image/gif'))
-          && decodedImages.some((image) => image.src.includes('/media/') && image.complete && image.naturalWidth > 0 && image.naturalHeight > 0);
-      const markers = ['schedule-400-assigned', 'contacts-700-assigned', 'schedule-1300-assigned'];
-      const timelineComplete = captureError === null && markers.every((marker) => timeline.some((event) =>
-        event && typeof event === 'object' && (event as { marker?: string }).marker === marker))
-        && timeline.filter((event) => event && typeof event === 'object'
-          && (event as { event?: string }).event === 'pagehide').length >= 6
-        && new Set(timeline.filter((event) => event && typeof event === 'object')
-          .map((event) => (event as { documentId?: string }).documentId).filter(Boolean)).size >= 3;
+      const scheduleDocumentIds = [...new Set(traceEvents.filter((event) =>
+        ['schedule-400-assigned', 'schedule-1300-assigned'].includes(String(event.marker)))
+        .map((event) => String(event.documentId)))];
+      const expectedStatus = arm === 'forced-404' ? 404 : 200;
+      const expectedMediaResponses = arm === 'natural-control' ? [] : mediaResponses;
+      const responseTreatmentValid = arm === 'natural-control' || (expectedMediaResponses.length > 0
+        && expectedMediaResponses.every((response) => response.status === expectedStatus
+          && (arm !== 'valid-gif' || response.contentType.startsWith('image/gif'))));
+      const documentImageTreatmentValid = arm === 'natural-control' || (scheduleDocumentIds.length === 2
+        && scheduleDocumentIds.every((documentId) => imageEvidence.some((image) => image.documentId === documentId
+          && image.src.includes('/media/') && image.complete
+          && mediaResponses.some((response) => response.url === image.src && response.status === expectedStatus)
+          && (arm === 'forced-404'
+            ? image.event === 'image-error' && image.naturalWidth === 0
+            : image.event === 'image-load' && image.naturalWidth > 0 && image.naturalHeight > 0))));
+      const imageArmValid = responseTreatmentValid && documentImageTreatmentValid;
+      const timelineComplete = captureError === null && reachedCheckpoints.every((marker) => traceEvents.some((event) =>
+        event.event === 'checkpoint' && event.marker === marker));
       const resultStatus = !timelineComplete || !imageArmValid ? 'invalid' : failure ? 'failed' : 'passed';
+      const contactsEligible = reachedCheckpoints.includes('back-1-contacts-url');
+      const scheduleEligible = reachedCheckpoints.includes('forward-2-schedule-url');
       const result = { ...start, event: 'finish', timestamp: new Date().toISOString(),
         status: resultStatus, historyAssertionStatus: failure ? 'failed' : 'passed', error: failure, captureError,
+        attemptedCheckpoint, reachedCheckpoints, censoredAt: failure ? attemptedCheckpoint : null,
+        symptomEligibility: { contacts700: contactsEligible, schedule1300: scheduleEligible },
         invalidReasons: [...(!timelineComplete ? ['incomplete-history-timeline'] : []),
           ...(!imageArmValid ? ['image-treatment-not-validated'] : [])],
         completeness: { timelineEvents: timeline.length, timelineComplete, mediaResponses: mediaResponses.length,
-          mediaFailures: mediaFailures.length, imageArmValid }, mediaResponses, mediaFailures, timeline };
+          mediaFailures: mediaFailures.length, responseTreatmentValid, documentImageTreatmentValid,
+          scheduleDocumentIds, imageArmValid }, mediaResponses, mediaFailures, imageEvidence, timeline };
       await appendFile(logPath!, `${JSON.stringify(result)}\n`);
-      if (failure === null) expect(timelineComplete, 'successful sequence must include all three assigned positions and navigation lifecycle').toBe(true);
+      if (failure === null) expect(timelineComplete && imageArmValid,
+        'successful sequence must have complete reached checkpoints and a document-validated image treatment').toBe(true);
     }
   });
 }

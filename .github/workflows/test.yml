@@ -946,7 +946,7 @@ jobs:
       - name: Build smoke-equivalent site and media derivatives
         run: npm run build
 
-      - name: Run full history sequence with natural-404 and valid-GIF image arms
+      - name: Run full history sequence with natural, forced-404 and valid-GIF arms
         id: pr312-history-image-ab
         env:
           GITHUB_SHA: ${{ github.sha }}
