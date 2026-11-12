@@ -1296,23 +1296,88 @@ test.describe('chat entry visibility approved contract', () => {
 
   test('history restores distinct scroll positions for separate entries with the same URL', async ({ page }) => {
     await protectThirdParties(page);
+    const diagnosticKey = '__pr312HistoryTrace';
+    await page.addInitScript((key) => {
+      const snapshot = (phase: string, persisted?: boolean) => {
+        const port = document.querySelector<HTMLElement>('[data-page-scrollport]');
+        const state = history.state && typeof history.state === 'object' ? history.state.__ikpkChatPageScroll : null;
+        const event = {
+          phase,
+          url: location.href,
+          persisted: persisted ?? null,
+          scrollTop: port?.scrollTop ?? null,
+          scrollHeight: port?.scrollHeight ?? null,
+          clientHeight: port?.clientHeight ?? null,
+          windowScrollY: window.scrollY,
+          viewport: { width: innerWidth, height: innerHeight, dpr: devicePixelRatio },
+          historyState: state ?? null,
+          readyState: document.readyState,
+          timeOrigin: performance.timeOrigin,
+        };
+        try {
+          const events = JSON.parse(sessionStorage.getItem(key) ?? '[]');
+          events.push(event);
+          sessionStorage.setItem(key, JSON.stringify(events));
+        } catch {
+          // Diagnostics must not affect the history behavior under test.
+        }
+      };
+      window.addEventListener('pagehide', (event) => {
+        queueMicrotask(() => snapshot('pagehide-after-listeners', event.persisted));
+      });
+      window.addEventListener('pageshow', (event) => {
+        snapshot('pageshow-before-listeners', event.persisted);
+        queueMicrotask(() => snapshot('pageshow-after-listeners', event.persisted));
+      });
+    }, diagnosticKey);
+    const mark = async (phase: string) => page.evaluate(({ key, label }) => {
+      const port = document.querySelector<HTMLElement>('[data-page-scrollport]');
+      const state = history.state && typeof history.state === 'object' ? history.state.__ikpkChatPageScroll : null;
+      const event = {
+        phase: label,
+        url: location.href,
+        scrollTop: port?.scrollTop ?? null,
+        scrollHeight: port?.scrollHeight ?? null,
+        clientHeight: port?.clientHeight ?? null,
+        windowScrollY: window.scrollY,
+        viewport: { width: innerWidth, height: innerHeight, dpr: devicePixelRatio },
+        historyState: state ?? null,
+        readyState: document.readyState,
+        timeOrigin: performance.timeOrigin,
+      };
+      try {
+        const events = JSON.parse(sessionStorage.getItem(key) ?? '[]');
+        events.push(event);
+        sessionStorage.setItem(key, JSON.stringify(events));
+      } catch {
+        // Diagnostics must not affect the history behavior under test.
+      }
+    }, { key: diagnosticKey, label: phase });
     await page.setViewportSize({ width: 375, height: 812 });
     await page.goto(activeUrl('/raspisanie-i-tseny'));
     const port = page.locator('[data-page-scrollport]');
     await expect(port).toHaveCount(1);
     await port.evaluate((el: HTMLElement) => el.scrollTo({ top: 400, behavior: 'instant' }));
+    await mark('schedule-entry-set-400');
     const entryUrl = page.url();
     await page.goto(activeUrl('/kontakty'));
     const contactsPort = page.locator('[data-page-scrollport]');
     await contactsPort.evaluate((el: HTMLElement) => el.scrollTo({ top: 700, behavior: 'instant' }));
+    await mark('contacts-entry-set-700');
     await page.goto(entryUrl);
     await expect(port).toHaveCount(1);
     await port.evaluate((el: HTMLElement) => el.scrollTo({ top: 1300, behavior: 'instant' }));
+    await mark('schedule-second-entry-set-1300');
 
     await page.goBack();
     await expect(page).toHaveURL(/kontakty/);
-    await expect.poll(() => contactsPort.evaluate((el: HTMLElement) => el.scrollTop),
-      'back restores the intermediary entry position').toBe(700);
+    await mark('back-to-contacts-before-assertion');
+    try {
+      await expect.poll(() => contactsPort.evaluate((el: HTMLElement) => el.scrollTop),
+        'back restores the intermediary entry position').toBe(700);
+    } finally {
+      console.log('PR312_HISTORY_TRACE', await page.evaluate((key) => sessionStorage.getItem(key), diagnosticKey));
+    }
     await page.goBack();
     await expect(page).toHaveURL(entryUrl);
     await expect.poll(() => port.evaluate((el: HTMLElement) => el.scrollTop),
