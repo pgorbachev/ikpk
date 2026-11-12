@@ -1329,9 +1329,9 @@ test.describe('chat entry visibility approved contract', () => {
 
   const registerPr312HistoryDiagnostic = () => {
     const cases = [
-      ['baseline', 1], ['map-observe-suppressed', 1],
-      ['baseline', 2], ['map-observe-suppressed', 2],
-      ['baseline', 3], ['map-observe-suppressed', 3],
+      ['baseline', 1], ['scroll-anchor-disabled', 1],
+      ['baseline', 2], ['scroll-anchor-disabled', 2],
+      ['baseline', 3], ['scroll-anchor-disabled', 3],
     ] as const;
 
     for (const [mode, iteration] of cases) {
@@ -1379,12 +1379,38 @@ test.describe('chat entry visibility approved contract', () => {
               };
               const state = history.state && typeof history.state === 'object' ? history.state : {};
               const entry = (state as Record<string, unknown>).__ikpkChatPageScroll ?? null;
+              const includeScheduleLayout = event === 'pagehide-event' || event === 'pagehide-after-handlers'
+                || (event === 'scroll-assignment' && observedTarget === 'schedule-1300-assigned');
+              const scheduleItems = includeScheduleLayout
+                ? Array.from(document.querySelectorAll<HTMLElement>('[data-schedule-item]')).slice(0, 30).map((item) => {
+                  const card = item.querySelector<HTMLElement>('.schedule-card');
+                  const title = item.querySelector<HTMLElement>('.schedule-card-title');
+                  const body = item.querySelector<HTMLElement>('.schedule-card-body');
+                  const details = item.querySelector<HTMLElement>('.schedule-card-details');
+                  const footer = item.querySelector<HTMLElement>('.schedule-card-footer');
+                  const image = item.querySelector<HTMLImageElement>('.schedule-card-media img');
+                  const style = (element: HTMLElement | null) => element ? (() => {
+                    const computed = getComputedStyle(element);
+                    return { fontFamily: computed.fontFamily, fontSize: computed.fontSize, fontWeight: computed.fontWeight,
+                      lineHeight: computed.lineHeight, display: computed.display };
+                  })() : null;
+                  return {
+                    startAt: item.dataset.startAt ?? null, startAvailable: item.dataset.startAvailable ?? null, hidden: item.hidden,
+                    title: title?.innerText ?? null,
+                    rects: { item: rect(item), card: rect(card), title: rect(title), body: rect(body), details: rect(details), footer: rect(footer), image: rect(image) },
+                    styles: { card: style(card), title: style(title), body: style(body), details: style(details), footer: style(footer) },
+                    imageState: image ? { complete: image.complete, naturalWidth: image.naturalWidth, currentSrc: image.currentSrc } : null,
+                  };
+                }) : undefined;
               const item = {
                 event, timestamp: new Date().toISOString(), mode: args.mode,
                 documentId: String(performance.timeOrigin), url: location.href,
                 historyLength: history.length, entry, scrollTop: port?.scrollTop ?? null,
                 scrollHeight: port?.scrollHeight ?? null, clientHeight: port?.clientHeight ?? null,
-                observedTarget,
+                scrollportOverflowAnchor: port ? getComputedStyle(port).overflowAnchor : null,
+                observedTarget, fonts: includeScheduleLayout ? { status: document.fonts.status,
+                  faces: Array.from(document.fonts).map((face) => ({ family: face.family, status: face.status, weight: face.weight })) } : undefined,
+                scheduleItems,
                 map: { rect: rect(map), contentRect: rect(map?.parentElement),
                   placeholderRect: rect(placeholder), iframeRect: rect(iframe),
                   placeholderPresent: Boolean(placeholder), iframePresent: Boolean(iframe) },
@@ -1401,10 +1427,14 @@ test.describe('chat entry visibility approved contract', () => {
                 observe(target: Element) {
                   const isContactMap = target.matches('.contact-shell-map');
                   record('intersection-observe', isContactMap ? '.contact-shell-map' : target.tagName.toLowerCase());
-                  if (args.mode === 'map-observe-suppressed' && isContactMap) return;
                   super.observe(target);
                 }
               };
+            }
+            if (args.mode === 'scroll-anchor-disabled') {
+              const style = document.createElement('style');
+              style.textContent = '[data-page-scrollport] { overflow-anchor: none !important; }';
+              (document.head ?? document.documentElement).append(style);
             }
             addEventListener('pageshow', () => record('pageshow'));
             addEventListener('pagehide', () => {

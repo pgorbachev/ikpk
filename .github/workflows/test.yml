@@ -744,9 +744,10 @@ jobs:
       - name: Run payment e2e (stand role)
         run: npm run test:e2e:payment-stand
 
-      # Temporary Linux investigation for PR #312. The two arms run the same full
-      # history sequence; the only intervention is suppressing observe() for the
-      # contact map slot. Evidence is retained independently of test success.
+      # Temporary Linux investigation for PR #312. Both arms run the original full
+      # history sequence; the only intervention is disabling scroll anchoring on the
+      # app scrollport in one arm. Per-entry geometry is retained independently of
+      # test success; synchronous measurements can affect timing.
       - name: Run PR 312 history scroll diagnostic
         id: pr312-history-diagnostic
         continue-on-error: true
@@ -754,7 +755,7 @@ jobs:
           PR312_HISTORY_DIAGNOSTIC_LOG: ${{ runner.temp }}/pr312-history-diagnostic.jsonl
           GITHUB_SHA: ${{ github.sha }}
           GITHUB_EVENT_PULL_REQUEST_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-        run: npx playwright test tests/chat-entry-visibility.spec.ts --project=mobile --grep PR312-history-diagnostic --workers=1
+        run: npx playwright test tests/chat-entry-visibility.spec.ts --project desktop mobile --grep PR312-history-diagnostic --workers=1
 
       - name: Upload PR 312 history diagnostic
         if: always() && steps.pr312-history-diagnostic.outcome != 'skipped'
