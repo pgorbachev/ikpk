@@ -1327,6 +1327,121 @@ test.describe('chat entry visibility approved contract', () => {
       'forward restores the second same-URL entry position').toBe(1300);
   });
 
+  test('diagnostic: history restores same-URL positions with and without contact map observation', async ({ page, browser }, testInfo) => {
+    test.setTimeout(10 * 60 * 1000);
+    const logPath = process.env.PR312_HISTORY_DIAGNOSTIC_LOG;
+    if (!logPath) throw new Error('PR312_HISTORY_DIAGNOSTIC_LOG is required');
+    const results: Array<{ mode: string; iteration: number; checks: Array<{ label: string; passed: boolean; actual?: unknown; error?: string }> }> = [];
+    const timeline: unknown[] = [];
+    const modes = ['baseline', 'map-observe-suppressed', 'baseline', 'map-observe-suppressed'];
+
+    try {
+      for (let iteration = 0; iteration < modes.length; iteration += 1) {
+        const mode = modes[iteration];
+        const diagnosticPage = iteration === 0 ? page : await browser.newPage({ viewport: { width: 375, height: 812 } });
+        const checks: Array<{ label: string; passed: boolean; actual?: unknown; error?: string }> = [];
+        const check = async (label: string, action: () => Promise<void>) => {
+          try {
+            await action();
+            checks.push({ label, passed: true });
+          } catch (error) {
+            checks.push({ label, passed: false, error: error instanceof Error ? error.message : String(error) });
+          }
+        };
+        await protectThirdParties(diagnosticPage);
+        await diagnosticPage.addInitScript((suppressMap: boolean) => {
+          const key = '__pr312HistoryDiagnostic';
+          const record = (label: string) => {
+            const port = document.querySelector<HTMLElement>('[data-page-scrollport]');
+            const map = document.querySelector<HTMLElement>('.contact-shell-map');
+            const placeholder = map?.querySelector<HTMLElement>('.contact-shell-map-placeholder');
+            const iframe = map?.querySelector<HTMLIFrameElement>('iframe');
+            const rect = (element: Element | null | undefined) => {
+              if (!element) return null;
+              const value = element.getBoundingClientRect();
+              return { top: value.top, bottom: value.bottom, width: value.width, height: value.height };
+            };
+            const state = history.state && typeof history.state === 'object' ? history.state : {};
+            const scrollEntry = (state as Record<string, unknown>).__ikpkChatPageScroll ?? null;
+            const item = {
+              label, mode: suppressMap ? 'map-observe-suppressed' : 'baseline',
+              documentId: String(performance.timeOrigin), url: location.href,
+              historyLength: history.length, scrollEntry, scrollTop: port?.scrollTop ?? null,
+              scrollHeight: port?.scrollHeight ?? null, clientHeight: port?.clientHeight ?? null,
+              map: { rect: rect(map), placeholderRect: rect(placeholder), iframeRect: rect(iframe),
+                contentRect: rect(map?.parentElement), placeholderPresent: Boolean(placeholder), iframePresent: Boolean(iframe) },
+            };
+            try {
+              const entries = JSON.parse(sessionStorage.getItem(key) || '[]') as unknown[];
+              entries.push(item);
+              sessionStorage.setItem(key, JSON.stringify(entries));
+            } catch { /* diagnostics must not change navigation behavior */ }
+          };
+          Object.defineProperty(window, '__pr312MapObserveSuppressed', { value: suppressMap });
+          if (suppressMap && 'IntersectionObserver' in window) {
+            const NativeObserver = window.IntersectionObserver;
+            window.IntersectionObserver = class extends NativeObserver {
+              observe(target: Element) {
+                if (target.matches('.contact-shell-map')) {
+                  record('map-observe-suppressed');
+                  return;
+                }
+                super.observe(target);
+              }
+            };
+          }
+          addEventListener('pageshow', () => record('pageshow'));
+          addEventListener('pagehide', () => {
+            record('pagehide-event');
+            queueMicrotask(() => record('pagehide-after-handlers'));
+          });
+          addEventListener('popstate', () => record('popstate'));
+          addEventListener('load', () => record('load'));
+        }, mode === 'map-observe-suppressed');
+        await diagnosticPage.setViewportSize({ width: 375, height: 812 });
+        await diagnosticPage.goto(activeUrl('/raspisanie-i-tseny'));
+        const port = diagnosticPage.locator('[data-page-scrollport]');
+        await expect(port).toHaveCount(1);
+        await port.evaluate((el: HTMLElement) => el.scrollTo({ top: 400, behavior: 'instant' }));
+        const entryUrl = diagnosticPage.url();
+        await diagnosticPage.goto(activeUrl('/kontakty'));
+        const contactsPort = diagnosticPage.locator('[data-page-scrollport]');
+        await expect(contactsPort).toHaveCount(1);
+        await contactsPort.evaluate((el: HTMLElement) => el.scrollTo({ top: 700, behavior: 'instant' }));
+        await diagnosticPage.goto(entryUrl);
+        await expect(port).toHaveCount(1);
+        await port.evaluate((el: HTMLElement) => el.scrollTo({ top: 1300, behavior: 'instant' }));
+
+        await diagnosticPage.goBack();
+        await check('Back #1 reaches contacts URL', async () => expect(diagnosticPage).toHaveURL(/kontakty/));
+        await check('Back #1 restores contacts 700', async () => expect.poll(() => contactsPort.evaluate((el: HTMLElement) => el.scrollTop)).toBe(700));
+        await diagnosticPage.goBack();
+        await check('Back #2 reaches first schedule URL entry', async () => expect(diagnosticPage).toHaveURL(entryUrl));
+        await check('Back #2 restores schedule 400', async () => expect.poll(() => port.evaluate((el: HTMLElement) => el.scrollTop)).toBe(400));
+        await diagnosticPage.goForward();
+        await check('Forward #1 reaches contacts URL', async () => expect(diagnosticPage).toHaveURL(/kontakty/));
+        await check('Forward #1 restores contacts 700', async () => expect.poll(() => contactsPort.evaluate((el: HTMLElement) => el.scrollTop)).toBe(700));
+        await diagnosticPage.goForward();
+        await check('Forward #2 reaches second schedule URL entry', async () => expect(diagnosticPage).toHaveURL(entryUrl));
+        await check('Forward #2 restores schedule 1300', async () => expect.poll(() => port.evaluate((el: HTMLElement) => el.scrollTop)).toBe(1300));
+        timeline.push(...await diagnosticPage.evaluate(() => JSON.parse(sessionStorage.getItem('__pr312HistoryDiagnostic') || '[]')));
+        results.push({ mode, iteration: iteration + 1, checks });
+        if (diagnosticPage !== page) await diagnosticPage.close();
+      }
+    } finally {
+      await testInfo.attach('pr312-history-diagnostic.json', {
+        body: Buffer.from(JSON.stringify({ head: process.env.GITHUB_SHA ?? 'local', viewport: { width: 375, height: 812 }, results, timeline }, null, 2)),
+        contentType: 'application/json',
+      });
+      const { mkdir, appendFile } = await import('node:fs/promises');
+      const { dirname } = await import('node:path');
+      await mkdir(dirname(logPath), { recursive: true });
+      await appendFile(logPath, `${JSON.stringify({ head: process.env.GITHUB_SHA ?? 'local', results, timeline })}\n`);
+    }
+    expect(results.flatMap((result) => result.checks.filter((check) => !check.passed).map((check) => `${result.mode} #${result.iteration}: ${check.label}: ${check.error}`)),
+      'diagnostic reports all full-sequence scroll restoration failures').toEqual([]);
+  });
+
   test('native same-document hash Back and Forward restore the shared scrollport', async ({ page }) => {
     await protectThirdParties(page);
     await installHistoryFragment(page);

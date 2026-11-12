@@ -744,6 +744,26 @@ jobs:
       - name: Run payment e2e (stand role)
         run: npm run test:e2e:payment-stand
 
+      # Temporary Linux investigation for PR #312. The two arms run the same full
+      # history sequence; the only intervention is suppressing observe() for the
+      # contact map slot. Evidence is retained independently of test success.
+      - name: Run PR 312 history scroll diagnostic
+        id: pr312-history-diagnostic
+        continue-on-error: true
+        env:
+          PR312_HISTORY_DIAGNOSTIC_LOG: ${{ runner.temp }}/pr312-history-diagnostic.jsonl
+          GITHUB_SHA: ${{ github.sha }}
+        run: npx playwright test tests/chat-entry-visibility.spec.ts --project=mobile --grep "diagnostic: history restores same-URL positions"
+
+      - name: Upload PR 312 history diagnostic
+        if: always() && steps.pr312-history-diagnostic.outcome != 'skipped'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: pr312-history-diagnostic-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/pr312-history-diagnostic.jsonl
+          if-no-files-found: error
+          retention-days: 7
+
       # Внешние виджеты. Отдельным шагом и в ЭТОМ workflow: публикацию останавливает
       # только `Tests`, а проверка, положенная в файл, который не запускает ни один
       # workflow, зелена ровно потому, что её никто не выполняет — тогда
