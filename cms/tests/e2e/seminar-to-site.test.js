@@ -12,11 +12,10 @@
 // Долгий (несколько минут: сборка Strapi и две сборки сайта), поэтому вне `npm test` и вне
 // проверок PR. Запуск: `npm run test:e2e` из cms/ — нужны `npm ci` в cms/ и web/.
 import assert from 'node:assert/strict';
-import childProcess from 'node:child_process';
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import http from 'node:http';
-import { createRequire, syncBuiltinESMExports } from 'node:module';
+import { createRequire } from 'node:module';
 import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
@@ -28,45 +27,6 @@ const repoRoot = path.join(cmsRoot, '..');
 const work = fs.mkdtempSync(path.join(os.tmpdir(), 'ikpk-e2e-seminar-'));
 const workspace = path.join(work, 'workspace');
 const webRoot = path.join(work, 'www');
-
-function installRefreshWorkerDiagnostics() {
-  const originalSpawn = childProcess.spawn;
-  childProcess.spawn = (command, args, options) => {
-    const entryIndex = Array.isArray(args)
-      ? args.findIndex((arg) => typeof arg === 'string' && arg.includes('.executeRefresh()')) : -1;
-    if (!options?.detached || options.stdio !== 'ignore' || entryIndex < 0) {
-      return originalSpawn(command, args, options);
-    }
-
-    const diagnosticArgs = [...args];
-    diagnosticArgs[entryIndex] = diagnosticArgs[entryIndex].replace(
-      '() => process.exit(1)',
-      '(error) => { console.error(JSON.stringify({ name: error?.name, code: error?.code, syscall: error?.syscall })); process.exit(1); }',
-    );
-    const child = originalSpawn(command, diagnosticArgs, { ...options, stdio: ['ignore', 'ignore', 'pipe'] });
-    let stderr = '';
-    child.stderr.setEncoding('utf8');
-    child.stderr.on('data', (chunk) => { stderr = `${stderr}${chunk}`.slice(-4096); });
-    child.once('close', (code, signal) => {
-      console.log(`E2E refresh worker exit: code=${code} signal=${signal || 'none'}`);
-      for (const line of stderr.split(/\r?\n/)) {
-        try {
-          const error = JSON.parse(line);
-          const safe = Object.fromEntries(['name', 'code', 'syscall']
-            .filter((key) => typeof error[key] === 'string')
-            .map((key) => [key, error[key].slice(0, 120)]));
-          if (Object.keys(safe).length) console.log(`E2E refresh worker error: ${JSON.stringify(safe)}`);
-        } catch { /* Worker diagnostics intentionally omit arbitrary stderr. */ }
-      }
-    });
-    return child;
-  };
-  syncBuiltinESMExports();
-  return () => {
-    childProcess.spawn = originalSpawn;
-    syncBuiltinESMExports();
-  };
-}
 
 function freePort() {
   return new Promise((resolve, reject) => {
@@ -140,7 +100,6 @@ describe('семинар из админки доходит до опублик�
   let site;
   let siteServer;
   let token;
-  let removeRefreshWorkerDiagnostics;
   const dbFile = path.join(work, 'data.db');
 
   const admin = async (method, url, body) => {
@@ -210,6 +169,9 @@ describe('семинар из админки доходит до опублик�
       });
     }
     prepareWorkspace();
+    // Refresh replaces the site's existing current pointer, as on the real host.
+    fs.mkdirSync(path.join(webRoot, 'releases', 'e2e-previous'), { recursive: true });
+    fs.symlinkSync('releases/e2e-previous', path.join(webRoot, 'current'));
     const sitePort = await freePort();
     site = `http://127.0.0.1:${sitePort}`;
     siteServer = await serveCurrent(sitePort);
@@ -255,7 +217,6 @@ describe('семинар из админки доходит до опублик�
     // Как и на хосте, worker обязан открыть существующий безопасный shared lock.
     fs.writeFileSync(path.join(webRoot, '.publication.lock'), '', { mode: 0o600 });
     fs.mkdirSync(path.join(cmsRoot, 'public/uploads'), { recursive: true });
-    removeRefreshWorkerDiagnostics = installRefreshWorkerDiagnostics();
     const { createStrapi } = loadCommonjs('@strapi/strapi');
     app = createStrapi({ appDir: cmsRoot, distDir: path.join(cmsRoot, 'dist') });
     await app.load();
@@ -328,7 +289,6 @@ describe('семинар из админки доходит до опублик�
   after(async () => {
     if (app) await app.destroy();
     if (siteServer) siteServer.close();
-    removeRefreshWorkerDiagnostics?.();
     if (!process.env.E2E_KEEP) fs.rmSync(work, { recursive: true, force: true });
     else console.log(`E2E_KEEP: рабочий каталог оставлен в ${work}`);
   });
