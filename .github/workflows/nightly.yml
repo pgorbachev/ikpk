@@ -111,6 +111,15 @@ jobs:
         working-directory: web
         run: npx playwright install --with-deps chromium
 
+      - name: Prepare empty trusted host publication status for E2E
+        run: |
+          publication_dir=/var/lib/ikpk-rehearsal/site-publication
+          publication_marker="$publication_dir/host-publication.json"
+          test ! -e "$publication_dir"
+          sudo install -d -o root -g "$(id -gn)" -m 0750 "$publication_dir"
+          test "$(stat -c '%u:%g:%a' "$publication_dir")" = "0:$(id -g):750"
+          test ! -e "$publication_marker"
+
       - name: Run end-to-end test
         working-directory: cms
         run: npm run test:e2e

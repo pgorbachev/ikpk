@@ -169,6 +169,9 @@ describe('семинар из админки доходит до опублик�
       });
     }
     prepareWorkspace();
+    // Refresh replaces the site's existing current pointer, as on the real host.
+    fs.mkdirSync(path.join(webRoot, 'releases', 'e2e-previous'), { recursive: true });
+    fs.symlinkSync('releases/e2e-previous', path.join(webRoot, 'current'));
     const sitePort = await freePort();
     site = `http://127.0.0.1:${sitePort}`;
     siteServer = await serveCurrent(sitePort);
@@ -211,6 +214,8 @@ describe('семинар из админки доходит до опублик�
 
     // Каталог состояния кнопки создаёт bootstrap-vps.sh, а не CMS.
     fs.mkdirSync(path.dirname(process.env.IKPK_REFRESH_STATE), { recursive: true });
+    // Как и на хосте, worker обязан открыть существующий безопасный shared lock.
+    fs.writeFileSync(path.join(webRoot, '.publication.lock'), '', { mode: 0o600 });
     fs.mkdirSync(path.join(cmsRoot, 'public/uploads'), { recursive: true });
     const { createStrapi } = loadCommonjs('@strapi/strapi');
     app = createStrapi({ appDir: cmsRoot, distDir: path.join(cmsRoot, 'dist') });
