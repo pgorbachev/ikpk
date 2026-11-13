@@ -1294,6 +1294,65 @@ test.describe('chat entry visibility approved contract', () => {
     }
   });
 
+  test('failed schedule images do not widen the mobile card grid', async ({ page }) => {
+    await protectThirdParties(page);
+    await page.setViewportSize({ width: 375, height: 812 });
+    let releaseImages!: () => void;
+    const imageGate = new Promise<void>(resolve => { releaseImages = resolve; });
+    let pendingImages = 0;
+    await page.route('**/media/**', async route => {
+      pendingImages += 1;
+      await imageGate;
+      try { await route.fulfill({ status: 404, body: 'missing' }); }
+      finally { pendingImages -= 1; }
+    });
+    try {
+      await page.goto(activeUrl('/raspisanie-i-tseny'), { waitUntil: 'domcontentloaded' });
+      const images = page.locator('.schedule-card-item:not([hidden]) img');
+      expect(await images.count()).toBeGreaterThan(0);
+      await expect.poll(() => pendingImages).toBeGreaterThan(0);
+      await page.evaluate(() => document.fonts.ready);
+      const measure = () => page.locator('.schedule-list').evaluate(list => {
+        const width = list.getBoundingClientRect().width;
+        const cards = Array.from(list.querySelectorAll('.schedule-card-item:not([hidden]) .schedule-card'));
+        return { width, height: list.getBoundingClientRect().height, maxCardWidth: Math.max(...cards.map(card => card.getBoundingClientRect().width)) };
+      });
+      const before = await measure();
+      releaseImages();
+      await expect.poll(() => pendingImages).toBe(0);
+      await expect.poll(() => images.first().evaluate((image: HTMLImageElement) => image.complete && image.naturalWidth === 0)).toBe(true);
+      const after = await measure();
+      expect(after.maxCardWidth).toBeLessThanOrEqual(after.width + 1);
+      expect(Math.abs(after.height - before.height)).toBeLessThanOrEqual(1);
+    } finally {
+      releaseImages();
+    }
+  });
+
+  test('the contacts map remains accessible when loaded', async ({ page }) => {
+    await protectThirdParties(page);
+    await page.setViewportSize({ width: 375, height: 812 });
+    await page.goto(activeUrl('/kontakty'));
+    const map = page.locator('.contact-shell-map');
+    const frame = map.locator('iframe[title="Карта ИКПК"]');
+    await expect(frame).toHaveCount(0);
+    const before = await map.boundingBox();
+    expect(before).not.toBeNull();
+    await map.scrollIntoViewIfNeeded();
+    await expect(frame).toBeVisible();
+    await expect(frame).toHaveCount(1);
+    const after = await map.boundingBox();
+    expect(after).not.toBeNull();
+    expect(Math.abs(after!.height - before!.height)).toBeLessThanOrEqual(1);
+    expect(await frame.evaluate(el => el.closest('[aria-hidden="true"]'))).toBeNull();
+    await expect(map.getByRole('link', { name: 'Открыть карту в отдельном окне' })).toBeVisible();
+    const hit = await frame.evaluate(el => {
+      const box = el.getBoundingClientRect();
+      return document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2) === el;
+    });
+    expect(hit).toBe(true);
+  });
+
   test('history restores distinct scroll positions for separate entries with the same URL', async ({ page }) => {
     await protectThirdParties(page);
     await page.setViewportSize({ width: 375, height: 812 });
