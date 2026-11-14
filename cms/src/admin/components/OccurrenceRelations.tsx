@@ -1,16 +1,23 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { Box, Button, Typography } from '@strapi/design-system';
 import { useFetchClient, useForm } from '@strapi/strapi/admin';
 import { unstable_useContentManagerContext } from '@strapi/content-manager/strapi-admin';
 import { useLocation, useNavigate } from 'react-router-dom';
-// Strapi 5.51.2 does not export its relation input. Keep the native input for
-// every relation outside these two content types; verify the path on upgrades.
+import { lockedSeminarId, occurrenceEntryId, occurrenceFormModel, occurrenceRelationKind } from '../occurrence-relation-kind';
+// Strapi 5.51.2 does not export its relation input or the modal document.
+// The seminar occurrence list uses the native input. The occurrence's seminar
+// link and teachers replace it. Inside the create-relation modal the page URL
+// stays on the seminar, so the form model comes from the modal context.
 // @ts-expect-error internal, version-pinned Strapi module
 import { RelationsInput } from '@ikpk/native-relations';
+// @ts-expect-error internal, version-pinned Strapi module
+import { useDocumentContext } from '@ikpk/document-context';
 
 const SEMINAR = 'api::seminar.seminar';
 const ENTRY = 'api::schedule-entry.schedule-entry';
 type Relation = { id: number; documentId: string; name?: string; label?: string; admin_label?: string; __temp_key__?: string; apiData?: { documentId?: string } };
 type Props = { name: string; disabled?: boolean; [key: string]: unknown };
+type ViewedDocument = { currentDocumentMeta?: { model?: string; documentId?: string } };
 type Fetcher = (url: string) => Promise<{ data: { results: Relation[]; pagination: { pageCount: number } } }>;
 
 async function allRelations(get: Fetcher, model: string, id: string, field: string): Promise<Relation[]> {
@@ -26,46 +33,12 @@ async function allRelations(get: Fetcher, model: string, id: string, field: stri
   return out;
 }
 
-function SeminarOccurrences({ id, disabled }: { id?: string; disabled?: boolean }) {
+function SeminarRelation({ from, creating, ...props }: Props & { from: string | null; creating: boolean }) {
   const navigate = useNavigate();
-  const location = useLocation();
-  const { get } = useFetchClient();
-  const getter = useRef(get); getter.current = get;
-  const [rows, setRows] = useState<Relation[]>([]);
-  const [error, setError] = useState('');
-  const saved = Boolean(id && id !== 'create' && !location.pathname.includes('/clone/'));
-  useEffect(() => {
-    if (!saved || !id) return;
-    let active = true;
-    allRelations(getter.current as Fetcher, SEMINAR, id, 'schedule_entries').then(data => {
-      if (active) { setRows(data); setError(''); }
-    }).catch(() => { if (active) setError('Не удалось загрузить проведения. Обновите страницу.'); });
-    return () => { active = false; };
-  }, [id, saved]);
-  const go = (destination: string) => {
-    navigate(destination);
-  };
-  const source = encodeURIComponent(id ?? '');
-  return <section aria-label="Проведения семинара">
-    <p>Проведения</p>
-    {error && <p role="alert">{error}</p>}
-    <ul>{rows.map(row => <li key={row.documentId}>
-      <button type="button" onClick={() => go(`/content-manager/collection-types/${ENTRY}/${encodeURIComponent(row.documentId)}?fromSeminar=${source}`)}>{row.admin_label ?? row.label ?? row.name ?? row.documentId}</button>
-    </li>)}</ul>
-    <button type="button" disabled={disabled} onClick={() => saved ? go(`/content-manager/collection-types/${ENTRY}/create?fromSeminar=${source}`) : setError('Сначала сохраните семинар')}>Создать проведение</button>
-  </section>;
-}
-
-function SeminarRelation(props: Props) {
-  const { id, isCreatingEntry } = unstable_useContentManagerContext();
-  const location = useLocation();
-  const navigate = useNavigate();
-  const from = new URLSearchParams(location.search).get('fromSeminar');
   const setValue = useForm('SeminarRelation', state => state.onChange);
   const { get } = useFetchClient();
   const getter = useRef(get); getter.current = get;
   const [error, setError] = useState('');
-  const creating = isCreatingEntry || !id || id === 'create';
   useEffect(() => {
     if (!creating || !from) return;
     let active = true;
@@ -80,7 +53,7 @@ function SeminarRelation(props: Props) {
   return <><RelationsInput {...props} disabled={props.disabled || !creating || Boolean(from)} />{error && <p role="alert">{error}</p>}{creating && from && <button type="button" onClick={() => navigate(`/content-manager/collection-types/${SEMINAR}/${encodeURIComponent(from)}`)}>Отмена</button>}</>;
 }
 
-function OccurrenceTeachers({ id, creating, disabled }: { id?: string; creating: boolean; disabled?: boolean }) {
+function OccurrenceTeachers({ id, creating, disabled, presetSeminar }: { id?: string; creating: boolean; disabled?: boolean; presetSeminar?: string | null }) {
   const formSeminar = useForm('OccurrenceTeachers', state => (state.values as { seminar?: { connect?: Relation[] } }).seminar?.connect?.[0]);
   const setValue = useForm('OccurrenceTeachers', state => state.onChange);
   const { get } = useFetchClient();
@@ -92,7 +65,7 @@ function OccurrenceTeachers({ id, creating, disabled }: { id?: string; creating:
   const [selected, setSelected] = useState<Relation[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const activeSeminar = formSeminar?.documentId ?? formSeminar?.apiData?.documentId ?? seminarId;
+  const activeSeminar = formSeminar?.documentId ?? formSeminar?.apiData?.documentId ?? seminarId ?? presetSeminar;
   useEffect(() => {
     if (creating || !id) { setSeminarId(null); setBaseline([]); return; }
     let active = true;
@@ -140,24 +113,45 @@ function OccurrenceTeachers({ id, creating, disabled }: { id?: string; creating:
   const availableIds = new Set(available.map(row => row.documentId));
   const availabilityReady = Boolean(activeSeminar && availableSeminar === activeSeminar && !loading && !error);
   return <section aria-label="Преподаватели проведения">
-    <p>Преподаватели проведения</p>
-    {error && <p role="alert">{error}</p>}
-    {!activeSeminar && <p>Сначала выберите семинар.</p>}
-    {loading && <p>Загрузка преподавателей…</p>}
-    <ol>{selected.map((row, index) => <li key={row.documentId}>
-      {row.name ?? row.label ?? row.documentId} {!availableIds.has(row.documentId) && availabilityReady && <small> (ранее назначен, сейчас отсутствует в семинаре)</small>}
-      <button type="button" disabled={disabled || index === 0} aria-label={`Поднять ${row.name ?? row.label ?? ''}`} onClick={() => move(index, -1)}>↑</button>
-      <button type="button" disabled={disabled || index === selected.length - 1} aria-label={`Опустить ${row.name ?? row.label ?? ''}`} onClick={() => move(index, 1)}>↓</button>
-      <button type="button" disabled={disabled || loading || Boolean(error)} onClick={() => update(selected.filter(item => item.documentId !== row.documentId))}>Удалить</button>
-    </li>)}</ol>
-    {availabilityReady && available.filter(row => !selectedIds.has(row.documentId)).map(row => <button key={row.documentId} type="button" disabled={disabled || loading || Boolean(error)} onClick={() => update([...selected, row])}>Добавить {row.name ?? row.label ?? row.documentId}</button>)}
+    <Box paddingBottom={1}>
+      <Typography variant="pi" fontWeight="bold" tag="p">Преподаватели проведения</Typography>
+    </Box>
+    {error && <Typography tag="p" role="alert" textColor="danger600">{error}</Typography>}
+    {!activeSeminar && <Typography tag="p">Сначала выберите семинар.</Typography>}
+    {loading && <Typography tag="p">Загрузка преподавателей…</Typography>}
+    <ol>{selected.map((row, index) => {
+      const label = row.name ?? row.label ?? row.documentId;
+      return <li key={row.documentId}>
+        <Typography>{label}</Typography>
+        {!availableIds.has(row.documentId) && availabilityReady && <Typography tag="small"> (ранее назначен, сейчас отсутствует в семинаре)</Typography>}
+        <Box paddingTop={1} paddingBottom={2}>
+          <Button size="S" variant="tertiary" disabled={disabled || index === 0} aria-label={`Поднять ${label}`} onClick={() => move(index, -1)}>Поднять</Button>
+          {' '}
+          <Button size="S" variant="tertiary" disabled={disabled || index === selected.length - 1} aria-label={`Опустить ${label}`} onClick={() => move(index, 1)}>Опустить</Button>
+          {' '}
+          <Button size="S" variant="danger-light" disabled={disabled || loading || Boolean(error)} onClick={() => update(selected.filter(item => item.documentId !== row.documentId))}>Удалить</Button>
+        </Box>
+      </li>;
+    })}</ol>
+    {availabilityReady && available.filter(row => !selectedIds.has(row.documentId)).map(row => <Box key={row.documentId} paddingBottom={2}><Button variant="secondary" disabled={disabled || loading || Boolean(error)} onClick={() => update([...selected, row])}>Добавить {row.name ?? row.label ?? row.documentId}</Button></Box>)}
   </section>;
 }
 
 export function OccurrenceRelations(props: Props) {
-  const { model, id, isCreatingEntry } = unstable_useContentManagerContext();
-  if (model === SEMINAR && props.name === 'schedule_entries') return <SeminarOccurrences id={id} disabled={props.disabled} />;
-  if (model === ENTRY && props.name === 'seminar') return <SeminarRelation {...props} />;
-  if (model === ENTRY && props.name === 'teachers') return <OccurrenceTeachers id={id} creating={isCreatingEntry || !id || id === 'create'} disabled={props.disabled} />;
+  const url = unstable_useContentManagerContext();
+  const location = useLocation();
+  const viewed = useDocumentContext('OccurrenceRelations') as ViewedDocument;
+  const entryDocumentId = viewed.currentDocumentMeta?.documentId || null;
+  const model = occurrenceFormModel(url.model, viewed.currentDocumentMeta?.model);
+  const entryId = occurrenceEntryId(url.model, url.id, entryDocumentId);
+  const kind = occurrenceRelationKind(model, props.name);
+  const presetSeminar = lockedSeminarId({
+    urlModel: url.model,
+    urlId: url.id,
+    fromSeminar: new URLSearchParams(location.search).get('fromSeminar'),
+    entryDocumentId,
+  });
+  if (kind === 'seminar') return <SeminarRelation {...props} from={presetSeminar} creating={!entryId} />;
+  if (kind === 'teachers') return <OccurrenceTeachers id={entryId} creating={!entryId} disabled={props.disabled} presetSeminar={presetSeminar} />;
   return <RelationsInput {...props} />;
 }

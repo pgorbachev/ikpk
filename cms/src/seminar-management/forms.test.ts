@@ -19,8 +19,8 @@ function attributesOf(name: string): string[] {
 }
 
 interface Configuration {
-  metadatas: Record<string, { edit?: { visible?: boolean; editable?: boolean; label?: string } }>;
-  layouts: { edit: { name: string }[][] };
+  metadatas: Record<string, { edit?: { visible?: boolean; editable?: boolean; label?: string; description?: string } }>;
+  layouts: { edit: { name: string; size?: number }[][] };
 }
 
 async function configurations() {
@@ -75,6 +75,46 @@ test('изображение проведения редактируется, а
   assert.equal(collectionFlag?.visible, false);
   assert.equal(collectionFlag?.editable, false);
   assert.ok(!inForm.has('isEventCollection'), 'исходный флаг коллекции не должен добавлять новый UI');
+});
+
+test('список проведений и преподаватели проведения занимают всю строку формы', async () => {
+  const saved = await configurations();
+  const seminar = saved.get('api::seminar.seminar');
+  const entry = saved.get('api::schedule-entry.schedule-entry');
+  assert.ok(seminar && entry);
+  const width = (config: Configuration, name: string) =>
+    config.layouts.edit.flat().find((cell) => cell.name === name)?.size;
+  assert.equal(width(seminar, 'schedule_entries'), 12, 'проведения не должны сжиматься в половину строки');
+  assert.equal(width(entry, 'teachers'), 12, 'преподаватели проведения не должны сжиматься в половину строки');
+  assert.equal(seminar.metadatas.schedule_entries?.edit?.label, 'Проведения');
+  const seminarOrder = seminar.layouts.edit.flat().map((cell) => cell.name);
+  assert.equal(
+    seminarOrder[seminarOrder.indexOf('schedule_entries') - 1],
+    'teachers',
+    'проведения идут сразу после преподавателей',
+  );
+  assert.equal(seminar.metadatas.documents?.edit?.label, 'Документы');
+  assert.equal(seminar.metadatas.training_registries?.edit?.label, 'Реестры обучения');
+  assert.equal(seminar.metadatas.nmo?.edit?.label, 'Сведения о НМО');
+});
+
+test('подсказки говорят, где поле видно на сайте', async () => {
+  const saved = await configurations();
+  const seminar = saved.get('api::seminar.seminar');
+  const entry = saved.get('api::schedule-entry.schedule-entry');
+  assert.ok(seminar && entry);
+  const hint = (config: Configuration, name: string) => config.metadatas[name]?.edit?.description ?? '';
+  assert.match(hint(seminar, 'order'), /каталоге программы/);
+  assert.match(hint(seminar, 'order'), /дате начала/);
+  assert.match(hint(seminar, 'full_text'), /старого формата/);
+  assert.match(hint(seminar, 'documents_owner_verified'), /не читает/);
+  assert.match(hint(seminar, 'learning_mode'), /Как проходит обучение/);
+  assert.match(hint(entry, 'startAt'), /Порядок/);
+  assert.match(hint(entry, 'entry_status'), /active/);
+  assert.match(hint(entry, 'oldPrice'), /не показывает/);
+  assert.match(hint(entry, 'description'), /не выводится/);
+  assert.match(hint(entry, 'additionalText'), /Начало в ЧЧ:ММ/);
+  assert.match(hint(entry, 'isFree'), /Бесплатно/);
 });
 
 test('редактор может выбрать преподавателей конкретного проведения в форме', async () => {

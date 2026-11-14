@@ -1,5 +1,6 @@
 import type { ComponentType } from 'react';
 import type { StrapiApp } from '@strapi/strapi/admin';
+import { contentManagerHomeRoute } from './content-home';
 import { OccurrenceRelations } from './components/OccurrenceRelations';
 import { SITE_REFRESH_ICON_PATH, siteRefreshIconProps, type SiteRefreshIconProps } from './site-refresh-icon';
 
@@ -16,6 +17,7 @@ export default {
     locales: ['ru'],
   },
   register(app: StrapiApp) {
+    app.router.addRoute(contentManagerHomeRoute());
     app.addFields({ type: 'relation', Component: OccurrenceRelations });
     app.customFields.register({
       name: 'wall-clock-datetime',
