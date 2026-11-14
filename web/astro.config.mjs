@@ -140,6 +140,10 @@ export default defineConfig({
       },
     }),
   ],
+  // Astro's own cache defaults to node_modules/.astro, read-only on production
+  // refresh. Since 7.4 `astro sync` writes its `vite-sync/` deps there, ignoring
+  // vite.cacheDir. Keep it in the writable workspace (TD-78).
+  cacheDir: join(webRoot, '.astro', 'cache'),
   output: 'static',
   // Старый сайт адресует страницы без завершающего слэша (ikpk.su/kontakty).
   // Раскладку файлов оставляем каталогами: nginx отдаёт /kontakty напрямую из

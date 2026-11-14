@@ -84,6 +84,8 @@ describe('стоимость платного семинара: главная, 
     };
     vi.spyOn(data, 'getScheduleEntries').mockReturnValue([entry]);
     vi.spyOn(data, 'getSnapshotReferenceDate').mockReturnValue('2026-10-13');
+    // The schedule hides started occurrences by the build clock; pin it, or the fixture expires.
+    vi.spyOn(data, 'getSeminarBuildNow').mockReturnValue(new Date('2026-10-13T12:00:00Z'));
     const visible = (value: string) => value.replace(/\s|&nbsp;|&#160;/g, ' ');
     expect.soft(visible(getUpcomingSeminars(1, new Date('2026-10-13T12:00:00Z'))[0].priceLabel)).toBe(label);
 
