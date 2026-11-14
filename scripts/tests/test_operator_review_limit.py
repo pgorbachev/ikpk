@@ -56,6 +56,15 @@ class OperatorReviewLimit(unittest.TestCase):
                      patch.object(operator,'validate_sha_and_ci',side_effect=AssertionError('acquisition called')):
                     with self.assertRaisesRegex(operator.Refusal,'transport.*limit'):operator.invoke(args)
 
+    def test_direct_invoke_rejects_review_without_source_before_remote_preflight(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            manifest=Path(tmp)/"manifest.json"; manifest.write_text(json.dumps({"operationId":"op","sourceSha":None}))
+            sha=hashlib.sha256(manifest.read_bytes()).hexdigest()
+            args=argparse.Namespace(profile="staging194",command="cms-update",operation_id="op",host=None,install_host_helper=True,migration_review=str(manifest),migration_review_sha256=sha)
+            with patch.object(operator,"_check_target_space",side_effect=AssertionError("preflight called")):
+                with self.assertRaisesRegex(operator.Refusal,"source SHA"):
+                    operator.invoke(args)
+
     def test_review_requires_source_before_any_remote_lookup(self):
         with patch.object(operator,'ssh_remote',side_effect=AssertionError('SSH called')):
             rc=operator.main(['cms-update','--operation-id','op','--migration-review','/unused','--migration-review-sha256','a'*64])

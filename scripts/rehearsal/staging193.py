@@ -685,6 +685,8 @@ def admit_seminar_proof(path: str, digest: str, sha: str, provenance: dict) -> b
 def migration_review_payload(path: Optional[str], digest: Optional[str], sha: str, operation_id: str) -> Optional[bytes]:
     if path is None and digest is None:
         return None
+    if not isinstance(sha, str) or not SHA.fullmatch(sha):
+        raise Refusal("migration review requires a full source SHA")
     if not path or not re.fullmatch(r"[a-f0-9]{64}", digest or ""):
         raise Refusal("migration review requires both file and independent SHA-256")
     raw = Path(path).read_bytes()
@@ -1409,7 +1411,7 @@ def invoke(args: argparse.Namespace, *, admission: Optional[dict] = None) -> Opt
     review_payload = None
     if args.command == "cms-update":
         review_payload = migration_review_payload(getattr(args, "migration_review", None),
-            getattr(args, "migration_review_sha256", None), args.source_sha, args.operation_id)
+            getattr(args, "migration_review_sha256", None), getattr(args, "source_sha", None), args.operation_id)
     automatic_static_capacity = profile == "production-static" and args.command == "static-main"
     helper_install_capacity = install_host_helper and profile == "staging194"
     if args.command == "space-preflight" or automatic_static_capacity or helper_install_capacity:
