@@ -77,16 +77,21 @@ export interface ContentAddress {
 }
 
 export type DocumentsState = 'issued' | 'not-issued' | 'unconfirmed';
-export type PriorEducation = 'none' | 'medical' | 'physical-or-pedagogical' | 'other';
+export type PriorEducation = 'unspecified' | 'none' | 'medical' | 'physical-or-pedagogical' | 'other';
 export type LearningOutcome =
   | 'completed'
   | 'assessment-failed'
+  | 'assessment-not-completed'
   | 'partially-completed'
   | 'expelled';
 
 export interface DocumentRecord {
   document: string;
   issuer: string;
+  issuerUnknown?: boolean;
+  completionScope?: 'unspecified' | 'this-seminar' | 'full-cycle' | 'other-seminar' | 'course';
+  otherSeminarHref?: string;
+  registries?: { subject: 'document'; href?: string; name?: string }[];
   priorEducation?: PriorEducation;
   /** Обязателен при `priorEducation: 'other'`. */
   priorEducationNote?: string;
@@ -99,6 +104,8 @@ export interface SeminarDocuments {
   identifier: string;
   documentsState: DocumentsState;
   documents: DocumentRecord[];
+  nmo?: { status: 'possible' | 'awarded'; href?: string; audience?: string; awardedFor?: string };
+  trainingRegistries?: { subject: 'training'; href?: string; name?: string }[];
 }
 
 export type PresentationForm = 'compliance-row' | 'not-issued-row' | 'unconfirmed-list';
@@ -154,9 +161,14 @@ export interface ContentValidation {
       document: string;
       issuer: string;
       outcome?: LearningOutcome;
+      issuerUnknown?: boolean;
+      completionScope?: DocumentRecord['completionScope'];
+      otherSeminarHref?: string;
+      registries?: DocumentRecord['registries'];
     }[];
     notIssued: string[];
     unconfirmed: string[];
+    supplemental?: { seminar: string; nmo?: SeminarDocuments['nmo']; trainingRegistries?: SeminarDocuments['trainingRegistries'] }[];
   };
 }
 

@@ -87,7 +87,7 @@
     "src:components/schedule/SchedulePage.astro:L64:C1:style",
     "src:components/schedule/SchedulePageHeader.astro:L17:C1:style",
     "src:components/seminars/SeminarArchitectureHeader.astro:L211:C1:style",
-    "src:components/seminars/SeminarSchedulePanel.astro:L162:C1:style",
+    "src:components/seminars/SeminarSchedulePanel.astro:L163:C1:style",
     "src:components/social-marks/RutubeMark.astro:L4:C1:svg",
     "src:components/social-marks/RutubeOnDarkMark.astro:L4:C1:svg",
     "src:components/social-marks/TelegramMark.astro:L4:C1:svg",
@@ -116,8 +116,8 @@
     "src:layouts/TopNavLayout.astro:css-import:0:../styles/global.css",
     "src:layouts/TopNavLayout.astro:L81:C1:style",
     "src:pages/[institute].astro:L223:C1:style",
-    "src:pages/[institute]/[courseGroup].astro:L215:C1:style",
-    "src:pages/[institute]/[courseGroup]/[seminar].astro:L185:C1:style",
+    "src:pages/[institute]/[courseGroup].astro:L216:C1:style",
+    "src:pages/[institute]/[courseGroup]/[seminar].astro:L236:C1:style",
     "src:pages/[institute]/prepodavatel/[id].astro:L72:C1:style",
     "src:pages/[slug].astro:L74:C1:style",
     "src:pages/404.astro:L19:C1:style",
@@ -135,8 +135,8 @@
     "src:pages/preview/[variant]/schedule.astro:L146:C1:style",
     "src:pages/preview/[variant]/seminar-undated.astro:L106:C3:script",
     "src:pages/preview/[variant]/seminar-undated.astro:L121:C1:style",
-    "src:pages/preview/[variant]/seminar.astro:L134:C3:script",
-    "src:pages/preview/[variant]/seminar.astro:L149:C1:style",
+    "src:pages/preview/[variant]/seminar.astro:L136:C3:script",
+    "src:pages/preview/[variant]/seminar.astro:L151:C1:style",
     "src:pages/preview/hub/[...rest].astro:L48:C1:style",
     "src:pages/programmy/[slug].astro:L66:C1:style",
     "src:pages/programmy/index.astro:L37:C1:style",
@@ -55260,7 +55260,7 @@
       ]
     },
     {
-      "slotId": "src:pages/[institute]/[courseGroup].astro:L215:C1:style",
+      "slotId": "src:pages/[institute]/[courseGroup].astro:L216:C1:style",
       "route": "/programmy/avtorskie-seminary-zharovoj-ls",
       "placement": "doc-order:6:style",
       "identity": "style|body:89fb74872eb7e707",
@@ -55510,7 +55510,7 @@
       ]
     },
     {
-      "slotId": "src:pages/[institute]/[courseGroup].astro:L215:C1:style",
+      "slotId": "src:pages/[institute]/[courseGroup].astro:L216:C1:style",
       "route": "/programmy/dolgoletie",
       "placement": "doc-order:6:style",
       "identity": "style|body:89fb74872eb7e707",
@@ -55760,7 +55760,7 @@
       ]
     },
     {
-      "slotId": "src:pages/[institute]/[courseGroup].astro:L215:C1:style",
+      "slotId": "src:pages/[institute]/[courseGroup].astro:L216:C1:style",
       "route": "/programmy/imunnyj-otvet",
       "placement": "doc-order:6:style",
       "identity": "style|body:89fb74872eb7e707",
@@ -56010,7 +56010,7 @@
       ]
     },
     {
-      "slotId": "src:pages/[institute]/[courseGroup].astro:L215:C1:style",
+      "slotId": "src:pages/[institute]/[courseGroup].astro:L216:C1:style",
       "route": "/programmy/korrekciya-strukturnyh-narushenij-osteoprakticheskimi-i-myshechno-energeticheskimi-tehnikami",
       "placement": "doc-order:6:style",
       "identity": "style|body:89fb74872eb7e707",
@@ -56260,7 +56260,7 @@
       ]
     },
     {
-      "slotId": "src:pages/[institute]/[courseGroup].astro:L215:C1:style",
+      "slotId": "src:pages/[institute]/[courseGroup].astro:L216:C1:style",
       "route": "/programmy/kraniosakralnaya-terapiya",
       "placement": "doc-order:6:style",
       "identity": "style|body:89fb74872eb7e707",
@@ -56510,7 +56510,7 @@
       ]
     },
     {
-      "slotId": "src:pages/[institute]/[courseGroup].astro:L215:C1:style",
+      "slotId": "src:pages/[institute]/[courseGroup].astro:L216:C1:style",
       "route": "/programmy/kraniosakralnaya-terapiya-specializirovannye",
       "placement": "doc-order:6:style",
       "identity": "style|body:89fb74872eb7e707",
@@ -56760,7 +56760,7 @@
       ]
     },
     {
-      "slotId": "src:pages/[institute]/[courseGroup].astro:L215:C1:style",
+      "slotId": "src:pages/[institute]/[courseGroup].astro:L216:C1:style",
       "route": "/programmy/kurs-po-kitajskoj-medicine-s-pozicij-prikladnoj-kineziologii",
       "placement": "doc-order:6:style",
       "identity": "style|body:89fb74872eb7e707",
@@ -57010,7 +57010,7 @@
       ]
     },
     {
-      "slotId": "src:pages/[institute]/[courseGroup].astro:L215:C1:style",
+      "slotId": "src:pages/[institute]/[courseGroup].astro:L216:C1:style",
       "route": "/programmy/massazh",
       "placement": "doc-order:6:style",
       "identity": "style|body:89fb74872eb7e707",
@@ -57260,7 +57260,7 @@
       ]
     },
     {
-      "slotId": "src:pages/[institute]/[courseGroup].astro:L215:C1:style",
+      "slotId": "src:pages/[institute]/[courseGroup].astro:L216:C1:style",
       "route": "/programmy/mozg",
       "placement": "doc-order:6:style",
       "identity": "style|body:89fb74872eb7e707",
@@ -57510,7 +57510,7 @@
       ]
     },
     {
-      "slotId": "src:pages/[institute]/[courseGroup].astro:L215:C1:style",
+      "slotId": "src:pages/[institute]/[courseGroup].astro:L216:C1:style",
       "route": "/programmy/nevralnye-tehniki",
       "placement": "doc-order:6:style",
       "identity": "style|body:89fb74872eb7e707",
@@ -57760,7 +57760,7 @@
       ]
     },
     {
-      "slotId": "src:pages/[institute]/[courseGroup].astro:L215:C1:style",
+      "slotId": "src:pages/[institute]/[courseGroup].astro:L216:C1:style",
       "route": "/programmy/novyj-manualnyj-podhod-k-sustavam",
       "placement": "doc-order:6:style",
       "identity": "style|body:89fb74872eb7e707",
@@ -58010,7 +58010,7 @@
       ]
     },
     {
-      "slotId": "src:pages/[institute]/[courseGroup].astro:L215:C1:style",
+      "slotId": "src:pages/[institute]/[courseGroup].astro:L216:C1:style",
       "route": "/programmy/pediatriya-akusherstvo-i-novorozhdennye",
       "placement": "doc-order:6:style",
       "identity": "style|body:89fb74872eb7e707",
@@ -58260,7 +58260,7 @@
       ]
     },
     {
-      "slotId": "src:pages/[institute]/[courseGroup].astro:L215:C1:style",
+      "slotId": "src:pages/[institute]/[courseGroup].astro:L216:C1:style",
       "route": "/programmy/pereprogrammirovanie-nejroreceptornyh-zon-v-pk",
       "placement": "doc-order:6:style",
       "identity": "style|body:89fb74872eb7e707",
@@ -58510,7 +58510,7 @@
       ]
     },
     {
-      "slotId": "src:pages/[institute]/[courseGroup].astro:L215:C1:style",
+      "slotId": "src:pages/[institute]/[courseGroup].astro:L216:C1:style",
       "route": "/programmy/postdiplomnye-programmy-po-prikladnoj-kineziologii",
       "placement": "doc-order:6:style",
       "identity": "style|body:89fb74872eb7e707",
@@ -58760,7 +58760,7 @@
       ]
     },
     {
-      "slotId": "src:pages/[institute]/[courseGroup].astro:L215:C1:style",
+      "slotId": "src:pages/[institute]/[courseGroup].astro:L216:C1:style",
       "route": "/programmy/prikladnaya-kineziologiya",
       "placement": "doc-order:6:style",
       "identity": "style|body:89fb74872eb7e707",
@@ -59010,7 +59010,7 @@
       ]
     },
     {
-      "slotId": "src:pages/[institute]/[courseGroup].astro:L215:C1:style",
+      "slotId": "src:pages/[institute]/[courseGroup].astro:L216:C1:style",
       "route": "/programmy/prikladnaya-kineziologiya-dlya-fitnesa",
       "placement": "doc-order:6:style",
       "identity": "style|body:89fb74872eb7e707",
@@ -59260,7 +59260,7 @@
       ]
     },
     {
-      "slotId": "src:pages/[institute]/[courseGroup].astro:L215:C1:style",
+      "slotId": "src:pages/[institute]/[courseGroup].astro:L216:C1:style",
       "route": "/programmy/primenenie-principov-akupunktury",
       "placement": "doc-order:6:style",
       "identity": "style|body:89fb74872eb7e707",
@@ -59510,7 +59510,7 @@
       ]
     },
     {
-      "slotId": "src:pages/[institute]/[courseGroup].astro:L215:C1:style",
+      "slotId": "src:pages/[institute]/[courseGroup].astro:L216:C1:style",
       "route": "/programmy/prodvinutye-visceralnye-tehniki",
       "placement": "doc-order:6:style",
       "identity": "style|body:89fb74872eb7e707",
@@ -59760,7 +59760,7 @@
       ]
     },
     {
-      "slotId": "src:pages/[institute]/[courseGroup].astro:L215:C1:style",
+      "slotId": "src:pages/[institute]/[courseGroup].astro:L216:C1:style",
       "route": "/programmy/psihokineziologiya",
       "placement": "doc-order:6:style",
       "identity": "style|body:89fb74872eb7e707",
@@ -60010,7 +60010,7 @@
       ]
     },
     {
-      "slotId": "src:pages/[institute]/[courseGroup].astro:L215:C1:style",
+      "slotId": "src:pages/[institute]/[courseGroup].astro:L216:C1:style",
       "route": "/programmy/specializirovannye",
       "placement": "doc-order:6:style",
       "identity": "style|body:89fb74872eb7e707",
@@ -60260,7 +60260,7 @@
       ]
     },
     {
-      "slotId": "src:pages/[institute]/[courseGroup].astro:L215:C1:style",
+      "slotId": "src:pages/[institute]/[courseGroup].astro:L216:C1:style",
       "route": "/programmy/specializirovannye-programmy",
       "placement": "doc-order:6:style",
       "identity": "style|body:89fb74872eb7e707",
@@ -60510,7 +60510,7 @@
       ]
     },
     {
-      "slotId": "src:pages/[institute]/[courseGroup].astro:L215:C1:style",
+      "slotId": "src:pages/[institute]/[courseGroup].astro:L216:C1:style",
       "route": "/programmy/tehniki-vyslushivaniya",
       "placement": "doc-order:6:style",
       "identity": "style|body:89fb74872eb7e707",
@@ -60760,7 +60760,7 @@
       ]
     },
     {
-      "slotId": "src:pages/[institute]/[courseGroup].astro:L215:C1:style",
+      "slotId": "src:pages/[institute]/[courseGroup].astro:L216:C1:style",
       "route": "/programmy/vebinary-i-mezhseminarskie-vstrechi",
       "placement": "doc-order:6:style",
       "identity": "style|body:89fb74872eb7e707",
@@ -61010,7 +61010,7 @@
       ]
     },
     {
-      "slotId": "src:pages/[institute]/[courseGroup].astro:L215:C1:style",
+      "slotId": "src:pages/[institute]/[courseGroup].astro:L216:C1:style",
       "route": "/programmy/vebinary-i-mezhseminarskie-vstrechi-ikpk",
       "placement": "doc-order:6:style",
       "identity": "style|body:89fb74872eb7e707",
@@ -61260,7 +61260,7 @@
       ]
     },
     {
-      "slotId": "src:pages/[institute]/[courseGroup].astro:L215:C1:style",
+      "slotId": "src:pages/[institute]/[courseGroup].astro:L216:C1:style",
       "route": "/programmy/vibracionnaya-medicina",
       "placement": "doc-order:6:style",
       "identity": "style|body:89fb74872eb7e707",
@@ -61510,7 +61510,7 @@
       ]
     },
     {
-      "slotId": "src:pages/[institute]/[courseGroup].astro:L215:C1:style",
+      "slotId": "src:pages/[institute]/[courseGroup].astro:L216:C1:style",
       "route": "/programmy/visceralnye-tehniki",
       "placement": "doc-order:6:style",
       "identity": "style|body:89fb74872eb7e707",

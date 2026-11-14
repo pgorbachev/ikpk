@@ -12,11 +12,13 @@
     },
     "issuer": {
       "type": "string",
-      "required": true
+      "required": false
     },
     "prior_education": {
       "type": "enumeration",
+      "default": "unspecified",
       "enum": [
+        "unspecified",
         "none",
         "medical",
         "physical-or-pedagogical",
@@ -32,11 +34,87 @@
         "completed",
         "assessment-failed",
         "partially-completed",
-        "expelled"
+        "expelled",
+        "assessment-not-completed"
       ]
     },
     "basis": {
       "type": "string"
+    },
+    "issuer_unknown": {
+      "type": "boolean",
+      "default": false
+    },
+    "completion_scope": {
+      "type": "enumeration",
+      "enum": [
+        "unspecified",
+        "this-seminar",
+        "full-cycle",
+        "other-seminar",
+        "course"
+      ]
+    },
+    "other_seminar_href": {
+      "type": "string"
+    },
+    "other_seminar_label": {
+      "type": "string"
+    },
+    "signed_by": {
+      "type": "enumeration",
+      "enum": [
+        "unspecified",
+        "teacher"
+      ]
+    },
+    "qualification_topic": {
+      "type": "string"
+    },
+    "hours_mode": {
+      "type": "enumeration",
+      "enum": [
+        "unspecified",
+        "actual-completed"
+      ]
+    },
+    "includes_completed_level": {
+      "type": "boolean",
+      "default": false
+    },
+    "registry": {
+      "type": "component",
+      "component": "seminar.registry-fact",
+      "repeatable": true
+    },
+    "completion_required": {
+      "type": "boolean",
+      "default": false
+    },
+    "completion_after_seminar_number": {
+      "type": "integer",
+      "min": 1
+    },
+    "completion_cycle_name": {
+      "type": "string"
+    },
+    "hours_may_vary": {
+      "type": "boolean",
+      "default": false
+    },
+    "regulation_url": {
+      "type": "string"
+    },
+    "document_type_unspecified": {
+      "type": "boolean",
+      "default": false
+    },
+    "regulation_issuer": {
+      "type": "string"
+    },
+    "document_on_template": {
+      "type": "boolean",
+      "default": false
     }
   }
 }

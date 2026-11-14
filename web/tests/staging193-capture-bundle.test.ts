@@ -27,7 +27,9 @@ interface CapturedSeminar {
   teachers: { name: string }[];
   course_group: { slug: string };
   seo: { seo_title: string };
-  documents: { document: string }[];
+  documents: { document: string; registry: { name: string; url: string }[] }[];
+  training_registries: { name: string }[];
+  nmo: { status: string };
   image: { url: string }[];
 }
 
@@ -85,7 +87,10 @@ function fixtureDatabase(path: string, includeUnshownDocument = true): void {
   `);
   if (includeUnshownDocument) {
     db.exec(`INSERT INTO components_seminar_document_records (id, document, issuer) VALUES (12,'Certificate','Issuer');
-      INSERT INTO seminars_cmps VALUES (3,5,12,'seminar.document-record','documents',1);`);
+      INSERT INTO components_seminar_registry_facts (id,name,subject,url) VALUES (14,'Registry','document','https://example.org/#registry'), (15,'IAHE','training','https://example.org/#training');
+      INSERT INTO components_seminar_nmo_facts (id,status) VALUES (16,'possible');
+      INSERT INTO components_seminar_document_records_cmps VALUES (1,12,14,'seminar.registry-fact','registry',1);
+      INSERT INTO seminars_cmps VALUES (3,5,12,'seminar.document-record','documents',1), (4,5,15,'seminar.registry-fact','training_registries',1), (5,5,16,'seminar.nmo-fact','nmo',1);`);
   }
   db.close();
 }
@@ -180,6 +185,21 @@ describe('staging193 sealed SQLite capture', () => {
     }
   });
 
+  it('audits a sealed candidate privately without emitting a publishable snapshot', () => {
+    const bundle = sealedBundle(false);
+    const output = mkdtempSync(join(tmpdir(), 'ikpk-history-audit-'));
+    temporaryRoots.push(output);
+    const report = join(output, 'history-review.json');
+    const run = spawnSync(process.execPath, [
+      '--experimental-strip-types', join(repoRoot, 'web/scripts/capture-content-snapshot.ts'), '--server-capture', bundle,
+    ], { encoding: 'utf8', cwd: repoRoot, env: { ...process.env, CONTENT_SNAPSHOT_DIR: output, CONTENT_HISTORY_AUDIT_OUTPUT: report } });
+    expect(run.status, run.stderr).toBe(0);
+    expect(existsSync(join(output, 'snapshot.json'))).toBe(false);
+    const audited = JSON.parse(readFileSync(report, 'utf8'));
+    expect(audited).toMatchObject({ version: 1, candidates: [] });
+    expect(audited.databaseDigest).toMatch(/^[a-f0-9]{64}$/);
+  });
+
   it('preserves non-empty published relations, components, media, and excludes drafts', () => {
     const bundle = sealedBundle();
     const verified = verifyStaging193Bundle(bundle, schemaRoot) as unknown as VerifiedCaptureBundle;
@@ -192,6 +212,9 @@ describe('staging193 sealed SQLite capture', () => {
     expect(seminar.course_group.slug).toBe('group');
     expect(seminar.seo.seo_title).toBe('Published SEO');
     expect(seminar.documents[0].document).toBe('Certificate');
+    expect(seminar.documents[0].registry[0]).toMatchObject({ name: 'Registry', url: 'https://example.org/#registry' });
+    expect(seminar.training_registries[0].name).toBe('IAHE');
+    expect(seminar.nmo.status).toBe('possible');
     expect(seminar.image[0].url).toBe('/uploads/photo.jpg');
     expect(verified.media.map((item) => item.url).sort()).toEqual(['/uploads/form.pdf', '/uploads/photo.jpg']);
   });

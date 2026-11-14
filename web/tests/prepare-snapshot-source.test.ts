@@ -90,6 +90,17 @@ describe('prepare-snapshot: источник снимка', () => {
     expect(run.status, `живой снимок отвергнут:\n${run.output}`).toBe(0);
   });
 
+  it('сборка отклоняет изменённое историческое проведение до копирования снимка', () => {
+    const dir = dirWithSnapshot();
+    const path = join(dir, 'snapshot.json');
+    const snapshot = JSON.parse(readFileSync(path, 'utf8'));
+    const row = snapshot.content.types.schedule_entries.find((item: { isFree: boolean; newPrice: number }) => item.isFree === false && item.newPrice === 0);
+    row.name = 'Изменённая историческая запись';
+    writeFileSync(path, JSON.stringify(snapshot));
+    const run = prepare({ CONTENT_SNAPSHOT_DIR: dir, SNAPSHOT_SOURCE: undefined });
+    expect(run.status, run.output).not.toBe(0);
+  });
+
   it('без CONTENT_SNAPSHOT_DIR источник — закреплённая фикстура (локальная сборка)', () => {
     const run = prepare({ CONTENT_SNAPSHOT_DIR: undefined, SNAPSHOT_SOURCE: undefined });
 

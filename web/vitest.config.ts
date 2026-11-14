@@ -86,11 +86,19 @@ export default defineConfig({
       'tests/schedule-filters.render.test.ts',
       'tests/teacher-links.render.test.ts',
       'tests/seminar-price.render.test.ts',
+      'tests/seminar-event-schema.render.test.ts',
+      'tests/seminar-documents.render.test.ts',
+      'tests/seminar-snapshot-occurrence.render.test.ts',
+      'tests/seminar-duration-migration.render.test.ts',
       'tests/seminar-registration.render.test.ts',
       'tests/rich-content-render.test.ts',
       'tests/seminar-snapshot-fields.render.test.ts',
       'tests/footer-snapshot-clock.render.test.ts',
       'tests/maintenance-notice.render.test.ts',
+      // Private migration evidence uses Astro and separately supplied source data.
+      // Keep it in vitest.migration.config.ts, not the ordinary unit transform.
+      'tests/seminar-real-migration.migration.test.ts',
+      'tests/seminar-separate-fields.migration.test.ts',
       // Одноразовые Docker-контейнеры провижининга. Запускаются последовательно
       // отдельным обязательным шагом workflow Tests, чтобы не смешивать их очистку
       // с параллельным набором; конфиг задаёт bounded срок и артефакты диагностики.

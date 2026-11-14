@@ -9,6 +9,15 @@ import type { ScheduleEntry } from '../src/lib/data';
 
 afterEach(() => vi.restoreAllMocks());
 
+it('schedule page preserves textual duration', async () => {
+  const entry = { ...data.getScheduleEntries()[0], startAt: '2099-11-14T00:00:00.000Z', endAt: '2099-11-15T00:00:00.000Z', status: 'active', duration: '24 часа' };
+  vi.spyOn(data, 'getScheduleEntries').mockReturnValue([entry]);
+  vi.spyOn(data, 'getSeminarBuildNow').mockReturnValue(new Date('2099-01-01T00:00:00Z'));
+  const container = await AstroContainer.create({ astroConfig: { site: 'https://ikpk.su' } });
+  const html = await container.renderToString(SchedulePage, { request: new Request('https://ikpk.su/raspisanie-i-tseny') });
+  expect(html).toContain('24 часа');
+});
+
 it('schedule page prints Nicosia-local-midnight SQL dates under UTC', async () => {
   const entry = {
     ...data.getScheduleEntries()[0],
@@ -50,11 +59,11 @@ it('schedule panel keeps SQL calendar dates and duration across Nicosia DST unde
 
 describe('стоимость платного семинара: главная, расписание, карточка и JSON-LD', () => {
   it.each([
-    { price: 0, isFree: false, label: 'Стоимость уточняется', offer: undefined },
-    { price: undefined, isFree: false, label: 'Стоимость уточняется', offer: undefined },
-    { price: Number.NaN, isFree: false, label: 'Стоимость уточняется', offer: undefined },
-    { price: Number.POSITIVE_INFINITY, isFree: false, label: 'Стоимость уточняется', offer: undefined },
-    { price: -100, isFree: false, label: 'Стоимость уточняется', offer: undefined },
+    { price: 0, isFree: false, label: 'Цена уточняется', offer: undefined },
+    { price: undefined, isFree: false, label: 'Цена уточняется', offer: undefined },
+    { price: Number.NaN, isFree: false, label: 'Цена уточняется', offer: undefined },
+    { price: Number.POSITIVE_INFINITY, isFree: false, label: 'Цена уточняется', offer: undefined },
+    { price: -100, isFree: false, label: 'Цена уточняется', offer: undefined },
     { price: 37500, isFree: false, label: '37 500 ₽', offer: '37500' },
     { price: 0, isFree: true, label: 'Бесплатно', offer: '0' },
     { price: 37500, isFree: true, label: 'Бесплатно', offer: '0' },

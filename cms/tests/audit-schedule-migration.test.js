@@ -1,0 +1,30 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { createRequire } from 'node:module';
+import { createHash } from 'node:crypto';
+import { mkdtempSync, rmSync, copyFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { auditScheduleMigration } from '../scripts/audit-schedule-migration.mjs';
+const Database = createRequire(import.meta.url)('better-sqlite3');
+const sha = v => createHash('sha256').update(JSON.stringify(v)).digest('hex');
+function fixture() {
+ const dir=mkdtempSync(join(tmpdir(),'ikpk-audit-')); const source=join(dir,'source.db'), candidate=join(dir,'candidate.db');
+ const db=new Database(source); db.exec(`CREATE TABLE seminars(id INTEGER PRIMARY KEY, document_id TEXT, published_at TEXT, duration TEXT, title TEXT);
+ CREATE TABLE schedule_entries(id INTEGER PRIMARY KEY, document_id TEXT, published_at TEXT, price INTEGER, is_free INTEGER, city TEXT, is_online INTEGER, duration TEXT);
+ CREATE TABLE schedule_entries_seminar_lnk(id INTEGER PRIMARY KEY, seminar_id INTEGER REFERENCES seminars(id), schedule_entry_id INTEGER REFERENCES schedule_entries(id));
+ CREATE TABLE files_related_mph(id INTEGER PRIMARY KEY, name TEXT);
+ INSERT INTO seminars VALUES(1,'s',NULL,NULL,'name'),(2,'s','date',NULL,'name');
+ INSERT INTO schedule_entries VALUES(3,'e',NULL,0,0,'Онлайн',NULL,'24'),(4,'e','date',0,0,'Онлайн',NULL,'24');
+ INSERT INTO schedule_entries_seminar_lnk VALUES(1,1,3),(2,2,4); INSERT INTO files_related_mph VALUES(1,'x');`);
+ const tables=['seminars','schedule_entries','schedule_entries_seminar_lnk','files_related_mph']; const snapshot=Object.fromEntries(tables.map(t=>[t,db.prepare(`SELECT * FROM ${t} ORDER BY rowid`).all()])); db.close(); copyFileSync(source,candidate);
+ const payload={sourceDigest:sha(snapshot),decisionDigest:sha({}),entries:[3,4].map((id,i)=>({documentId:'e',rowId:id,published:!!i,changes:{price:null,is_online:1,city:null}})),seminars:[1,2].map(id=>({rowId:id,documentId:'s',duration:'24 часа'})),exceptions:[{documentId:'e',rowId:3,errors:['duration-needs-review']}]};
+ const plan={...payload,planDigest:sha(payload)}; const acceptedExceptions=[{documentId:'e',rowId:3,error:'duration-needs-review'}];
+ const apply=()=>{const c=new Database(candidate); c.exec("UPDATE schedule_entries SET price=NULL,is_online=1,city=NULL; UPDATE seminars SET duration='24 часа'");c.close();};
+ return {source,candidate,plan,acceptedExceptions,apply,cleanup:()=>rmSync(dir,{recursive:true,force:true}),audit(){return auditScheduleMigration({sourceDbPath:source,candidateDbPath:candidate,plan,expectedPlanDigest:plan.planDigest,acceptedExceptions});}};
+}
+test('audits every approved physical version and accepted exception',()=>{const f=fixture();try{f.apply();assert.equal(f.audit().passed,true);}finally{f.cleanup();}});
+test('rejects incomplete, substituted, and unrelated changes',()=>{for(const mutation of ["UPDATE seminars SET duration=NULL WHERE id=2","UPDATE schedule_entries SET price=99 WHERE id=3","UPDATE seminars SET title='changed' WHERE id=1","DELETE FROM files_related_mph","CREATE TABLE unexpected(id INTEGER)"]){const f=fixture();try{f.apply();const db=new Database(f.candidate);db.exec(mutation);db.close();assert.equal(f.audit().passed,false,mutation);}finally{f.cleanup();}}});
+test('requires approved plan, complete versions and explicitly accepted exceptions',()=>{const f=fixture();try{f.apply();assert.throws(()=>auditScheduleMigration({sourceDbPath:f.source,candidateDbPath:f.candidate,plan:f.plan,expectedPlanDigest:'x',acceptedExceptions:f.acceptedExceptions}));assert.throws(()=>auditScheduleMigration({sourceDbPath:f.source,candidateDbPath:f.candidate,plan:f.plan,expectedPlanDigest:f.plan.planDigest,acceptedExceptions:[]}));const p={...f.plan};delete p.planDigest;p.entries.pop();const plan={...p,planDigest:sha(p)};assert.throws(()=>auditScheduleMigration({sourceDbPath:f.source,candidateDbPath:f.candidate,plan,expectedPlanDigest:plan.planDigest,acceptedExceptions:f.acceptedExceptions}));}finally{f.cleanup();}});
+test('rejects broken foreign keys',()=>{const f=fixture();try{f.apply();const db=new Database(f.candidate);db.pragma('foreign_keys=OFF');db.exec('UPDATE schedule_entries_seminar_lnk SET seminar_id=999 WHERE id=1');db.close();assert.equal(f.audit().passed,false);}finally{f.cleanup();}});
+test('permits only null when a reviewed override is cleared',()=>{const f=fixture();try{f.apply();const db=new Database(f.candidate);db.exec('UPDATE schedule_entries SET duration=NULL WHERE id=3');db.close();f.plan.entries[0].changes.duration=null;const payload={...f.plan};delete payload.planDigest;f.plan={...payload,planDigest:sha(payload)};const check=()=>auditScheduleMigration({sourceDbPath:f.source,candidateDbPath:f.candidate,plan:f.plan,expectedPlanDigest:f.plan.planDigest,acceptedExceptions:f.acceptedExceptions});assert.equal(check().passed,true);f.plan.entries[0].changes.duration='36';const altered={...f.plan};delete altered.planDigest;f.plan={...altered,planDigest:sha(altered)};assert.throws(check,/invalid planned entry change/);}finally{f.cleanup();}});

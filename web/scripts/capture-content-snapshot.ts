@@ -1,3 +1,4 @@
+import { resolveSeminar } from '../src/lib/seminar-identity.ts';
 /**
  * Снятие снимка контента. Живой путь читает CMS по REST, когда `CMS_URL`/`STRAPI_URL` задан;
  * без адреса — закреплённая фикстура. Неудача живого захвата при заданном адресе — ОТКАЗ, а
@@ -25,10 +26,20 @@ import {
 } from './lib/content-field-map.ts';
 import { contentFingerprint, snapshotId, type DemoCaptureProof, type InitialProductionCaptureProof, type ProductionStaticCaptureProof, type Snapshot, type SnapshotContent } from './lib/content-snapshot.ts';
 import { contentIdOf, readFromStore } from './lib/content-media-store.ts';
+import { activeHistoricalExceptions, historicalExceptionsFromEnvironment, proposeHistoricalExceptions } from './lib/historical-exceptions.ts';
 
 const webRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
 const repoRoot = join(webRoot, '..');
 const outDir = process.env.CONTENT_SNAPSHOT_DIR || join(webRoot, '.snapshot');
+const historyAuditOutput = process.env.CONTENT_HISTORY_AUDIT_OUTPUT;
+if (historyAuditOutput) {
+  if (process.argv[2] !== '--server-capture' || !isAbsolute(historyAuditOutput) ||
+      resolve(dirname(historyAuditOutput)) !== resolve(outDir) || resolve(historyAuditOutput) === resolve(outDir, 'snapshot.json')) throw new Error('history audit requires a sealed server capture and a private output directory');
+  const dir = lstatSync(outDir);
+  if (!dir.isDirectory() || dir.isSymbolicLink() || (dir.mode & 0o077) !== 0 ||
+      (typeof process.getuid === 'function' && dir.uid !== process.getuid())) throw new Error('history audit output directory must be private and owned by the operator');
+  if (existsSync(join(outDir, 'snapshot.json'))) throw new Error('history audit must not overwrite an existing snapshot');
+}
 
 const cmsUrl = process.env.CMS_URL ?? process.env.STRAPI_URL ?? '';
 
@@ -310,7 +321,7 @@ function mapRecord(type: string, record: Record<string, unknown>): Record<string
   const out: Record<string, unknown> = {};
   // Системные поля Strapi — не часть схемы (`attributes` их не перечисляет), поэтому вне
   // объявленного соответствия: передаются как есть, когда присутствуют.
-  for (const sys of ['id', 'createdAt', 'updatedAt', 'publishedAt'] as const) {
+  for (const sys of ['id', 'documentId', 'createdAt', 'updatedAt', 'publishedAt'] as const) {
     if (record[sys] !== undefined) out[sys] = record[sys];
   }
   for (const entry of FIELD_MAP) {
@@ -335,7 +346,10 @@ async function fetchAllPages(endpoint: string): Promise<Record<string, unknown>[
   let page = 1;
   for (;;) {
     assertWithinBudget(`${endpoint}, страница ${page}`);
-    const url = `${cmsUrl}/api/${endpoint}?status=published&pagination[page]=${page}&pagination[pageSize]=100&populate=*`;
+    const populate = endpoint === 'seminars'
+      ? 'populate[seo]=true&populate[image]=true&populate[course_group]=true&populate[teachers]=true&populate[documents][populate][registry]=true&populate[training_registries]=true&populate[nmo]=true'
+      : 'populate=*';
+    const url = `${cmsUrl}/api/${endpoint}?status=published&pagination[page]=${page}&pagination[pageSize]=100&${populate}`;
     const res = await fetch(url, {
       headers: cmsToken ? { Authorization: `Bearer ${cmsToken}` } : {},
       // Недоступная CMS (закрытый порт, зависший сокет) обязана быть быстрым отказом, а не
@@ -556,9 +570,6 @@ async function liveCapture(): Promise<void> {
   //    (`raspisanie-i-tseny.astro:67`, `entry.institute.name`), поэтому его надо выводить по
   //    цепочке семинар → программа → институт, а не объявлять отсутствующим.
   {
-    const seminarBySlug = new Map(
-      (types.seminars ?? []).map((r) => [String(r.slug ?? ''), r] as const),
-    );
     const groupByLegacyId = new Map(
       (types.course_groups ?? []).map((r) => [String(r.legacy_id ?? ''), r] as const),
     );
@@ -566,13 +577,18 @@ async function liveCapture(): Promise<void> {
       (types.institutes ?? []).map((r) => [String(r.slug ?? ''), r] as const),
     );
 
-    for (const entry of types.schedule_entries ?? []) {
+    for (const entry of (types.seminars?.length ? types.schedule_entries ?? [] : [])) {
       const rawSeminar = entry.seminar as Record<string, unknown> | undefined;
       if (!rawSeminar) continue;
       const slug = String(rawSeminar.slug ?? '');
-      entry.seminar = { id: rawSeminar.id, name: rawSeminar.name, slug };
-
-      const seminar = seminarBySlug.get(slug);
+      if (typeof rawSeminar.documentId !== 'string' || !rawSeminar.documentId.trim()) {
+        throw new Error(`живой захват: проведение ${String(entry.id)} не содержит documentId семинара`);
+      }
+      const seminar = resolveSeminar(types.seminars ?? [], rawSeminar);
+      if (!seminar || seminar.slug !== slug) {
+        throw new Error(`живой захват: проведение ${String(entry.id)} не разрешает связь семинара по documentId`);
+      }
+      entry.seminar = { id: rawSeminar.id, documentId: rawSeminar.documentId, name: rawSeminar.name, slug };
       const group = seminar ? groupByLegacyId.get(String(seminar.course_group_legacy_id ?? '')) : undefined;
       const institute = group ? instituteBySlug.get(String(group.institute_legacy_id ?? '')) : undefined;
       // An empty institute collection is rejected by the existing required-type
@@ -601,7 +617,18 @@ async function liveCapture(): Promise<void> {
   }
 
   const media = await captureMedia(types);
+  const history = historicalExceptionsFromEnvironment();
   const content: SnapshotContent = { types, media };
+  if (historyAuditOutput) {
+    if (!serverCapture) throw new Error('history audit needs a verified server capture');
+    const proposed = proposeHistoricalExceptions(content);
+    const report = { version: 1, databaseDigest: serverCapture.proof.databaseDigest, schemaDigest: serverCapture.readback.schemaDigest, candidates: proposed };
+    writeFileSync(historyAuditOutput, `${JSON.stringify(report, null, 2)}\n`, { flag: 'wx', mode: 0o600 });
+    console.log(`history audit: ${proposed.length} candidates; no snapshot was published`);
+    return;
+  }
+  const activeHistory = activeHistoricalExceptions(content, history.entries);
+  if (activeHistory.length) content.historicalExceptions = activeHistory;
   const fingerprint = contentFingerprint(content);
   const referenceDate = new Date().toISOString().slice(0, 10);
   const snapshotBase = {

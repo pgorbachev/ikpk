@@ -1,8 +1,10 @@
-import type { Snapshot } from './content-snapshot.ts';
+import { resolveSeminar } from '../../src/lib/seminar-identity.ts';
+import { contentFingerprint, type Snapshot, type HistoricalException } from './content-snapshot.ts';
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { trustForHistoricalSnapshot } from './historical-exceptions.ts';
 
 /** Группа обязательных полей: достаточно любого имени из группы (design.md, change
  *  `cms-live-snapshot-capture`). Перечислена явно, а не выведена из кода ниже: полнота
@@ -25,7 +27,7 @@ export interface ContractViolation {
   type: string;
   recordId: string;
   field?: string;
-  rule: 'required-field-empty' | 'duplicate-identifier' | 'broken-relation' | 'slug-not-url-safe';
+  rule: 'required-field-empty' | 'duplicate-identifier' | 'broken-relation' | 'slug-not-url-safe' | 'invalid-value' | 'historical-exception-invalid';
   relatedRecordIds?: string[];
 }
 
@@ -90,7 +92,9 @@ function checkDuplicates(
   }
 }
 
-export function validateSnapshotContract(snapshot: Snapshot): { ok: boolean; violations: ContractViolation[] } {
+export type HistoricalTrust = { trustedHistoricalExceptionsFingerprint?: string };
+const PINNED_LEGACY_EXCEPTIONS = 'sha256:6458aebefba03170933cc90d3dc7736d9fd35a05d2ff034440aa4e6b10d60c62';
+export function validateSnapshotContract(snapshot: Snapshot, trust: HistoricalTrust = {}): { ok: boolean; violations: ContractViolation[] } {
   const violations: ContractViolation[] = [];
   const types = snapshot.content.types;
   const articles = types.articles ?? [];
@@ -99,6 +103,26 @@ export function validateSnapshotContract(snapshot: Snapshot): { ok: boolean; vio
   const institutes = types.institutes ?? [];
   const teachers = types.teachers ?? [];
   const schedule = types.schedule ?? types.schedule_entries ?? [];
+
+  const rawRegistry = snapshot.content.historicalExceptions;
+  const registry = Array.isArray(rawRegistry) ? rawRegistry : [];
+  const registryFingerprint = contentFingerprint({ types: { historicalExceptions: registry as unknown as Record<string, unknown>[] }, media: [] });
+  const trusted = trust.trustedHistoricalExceptionsFingerprint === registryFingerprint ||
+    (snapshot.pinned === true && registryFingerprint === PINNED_LEGACY_EXCEPTIONS);
+  const used = new Set<number>();
+  if ((rawRegistry !== undefined && !Array.isArray(rawRegistry)) || (registry.length > 0 && !trusted)) {
+    violations.push({ type: 'schedule', recordId: 'historicalExceptions', rule: 'historical-exception-invalid' });
+  }
+  function approved(event: Record<string, unknown>, condition: HistoricalException['condition']): boolean {
+    if (!trusted || !Array.isArray(registry)) return false;
+    const fingerprint = contentFingerprint({ types: { schedule_entries: [event] }, media: [] });
+    const indices = registry.flatMap((entry, index) => entry && entry.documentId === event.documentId &&
+      entry.publishedAt === event.publishedAt && entry.updatedAt === event.updatedAt &&
+      entry.condition === condition && entry.recordFingerprint === fingerprint ? [index] : []);
+    if (indices.length !== 1) return false;
+    used.add(indices[0]!);
+    return true;
+  }
 
   for (const article of articles) {
     requireGroup('articles', article, ['slug'], violations);
@@ -116,7 +140,6 @@ export function validateSnapshotContract(snapshot: Snapshot): { ok: boolean; vio
 
   const programSlugs = slugsOf(programs);
   const instituteSlugs = slugsOf(institutes);
-  const seminarSlugs = slugsOf(seminars);
 
   if (types.programs || types.course_groups) {
     // Сравнивать надо ОДНОРОДНОЕ с однородным. Семинар ссылается на программу двумя разными
@@ -158,16 +181,31 @@ export function validateSnapshotContract(snapshot: Snapshot): { ok: boolean; vio
 
   if (types.seminars && (types.schedule || types.schedule_entries)) {
     for (const event of schedule) {
-      const seminar =
-        typeof event.seminar === 'string'
-          ? event.seminar
-          : event.seminar && typeof event.seminar === 'object'
-            ? (event.seminar as { slug?: unknown }).slug
-            : undefined;
-      if (isEmpty(seminar) || !seminarSlugs.has(String(seminar))) {
+      const relation = typeof event.seminar === 'string' ? { slug: event.seminar }
+        : event.seminar && typeof event.seminar === 'object' ? event.seminar as Record<string, unknown> : {};
+      const seminar = resolveSeminar(seminars, relation);
+      if (!seminar || (relation.slug != null && seminar.slug !== relation.slug)) {
         violations.push({ type: 'schedule', recordId: recordId(event), rule: 'broken-relation' });
       }
+      const price = Object.hasOwn(event, 'price') ? event.price : event.newPrice;
+      const priceMissing = price == null || price === '';
+      const numericPrice = Number(price);
+      if ((!priceMissing && (!Number.isFinite(numericPrice) || numericPrice < 0)) ||
+          (event.isFree === true && (priceMissing || numericPrice !== 0))) {
+        violations.push({ type: 'schedule', recordId: recordId(event), field: 'price', rule: 'invalid-value' });
+      }
+      if (event.isFree === false && price != null && price !== '' && Number(price) === 0 && !approved(event, 'paid-zero-price')) {
+        violations.push({ type: 'schedule', recordId: recordId(event), field: 'price', rule: 'invalid-value' });
+      }
+      const publishedSeminar = seminar?.publishedAt !== null ? seminar : undefined;
+      const nonempty = (value: unknown) => typeof value === 'string' ? value.trim().length > 0 : value != null;
+      if (!nonempty(event.duration) && !nonempty(publishedSeminar?.duration) && !approved(event, 'missing-duration')) {
+        violations.push({ type: 'schedule', recordId: recordId(event), field: 'duration', rule: 'required-field-empty' });
+      }
     }
+  }
+  if (Array.isArray(registry)) for (const [index, entry] of registry.entries()) {
+    if (!entry || !used.has(index)) violations.push({ type: 'schedule', recordId: String(entry?.documentId ?? 'historicalExceptions'), rule: 'historical-exception-invalid' });
   }
 
   checkDuplicates(
@@ -176,11 +214,15 @@ export function validateSnapshotContract(snapshot: Snapshot): { ok: boolean; vio
     (r) => `${String(r.program ?? r.course_group_legacy_id ?? '')}::${String(r.slug ?? '')}`,
     violations,
   );
+  // /seminary/[slug] is a flat route, so slugs must be globally unique.
+  checkDuplicates('seminars', seminars, (row) => String(row.slug ?? ''), violations);
+  checkDuplicates('seminars', seminars, (row) => typeof row.documentId === 'string' ? row.documentId : '', violations);
+  checkDuplicates('schedule', schedule, (row) => typeof row.documentId === 'string' ? row.documentId : '', violations);
 
   return { ok: violations.length === 0, violations };
 }
 
-function assertSnapshotContractCore(snapshot: Snapshot, allowDemoProof: boolean): void {
+function assertSnapshotContractCore(snapshot: Snapshot, allowDemoProof: boolean, trust?: HistoricalTrust): void {
   const demo = snapshot as Snapshot & {
     sourcePolicy?: unknown; sourceAge?: unknown; captureProof?: Record<string, unknown>;
   };
@@ -197,7 +239,7 @@ function assertSnapshotContractCore(snapshot: Snapshot, allowDemoProof: boolean)
       throw new Error('staging193 publication snapshot has incomplete or invalid sealed capture proof');
     }
   }
-  const { violations } = validateSnapshotContract(snapshot);
+  const { violations } = validateSnapshotContract(snapshot, trust);
   if (violations.length === 0) return;
   // Отказ обязан называть ПРЕДМЕТ, а не только первую запись: сообщение вида
   // «85 broken-relation» не говорит ни какая связь сломана, ни сколько их — по нему
@@ -216,12 +258,12 @@ function assertSnapshotContractCore(snapshot: Snapshot, allowDemoProof: boolean)
 }
 
 /** The ordinary reader deliberately rejects initial-production one-off proofs. */
-export function assertSnapshotContract(snapshot: Snapshot): void {
-  assertSnapshotContractCore(snapshot, true);
+export function assertSnapshotContract(snapshot: Snapshot, trust?: HistoricalTrust): void {
+  assertSnapshotContractCore(snapshot, true, trust ?? trustForHistoricalSnapshot(snapshot.content));
 }
 
 /** Capture/build-only validation for the single approved initial production operation. */
-export function assertInitialProductionCaptureContract(snapshot: Snapshot): void {
+export function assertInitialProductionCaptureContract(snapshot: Snapshot, trust?: HistoricalTrust): void {
   const value = snapshot as Snapshot & {
     sourcePolicy?: unknown; sourceAge?: unknown; captureProof?: Record<string, unknown>;
   };
@@ -239,11 +281,11 @@ export function assertInitialProductionCaptureContract(snapshot: Snapshot): void
       || !digest(proof.mediaManifestDigest) || !digest(proof.bundleDigest)) {
     throw new Error('initial production snapshot has incomplete or invalid source-bound server-DB proof');
   }
-  assertSnapshotContractCore(snapshot, false);
+  assertSnapshotContractCore(snapshot, false, trust ?? trustForHistoricalSnapshot(snapshot.content));
 }
 
 /** Capture/build-only validation for reusable static-only production publishes. */
-export function assertProductionStaticCaptureContract(snapshot: Snapshot): void {
+export function assertProductionStaticCaptureContract(snapshot: Snapshot, trust?: HistoricalTrust): void {
   const value = snapshot as Snapshot & {
     sourcePolicy?: unknown; sourceAge?: unknown; captureProof?: Record<string, unknown>;
   };
@@ -261,7 +303,7 @@ export function assertProductionStaticCaptureContract(snapshot: Snapshot): void 
       || !digest(proof.mediaManifestDigest) || !digest(proof.bundleDigest)) {
     throw new Error('production-static snapshot has incomplete or invalid source-bound server-DB proof');
   }
-  assertSnapshotContractCore(snapshot, false);
+  assertSnapshotContractCore(snapshot, false, trust ?? trustForHistoricalSnapshot(snapshot.content));
 }
 
 /**

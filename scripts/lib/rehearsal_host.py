@@ -66,12 +66,14 @@ REQUIRED_CONFIG = {
 }
 SHA_RE = re.compile(r"[a-f0-9]{40}\Z")
 SHA256_RE = re.compile(r"[a-f0-9]{64}\Z")
+# Covers one 50,000,000-byte review after base64 plus its bounded control envelope.
+MIGRATION_REVIEW_TRANSPORT_LIMIT = 64 * 1024 * 1024
 STAGING194_PAIRED_HELPER_IDENTITY_CAPABILITY = "paired-helper-identity-v1"
 HOST_HELPER_RUNTIME_MODULES = ("rehearsal_host.py", "rehearsal_state.py", "housekeeping_journal.py")
 DESTINATION_LOCKED_ACTIONS = frozenset({
     "cms-update", "static-publish", "static-main", "static-main-recover",
     "recover", "restore", "finalize-recover", "cleanup-site",
-    "export-backup", "export-static", "export-static-main",
+    "export-backup", "export-static", "export-static-main", "export-migration-pause",
 })
 CONTENT_FINGERPRINT_RE = re.compile(r"sha256:[a-f0-9]{64}\Z")
 PREFIX_RE = re.compile(r"/[A-Za-z0-9_./*?=-]+\Z")
@@ -2360,7 +2362,8 @@ def _old_pair(config: dict[str, Any]) -> dict[str, Any]:
     db_proof = (_initial_prod_baseline_db_reference(config, database)
                 if config.get("profile") == "initial-prod"
                 else _database_process_proof(_service_pid(config["cmsUnit"]), database))
-    result = {"cmsPath": str(cms), "staticPath": str(static), "databasePath": str(database),
+    history = _current_historical_manifest(config)
+    result = {"historicalRegistryManifest": history, "cmsPath": str(cms), "staticPath": str(static), "databasePath": str(database),
             "cmsPayloadSha256": _cms_payload_sha256(cms, media_uploads),
             "databaseSha256": sha256_file(database), "staticTreeSha256": _tree_sha256(static),
             "configSha256": _config_sha256(config),
@@ -2702,27 +2705,387 @@ def _run_as_cms(config: dict[str, Any], cwd: Path, argv: list[str], timeout: int
     return result.stdout
 
 
-def _cms_build_generation(config: dict[str, Any], source_root: Path) -> tuple[Path, dict[str, str]]:
+ROOT_SEALED_DEPENDENCIES_VERSION = 3
+SEALED_DEPENDENCY_MARKER = '.ikpk-install-provenance-v3.json'
+
+
+def _protected_dependency_path(path: Path, *, directory: bool, trusted_uid: int = 0) -> None:
+    if not path.is_absolute() or path.resolve(strict=True) != path:
+        raise HostFailure('sealed dependency path must be canonical')
+    info = path.lstat()
+    if ((directory and not stat.S_ISDIR(info.st_mode))
+            or (not directory and (not stat.S_ISREG(info.st_mode) or info.st_nlink != 1))
+            or info.st_uid != trusted_uid or info.st_mode & 0o022):
+        raise HostFailure('sealed dependency path has unsafe owner, type or permissions')
+    for parent in path.parents:
+        owner = parent.lstat()
+        if not stat.S_ISDIR(owner.st_mode) or owner.st_uid not in (0, trusted_uid) or owner.st_mode & 0o022:
+            raise HostFailure('sealed dependency ancestor is writable or untrusted')
+
+
+def _copy_sealed_dependency_tree(source: Path, destination: Path) -> str:
+    """Copy untrusted install output into new root-private inodes, fd-relative.
+
+    chmod/chown in place leaves old writable descriptors valid. Path-based root
+    traversal also lets a racing CMS-owned directory redirect reads elsewhere.
+    Both are avoided by new inodes and O_NOFOLLOW directory descriptors.
+    Callers retain the root-controlled private install parent after draining the
+    dedicated installer UID. A metadata census proves every regular-file hard
+    link name is inside this tree before any contents are read; metadata and link
+    counts are checked again during copying and in a final census. Internal
+    aliases are copied into separate destination inodes, never linked in place.
+    """
+    entries = []
+    directory_flags = os.O_RDONLY | getattr(os, 'O_DIRECTORY', 0) | getattr(os, 'O_NOFOLLOW', 0)
+    def identity(info):
+        return (info.st_dev, info.st_ino, info.st_mode, info.st_uid, info.st_gid,
+                info.st_nlink, info.st_size, info.st_mtime_ns, info.st_ctime_ns)
+
+    def census(root_fd: int) -> dict[str, tuple]:
+        inventory = {}
+        file_links = {}
+        def scan(directory_fd: int, prefix: str) -> None:
+            before = os.fstat(directory_fd)
+            inventory[prefix] = identity(before)
+            for name in sorted(os.listdir(directory_fd)):
+                relative = f'{prefix}/{name}' if prefix else name
+                info = os.stat(name, dir_fd=directory_fd, follow_symlinks=False)
+                snapshot = identity(info)
+                if stat.S_ISDIR(info.st_mode):
+                    child_fd = os.open(name, directory_flags, dir_fd=directory_fd)
+                    try:
+                        if identity(os.fstat(child_fd)) != snapshot:
+                            raise HostFailure('dependency source changed during hard link census')
+                        scan(child_fd, relative)
+                    finally:
+                        os.close(child_fd)
+                elif stat.S_ISREG(info.st_mode):
+                    inventory[relative] = snapshot
+                    key = (info.st_dev, info.st_ino)
+                    previous, names = file_links.setdefault(key, (snapshot, []))
+                    if previous != snapshot:
+                        raise HostFailure('dependency source changed during hard link census')
+                    names.append(relative)
+                elif stat.S_ISLNK(info.st_mode):
+                    inventory[relative] = snapshot
+                else:
+                    raise HostFailure('dependency tree contains a special file')
+            if identity(os.fstat(directory_fd)) != identity(before):
+                raise HostFailure('dependency directory changed during hard link census')
+        scan(root_fd, '')
+        for snapshot, names in file_links.values():
+            if snapshot[5] != len(names):
+                raise HostFailure('dependency source contains a hard link outside the private tree')
+        return inventory
+
+    def visit(source_fd: int, dst: Path, prefix: str) -> None:
+        if identity(os.fstat(source_fd)) != inventory.get(prefix):
+            raise HostFailure('dependency directory changed after hard link census')
+        dst.mkdir(mode=0o700)
+        entries.append({'path': prefix, 'type': 'directory'})
+        for name in sorted(os.listdir(source_fd)):
+            info = os.stat(name, dir_fd=source_fd, follow_symlinks=False)
+            target, relative = dst / name, f'{prefix}/{name}' if prefix else name
+            if identity(info) != inventory.get(relative):
+                raise HostFailure('dependency source changed after hard link census')
+            if stat.S_ISLNK(info.st_mode):
+                link = os.readlink(name, dir_fd=source_fd)
+                if Path(link).is_absolute():
+                    raise HostFailure('installed dependency symlink must be relative')
+                target.symlink_to(link)
+                entries.append({'path': relative, 'type': 'symlink', 'target': link})
+                continue
+            flags = directory_flags if stat.S_ISDIR(info.st_mode) else os.O_RDONLY | getattr(os, 'O_NOFOLLOW', 0) | getattr(os, 'O_NONBLOCK', 0)
+            if not (stat.S_ISDIR(info.st_mode) or stat.S_ISREG(info.st_mode)):
+                raise HostFailure('dependency tree contains a special file')
+            fd = os.open(name, flags, dir_fd=source_fd)
+            try:
+                before = os.fstat(fd)
+                if (before.st_dev, before.st_ino, before.st_mode) != (info.st_dev, info.st_ino, info.st_mode):
+                    raise HostFailure('dependency source changed before sealing')
+                if stat.S_ISDIR(before.st_mode):
+                    visit(fd, target, relative)
+                    continue
+                if identity(before) != inventory[relative]:
+                    raise HostFailure('dependency source changed before sealing')
+                digest = hashlib.sha256()
+                with os.fdopen(fd, 'rb', closefd=False) as reader, target.open('xb') as writer:
+                    for block in iter(lambda: reader.read(1024 * 1024), b''):
+                        digest.update(block); writer.write(block)
+                    os.fchmod(writer.fileno(), 0o555 if info.st_mode & 0o111 else 0o444)
+                    writer.flush(); os.fsync(writer.fileno())
+                after = os.fstat(fd)
+                if identity(before) != identity(after):
+                    raise HostFailure('dependency source changed while sealing')
+                entries.append({'path': relative, 'type': 'file', 'sha256': digest.hexdigest(),
+                                'executable': bool(info.st_mode & 0o111)})
+            finally:
+                os.close(fd)
+        if identity(os.fstat(source_fd)) != inventory[prefix]:
+            raise HostFailure('dependency directory changed while sealing')
+        os.chmod(dst, 0o555)
+        target_fd = os.open(dst, directory_flags)
+        try:
+            os.fsync(target_fd)
+        finally:
+            os.close(target_fd)
+    source_fd = os.open(source, directory_flags)
+    try:
+        inventory = census(source_fd)
+        visit(source_fd, destination, '')
+        if census(source_fd) != inventory:
+            raise HostFailure('dependency source changed while sealing')
+    finally:
+        os.close(source_fd)
+    # Validate the immutable copy, not racing targets in the CMS-owned source.
+    for path in destination.rglob('*'):
+        if path.is_symlink() and not path.resolve(strict=True).is_relative_to(destination):
+            raise HostFailure('installed dependency symlink escapes its generation')
+    return sha256_file_bytes(json.dumps(entries, sort_keys=True, separators=(',', ':')).encode())
+
+
+def _sealed_dependency_provenance(generation: Path, expected: dict[str, str], *, trusted_uid: int = 0) -> dict[str, Any]:
+    dependencies = generation / 'node_modules'
+    marker = generation / SEALED_DEPENDENCY_MARKER
+    for path, directory in ((generation, True), (dependencies, True), (marker, False)):
+        _protected_dependency_path(path, directory=directory, trusted_uid=trusted_uid)
+    proof = json.loads(marker.read_bytes())
+    info = dependencies.lstat()
+    if (proof.get('schemaVersion') != 3 or proof.get('generation') != str(generation)
+            or proof.get('dependencyRoot') != str(dependencies)
+            or proof.get('dependencyDevice') != info.st_dev or proof.get('dependencyInode') != info.st_ino
+            or proof.get('packageLockSha256') != expected['lockSha256']
+            or proof.get('packageJsonSha256') != expected['packageJsonSha256']
+            or proof.get('nodeAbi') != expected['nodeAbi'] or proof.get('nodeVersion') != expected['nodeVersion']
+            or proof.get('installCommand') != 'npm ci --no-audit --no-fund' or proof.get('exitCode') != 0
+            or proof.get('installerUser') != 'ikpk-deps' or proof.get('installIsolation') != 'dedicated-uid-cgroup-drained-v1'
+            or any(proof.get(key) != expected.get(key) for key in
+                   ('installerUid', 'installerGid', 'nodeBinary', 'nodeBinarySha256', 'npmCli', 'npmCliSha256'))
+            or not SHA256_RE.fullmatch(str(proof.get('dependencyTreeSha256', '')))):
+        raise HostFailure('sealed dependency provenance differs from its generation')
+    return proof
+
+
+def _seal_cms_dependency_generation(temporary: Path, generation: Path, expected: dict[str, str],
+                                    strapi_version: str, npm_version: str) -> Path:
+    """Called only after the host observed its own npm-ci subprocess succeed."""
+    from datetime import datetime, timezone
+    _protected_dependency_path(generation.parent, directory=True)
+    sealed = Path(tempfile.mkdtemp(prefix=f'.{generation.name}.sealed-', dir=generation.parent))
+    try:
+        for name in ('package.json', 'package-lock.json'):
+            source = temporary / name
+            if source.is_symlink() or not source.is_file():
+                raise HostFailure('installed package metadata is unsafe')
+            with (sealed / name).open('xb') as target:
+                target.write(_cohort_file(source)); os.fchmod(target.fileno(), 0o444)
+                target.flush(); os.fsync(target.fileno())
+        if (sha256_file(sealed / 'package-lock.json') != expected['lockSha256']
+                or sha256_file(sealed / 'package.json') != expected['packageJsonSha256']):
+            raise HostFailure('npm ci changed the admitted package lock')
+        tree_sha = _copy_sealed_dependency_tree(temporary / 'node_modules', sealed / 'node_modules')
+        info = (sealed / 'node_modules').lstat()
+        proof = {'schemaVersion': 3, 'generation': str(generation), 'dependencyRoot': str(generation / 'node_modules'),
+                 'dependencyDevice': info.st_dev, 'dependencyInode': info.st_ino,
+                 'dependencyTreeSha256': tree_sha, 'packageLockSha256': expected['lockSha256'],
+                 'packageJsonSha256': expected['packageJsonSha256'],
+                 'nodeVersion': expected['nodeVersion'], 'nodeAbi': expected['nodeAbi'],
+                 'strapiVersion': strapi_version, 'npmVersion': npm_version,
+                 'installCommand': 'npm ci --no-audit --no-fund', 'exitCode': 0,
+                 'completionObservedAt': datetime.now(timezone.utc).isoformat(timespec='milliseconds').replace('+00:00', 'Z')}
+        proof.update({key: expected[key] for key in
+                      ('installerUid', 'installerGid', 'nodeBinary', 'nodeBinarySha256', 'npmCli', 'npmCliSha256')})
+        proof.update(installerUser='ikpk-deps', installIsolation='dedicated-uid-cgroup-drained-v1')
+        for name, data in (('.complete', expected), (SEALED_DEPENDENCY_MARKER, proof)):
+            _registry_write(sealed / name, (json.dumps(data, sort_keys=True, separators=(',', ':')) + '\n').encode())
+        os.chmod(sealed, 0o555)
+        if os.path.lexists(generation):
+            raise HostFailure('sealed generation appeared before publication')
+        os.rename(sealed, generation)
+        fd = os.open(generation.parent, os.O_RDONLY | getattr(os, 'O_DIRECTORY', 0))
+        try:
+            os.fsync(fd)
+        finally:
+            os.close(fd)
+        return generation / 'node_modules'
+    except Exception:
+        if sealed.exists():
+            for path in sealed.rglob('*'):
+                if path.is_dir() and not path.is_symlink(): os.chmod(path, 0o700)
+            os.chmod(sealed, 0o700)
+            shutil.rmtree(sealed)
+        raise
+
+
+def _dependency_installer_account(config: dict[str, Any]):
+    import grp
+    try:
+        cms = pwd.getpwnam(config['cmsUser'])
+        installer = pwd.getpwnam('ikpk-deps')
+        group = grp.getgrgid(installer.pw_gid)
+    except KeyError as error:
+        raise HostFailure('dedicated ikpk-deps system user/group must be provisioned before sealed installation') from error
+    if (installer.pw_uid <= 0 or installer.pw_gid <= 0 or installer.pw_uid == cms.pw_uid or installer.pw_gid == cms.pw_gid
+            or installer.pw_gid in os.getgrouplist(cms.pw_name, cms.pw_gid)
+            or set(os.getgrouplist(installer.pw_name, installer.pw_gid)) != {installer.pw_gid}
+            or installer.pw_shell not in ('/usr/sbin/nologin', '/sbin/nologin', '/bin/false')
+            or any(name != installer.pw_name for name in group.gr_mem)
+            or any(user.pw_name != installer.pw_name and
+                   (user.pw_uid == installer.pw_uid or user.pw_gid == installer.pw_gid) for user in pwd.getpwall())):
+        raise HostFailure('dependency installer must have a dedicated non-login UID/GID inaccessible to CMS')
+    return installer
+
+
+def _dependency_install_runtime(config: dict[str, Any]) -> dict[str, str]:
+    node_alias = Path(config.get('nodeBinary', '/usr/bin/node'))
+    npm_alias = Path('/usr/bin/npm')
+    try:
+        for alias in (node_alias, npm_alias):
+            _protected_dependency_path(alias.parent.resolve(strict=True), directory=True)
+            if alias.lstat().st_uid != 0:
+                raise HostFailure('dependency runtime entrypoint is not root controlled')
+        node, npm = node_alias.resolve(strict=True), npm_alias.resolve(strict=True)
+        for path in (node, npm):
+            _protected_dependency_path(path, directory=False)
+        if not node.stat().st_mode & 0o111 or npm.name != 'npm-cli.js':
+            raise HostFailure('root-controlled Node and npm-cli.js entrypoints are required')
+    except OSError as error:
+        raise HostFailure('root-controlled dependency runtime is unavailable') from error
+    return {'nodeBinary': str(node), 'nodeBinarySha256': sha256_file(node),
+            'npmCli': str(npm), 'npmCliSha256': sha256_file(npm)}
+
+
+def _assert_dependency_installer_idle(uid: int, proc_root: Path = Path('/proc')) -> None:
+    if not (proc_root / 'self/status').is_file():
+        raise HostFailure('Linux process inspection is required for dependency installer isolation')
+    for entry in proc_root.iterdir():
+        if not entry.name.isdecimal():
+            continue
+        try:
+            lines = (entry / 'status').read_text(encoding='utf-8').splitlines()
+        except FileNotFoundError:
+            continue
+        except OSError as error:
+            raise HostFailure('cannot prove dependency installer process exit') from error
+        values = next((line.split()[1:] for line in lines if line.startswith('Uid:')), None)
+        if values is None or len(values) != 4 or any(not value.isdecimal() for value in values):
+            raise HostFailure('cannot parse process UID during dependency installer verification')
+        if uid in map(int, values):
+            raise HostFailure('dependency installer still has a live process; refusing seal')
+
+
+def _run_private_dependency_install(work: Path, installer: Any, runtime: dict[str, str], args: list[str]) -> str:
+    _assert_dependency_installer_idle(installer.pw_uid)
+    runtime_dir = work.parent / 'runtime'
+    runtime_dir.mkdir(mode=0o755, exist_ok=True)
+    os.chmod(runtime_dir, 0o755)
+    npm_configs = [runtime_dir / 'npm-user-empty', runtime_dir / 'npm-global-empty']
+    for config_path in npm_configs:
+        if not os.path.lexists(config_path):
+            with config_path.open('xb') as stream:
+                os.fchmod(stream.fileno(), 0o444); stream.flush(); os.fsync(stream.fileno())
+        elif config_path.is_symlink() or not config_path.is_file() or config_path.read_bytes():
+            raise HostFailure('private npm configuration is not an empty regular file')
+    node_alias = runtime_dir / 'node'
+    if not os.path.lexists(node_alias):
+        node_alias.symlink_to(runtime['nodeBinary'])
+    elif not node_alias.is_symlink() or str(node_alias.resolve(strict=True)) != runtime['nodeBinary']:
+        raise HostFailure('private installer Node alias changed')
+    unit = f'ikpk-deps-install-{uuid.uuid4().hex}.service'
+    command = ['/usr/bin/systemd-run', '--wait', '--collect', '--pipe', f'--unit={unit}',
+               f'--uid={installer.pw_uid}', f'--gid={installer.pw_gid}', f'--working-directory={work}']
+    properties = ['Type=exec', 'Restart=no', 'RuntimeMaxSec=1770s', 'TimeoutStopSec=15s', 'KillMode=control-group',
+                  'SendSIGKILL=yes', 'NoNewPrivileges=yes', 'CapabilityBoundingSet=', 'ProtectSystem=strict',
+                  'ProtectHome=yes', 'ProtectControlGroups=yes', 'RestrictNamespaces=yes', 'PrivateTmp=yes',
+                  'PrivateDevices=yes', 'RestrictSUIDSGID=yes', 'UMask=0077',
+                  'InaccessiblePaths=-/etc/ikpk -/etc/ikpk-cms', f'ReadWritePaths={work}']
+    command += [f'--property={value}' for value in properties]
+    command += ['/usr/bin/env', '-i', f'PATH={runtime_dir}:/usr/bin:/bin', f'HOME={work}',
+                f'TMPDIR={work}', f'NPM_CONFIG_USERCONFIG={npm_configs[0]}', f'NPM_CONFIG_GLOBALCONFIG={npm_configs[1]}',
+                'NODE_DISABLE_COMPILE_CACHE=1',
+                f'NPM_CONFIG_CACHE={work}/.npm-cache', runtime['nodeBinary'], runtime['npmCli'], *args]
+    try:
+        result = run(command, timeout=1800)
+    finally:
+        # A collected unit may already be gone. Regardless of stop's status,
+        # no proof is issued unless all processes of the dedicated UID are gone.
+        run(['/usr/bin/systemctl', 'stop', unit], timeout=30, check=False)
+        _assert_dependency_installer_idle(installer.pw_uid)
+    return result.stdout
+
+
+def _prepare_private_cms_dependencies(config: dict[str, Any], source_root: Path,
+                                      generation: Path, expected: dict[str, Any], package_inputs: dict[str, bytes]) -> Path:
+    installer = _dependency_installer_account(config)
+    runtime = _dependency_install_runtime(config)
+    if (any(expected.get(key) != value for key, value in runtime.items())
+            or expected.get('installerUid') != installer.pw_uid or expected.get('installerGid') != installer.pw_gid):
+        raise HostFailure('dependency installer or runtime changed after generation admission')
+    _protected_dependency_path(generation.parent, directory=True)
+    outer = Path(tempfile.mkdtemp(prefix=f'.{generation.name}.install-', dir=generation.parent))
+    try:
+        # Installer cannot chmod this parent to expose its output to CMS.
+        os.chown(outer, 0, installer.pw_gid); os.chmod(outer, 0o710)
+        work = outer / 'work'; work.mkdir(mode=0o700)
+        os.chown(work, installer.pw_uid, installer.pw_gid)
+        for name in ('package.json', 'package-lock.json'):
+            target = work / name
+            target.write_bytes(package_inputs[name])
+            os.chmod(target, 0o600); os.chown(target, installer.pw_uid, installer.pw_gid)
+        npm_version = _run_private_dependency_install(work, installer, runtime, ['--version']).strip()
+        if not re.fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?', npm_version):
+            raise HostFailure('isolated npm CLI returned an invalid version')
+        _run_private_dependency_install(work, installer, runtime, ['ci', '--no-audit', '--no-fund'])
+        for name in ('package.json', 'package-lock.json'):
+            if sha256_file(work / name) != sha256_file_bytes(package_inputs[name]):
+                raise HostFailure('npm install changed admitted package metadata')
+        lock = json.loads((work / 'package-lock.json').read_bytes())
+        strapi_version = lock.get('packages', {}).get('node_modules/@strapi/strapi', {}).get('version')
+        if not isinstance(strapi_version, str):
+            raise HostFailure('admitted lockfile lacks the installed Strapi version')
+        _seal_cms_dependency_generation(work, generation, expected, strapi_version, npm_version)
+        return _validate_cms_build_generation(config, generation, expected)
+    finally:
+        shutil.rmtree(outer)
+
+
+def _cms_build_generation(config: dict[str, Any], source_root: Path, *,
+                          admitted_inputs: Optional[dict[str, bytes]] = None) -> tuple[Path, dict[str, str]]:
     source_cms = source_root / "cms"
     lockfile = source_cms / "package-lock.json"
     if lockfile.is_symlink() or not lockfile.is_file():
         raise HostFailure("CMS source package-lock is unavailable for dependency admission")
     lock_hash = sha256_file(lockfile)
-    node = config.get("nodeBinary", "/usr/bin/node")
+    # Capability is authenticated archive content, never a CMS-writable checkout claim.
+    runner_bytes = (admitted_inputs or {}).get('scripts/run-data-migrations.mjs', b'')
+    supports_seal = b'ROOT_SEALED_DEPENDENCIES_VERSION = 3' in runner_bytes
+    profile = 'full-build-sealed-v3' if supports_seal else 'full-build'
+    installer = _dependency_installer_account(config) if supports_seal else None
+    install_runtime = _dependency_install_runtime(config) if supports_seal else {}
+    node = install_runtime.get('nodeBinary', config.get('nodeBinary', '/usr/bin/node'))
     node_version = run([node, "--version"]).stdout.strip()
     if not re.fullmatch(r"v[0-9]+\.[0-9]+\.[0-9]+", node_version):
         raise HostFailure("host Node version is unavailable for CMS dependency admission")
     runtime = json.loads(run([node, "-p", "JSON.stringify({abi:process.versions.modules,platform:process.platform,arch:process.arch})"]).stdout)
-    profile = "full-build"
     key = f"{lock_hash}-{profile}-node{node_version[1:]}-{runtime['platform']}-{runtime['arch']}-abi{runtime['abi']}"
+    if supports_seal:
+        package_hash = sha256_file_bytes(_cohort_file(source_cms / 'package.json'))
+        key += f"-node{install_runtime['nodeBinarySha256'][:16]}-npm{install_runtime['npmCliSha256'][:16]}-pkg{package_hash[:16]}"
     root = Path(config["releaseRoot"]).resolve(strict=True).parent / "deps"
     if root.is_symlink():
         raise HostFailure("shared CMS dependency root must not be a symlink")
     root.mkdir(mode=0o755, exist_ok=True)
+    if supports_seal:
+        _protected_dependency_path(root, directory=True)
+        os.chmod(root, 0o755)
     generation = root / key
     metadata = {"version": 1, "lockSha256": lock_hash, "profile": profile,
                 "nodeVersion": node_version, "nodeAbi": runtime["abi"],
                 "platform": runtime["platform"], "architecture": runtime["arch"]}
+    if supports_seal:
+        metadata.update(install_runtime)
+        metadata['packageJsonSha256'] = package_hash
+        metadata.update(installerUid=installer.pw_uid, installerGid=installer.pw_gid)
     return generation, metadata
 
 
@@ -2745,27 +3108,45 @@ def _validate_cms_build_generation(config: dict[str, Any], generation: Path,
     dependencies = generation / "node_modules"
     if dependencies.is_symlink() or not dependencies.is_dir():
         raise HostFailure("CMS build dependency generation has no real node_modules directory")
-    user = pwd.getpwnam(config["cmsUser"])
-    for directory in (generation, dependencies):
-        info = directory.stat()
-        if info.st_uid != user.pw_uid or info.st_mode & 0o022:
-            raise HostFailure("CMS build dependency generation is not a private service-user tree")
+    sealed = expected.get('profile') == 'full-build-sealed-v3'
+    if sealed:
+        proof = _sealed_dependency_provenance(generation, expected)
+        _protected_dependency_path(complete, directory=False)
+        _protected_dependency_path(generation_lock, directory=False)
+        _protected_dependency_path(generation / 'package.json', directory=False)
+        if sha256_file(generation / 'package.json') != expected['packageJsonSha256']:
+            raise HostFailure('sealed generation package.json differs from admitted install inputs')
+    else:
+        user = pwd.getpwnam(config["cmsUser"])
+        for directory in (generation, dependencies):
+            info = directory.stat()
+            if info.st_uid != user.pw_uid or info.st_mode & 0o022:
+                raise HostFailure("CMS build dependency generation is not a private service-user tree")
     try:
         lock_data = json.loads(generation_lock.read_text(encoding="utf-8"))
         installed = json.loads((dependencies / "@strapi/strapi/package.json").read_text(encoding="utf-8"))
         expected_strapi = lock_data.get("packages", {}).get("node_modules/@strapi/strapi", {}).get("version")
     except (OSError, ValueError, AttributeError) as error:
         raise HostFailure("CMS build dependency generation Strapi identity is unreadable") from error
-    if not isinstance(expected_strapi, str) or installed.get("version") != expected_strapi:
+    if (not isinstance(expected_strapi, str) or installed.get("version") != expected_strapi
+            or sealed and proof.get('strapiVersion') != expected_strapi):
         raise HostFailure("CMS build dependency generation Strapi version differs from its lockfile")
     return dependencies.resolve(strict=True)
 
 
-def _prepare_cms_build_dependencies(config: dict[str, Any], source_root: Path) -> Path:
+def _prepare_cms_build_dependencies(config: dict[str, Any], source_root: Path, *,
+                                    package_inputs: Optional[dict[str, bytes]] = None) -> Path:
     source_cms = source_root / "cms"
-    generation, expected = _cms_build_generation(config, source_root)
+    generation, expected = _cms_build_generation(config, source_root, admitted_inputs=package_inputs)
+    if expected.get('profile') == 'full-build-sealed-v3':
+        if (not package_inputs or set(package_inputs) != {'package.json', 'package-lock.json', 'scripts/run-data-migrations.mjs'}
+                or sha256_file_bytes(package_inputs['package.json']) != expected['packageJsonSha256']
+                or sha256_file_bytes(package_inputs['package-lock.json']) != expected['lockSha256']):
+            raise HostFailure('sealed dependencies require CI-admitted exact package install inputs')
     if os.path.lexists(generation):
         dependencies = _validate_cms_build_generation(config, generation, expected)
+    elif expected.get('profile') == 'full-build-sealed-v3':
+        return _prepare_private_cms_dependencies(config, source_root, generation, expected, package_inputs)
     else:
         generation.parent.mkdir(mode=0o755, exist_ok=True)
         user = pwd.getpwnam(config["cmsUser"])
@@ -2860,6 +3241,26 @@ def _cms_tar_members(payload: bytes) -> tuple[tarfile.TarFile, list[tarfile.TarI
             archive.close()
             raise HostFailure("CI CMS artifact contains a link or unsupported archive member")
     return archive, members
+
+
+def _admitted_cms_install_inputs(source_root: Path, evidence: dict[str, Any]) -> dict[str, bytes]:
+    # Read once and authenticate the bytes, never mutable extracted package files.
+    payload = _cohort_file(source_root / '.ikpk-cms-artifact.tar.gz', maximum=1024 * 1024 * 1024)
+    if sha256_file_bytes(payload) != evidence['payloadSha256']:
+        raise HostFailure('CI install archive digest differs from trusted provenance')
+    archive, members = _cms_tar_members(payload)
+    try:
+        result = {}
+        for member in members:
+            if member.name in ('package.json', 'package-lock.json', 'scripts/run-data-migrations.mjs'):
+                if not member.isfile():
+                    raise HostFailure('CI install input is not a regular file')
+                result[member.name] = archive.extractfile(member).read()
+        if set(result) != {'package.json', 'package-lock.json', 'scripts/run-data-migrations.mjs'}:
+            raise HostFailure('CI artifact lacks exact package install inputs')
+        return result
+    finally:
+        archive.close()
 
 
 def _verify_cms_artifact_bytes(source_root: Path, artifact: Path, expected: dict[str, Any], *,
@@ -3063,7 +3464,11 @@ def _validate_prepared_cms_candidate(config: dict[str, Any], source_root: Path, 
             or source_root.name != f"{admitted['sourceSha']}-{operation_id}"):
         raise HostFailure("prepared candidate path differs from its admitted source and operation")
     source_cms = source_root / "cms"
-    generation, expected_generation = _cms_build_generation(config, source_root)
+    paired = config.get("profile", "staging194") in ("staging194", "production-paired")
+    if paired and provenance is None:
+        raise HostFailure('paired CMS validation requires trusted CI provenance')
+    inputs = _admitted_cms_install_inputs(source_root, _trusted_cms_artifact(provenance)) if paired else None
+    generation, expected_generation = _cms_build_generation(config, source_root, admitted_inputs=inputs)
     dependencies_link = source_cms / "node_modules"
     if not dependencies_link.is_symlink():
         raise HostFailure("operation CMS dependencies are not linked to the shared private generation")
@@ -3116,7 +3521,8 @@ def _prepare_cms_candidate(config: dict[str, Any], source_root: Path, operation_
         source_cms = source_root / "cms"
         if sha256_file(source_cms / "package-lock.json") != sha256_file(artifact / "package-lock.json"):
             raise HostFailure("CI CMS artifact package-lock differs from the operation source lock")
-        dependencies = _prepare_cms_build_dependencies(config, source_root)
+        package_inputs = _admitted_cms_install_inputs(source_root, evidence)
+        dependencies = _prepare_cms_build_dependencies(config, source_root, package_inputs=package_inputs)
         source_dependencies = source_cms / "node_modules"
         if os.path.lexists(source_dependencies):
             if not source_dependencies.is_symlink() or source_dependencies.resolve(strict=True) != dependencies:
@@ -3256,6 +3662,19 @@ def _create_capture_bundle(config: dict[str, Any], operation_id: str, source_sha
     if operation_root.is_symlink() or operation_root.parent.is_symlink():
         raise HostFailure("rehearsal work directory contains a symlink")
     capture = operation_root / "capture"
+    if os.path.lexists(capture):
+        if capture.is_symlink() or not capture.is_dir():
+            raise HostFailure('existing capture is unsafe; recover before retrying')
+        try:
+            manifest = json.loads(_cohort_file(capture / 'manifest.json'))
+            _tree_sha256(capture)
+            if (manifest.get('operationId') != operation_id or manifest.get('sourceSha') != source_sha
+                    or manifest.get('databaseSha256') != sha256_file(database)
+                    or sha256_file(capture / 'database.sqlite') != sha256_file(database)):
+                raise HostFailure('existing capture differs from candidate; recover before retrying')
+        except (OSError, ValueError) as error:
+            raise HostFailure('existing capture is incomplete; recover before retrying') from error
+        return capture
     capture.mkdir(mode=0o700)
     shutil.copy2(database, capture / "database.sqlite")
     media = _capture_media(config, capture)
@@ -3393,6 +3812,15 @@ def _ensure_empty_candidate_upload_directory(config: dict[str, Any], artifact_ro
     if not stat.S_ISDIR(public_info.st_mode):
         raise HostFailure("prepared CMS artifact public path is not a real directory")
     uploads = public / "uploads"
+    if uploads.is_symlink():
+        configured = next((Path(item["path"]) for item in config["mediaRoots"]
+                           if item["prefix"] == "/uploads/"), None)
+        if (configured is None or configured.is_symlink() or not configured.is_dir()
+                or os.readlink(uploads) != str(configured.resolve(strict=True))):
+            raise HostFailure("candidate uploads link differs from the configured media root")
+        # A prior attempt may have linked the external uploads after closed-load.
+        # Unlink only the link; the resumed closed-load gets a fresh empty directory.
+        uploads.unlink()
     if os.path.lexists(uploads):
         try:
             uploads_info = uploads.lstat()
@@ -3424,10 +3852,713 @@ def _config_sha256(config: dict[str, Any]) -> str:
     return sha256_file_bytes(payload)
 
 
+SEMINAR_PROOF_REQUIRED = {"web/package.json", "web/package-lock.json", "web/astro.config.mjs",
+    "web/scripts/seminar-migration/render-audit.ts", "web/scripts/seminar-migration/rehearse.py",
+    "web/tests/seminar-real-migration.migration.test.ts", "web/tests/seminar-separate-fields.migration.test.ts",
+    "fixtures/content-snapshot/collapsible_panels.json", "fixtures/content-snapshot/url_map.csv",
+    "cms/src/lib/demo193-source-empty-fields.json",
+    "web/scripts/capture-content-snapshot.ts",
+    *(f"web/scripts/lib/{name}.ts" for name in ("capture-snapshot-contract", "content-field-map", "content-snapshot", "content-media-store", "historical-exceptions", "content-contract")),
+    *(f"scripts/lib/{name}.mjs" for name in ("staging193-capture-bundle", "server-capture-sqlite", "seal-staging193-capture")),
+    *(f"cms/src/api/{name}/content-types/{name}/schema.json" for name in ("institute", "course-group", "seminar", "teacher", "article", "schedule-entry", "news-item", "promotion", "page", "video-playlist")),
+    *(f"cms/src/components/{name}.json" for name in ("shared/seo", "seminar/document-record", "seminar/registry-fact", "seminar/nmo-fact"))}
+
+
+def _verify_seminar_proof(source_root: Path, provenance: dict[str, Any]) -> dict[str, Any]:
+    proof = provenance.get("seminarProofArtifact")
+    if (not isinstance(proof, dict) or proof.get("sourceSha") != provenance.get("sourceSha")
+            or not SHA_RE.fullmatch(proof.get("sourceSha", "")) or not SHA256_RE.fullmatch(proof.get("payloadSha256", ""))):
+        raise HostFailure("seminar proof lacks independently admitted source and archive digest")
+    path = source_root / ".ikpk-seminar-proof.tar.gz"
+    if path.is_symlink() or not path.is_file() or sha256_file(path) != proof["payloadSha256"]:
+        raise HostFailure("seminar proof archive differs from independently admitted digest")
+    seen, source_members = set(), set()
+    try:
+        with tarfile.open(path, mode="r:*") as archive:
+            for member in archive.getmembers():
+                relative = Path(member.name)
+                if (relative.is_absolute() or not relative.parts or ".." in relative.parts or relative.as_posix() in seen
+                        or not (member.isfile() or member.isdir())
+                        or not (relative.parts[0] == "web" or relative.as_posix().startswith("cms/src/components/") or relative.as_posix() in SEMINAR_PROOF_REQUIRED
+                                or (member.isdir() and any(name.startswith(relative.as_posix() + "/") for name in SEMINAR_PROOF_REQUIRED)))):
+                    raise HostFailure("seminar proof archive contains unsafe or duplicate source members")
+                seen.add(relative.as_posix())
+                target = source_root / relative
+                if target.is_symlink() or any((source_root / Path(*relative.parts[:index])).is_symlink() for index in range(1, len(relative.parts))):
+                    raise HostFailure("seminar proof source contains a symlink")
+                if member.isdir():
+                    if not target.is_dir():
+                        raise HostFailure("seminar proof source directory mismatch")
+                elif (not target.is_file() or sha256_file(target) != hashlib.sha256(archive.extractfile(member).read()).hexdigest()
+                      or bool(target.stat().st_mode & 0o111) != bool(member.mode & 0o111)):
+                    raise HostFailure("seminar proof bytes differ from admitted source tree")
+                if member.isfile() and relative.as_posix().startswith("web/src/"):
+                    source_members.add(relative.as_posix())
+    except (tarfile.TarError, OSError) as error:
+        raise HostFailure("seminar proof archive is unreadable") from error
+    actual_source = {path.relative_to(source_root).as_posix() for path in (source_root / "web/src").rglob("*") if path.is_file() or path.is_symlink()}
+    components = source_root / "cms/src/components"
+    actual_components = {path.relative_to(source_root).as_posix() for path in components.rglob("*") if path.is_file() or path.is_symlink()}
+    archived_components = {name for name in seen if name.startswith("cms/src/components/") and (source_root / name).is_file()}
+    if actual_components != archived_components:
+        raise HostFailure("seminar proof component source set differs from admitted archive")
+    if not SEMINAR_PROOF_REQUIRED.issubset(seen) or not source_members or source_members != actual_source:
+        raise HostFailure("seminar proof is missing admitted render source files")
+    return proof
+
+
+def _open_directory_without_symlinks(path: Path) -> int:
+    if not path.is_absolute() or str(path) != os.path.normpath(str(path)):
+        raise HostFailure('migration directory must be an absolute canonical path')
+    fd = os.open('/', os.O_RDONLY | os.O_DIRECTORY | getattr(os, 'O_NOFOLLOW', 0))
+    try:
+        for component in path.parts[1:]:
+            next_fd = os.open(component, os.O_RDONLY | os.O_DIRECTORY | getattr(os, 'O_NOFOLLOW', 0), dir_fd=fd)
+            os.close(fd)
+            fd = next_fd
+        return fd
+    except OSError as error:
+        os.close(fd)
+        raise HostFailure('migration directory traverses a symlink or is unavailable') from error
+
+
+def _create_cms_review_directory(parent_fd: int, user: Any, name: str = 'reviews') -> None:
+    """Create as CMS, so root never changes ownership of a substituted directory."""
+    if os.geteuid() == user.pw_uid and os.getegid() == user.pw_gid:
+        try:
+            os.mkdir(name, 0o700, dir_fd=parent_fd)
+        except FileExistsError:
+            pass
+        return
+    pid = os.fork()
+    if pid == 0:
+        try:
+            os.setgroups([])
+            os.setgid(user.pw_gid)
+            os.setuid(user.pw_uid)
+            try:
+                os.mkdir(name, 0o700, dir_fd=parent_fd)
+            except FileExistsError:
+                pass
+            os._exit(0)
+        except BaseException:
+            os._exit(1)
+    _, status = os.waitpid(pid, 0)
+    if not os.WIFEXITED(status) or os.WEXITSTATUS(status) != 0:
+        raise HostFailure('CMS user could not create the private review directory')
+
+
+def _ensure_cms_private_directory(operation_root: Path, user: Any, name: str) -> None:
+    if name not in ('stage-snapshots',):
+        raise HostFailure('invalid private migration directory')
+    parent_fd = _open_directory_without_symlinks(operation_root)
+    directory_fd = None
+    try:
+        _create_cms_review_directory(parent_fd, user, name)
+        directory_fd = os.open(name, os.O_RDONLY | os.O_DIRECTORY | getattr(os, 'O_NOFOLLOW', 0), dir_fd=parent_fd)
+        info = os.fstat(directory_fd)
+        if not stat.S_ISDIR(info.st_mode) or info.st_uid != user.pw_uid or info.st_mode & 0o077:
+            raise HostFailure('migration private directory is unsafe')
+        os.fsync(parent_fd)
+    except OSError as error:
+        raise HostFailure('cannot securely create migration private directory') from error
+    finally:
+        if directory_fd is not None:
+            os.close(directory_fd)
+        os.close(parent_fd)
+
+
+def _store_migration_review(operation_root: Path, user: Any, name: str, raw: bytes) -> Path:
+    """Write under pinned directory descriptors; never follow a CMS-controlled path as root."""
+    parent_fd = _open_directory_without_symlinks(operation_root)
+    directory_fd = None
+    try:
+        _create_cms_review_directory(parent_fd, user)
+        directory_fd = os.open('reviews', os.O_RDONLY | os.O_DIRECTORY | getattr(os, 'O_NOFOLLOW', 0), dir_fd=parent_fd)
+        directory = os.fstat(directory_fd)
+        if not stat.S_ISDIR(directory.st_mode) or directory.st_mode & 0o077 or directory.st_uid != user.pw_uid:
+            raise HostFailure('migration reviews directory is not private')
+        os.fsync(parent_fd)
+        flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, 'O_NOFOLLOW', 0)
+        try:
+            fd = os.open(name, flags, 0o600, dir_fd=directory_fd)
+        except FileExistsError:
+            fd = os.open(name, os.O_RDONLY | getattr(os, 'O_NOFOLLOW', 0) | getattr(os, 'O_NONBLOCK', 0), dir_fd=directory_fd)
+            try:
+                info = os.fstat(fd)
+                if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1 or info.st_uid != user.pw_uid or info.st_mode & 0o077 or info.st_size != len(raw):
+                    raise HostFailure('retained migration review file is unsafe')
+                with os.fdopen(fd, 'rb', closefd=False) as source:
+                    if source.read() != raw:
+                        raise HostFailure('retained migration review bytes changed')
+            finally:
+                os.close(fd)
+        else:
+            try:
+                os.fchown(fd, user.pw_uid, user.pw_gid)
+                with os.fdopen(fd, 'wb', closefd=False) as output:
+                    output.write(raw); output.flush(); os.fsync(output.fileno())
+            finally:
+                os.close(fd)
+        os.fsync(directory_fd)
+        selected = os.stat('reviews', dir_fd=parent_fd, follow_symlinks=False)
+        if (selected.st_dev, selected.st_ino) != (directory.st_dev, directory.st_ino):
+            raise HostFailure('migration reviews directory changed while writing')
+        check_fd = _open_directory_without_symlinks(operation_root)
+        try:
+            selected_parent = os.fstat(check_fd)
+            parent = os.fstat(parent_fd)
+            if (selected_parent.st_dev, selected_parent.st_ino) != (parent.st_dev, parent.st_ino):
+                raise HostFailure('migration operation directory changed while writing')
+        finally:
+            os.close(check_fd)
+        return operation_root / 'reviews' / name
+    except OSError as error:
+        raise HostFailure('cannot securely store migration review') from error
+    finally:
+        if directory_fd is not None:
+            os.close(directory_fd)
+        os.close(parent_fd)
+
+
+def _migration_review_arguments(config: dict[str, Any], operation_root: Path, operation_id: str,
+                                 source_sha: str, control: dict[str, Any]) -> list[str]:
+    if (not isinstance(control, dict) or control.get("operationId") != operation_id
+            or control.get("sourceSha") != source_sha or set(control) - {"operationId", "sourceSha", "stopAfterStage", "reviewedStep", "compositionReview", "registryReview"}):
+        raise HostFailure("migration review belongs to another operation or has unknown fields")
+    result = []
+    if "stopAfterStage" in control:
+        stage = control["stopAfterStage"]
+        if not isinstance(stage, str) or not re.fullmatch(r"[A-Za-z0-9._-]{1,160}", stage):
+            raise HostFailure("invalid migration stop stage")
+        result += ["--stop-after-stage", stage]
+    user = pwd.getpwnam(config["cmsUser"])
+    directory = operation_root / "reviews"
+    for kind, hash_key, digest_key, flags in (
+        ("reviewedStep", "expectedReviewFileSha256", "expectedPlanDigest", ("--review-file", "--review-file-sha256", "--review-plan-digest")),
+        ("compositionReview", "expectedFileSha256", "expectedContractDigest", ("--composition-review-file", "--composition-file-sha256", "--composition-contract-digest")),
+        ("registryReview", "expectedFileSha256", None, ("--registry-review-file", "--registry-file-sha256"))):
+        if kind not in control:
+            continue
+        binding = control[kind]
+        allowed = {"fileBase64", hash_key} | ({"registryBase64"} if kind == "registryReview" else set()) | ({digest_key} if digest_key else set()) | ({"id"} if kind == "reviewedStep" else set())
+        if (not isinstance(binding, dict) or set(binding) != allowed
+                or not SHA256_RE.fullmatch(binding.get(hash_key, ""))
+                or (digest_key and not SHA256_RE.fullmatch(binding.get(digest_key, "")))):
+            raise HostFailure("migration review binding or independent hashes are invalid")
+        try:
+            raw = base64.b64decode(binding["fileBase64"], validate=True)
+        except (ValueError, TypeError) as error:
+            raise HostFailure("migration review file is not base64") from error
+        if hashlib.sha256(raw).hexdigest() != binding[hash_key]:
+            raise HostFailure("migration review file differs from independently approved bytes")
+        target = _store_migration_review(operation_root, user, f"{kind}-{binding[hash_key]}.json", raw)
+        if kind == "registryReview":
+            try:
+                approved = json.loads(raw)
+                registry = base64.b64decode(binding["registryBase64"], validate=True)
+            except (ValueError, TypeError) as error:
+                raise HostFailure("registry review or payload is malformed") from error
+            digest = hashlib.sha256(registry).hexdigest()
+            registry_path = directory / f"registry-{digest}.json"
+            if approved.get("registrySha256") != digest or approved.get("registryPath") != str(registry_path):
+                raise HostFailure("approved registry digest or fixed operation path differs")
+            _store_migration_review(operation_root, user, registry_path.name, registry)
+        if kind == "reviewedStep":
+            if not re.fullmatch(r"[A-Za-z0-9._-]{1,160}", binding.get("id", "")):
+                raise HostFailure("invalid reviewed migration step")
+            result += ["--review-step", binding["id"]]
+        result += [flags[0], str(target), flags[1], binding[hash_key]]
+        if digest_key:
+            result += [flags[2], binding[digest_key]]
+    return result
+
+
+def _effective_migration_reviews(controls: list[dict], receipt_path: Path, current: Optional[dict] = None) -> list[dict]:
+    """Submitted reviews may be corrected only before a runner binding exists."""
+    receipt = json.loads(_cohort_file(receipt_path)) if receipt_path.exists() else {}
+    effective = {}
+    for control in controls:
+        for kind in ("reviewedStep", "compositionReview", "registryReview"):
+            if kind in control:
+                binding = control[kind]
+                slot = (kind, binding.get("id") if kind == "reviewedStep" else None)
+                effective[slot] = {"operationId": control["operationId"], "sourceSha": control["sourceSha"], kind: binding}
+    if current is not None:
+        for kind in ("reviewedStep", "compositionReview", "registryReview"):
+            if kind not in current:
+                continue
+            binding = current[kind]
+            slot = (kind, binding.get("id") if kind == "reviewedStep" else None)
+            old = effective.get(slot)
+            if old and old[kind] != binding:
+                bound = (receipt.get("reviewedSteps", {}).get(binding["id"]) if kind == "reviewedStep" else receipt.get(kind))
+                if bound:
+                    raise HostFailure("cannot replace a bound migration review")
+                if kind == "reviewedStep":
+                    candidate = receipt_path.parent / "candidate.db"
+                    if os.path.lexists(candidate):
+                        _cohort_database_identity(candidate)
+                        import sqlite3
+                        with sqlite3.connect(f"file:{quote(str(candidate), safe='/')}?mode=ro", uri=True) as database:
+                            if database.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='ikpk_data_migration_history'").fetchone() and database.execute("SELECT 1 FROM ikpk_data_migration_history WHERE step_id=?", (binding["id"],)).fetchone():
+                                raise HostFailure("cannot replace a committed migration review")
+            effective[slot] = {"operationId": current["operationId"], "sourceSha": current["sourceSha"], kind: binding}
+    for (kind, step_id), control in effective.items():
+        binding = control[kind]
+        bound = receipt.get("reviewedSteps", {}).get(step_id) if kind == "reviewedStep" else receipt.get(kind)
+        if bound:
+            hash_key = "expectedReviewFileSha256" if kind == "reviewedStep" else "expectedFileSha256"
+            digest_key = "expectedPlanDigest" if kind == "reviewedStep" else "expectedContractDigest"
+            if bound.get(hash_key) != binding.get(hash_key) or bound.get(digest_key) != binding.get(digest_key):
+                raise HostFailure("submitted migration review differs from durable binding")
+    return list(effective.values())
+
+
+def _admit_inherited_seminar_cohort(config: dict[str, Any], old_cms_root: Path) -> Optional[dict]:
+    manifest_path = HISTORICAL_REGISTRY_DIRECTORY / 'current.json'
+    if not os.path.lexists(manifest_path):
+        return None
+    environment = _historical_registry_environment(require_cohort=True, config=config)
+    manifest_bytes = _cohort_file(manifest_path)
+    manifest = json.loads(manifest_bytes)
+    if manifest.get('cmsRelease') != str(old_cms_root):
+        raise HostFailure('inherited registry does not identify the selected old CMS')
+    receipt_path = old_cms_root.parent / 'receipt.json'
+    receipt_bytes = _cohort_file(receipt_path)
+    if sha256_file_bytes(receipt_bytes) != manifest['receiptSha256']:
+        raise HostFailure('inherited receipt differs from the root-sealed cohort')
+    prior = json.loads(receipt_bytes)
+    if (prior.get('phase') != 'prepared' or prior.get('operationId') != manifest['operationId']
+            or prior.get('sourceCommitSha') != manifest['sourceCommit']
+            or prior.get('registryBinding', {}).get('registrySha256') != manifest['registrySha256']
+            or not isinstance(prior.get('seminarStepHistory'), list) or len(prior['seminarStepHistory']) != 4):
+        raise HostFailure('selected cohort lacks sealed seminar step provenance')
+    return {'manifestPath': str(manifest_path), 'expectedManifestSha256': sha256_file_bytes(manifest_bytes),
+            'receiptPath': str(receipt_path), 'expectedReceiptSha256': manifest['receiptSha256'],
+            'registryPath': environment['CONTENT_HISTORICAL_EXCEPTIONS_FILE']}
+
+
+def _verify_migration_receipt_admission(receipt_path: Path, controls: list[dict], proof: dict, inherited_cohort: Optional[dict] = None) -> None:
+    if not receipt_path.exists():
+        return
+    if receipt_path.is_symlink() or not receipt_path.is_file():
+        raise HostFailure("migration receipt is unsafe")
+    receipt = json.loads(receipt_path.read_text())
+    if receipt.get("inheritedCohort") != inherited_cohort:
+        raise HostFailure("migration receipt inherited cohort differs from root admission")
+    admitted_steps, composition, registry = {}, None, None
+    for control in controls:
+        if "registryReview" in control:
+            supplied = control["registryReview"]
+            approved = json.loads(base64.b64decode(supplied["fileBase64"], validate=True))
+            expected = {"reviewFilePath": str(receipt_path.parent / "reviews" / f"registryReview-{supplied['expectedFileSha256']}.json"), "expectedFileSha256": supplied["expectedFileSha256"]}
+            if registry and registry != (expected, approved):
+                raise HostFailure("journal has conflicting registry admission")
+            registry = (expected, approved)
+        if "reviewedStep" in control:
+            binding = control["reviewedStep"]
+            expected = {"reviewFilePath": str(receipt_path.parent / "reviews" / f"reviewedStep-{binding['expectedReviewFileSha256']}.json"),
+                "expectedReviewFileSha256": binding["expectedReviewFileSha256"], "expectedPlanDigest": binding["expectedPlanDigest"]}
+            if binding["id"] in admitted_steps and admitted_steps[binding["id"]] != expected:
+                raise HostFailure("journal has conflicting migration review admission")
+            admitted_steps[binding["id"]] = expected
+        if "compositionReview" in control:
+            binding = control["compositionReview"]
+            expected = {"reviewFilePath": str(receipt_path.parent / "reviews" / f"compositionReview-{binding['expectedFileSha256']}.json"),
+                "expectedFileSha256": binding["expectedFileSha256"], "expectedContractDigest": binding["expectedContractDigest"]}
+            if composition and composition != expected:
+                raise HostFailure("journal has conflicting composition admission")
+            composition = expected
+    if receipt.get("sourceCommitSha") != proof["sourceSha"]:
+        raise HostFailure("migration receipt source differs from independent admission")
+    for step_id, binding in receipt.get("reviewedSteps", {}).items():
+        if admitted_steps.get(step_id) != binding:
+            raise HostFailure("migration receipt review differs from root journal admission")
+    if receipt.get("registryReview") and (not registry or receipt["registryReview"] != registry[0] or receipt.get("registryBinding") != registry[1]):
+        raise HostFailure("migration receipt registry differs from root journal admission")
+    if receipt.get("compositionReview") and receipt["compositionReview"] != composition:
+        raise HostFailure("migration receipt composition differs from root journal admission")
+    if composition:
+        contract = json.loads(Path(composition["reviewFilePath"]).read_text())
+        if contract.get("proofArtifact") != {"path": str(receipt_path.parents[3] / ".ikpk-seminar-proof.tar.gz"), "sha256": proof["payloadSha256"]} or contract.get("sourceCommitSha") != proof["sourceSha"]:
+            raise HostFailure("composition proof differs from independent source/artifact admission")
+
+
+def _verify_protected_migration_copy(artifact: Path, payload: bytes, dependencies: Path) -> None:
+    """Validate immutable inodes as well as exact admitted bytes on every resume."""
+    _protected_dependency_path(artifact, directory=True)
+    _protected_dependency_path(dependencies, directory=True)
+    archive, members = _cms_tar_members(payload)
+    try:
+        expected_paths = {'node_modules', 'public', 'public/uploads'}
+        for member in members:
+            relative = Path(member.name)
+            expected_paths.add(relative.as_posix())
+            expected_paths.update(parent.as_posix() for parent in relative.parents if str(parent) != '.')
+            target = artifact / relative
+            _protected_dependency_path(target, directory=member.isdir())
+            if member.isfile():
+                with archive.extractfile(member) as source, target.open('rb') as actual:
+                    while True:
+                        block = source.read(1024 * 1024)
+                        if not block:
+                            if actual.read(1):
+                                raise HostFailure('protected migration artifact bytes differ from admission')
+                            break
+                        if actual.read(len(block)) != block:
+                            raise HostFailure('protected migration artifact bytes differ from admission')
+        for path in artifact.rglob('*'):
+            relative = path.relative_to(artifact).as_posix()
+            if relative not in expected_paths:
+                raise HostFailure('protected migration artifact contains unadmitted files')
+            if relative == 'node_modules':
+                if not path.is_symlink() or os.readlink(path) != str(dependencies):
+                    raise HostFailure('protected migration dependency link differs from admission')
+            else:
+                _protected_dependency_path(path, directory=path.is_dir())
+        if not (artifact / 'node_modules').is_symlink():
+            raise HostFailure('protected migration artifact lacks its dependency link')
+        if any((artifact / 'public/uploads').iterdir()):
+            raise HostFailure('protected migration uploads must remain empty')
+    finally:
+        archive.close()
+
+
+def _protected_cms_migration_artifact(config: dict[str, Any], source_root: Path, operation_id: str,
+                                      provenance: Optional[dict[str, Any]], dependencies: Path) -> Path:
+    """Give the closed runner private root-created code, separate from writable DB/reviews."""
+    original = _cms_artifact_path(source_root, operation_id)
+    if config.get('profile', 'staging194') not in ('staging194', 'production-paired'):
+        return original
+    if provenance is None:
+        raise HostFailure('protected migration execution requires trusted CI provenance')
+    evidence = _trusted_cms_artifact(provenance)
+    payload = _cohort_file(source_root / '.ikpk-cms-artifact.tar.gz', maximum=1024 * 1024 * 1024)
+    if sha256_file_bytes(payload) != evidence['payloadSha256']:
+        raise HostFailure('protected migration archive digest differs from trusted provenance')
+    archive, members = _cms_tar_members(payload)
+    try:
+        runner_member = next((member for member in members if member.name == 'scripts/run-data-migrations.mjs'), None)
+        if runner_member is None or not runner_member.isfile():
+            raise HostFailure('admitted CMS archive lacks a migration runner')
+        runner_bytes = archive.extractfile(runner_member).read()
+        if b'ROOT_SEALED_DEPENDENCIES_VERSION = 3' not in runner_bytes:
+            return original
+        source_sha = provenance.get('sourceSha')
+        RehearsalState._validate_identity(operation_id)
+        if not isinstance(source_sha, str) or not SHA_RE.fullmatch(source_sha) or source_root.name != f'{source_sha}-{operation_id}':
+            raise HostFailure('protected migration source/operation identity differs')
+        root = Path(config['releaseRoot']).resolve(strict=True).parent / 'migration-code'
+        _protected_dependency_path(root.parent, directory=True)
+        root.mkdir(mode=0o755, exist_ok=True)
+        _protected_dependency_path(root, directory=True)
+        os.chmod(root, 0o755)
+        _protected_dependency_path(dependencies, directory=True)
+        generation = root / f'{source_sha}-{operation_id}-{evidence["payloadSha256"][:16]}'
+        artifact = generation / 'cms-artifact'
+        identity = {'version': 1, 'sourceSha': source_sha, 'operationId': operation_id,
+                    'payloadSha256': evidence['payloadSha256'], 'dependencies': str(dependencies)}
+        if os.path.lexists(generation):
+            _protected_dependency_path(generation, directory=True)
+            _protected_dependency_path(generation / '.complete', directory=False)
+            if json.loads(_cohort_file(generation / '.complete')) != identity:
+                raise HostFailure('protected migration generation identity differs')
+            _verify_protected_migration_copy(artifact, payload, dependencies)
+            return artifact
+        temporary = Path(tempfile.mkdtemp(prefix='.migration-code-', dir=root))
+        try:
+            copy = temporary / 'cms-artifact'; copy.mkdir(mode=0o700)
+            for member in members:
+                target = copy / member.name
+                if member.isdir():
+                    target.mkdir(mode=0o700, parents=True, exist_ok=True)
+                    continue
+                target.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+                with archive.extractfile(member) as source, target.open('xb') as output:
+                    shutil.copyfileobj(source, output, 1024 * 1024)
+                    os.fchmod(output.fileno(), 0o555 if member.mode & 0o111 else 0o444)
+                    output.flush(); os.fsync(output.fileno())
+            (copy / 'public/uploads').mkdir(mode=0o555, parents=True, exist_ok=True)
+            (copy / 'node_modules').symlink_to(dependencies, target_is_directory=True)
+            _registry_write(temporary / '.complete', (json.dumps(identity, sort_keys=True) + '\n').encode())
+            for directory in sorted((path for path in copy.rglob('*') if path.is_dir() and not path.is_symlink()),
+                                    key=lambda path: len(path.parts), reverse=True) + [copy, temporary]:
+                os.chmod(directory, 0o555)
+                fd = os.open(directory, os.O_RDONLY | getattr(os, 'O_DIRECTORY', 0))
+                try: os.fsync(fd)
+                finally: os.close(fd)
+            _verify_protected_migration_copy(copy, payload, dependencies)
+            os.rename(temporary, generation)
+            fd = os.open(root, os.O_RDONLY | getattr(os, 'O_DIRECTORY', 0))
+            try: os.fsync(fd)
+            finally: os.close(fd)
+        except Exception:
+            if temporary.exists():
+                for path in [temporary, *temporary.rglob('*')]:
+                    if path.is_dir() and not path.is_symlink(): os.chmod(path, 0o700)
+                shutil.rmtree(temporary)
+            raise
+        _verify_protected_migration_copy(artifact, payload, dependencies)
+        return artifact
+    finally:
+        archive.close()
+
+
+def _latest_migration_pause(rows: list[dict]) -> dict:
+    if (len(rows) < 2 or rows[-1].get("record") != "migration-pause-sealed"
+            or rows[-2].get("record") != "migration-attempt-started"
+            or not isinstance(rows[-1].get("attempt"), str)
+            or not re.fullmatch(r"[a-f0-9]{32}", rows[-1]["attempt"])
+            or rows[-1].get("attempt") != rows[-2].get("attempt")):
+        raise HostFailure("migration has no current sealed pause")
+    return rows[-1]
+
+
+@contextmanager
+def _migration_export_lock(root: Path):
+    """Cooperate with the runner's O_EXCL PID lock, including orphaned runners."""
+    directory = _open_directory_without_symlinks(root)
+    name = "candidate.db.migration-lock"
+    token = f"{os.getpid()}:{uuid.uuid4()}\n".encode()
+    fd = None
+    try:
+        try:
+            fd = os.open(name, os.O_CREAT | os.O_EXCL | os.O_RDWR | getattr(os, "O_NOFOLLOW", 0), 0o600, dir_fd=directory)
+        except FileExistsError as error:
+            raise HostFailure("migration runner lock exists; inspect or retry after runner exits") from error
+        if os.write(fd, token) != len(token):
+            raise HostFailure("migration runner lock could not be written")
+        os.fsync(fd)
+        def verify_lock() -> None:
+            try:
+                held = os.fstat(fd)
+                named = os.stat(name, dir_fd=directory, follow_symlinks=False)
+                if ((held.st_dev, held.st_ino, held.st_nlink) != (named.st_dev, named.st_ino, 1)
+                        or os.pread(fd, len(token) + 1, 0) != token):
+                    raise HostFailure("migration runner lock changed during capture")
+            except OSError as error:
+                raise HostFailure("migration runner lock disappeared during capture") from error
+        yield verify_lock
+        verify_lock()
+    finally:
+        if fd is not None:
+            held = os.fstat(fd)
+            try:
+                named = os.stat(name, dir_fd=directory, follow_symlinks=False)
+                if (held.st_dev, held.st_ino) == (named.st_dev, named.st_ino):
+                    os.unlink(name, dir_fd=directory)
+            finally:
+                os.close(fd)
+        os.close(directory)
+
+
+def _capture_migration_source(config: dict[str, Any], receipt: dict) -> dict[str, bytes]:
+    """Capture the runner's exact live source and sidecars, never a SQLite backup."""
+    live = Path(config["cmsDatabase"])
+    if (not live.is_absolute() or str(live) != os.path.normpath(str(live))
+            or receipt.get("sourceDbPath") != str(live)):
+        raise HostFailure("migration receipt source differs from configured database")
+    source_receipt = receipt.get("source")
+    expected = source_receipt.get("sourceFileFingerprint") if isinstance(source_receipt, dict) else None
+    if not isinstance(expected, str) or not SHA256_RE.fullmatch(expected):
+        raise HostFailure("migration receipt has no source file fingerprint")
+    def verify_quiescent() -> None:
+        _verify_fence(config)
+        for unit in config.get("writerUnits", []):
+            status = run(["/usr/bin/systemctl", "is-active", unit], check=False)
+            if status.returncode == 0 or status.stdout.strip() not in ("inactive", "failed"):
+                raise HostFailure("migration source writer unit is not stopped")
+        _assert_no_database_handles(live)
+    verify_quiescent()
+    directory = _open_directory_without_symlinks(live.parent)
+    identities = {}
+    data = {}
+    absent = set()
+    try:
+        for suffix in ("", "-wal", "-shm", "-journal"):
+            name = live.name + suffix
+            try:
+                before = os.stat(name, dir_fd=directory, follow_symlinks=False)
+            except FileNotFoundError:
+                if not suffix:
+                    raise HostFailure("migration source database is missing")
+                absent.add(name)
+                continue
+            if suffix == "-journal":
+                raise HostFailure("migration source has a rollback journal")
+            if not stat.S_ISREG(before.st_mode) or before.st_nlink != 1:
+                raise HostFailure("migration source component is unsafe")
+            fd = os.open(name, os.O_RDONLY | os.O_NONBLOCK | getattr(os, "O_NOFOLLOW", 0), dir_fd=directory)
+            try:
+                opened = os.fstat(fd)
+                if (not stat.S_ISREG(opened.st_mode) or opened.st_nlink != 1
+                        or (opened.st_dev, opened.st_ino) != (before.st_dev, before.st_ino)):
+                    raise HostFailure("migration source changed during open")
+                with os.fdopen(fd, "rb", closefd=False) as source:
+                    payload = source.read()
+                after = os.fstat(fd)
+                named = os.stat(name, dir_fd=directory, follow_symlinks=False)
+                def fields(info):
+                    return (info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns,
+                            info.st_ctime_ns, info.st_nlink, info.st_mode, info.st_uid, info.st_gid)
+                if fields(opened) != fields(after) or fields(after) != fields(named):
+                    raise HostFailure("migration source changed during capture")
+                identities[name] = fields(after)
+                data["source/" + name] = payload
+            finally:
+                os.close(fd)
+        entries = []
+        for name in (live.name, live.name + "-wal"):
+            raw = data.get("source/" + name)
+            entries.append({"file": name, "absent": True} if raw is None else
+                           {"file": name, "sha256": hashlib.sha256(raw).hexdigest()})
+        actual = hashlib.sha256(json.dumps(entries, separators=(",", ":"), ensure_ascii=False).encode()).hexdigest()
+        if actual != expected:
+            raise HostFailure("migration source database or WAL differs from receipt")
+        for name, expected_info in identities.items():
+            info = os.stat(name, dir_fd=directory, follow_symlinks=False)
+            current = (info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns,
+                       info.st_ctime_ns, info.st_nlink, info.st_mode, info.st_uid, info.st_gid)
+            if current != expected_info:
+                raise HostFailure("migration source changed before capture completed")
+        for name in absent:
+            try:
+                os.stat(name, dir_fd=directory, follow_symlinks=False)
+            except FileNotFoundError:
+                continue
+            raise HostFailure("migration source sidecar appeared during capture")
+        check = _open_directory_without_symlinks(live.parent)
+        try:
+            if (os.fstat(check).st_dev, os.fstat(check).st_ino) != (os.fstat(directory).st_dev, os.fstat(directory).st_ino):
+                raise HostFailure("migration source directory changed during capture")
+        finally:
+            os.close(check)
+        verify_quiescent()
+        return data
+    except OSError as error:
+        raise HostFailure("cannot safely capture migration source") from error
+    finally:
+        os.close(directory)
+
+
+def _capture_migration_pause(root: Path, operation_id: str, source_sha: str, *, include_bytes: bool = False, cms_uid: Optional[int] = None, config: Optional[dict] = None) -> dict:
+    """Read only the fixed, receipt-bound private files through pinned directory descriptors."""
+    _assert_no_database_handles(root / "candidate.db")
+    root_fd = _open_directory_without_symlinks(root)
+    snap_fd = None
+    cms_uid = os.getuid() if cms_uid is None else cms_uid
+    try:
+        root_info = os.fstat(root_fd)
+        if root_info.st_uid != cms_uid or stat.S_IMODE(root_info.st_mode) & 0o077:
+            raise HostFailure("migration directory has unsafe owner or mode")
+        for suffix in ("-wal", "-shm", "-journal"):
+            try:
+                os.stat("candidate.db" + suffix, dir_fd=root_fd, follow_symlinks=False)
+            except FileNotFoundError:
+                continue
+            raise HostFailure("migration candidate has a SQLite sidecar")
+        snap_fd = os.open("stage-snapshots", os.O_RDONLY | os.O_DIRECTORY | getattr(os, "O_NOFOLLOW", 0), dir_fd=root_fd)
+        snap_info = os.fstat(snap_fd)
+        if snap_info.st_uid != cms_uid or stat.S_IMODE(snap_info.st_mode) & 0o077:
+            raise HostFailure("snapshot directory has unsafe owner or mode")
+        identities = []
+        def read_regular(directory: int, name: str) -> bytes:
+            before = os.stat(name, dir_fd=directory, follow_symlinks=False)
+            if (not stat.S_ISREG(before.st_mode) or before.st_nlink != 1 or before.st_uid != cms_uid
+                    or stat.S_IMODE(before.st_mode) & 0o077):
+                raise HostFailure("migration file is unsafe")
+            fd = os.open(name, os.O_RDONLY | os.O_NONBLOCK | getattr(os, "O_NOFOLLOW", 0), dir_fd=directory)
+            try:
+                opened = os.fstat(fd)
+                if (not stat.S_ISREG(opened.st_mode) or opened.st_nlink != 1 or opened.st_uid != cms_uid
+                        or stat.S_IMODE(opened.st_mode) & 0o077
+                        or (opened.st_dev, opened.st_ino) != (before.st_dev, before.st_ino)):
+                    raise HostFailure("migration file changed during open")
+                with os.fdopen(fd, "rb", closefd=False) as f:
+                    content = f.read()
+                after = os.fstat(fd)
+                named = os.stat(name, dir_fd=directory, follow_symlinks=False)
+                fields = lambda x: (x.st_dev, x.st_ino, x.st_size, x.st_mtime_ns, x.st_ctime_ns, x.st_nlink, x.st_mode)
+                if fields(opened) != fields(after) or fields(after) != fields(named):
+                    raise HostFailure("migration file changed during capture")
+                identities.append((directory, name, fields(after)))
+                return content
+            finally:
+                os.close(fd)
+        data = {"candidate.db": read_regular(root_fd, "candidate.db"), "receipt.json": read_regular(root_fd, "receipt.json")}
+        try:
+            receipt = json.loads(data["receipt.json"])
+            snapshots = receipt["stageSnapshots"]
+            if (receipt["operationId"] != operation_id or receipt["sourceCommitSha"] != source_sha
+                    or receipt.get("candidateDbPath") != str(root / "candidate.db")
+                    or receipt.get("stageSnapshotDir") != str(root / "stage-snapshots")
+                    or receipt.get("pendingSnapshotStep") or not isinstance(snapshots, dict)):
+                raise ValueError()
+            names = set()
+            for stage, info in snapshots.items():
+                if not isinstance(stage, str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", stage):
+                    raise ValueError()
+                name = f"{operation_id}.{stage}.db"
+                if not isinstance(info, dict) or info.get("path") != str(root / "stage-snapshots" / name):
+                    raise ValueError()
+                names.add(name)
+            if set(os.listdir(snap_fd)) != names:
+                raise ValueError()
+            for name in sorted(names):
+                raw = read_regular(snap_fd, name)
+                data["stage-snapshots/" + name] = raw
+                stage = name[len(operation_id) + 1:-3]
+                fingerprint = hashlib.sha256(json.dumps([hashlib.sha256(raw).hexdigest(), None], separators=(",", ":")).encode()).hexdigest()
+                if snapshots[stage].get("snapshotFingerprint") != fingerprint:
+                    raise HostFailure("stage snapshot fingerprint differs from receipt")
+        except (ValueError, KeyError, TypeError) as error:
+            raise HostFailure("migration receipt or snapshot set is invalid") from error
+        # Verify that every ancestor still resolves to the pinned directories.
+        check_fd = _open_directory_without_symlinks(root)
+        try:
+            if (os.fstat(check_fd).st_dev, os.fstat(check_fd).st_ino) != (os.fstat(root_fd).st_dev, os.fstat(root_fd).st_ino):
+                raise HostFailure("migration directory changed during capture")
+            named = os.stat("stage-snapshots", dir_fd=root_fd, follow_symlinks=False)
+            if (named.st_dev, named.st_ino) != (os.fstat(snap_fd).st_dev, os.fstat(snap_fd).st_ino):
+                raise HostFailure("snapshot directory changed during capture")
+        finally:
+            os.close(check_fd)
+        for suffix in ("-wal", "-shm", "-journal"):
+            try:
+                os.stat("candidate.db" + suffix, dir_fd=root_fd, follow_symlinks=False)
+            except FileNotFoundError:
+                continue
+            raise HostFailure("migration candidate gained a SQLite sidecar")
+        if set(os.listdir(snap_fd)) != names:
+            raise HostFailure("snapshot directory changed during capture")
+        if config is not None:
+            data.update(_capture_migration_source(config, receipt))
+        for directory, name, expected in identities:
+            current = os.stat(name, dir_fd=directory, follow_symlinks=False)
+            actual = (current.st_dev, current.st_ino, current.st_size, current.st_mtime_ns,
+                      current.st_ctime_ns, current.st_nlink, current.st_mode)
+            if actual != expected:
+                raise HostFailure("migration file changed before capture completed")
+        _assert_no_database_handles(root / "candidate.db")
+        result = {"files": {name: hashlib.sha256(raw).hexdigest() for name, raw in data.items()}}
+        if include_bytes:
+            result["bytes"] = data
+        return result
+    except OSError as error:
+        raise HostFailure("cannot securely capture migration pause") from error
+    finally:
+        if snap_fd is not None:
+            os.close(snap_fd)
+        os.close(root_fd)
+
+
 def _install_migrated_database(config: dict[str, Any], source_root: Path, operation_id: str,
-                               old_cms_root: Path) -> tuple[Path, Path, str]:
+                               old_cms_root: Path, *, review_controls: Optional[list[dict]] = None,
+                               provenance: Optional[dict] = None, current_review: Optional[dict] = None,
+                               inherited_cohort: Optional[dict] = None, inherited_result: Optional[dict] = None) -> tuple[Path, Path, str] | dict:
     live = Path(config["cmsDatabase"]).resolve(strict=True)
-    _source, artifact_dir, dependencies = _validate_prepared_cms_candidate(config, source_root, operation_id)
+    _source, artifact_dir, dependencies = _validate_prepared_cms_candidate(config, source_root, operation_id, provenance)
     operation_root = artifact_dir.parent
     if operation_root.is_symlink() or not operation_root.is_dir():
         raise HostFailure("prepared CMS migration directory is missing or unsafe")
@@ -3436,14 +4567,57 @@ def _install_migrated_database(config: dict[str, Any], source_root: Path, operat
         raise HostFailure("migration work directory contains a symlink")
     candidate = operation_root / "candidate.db"
     receipt = operation_root / "receipt.json"
-    if any(os.path.lexists(path) for path in (candidate, receipt)):
+    execution_artifact = _protected_cms_migration_artifact(config, source_root, operation_id, provenance, dependencies)
+    reviewed = (execution_artifact / "scripts/verify-seminar-proof-artifact.py").is_file()
+    controls = review_controls or []
+    if reviewed:
+        proof = _verify_seminar_proof(source_root, provenance or {})
+        if os.path.lexists(candidate) != os.path.lexists(receipt):
+            raise HostFailure("CMS migration candidate and receipt must resume together")
+        _verify_migration_receipt_admission(receipt, controls, proof, inherited_cohort)
+    elif any(os.path.lexists(path) for path in (candidate, receipt)):
         raise HostFailure("CMS migration candidate already exists; inspect the operation before retrying")
     _ensure_empty_candidate_upload_directory(config, artifact_dir)
-    runner = artifact_dir / "scripts/run-data-migrations.mjs"
+    runner = execution_artifact / "scripts/run-data-migrations.mjs"
     common = ["--operation-id", operation_id, "--source-db", str(live), "--source-cms-root", str(old_cms_root),
-              "--candidate-db", str(candidate), "--artifact-dir", str(artifact_dir), "--receipt", str(receipt)]
-    _run_as_cms(config, artifact_dir, [config.get("nodeBinary", "/usr/bin/node"), str(runner), "prepare", *common], timeout=3600)
-    status = _run_as_cms(config, artifact_dir, [config.get("nodeBinary", "/usr/bin/node"), str(runner), "status",
+              "--candidate-db", str(candidate), "--artifact-dir", str(execution_artifact), "--receipt", str(receipt)]
+    if reviewed:
+        snapshots = operation_root / "stage-snapshots"
+        _ensure_cms_private_directory(operation_root, user, 'stage-snapshots')
+        common += ["--stage-snapshot-dir", str(snapshots), "--source-commit-sha", proof["sourceSha"]]
+        if inherited_cohort is not None:
+            common += ["--inherited-cohort-b64", base64.b64encode(json.dumps(inherited_cohort, separators=(",", ":")).encode()).decode(),
+                       "--proof-artifact-sha256", proof["payloadSha256"]]
+        if current_review is not None:
+            common += _migration_review_arguments(config, operation_root, operation_id, proof["sourceSha"], current_review)
+    prepared = _run_as_cms(config, execution_artifact, [config.get("nodeBinary", "/usr/bin/node"), str(runner), "prepare", *common], timeout=3600, read_only_path=[execution_artifact, dependencies])
+    if reviewed:
+        _verify_migration_receipt_admission(receipt, controls, proof, inherited_cohort)
+        try:
+            preparation = json.loads(prepared)
+        except ValueError as error:
+            raise HostFailure("migration prepare returned malformed JSON") from error
+        if inherited_cohort is not None and preparation.get("phase") == "prepared":
+            result = preparation.get("inheritedCohortResult")
+            if not isinstance(result, dict) or not isinstance(inherited_result, dict) or result.get("receiptSha256") != sha256_file(receipt):
+                raise HostFailure("inherited cohort runner result does not seal the exact receipt")
+            binding = result.get("binding")
+            prior = json.loads(_cohort_file(Path(inherited_cohort["manifestPath"])))
+            if (not isinstance(binding, dict) or binding.get("operationId") != operation_id
+                    or binding.get("sourceCommit") != proof["sourceSha"]
+                    or binding.get("proofArtifactSha256") != proof["payloadSha256"]
+                    or binding.get("registrySha256") != prior["registrySha256"]
+                    or binding.get("registryPath") != inherited_cohort["registryPath"]
+                    or binding.get("migrationPlanDigest") != sha256_file(execution_artifact / "database/migrations/plan.json")
+                    or binding.get("candidateDatabaseSha256") != sha256_file(candidate)):
+                raise HostFailure("inherited cohort runner binding differs from root admission")
+            inherited_result.update({"binding": binding, "receiptSha256": result["receiptSha256"],
+                "receiptPath": str(receipt), "registryPath": inherited_cohort["registryPath"]})
+        if (preparation.get("waitingForReview") or preparation.get("waitingForCompositionReview")
+                or preparation.get("waitingForRegistryBinding") or preparation.get("pausedAfterStage")):
+            return {"migrationPaused": True, "migration": preparation, "stageSnapshotDir": str(snapshots), "receiptPath": str(receipt),
+                    "proofArtifactPath": str(source_root / ".ikpk-seminar-proof.tar.gz")}
+    status = _run_as_cms(config, execution_artifact, [config.get("nodeBinary", "/usr/bin/node"), str(runner), "status",
         "--operation-id", operation_id, "--candidate-db", str(candidate), "--receipt", str(receipt)], timeout=300)
     try:
         report = json.loads(status)
@@ -3469,7 +4643,10 @@ def _activate_cms(config: dict[str, Any], cms_release: Path, candidate_db: Path,
                   capture: Path, source_root: Optional[Path] = None,
                   source_sha: Optional[str] = None,
                   site_workspace: Optional[Path] = None,
-                  cms_artifact: Optional[dict[str, Any]] = None) -> dict[str, Any]:
+                  cms_artifact: Optional[dict[str, Any]] = None,
+                  state: Optional[RehearsalState] = None, operation_id: Optional[str] = None,
+                  cohort_admission: Optional[dict[str, Any]] = None) -> dict[str, Any]:
+    admitted = {}
     if config.get("profile", "staging194") in ("staging194", "production-paired"):
         if source_root is None or cms_artifact is None:
             raise HostFailure("paired CMS activation lacks its journal-bound CI artifact identity")
@@ -3483,8 +4660,30 @@ def _activate_cms(config: dict[str, Any], cms_release: Path, candidate_db: Path,
             allow_runtime_updater=True, cms_uid=pwd.getpwnam(config["cmsUser"]).pw_uid)
     live = Path(config["cmsDatabase"]).resolve(strict=True)
     _assert_no_database_handles(live)
-    _copy_atomic(candidate_db, live)
+    needs_cohort = bool(admitted.get('seminarProofArtifact')) or (source_root is not None and (source_root / 'web/scripts/lib/historical-exceptions.ts').is_file())
+    cohort_intent = None
+    if needs_cohort or cohort_admission is not None:
+        if config.get('profile', 'staging194') not in ('staging194', 'production-paired'):
+            raise HostFailure('historical cohort activation requires the paired host lifecycle')
+        if state is None or operation_id is None or cohort_admission is None or cms_artifact is None:
+            raise HostFailure('historical migration requires independently admitted cohort activation')
+        if admitted.get('seminarProofArtifact', {}).get('payloadSha256') != cohort_admission.get('binding', {}).get('proofArtifactSha256'):
+            raise HostFailure('historical cohort proof differs from admitted CI source')
+        with _verify_candidate_capture(config, source_root, capture, candidate_db, cohort_admission['binding'], admitted) as capture_proof:
+            cohort_intent = _prepare_historical_cohort(config, state, operation_id, source_sha,
+                cms_release, candidate_db, cms_artifact, cohort_admission)
+            if (_candidate_capture_identity(candidate_db, capture_proof['databaseSha256']) != capture_proof['database']
+                    or sha256_file(capture_proof['sealedDatabase']) != capture_proof['databaseSha256']):
+                raise HostFailure('candidate changed after capture verification')
+            _copy_atomic(capture_proof['sealedDatabase'], live)
+            if (sha256_file(live) != capture_proof['databaseSha256']
+                    or _candidate_capture_identity(candidate_db, capture_proof['databaseSha256']) != capture_proof['database']):
+                raise HostFailure('candidate or live database changed during cohort copy; recover before retrying')
+    else:
+        _copy_atomic(candidate_db, live)
     _switch_pointer(Path(config["currentCms"]), cms_release, Path(config["releaseRoot"]))
+    if cohort_intent is not None:
+        _commit_historical_cohort(config, state, cohort_intent)
     if config.get("profile") == "production-paired":
         if source_root is None or source_sha is None or not SHA_RE.fullmatch(source_sha):
             raise HostFailure("paired CMS activation lacks its admitted source workspace")
@@ -3543,6 +4742,588 @@ def _activate_cms(config: dict[str, Any], cms_release: Path, candidate_db: Path,
     return proof
 
 
+# Historical registry is the commit marker of the selected CMS/database cohort.
+HISTORICAL_REGISTRY_DIRECTORY = Path('/etc/ikpk-cms/seminar-history')
+
+
+def _cohort_file(path: Path, *, maximum: int = 20 * 1024 * 1024) -> bytes:
+    """Read one canonical, non-aliased file without following a last-minute link."""
+    if not path.is_absolute() or path.resolve(strict=True) != path:
+        raise HostFailure('cohort input path is not canonical')
+    fd = os.open(path, os.O_RDONLY | getattr(os, 'O_NOFOLLOW', 0) | getattr(os, 'O_NONBLOCK', 0))
+    try:
+        info = os.fstat(fd)
+        if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1 or info.st_size > maximum:
+            raise HostFailure('cohort input must be a bounded single-link regular file')
+        with os.fdopen(fd, 'rb', closefd=False) as stream:
+            data = stream.read(maximum + 1)
+        after = os.fstat(fd)
+        if (len(data) > maximum or (info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns)
+                != (after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns)):
+            raise HostFailure('cohort input changed while reading')
+        return data
+    finally:
+        os.close(fd)
+
+
+def _registry_write(path: Path, data: bytes) -> None:
+    # Caller holds the publication lock; parent was checked as root-only writable.
+    fd, temporary = tempfile.mkstemp(prefix=f'.{path.name}.', dir=path.parent)
+    try:
+        with os.fdopen(fd, 'wb') as output:
+            output.write(data)
+            os.fchmod(output.fileno(), 0o444)
+            output.flush()
+            os.fsync(output.fileno())
+        os.replace(temporary, path)
+        directory_fd = os.open(path.parent, os.O_RDONLY | getattr(os, 'O_DIRECTORY', 0))
+        try:
+            os.fsync(directory_fd)
+        finally:
+            os.close(directory_fd)
+    finally:
+        if os.path.lexists(temporary):
+            os.unlink(temporary)
+
+
+def _cohort_database_identity(path: Path) -> dict[str, Any]:
+    if not path.is_absolute() or path.resolve(strict=True) != path:
+        raise HostFailure('cohort database path is not canonical')
+    info = path.lstat()
+    if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
+        raise HostFailure('cohort database is not a single-link regular file')
+    # Inode binds the selected database across legitimate editorial writes. A
+    # content hash here would invalidate the registry on the first CMS save.
+    return {'path': str(path), 'device': info.st_dev, 'inode': info.st_ino}
+
+
+def _validate_registry_cohort(manifest: dict[str, Any], *, config: Optional[dict[str, Any]] = None) -> None:
+    if (manifest.get('version') != 2 or not isinstance(manifest.get('operationId'), str)
+            or any(not SHA256_RE.fullmatch(str(manifest.get(key, ''))) for key in
+                   ('candidateDatabaseSha256', 'receiptSha256', 'cmsArtifactSha256', 'cmsArtifactPayloadSha256', 'proofArtifactSha256'))
+            or not isinstance(manifest.get('cmsPointer'), str) or not isinstance(manifest.get('cmsRelease'), str)
+            or not isinstance(manifest.get('database'), dict)):
+        raise HostFailure('registry has no sealed CMS/database cohort')
+    RehearsalState._validate_identity(manifest['operationId'])
+    pointer, release = Path(manifest['cmsPointer']), Path(manifest['cmsRelease'])
+    database = manifest['database']
+    if (not pointer.is_absolute() or not release.is_absolute()
+            or str(_current_target(pointer)) != str(release)
+            or not isinstance(database.get('path'), str)
+            or _cohort_database_identity(Path(database['path'])) != database):
+        raise HostFailure('registry does not identify the selected CMS/database cohort')
+    if config is not None and (str(pointer) != config['currentCms'] or database['path'] != str(Path(config['cmsDatabase']).resolve(strict=True))):
+        raise HostFailure('registry cohort differs from configured CMS/database')
+
+
+def _prepare_historical_cohort(config: dict[str, Any], state: RehearsalState, operation_id: str,
+                               source_sha: str, cms_release: Path, candidate_db: Path,
+                               cms_artifact: dict[str, Any], admission: dict[str, Any], *,
+                               trusted_uid: int = 0) -> dict[str, Any]:
+    """Seal independently approved bytes before the first live mutation.
+
+    Admission is produced by the journal-bound review transport, never inferred
+    from the writable runner receipt. It must be supplied again on every retry.
+    The runner must have independently re-audited and bound the reviewed registry.
+    """
+    if any(row.get('record') == 'historical-cohort-intent' for row in state._operation_rows(operation_id)):
+        raise HostFailure('cohort activation already began; recover before retrying')
+    _verify_fence(config)
+    live = Path(config['cmsDatabase']).resolve(strict=True)
+    _assert_no_database_handles(live)
+    _assert_no_database_handles(candidate_db)
+    for path in (live, candidate_db):
+        _cohort_database_identity(path)
+        for suffix in ('-wal', '-shm'):
+            sidecar = Path(str(path) + suffix)
+            if os.path.lexists(sidecar):
+                _cohort_database_identity(sidecar)
+        if any(Path(str(path) + suffix).exists() and Path(str(path) + suffix).stat().st_size
+               for suffix in ('-wal',)):
+            raise HostFailure('cohort database has uncheckpointed WAL')
+    binding = admission.get('binding') if isinstance(admission, dict) else None
+    if not isinstance(binding, dict):
+        raise HostFailure('independent historical cohort admission is required')
+    expected = {'operationId': operation_id, 'sourceCommit': source_sha}
+    if binding.get('version') != 1 or any(binding.get(key) != value for key, value in expected.items()):
+        raise HostFailure('historical cohort admission has a different operation or artifact')
+    for key in ('migrationPlanDigest', 'sourceDatabaseSha256', 'candidateDatabaseSha256',
+                'registrySha256', 'proofArtifactSha256', 'cmsArtifactSha256'):
+        if not SHA256_RE.fullmatch(str(binding.get(key, ''))):
+            raise HostFailure('historical cohort admission digest malformed')
+    receipt_path = Path(admission['receiptPath'])
+    receipt_bytes = _cohort_file(receipt_path)
+    if not SHA256_RE.fullmatch(str(admission.get('receiptSha256', ''))) or sha256_file_bytes(receipt_bytes) != admission['receiptSha256']:
+        raise HostFailure('historical cohort receipt changed after binding')
+    receipt = json.loads(receipt_bytes)
+    if (receipt.get('operationId') != operation_id or receipt.get('phase') != 'prepared'
+            or receipt.get('sourceCommitSha') != source_sha
+            or receipt.get('artifactSha256') != binding['cmsArtifactSha256']
+            or receipt.get('planSha256') != binding['migrationPlanDigest']
+            or receipt.get('source', {}).get('snapshotSha256') != binding['sourceDatabaseSha256']
+            or receipt.get('registryBinding') != binding
+            or receipt.get('candidateDbPath') != str(candidate_db)
+            or receipt.get('sourceDbPath') != str(live)):
+        raise HostFailure('historical cohort receipt does not match independent approval')
+    source_files = []
+    for path in (live, Path(str(live) + '-wal')):
+        source_files.append({'file': path.name, 'sha256': sha256_file(path)}
+                            if os.path.lexists(path) else {'file': path.name, 'absent': True})
+    source_fingerprint = sha256_file_bytes(json.dumps(source_files, separators=(',', ':')).encode())
+    if source_fingerprint != receipt.get('source', {}).get('sourceFileFingerprint'):
+        raise HostFailure('live database or WAL changed after migration preparation')
+    # The exact post-checkpoint baseline is also journal-bound by the backup.
+    backup = _backup_manifest(config, operation_id)
+    if sha256_file(live) != backup.get('postCheckpointLiveSha256'):
+        raise HostFailure('live database changed after the fenced backup')
+    if sha256_file(candidate_db) != binding['candidateDatabaseSha256']:
+        raise HostFailure('candidate database differs from approved registry cohort')
+    registry_bytes = _cohort_file(Path(admission['registryPath']))
+    if sha256_file_bytes(registry_bytes) != binding['registrySha256'] or not isinstance(json.loads(registry_bytes), list):
+        raise HostFailure('historical registry differs from independently approved bytes')
+    directory = HISTORICAL_REGISTRY_DIRECTORY
+    for parent in (directory, *directory.parents):
+        info = parent.lstat()
+        if not stat.S_ISDIR(info.st_mode) or info.st_uid not in (0, trusted_uid) or info.st_mode & 0o022:
+            raise HostFailure('historical registry directory must be root-owned and protected')
+    previous = None
+    if os.path.lexists(directory / 'current.json'):
+        _historical_registry_environment(directory, require_cohort=True, config=config, trusted_uid=trusted_uid)
+        previous = json.loads(_cohort_file(directory / 'current.json'))
+    target = directory / f"registry-{binding['registrySha256']}.json"
+    if os.path.lexists(target):
+        info = target.lstat()
+        if info.st_uid != trusted_uid or info.st_mode & 0o022 or _cohort_file(target) != registry_bytes:
+            raise HostFailure('retained historical registry is unsafe or changed')
+    else:
+        _registry_write(target, registry_bytes)
+    intent = {'version': 1, 'record': 'historical-cohort-intent', 'operationId': operation_id,
+              'sourceSha': source_sha, 'cmsArtifact': cms_artifact,
+              'binding': binding, 'receiptSha256': admission['receiptSha256'],
+              'cmsRelease': str(cms_release), 'previousManifest': previous,
+              'sourceLiveSha256': backup['postCheckpointLiveSha256']}
+    state._append(intent)
+    return intent
+
+
+def _commit_historical_cohort(config: dict[str, Any], state: RehearsalState, intent: dict[str, Any]) -> None:
+    live = Path(config['cmsDatabase']).resolve(strict=True)
+    binding = intent['binding']
+    if (sha256_file(live) != binding['candidateDatabaseSha256']
+            or str(_current_target(Path(config['currentCms']))) != intent['cmsRelease']):
+        raise HostFailure('cohort selection differs from durable activation intent')
+    manifest = {**binding, 'version': 2, 'receiptSha256': intent['receiptSha256'],
+                'cmsPointer': config['currentCms'], 'cmsRelease': intent['cmsRelease'],
+                'cmsArtifactPayloadSha256': intent['cmsArtifact']['payloadSha256'],
+                'database': _cohort_database_identity(live)}
+    _registry_write(HISTORICAL_REGISTRY_DIRECTORY / 'current.json',
+                    (json.dumps(manifest, sort_keys=True, separators=(',', ':')) + '\n').encode())
+    _historical_registry_environment(require_cohort=True, config=config)
+    state._append({'version': 1, 'record': 'historical-cohort-selected',
+                   'operationId': intent['operationId'], 'sourceSha': binding['sourceCommit'], 'manifest': manifest})
+
+
+def _current_historical_manifest(config: dict[str, Any]) -> Optional[dict[str, Any]]:
+    path = HISTORICAL_REGISTRY_DIRECTORY / 'current.json'
+    if not os.path.lexists(path):
+        return None
+    _historical_registry_environment(require_cohort=True, config=config)
+    return json.loads(_cohort_file(path))
+
+
+def _record_historical_recovery_baseline(config: dict[str, Any], state: RehearsalState,
+                                         operation_id: str, old_pair: dict[str, Any]) -> None:
+    rows = state._operation_rows(operation_id)
+    if any(row.get('record') in ('historical-cohort-baseline', 'historical-cohort-restored') for row in rows):
+        return
+    start = next(row for row in rows if row.get('record') == 'start')
+    intent = next((row for row in rows if row.get('record') == 'historical-cohort-intent'), None)
+    if 'historicalRegistryManifest' in old_pair:
+        previous = old_pair['historicalRegistryManifest']
+        if intent is not None and intent['previousManifest'] != previous:
+            raise HostFailure('historical recovery baseline differs from activation intent')
+    elif intent is not None:
+        previous = intent['previousManifest']
+    else:
+        # Compatibility for a pre-upgrade operation: acquire evidence only while
+        # the still-selected old cohort is intact, before replacing its DB.
+        previous = _current_historical_manifest(config)
+    if previous is None and intent is None:
+        return  # A deployment predating historical registries needs no cohort journal.
+    if previous is not None and previous.get('cmsRelease') != old_pair.get('cmsPath'):
+        raise HostFailure('historical recovery baseline belongs to another CMS release')
+    state._append({'version': 1, 'record': 'historical-cohort-baseline',
+                   'operationId': operation_id, 'sourceSha': start['sourceSha'],
+                   'previousManifest': previous})
+
+
+def _restore_historical_cohort(config: dict[str, Any], state: RehearsalState, operation_id: str,
+                               *, verified_database_sha256: Optional[str] = None) -> None:
+    rows = state._operation_rows(operation_id)
+    restored = next((row for row in rows if row.get('record') == 'historical-cohort-restored'), None)
+    manifest_path = HISTORICAL_REGISTRY_DIRECTORY / 'current.json'
+    if restored is not None:
+        # Reopen and terminal retries are identity checks only. Editors may have
+        # changed the DB contents, but no retry may bless a replacement inode.
+        if _cohort_database_identity(Path(config['cmsDatabase']).resolve(strict=True)) != restored['database']:
+            raise HostFailure('restored historical cohort database identity changed')
+        current = _current_historical_manifest(config)
+        if current != restored['manifest']:
+            raise HostFailure('restored historical cohort manifest changed')
+        return
+    baseline = next((row for row in rows if row.get('record') == 'historical-cohort-baseline'), None)
+    intent = next((row for row in rows if row.get('record') == 'historical-cohort-intent'), None)
+    if any(row.get('record') == 'recovered' for row in rows):
+        # Compatibility for old terminal rows: validate, never rebind. If a
+        # prior manifest was recorded, its absence is not a valid restored state.
+        current = _current_historical_manifest(config)
+        previous = baseline['previousManifest'] if baseline is not None else intent['previousManifest'] if intent else None
+        if baseline is not None or intent is not None:
+            identity = lambda manifest: None if manifest is None else {k: v for k, v in manifest.items() if k != 'database'}
+            if identity(current) != identity(previous):
+                raise HostFailure('terminal historical cohort differs from its recorded baseline')
+        return
+    if verified_database_sha256 is None:
+        if baseline is not None or intent is not None:
+            raise HostFailure('historical cohort rebind requires a verified database restore')
+        _current_historical_manifest(config)
+        return
+    live = Path(config['cmsDatabase']).resolve(strict=True)
+    if (not SHA256_RE.fullmatch(verified_database_sha256) or sha256_file(live) != verified_database_sha256):
+        raise HostFailure('historical cohort restore database differs from verified backup')
+    if baseline is None:
+        if intent is None and not os.path.lexists(manifest_path):
+            return
+        raise HostFailure('historical recovery baseline was not captured before restore')
+    previous = baseline['previousManifest']
+    if os.path.lexists(manifest_path):
+        current = json.loads(_cohort_file(manifest_path))
+        allowed = {operation_id, previous.get('operationId') if previous else None}
+        if current.get('operationId') not in allowed:
+            raise HostFailure('another historical cohort is selected during recovery')
+    if previous is None:
+        if os.path.lexists(manifest_path):
+            manifest_path.unlink()
+            fd = os.open(manifest_path.parent, os.O_RDONLY | getattr(os, 'O_DIRECTORY', 0))
+            try:
+                os.fsync(fd)
+            finally:
+                os.close(fd)
+        manifest = None
+    else:
+        manifest = {**previous, 'database': _cohort_database_identity(live)}
+        _validate_registry_cohort(manifest, config=config)
+        _registry_write(manifest_path, (json.dumps(manifest, sort_keys=True, separators=(',', ':')) + '\n').encode())
+        _historical_registry_environment(require_cohort=True, config=config)
+    state._append({'version': 1, 'record': 'historical-cohort-restored', 'operationId': operation_id,
+                   'sourceSha': baseline['sourceSha'], 'manifest': manifest,
+                   'database': _cohort_database_identity(live), 'databaseSha256': verified_database_sha256})
+
+
+def _historical_registry_environment(directory: Optional[Path] = None, *,
+                                     trusted_uid: int = 0, require_cohort: bool = False,
+                                     config: Optional[dict[str, Any]] = None) -> dict[str, str]:
+    directory = directory if directory is not None else HISTORICAL_REGISTRY_DIRECTORY
+    if not directory.is_absolute() or str(directory) != os.path.normpath(str(directory)):
+        raise HostFailure('registry directory must be canonical')
+    for parent in (directory, *directory.parents):
+        try:
+            info = parent.lstat()
+        except OSError as error:
+            raise HostFailure('registry manifest directory unavailable') from error
+        if (not stat.S_ISDIR(info.st_mode) or info.st_uid not in (0, trusted_uid)
+                or info.st_mode & 0o022):
+            raise HostFailure('registry directory ownership or mode unsafe')
+
+    def read_trusted(path: Path) -> bytes:
+        try:
+            info = path.lstat()
+            if (not stat.S_ISREG(info.st_mode) or info.st_uid != trusted_uid or info.st_nlink != 1
+                    or info.st_mode & 0o022 or info.st_size > 8 * 1024 * 1024):
+                raise HostFailure('registry file ownership or mode unsafe')
+            fd = os.open(path, os.O_RDONLY | getattr(os, 'O_NOFOLLOW', 0) | getattr(os, 'O_NONBLOCK', 0))
+            try:
+                actual = os.fstat(fd)
+                if (actual.st_dev, actual.st_ino, actual.st_size) != (info.st_dev, info.st_ino, info.st_size):
+                    raise HostFailure('registry file changed while opening')
+                with os.fdopen(fd, 'rb', closefd=False) as stream:
+                    return stream.read(8 * 1024 * 1024 + 1)
+            finally:
+                os.close(fd)
+        except OSError as error:
+            raise HostFailure('registry manifest or file unavailable') from error
+
+    try:
+        manifest_bytes = read_trusted(directory / 'current.json')
+        manifest = json.loads(manifest_bytes)
+    except (ValueError, UnicodeError) as error:
+        raise HostFailure('registry manifest malformed') from error
+    if (not isinstance(manifest, dict) or manifest.get('version') not in (1, 2) or
+            any(not isinstance(manifest.get(k), str) or not re.fullmatch(r'[a-f0-9]{64}', manifest[k])
+                for k in ('registrySha256', 'migrationPlanDigest', 'sourceDatabaseSha256')) or
+            not isinstance(manifest.get('sourceCommit'), str) or not re.fullmatch(r'[a-f0-9]{40}', manifest['sourceCommit'])):
+        raise HostFailure('registry manifest identity malformed')
+    if require_cohort or manifest.get('version') == 2:
+        _validate_registry_cohort(manifest, config=config)
+    digest = manifest['registrySha256']
+    path = directory / f'registry-{digest}.json'
+    payload = read_trusted(path)
+    if hashlib.sha256(payload).hexdigest() != digest:
+        raise HostFailure('registry digest mismatch')
+    try:
+        entries = json.loads(payload)
+    except (ValueError, UnicodeError) as error:
+        raise HostFailure('registry file malformed') from error
+    if not isinstance(entries, list):
+        raise HostFailure('registry file malformed')
+    return {'CONTENT_HISTORICAL_EXCEPTIONS_FILE': str(path), 'CONTENT_HISTORICAL_EXCEPTIONS_SHA256': digest,
+            'IKPK_HISTORICAL_REGISTRY_MANIFEST_SHA256': hashlib.sha256(manifest_bytes).hexdigest()}
+
+
+def _extract_candidate_capture_source(archive_path: Path, expected_sha: str, destination: Path,
+                                      source_sha: Optional[str] = None) -> None:
+    """Extract only the independently pinned archive into new private inodes."""
+    data = _cohort_file(archive_path, maximum=256 * 1024 * 1024)
+    if not SHA256_RE.fullmatch(str(expected_sha or '')) or sha256_file_bytes(data) != expected_sha:
+        raise HostFailure('candidate capture proof archive digest differs from admission')
+    if os.path.lexists(destination):
+        raise HostFailure('candidate capture source destination already exists')
+    try:
+        with tarfile.open(fileobj=io.BytesIO(data), mode='r:*') as archive:
+            if source_sha is not None and archive.pax_headers.get('comment') != source_sha:
+                raise HostFailure('candidate capture proof revision differs from admission')
+            seen = set(); members = archive.getmembers(); size = 0
+            for member in members:
+                relative = Path(member.name)
+                name = relative.as_posix()
+                allowed = (relative.parts and (relative.parts[0] == 'web'
+                    or name.startswith('cms/src/components/') or name in SEMINAR_PROOF_REQUIRED
+                    or (member.isdir() and any(item.startswith(name + '/') for item in SEMINAR_PROOF_REQUIRED))))
+                if (not allowed or relative.is_absolute() or '..' in relative.parts or name in seen
+                        or not (member.isfile() or member.isdir()) or member.size > 20_000_000):
+                    raise HostFailure('candidate capture proof has unsafe archive members')
+                seen.add(name); size += member.size
+                if size > 512_000_000:
+                    raise HostFailure('candidate capture proof exceeds extraction limit')
+            if not SEMINAR_PROOF_REQUIRED.issubset(seen):
+                raise HostFailure('candidate capture proof lacks required inputs')
+            destination.mkdir(mode=0o755)
+            for member in members:
+                target = destination / member.name
+                if member.isdir():
+                    target.mkdir(parents=True, exist_ok=True, mode=0o755)
+                    continue
+                target.parent.mkdir(parents=True, exist_ok=True, mode=0o755)
+                stream = archive.extractfile(member)
+                if stream is None:
+                    raise HostFailure('candidate capture proof member unreadable')
+                with target.open('xb') as output:
+                    shutil.copyfileobj(stream, output)
+                    os.fchmod(output.fileno(), 0o555 if member.mode & 0o111 else 0o444)
+            for directory in [destination, *(p for p in destination.rglob('*') if p.is_dir())]:
+                os.chmod(directory, 0o555)
+    except (tarfile.TarError, OSError) as error:
+        raise HostFailure('candidate capture proof archive could not be extracted') from error
+
+
+def _prepare_capture_web_dependencies(config: dict[str, Any], source_root: Path, seal_root: Path) -> Path:
+    """Install exact admitted web lock under the isolated dependency UID, then seal it."""
+    installer = _dependency_installer_account(config)
+    runtime = _dependency_install_runtime(config)
+    inputs = {name: _cohort_file(source_root / 'web' / name) for name in ('package.json', 'package-lock.json')}
+    outer = seal_root / 'install'; outer.mkdir(mode=0o710)
+    os.chown(outer, 0, installer.pw_gid); os.chmod(outer, 0o710)
+    work = outer / 'work'; work.mkdir(mode=0o700)
+    os.chown(work, installer.pw_uid, installer.pw_gid)
+    try:
+        for name, data in inputs.items():
+            path = work / name; path.write_bytes(data); os.chmod(path, 0o600)
+            os.chown(path, installer.pw_uid, installer.pw_gid)
+        _run_private_dependency_install(work, installer, runtime, ['ci', '--no-audit', '--no-fund'])
+        for name, data in inputs.items():
+            if _cohort_file(work / name) != data:
+                raise HostFailure('capture dependency installer changed admitted package input')
+        destination = seal_root / 'node_modules'
+        _copy_sealed_dependency_tree(work / 'node_modules', destination)
+        return destination
+    finally:
+        shutil.rmtree(outer)
+
+
+def _run_private_candidate_capture(config: dict[str, Any], web: Path, output: Path,
+                                   environment: dict[str, str], args: list[str]) -> None:
+    installer = _dependency_installer_account(config)
+    runtime = _dependency_install_runtime(config)
+    _assert_dependency_installer_idle(installer.pw_uid)
+    unit = f'ikpk-capture-check-{uuid.uuid4().hex}.service'
+    command = ['/usr/bin/systemd-run', '--wait', '--collect', '--pipe', f'--unit={unit}',
+               f'--uid={installer.pw_uid}', f'--gid={installer.pw_gid}', f'--working-directory={web}']
+    properties = ['Type=exec', 'Restart=no', 'RuntimeMaxSec=1770s', 'TimeoutStopSec=15s', 'KillMode=control-group',
+                  'SendSIGKILL=yes', 'NoNewPrivileges=yes', 'CapabilityBoundingSet=', 'ProtectSystem=strict',
+                  'ProtectHome=yes', 'ProtectControlGroups=yes', 'RestrictNamespaces=yes', 'PrivateTmp=yes',
+                  'PrivateDevices=yes', 'RestrictSUIDSGID=yes', 'UMask=0077',
+                  'InaccessiblePaths=-/etc/ikpk -/etc/ikpk-cms', f'ReadWritePaths={output}']
+    command += [f'--property={value}' for value in properties]
+    command += ['/usr/bin/env', '-i', *(f'{key}={value}' for key, value in environment.items()),
+                runtime['nodeBinary'], str(web/'node_modules/.bin/tsx'),
+                str(web/'scripts/capture-content-snapshot.ts'), *args]
+    try:
+        run(command, timeout=1800)
+    finally:
+        run(['/usr/bin/systemctl', 'stop', unit], timeout=30, check=False)
+        _assert_dependency_installer_idle(installer.pw_uid)
+
+
+def _candidate_capture_identity(candidate: Path, expected_sha: str) -> dict[str, Any]:
+    identity = _cohort_database_identity(candidate)
+    for suffix in ('-wal', '-shm'):
+        sidecar = Path(str(candidate) + suffix)
+        if os.path.lexists(sidecar):
+            if sidecar.is_symlink():
+                raise HostFailure('candidate sidecar must not be a symlink')
+            _cohort_database_identity(sidecar)
+            if suffix == '-wal' and sidecar.stat().st_size:
+                raise HostFailure('candidate has pending WAL during capture')
+    if sha256_file(candidate) != expected_sha:
+        raise HostFailure('candidate changed during capture')
+    return identity
+
+
+def _capture_filesystem_type(path: Path) -> str:
+    result = run(['/usr/bin/findmnt', '--noheadings', '--output', 'FSTYPE', '--target', str(path)], timeout=15)
+    return result.stdout.strip()
+
+
+@contextmanager
+def _capture_seal_workspace(config: dict[str, Any], operation_id: str, installer: Any,
+                            capture: Path, *, trusted_uid: int = 0):
+    """Use a private disk-backed, operation-scoped workspace; recover only its own orphan."""
+    if not isinstance(operation_id, str) or not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9._-]{0,127}', operation_id):
+        raise HostFailure('candidate capture operation id is invalid')
+    release = Path(config['releaseRoot'])
+    if not release.is_absolute() or release.resolve(strict=True) != release:
+        raise HostFailure('capture release root is not canonical')
+    parent = release.parent
+    _protected_dependency_path(parent, directory=True, trusted_uid=trusted_uid)
+    if _capture_filesystem_type(parent) not in ('ext4', 'xfs', 'btrfs', 'zfs'):
+        raise HostFailure('candidate capture requires a supported disk filesystem')
+    base = parent / '.ikpk-capture-checks'
+    try:
+        base.mkdir(mode=0o711)
+        os.chmod(base, 0o711)
+    except FileExistsError:
+        pass
+    info = base.lstat()
+    if not stat.S_ISDIR(info.st_mode) or info.st_uid != trusted_uid:
+        raise HostFailure('candidate capture workspace parent is unsafe')
+    if stat.S_IMODE(info.st_mode) == 0o700:
+        os.chmod(base, 0o711)  # Recover interruption between mkdir and chmod.
+    elif stat.S_IMODE(info.st_mode) != 0o711:
+        raise HostFailure('candidate capture workspace parent is unsafe')
+    _protected_dependency_path(base, directory=True, trusted_uid=trusted_uid)
+    if _capture_filesystem_type(base) not in ('ext4', 'xfs', 'btrfs', 'zfs'):
+        raise HostFailure('candidate capture workspace requires a supported disk filesystem')
+    lock_path = base / ('.lock-' + operation_id)
+    lock_fd = os.open(lock_path, os.O_RDWR | os.O_CREAT | getattr(os, 'O_NOFOLLOW', 0), 0o600)
+    try:
+        lock_info = os.fstat(lock_fd)
+        if (not stat.S_ISREG(lock_info.st_mode) or lock_info.st_uid != trusted_uid
+                or lock_info.st_nlink != 1 or stat.S_IMODE(lock_info.st_mode) != 0o600):
+            raise HostFailure('candidate capture workspace lock is unsafe')
+        try:
+            fcntl.flock(lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError as error:
+            raise HostFailure('candidate capture workspace is already in use') from error
+        work = base / operation_id
+        if not shutil.rmtree.avoids_symlink_attacks:
+            raise HostFailure('safe candidate capture workspace cleanup is unavailable')
+        _assert_dependency_installer_idle(installer.pw_uid)
+        if os.path.lexists(work):
+            info = work.lstat()
+            if (not stat.S_ISDIR(info.st_mode) or info.st_uid != trusted_uid
+                    or not (stat.S_IMODE(info.st_mode) == 0o700
+                            or (info.st_gid == installer.pw_gid and stat.S_IMODE(info.st_mode) == 0o710))):
+                raise HostFailure('candidate capture orphan is unsafe; manual recovery required')
+            shutil.rmtree(work)
+        # Two copies of the source media may coexist; the reserve covers the
+        # admitted proof, npm install/cache, sealed web dependencies and metadata.
+        required = 2 * _filesystem_bytes(capture, required=True, strict_tree=True) + 2 * 1024**3
+        if shutil.disk_usage(base).free < required:
+            raise HostFailure(f'candidate capture insufficient free space: need {required} bytes')
+        work.mkdir(mode=0o700)
+        os.chown(work, trusted_uid, installer.pw_gid); os.chmod(work, 0o710)
+        try:
+            yield work
+        finally:
+            _assert_dependency_installer_idle(installer.pw_uid)
+            shutil.rmtree(work)
+    finally:
+        os.close(lock_fd)
+
+
+
+@contextmanager
+def _verify_candidate_capture(config: dict[str, Any], source_root: Path, capture: Path,
+                              candidate: Path, binding: dict[str, Any], provenance: dict[str, Any]) -> dict[str, Any]:
+    """Run admitted capture from root-owned copies against the approved cohort."""
+    expected_db = binding.get('candidateDatabaseSha256')
+    registry = Path(binding.get('registryPath', ''))
+    expected_registry = binding.get('registrySha256')
+    proof = provenance.get('seminarProofArtifact')
+    if (not SHA256_RE.fullmatch(str(expected_db or '')) or not SHA256_RE.fullmatch(str(expected_registry or ''))
+            or not isinstance(proof, dict) or proof.get('payloadSha256') != binding.get('proofArtifactSha256')
+            or proof.get('sourceSha') != binding.get('sourceCommit')):
+        raise HostFailure('candidate capture admission digests malformed or unbound')
+    def checked_inputs():
+        identity = _candidate_capture_identity(candidate, expected_db)
+        if sha256_file(capture / 'database.sqlite') != expected_db:
+            raise HostFailure('capture database differs from candidate')
+        if sha256_file_bytes(_cohort_file(registry)) != expected_registry:
+            raise HostFailure('candidate capture registry changed')
+        return identity, _tree_sha256(capture)
+    before = checked_inputs()
+    # New inodes under a root-owned disk workspace cannot be changed by CMS.
+    installer = _dependency_installer_account(config)
+    with _capture_seal_workspace(config, binding.get('operationId'), installer, capture) as sealed:
+        source = sealed / 'source'
+        _extract_candidate_capture_source(source_root / '.ikpk-seminar-proof.tar.gz',
+                                          proof['payloadSha256'], source, proof['sourceSha'])
+        deps = _prepare_capture_web_dependencies(config, source, sealed)
+        (source / 'web/node_modules').symlink_to(deps, target_is_directory=True)
+        bundle = sealed / 'capture'
+        _copy_sealed_dependency_tree(capture, bundle)
+        registry_copy = sealed / 'registry.json'
+        registry_copy.write_bytes(_cohort_file(registry)); os.chmod(registry_copy, 0o444)
+        if (sha256_file_bytes(_cohort_file(registry_copy)) != expected_registry
+                or _tree_sha256(bundle) != before[1] or sha256_file(bundle / 'database.sqlite') != expected_db):
+            raise HostFailure('sealed candidate inputs differ from admitted originals')
+        manifest = json.loads(_cohort_file(bundle / 'manifest.json'))
+        if (manifest.get('databaseSha256') != expected_db or manifest.get('sourceSha') != binding.get('sourceCommit')
+                or manifest.get('operationId') != binding.get('operationId')):
+            raise HostFailure('candidate capture manifest differs from registry admission')
+        output = sealed / 'output'; output.mkdir(mode=0o700)
+        os.chown(output, installer.pw_uid, installer.pw_gid)
+        web = source / 'web'
+        environment = {'CONTENT_SNAPSHOT_DIR': str(output),
+            'CONTENT_HISTORICAL_EXCEPTIONS_FILE': str(registry_copy),
+            'CONTENT_HISTORICAL_EXCEPTIONS_SHA256': expected_registry}
+        args = ['--server-capture', str(bundle)]
+        if config.get('profile') == 'production-paired':
+            args = ['--server-capture', '--profile', 'production-static', str(bundle)]
+        _run_private_candidate_capture(config, web, output, environment, args)
+        if checked_inputs() != before:
+            raise HostFailure('candidate or sealed capture changed during verification')
+        try:
+            snapshot = json.loads(_cohort_file(output / 'snapshot.json'))
+        except (OSError, ValueError) as error:
+            raise HostFailure('candidate capture did not produce a valid snapshot') from error
+        if snapshot.get('captureProof', {}).get('databaseDigest') != expected_db:
+            raise HostFailure('candidate snapshot proof differs from approved database')
+        yield {'database': before[0], 'databaseSha256': expected_db, 'captureTreeSha256': before[1],
+               'registrySha256': expected_registry, 'proofArtifactSha256': proof['payloadSha256'],
+               'sealedDatabase': bundle / 'database.sqlite'}
+
+
 def _build_static(config: dict[str, Any], source_root: Path, capture: Path,
                   read_only_paths: Optional[list[Path]] = None,
                   chat_loader_src: Optional[str] = None,
@@ -3558,6 +5339,9 @@ def _build_static(config: dict[str, Any], source_root: Path, capture: Path,
     initial_prod = config.get("profile") == "initial-prod"
     production_static = config.get("profile") in ("production-static", "production-paired")
     capture_environment = {"CONTENT_SNAPSHOT_DIR": str(web / ".snapshot")}
+    needs_history = (web / 'scripts/lib/historical-exceptions.ts').is_file()
+    history = _historical_registry_environment(require_cohort=True, config=config) if needs_history else {}
+    capture_environment.update(history)
     if initial_prod:
         capture_environment.update({"INITIAL_PROD_PROFILE": "1", "DEPLOY_MODE": "prod", "PAYMENT_ROLE": "prod",
                                    "PAYMENT_ENDPOINT_PROD": INITIAL_PROD_PAYMENT_ENDPOINT,
@@ -3588,6 +5372,8 @@ def _build_static(config: dict[str, Any], source_root: Path, capture: Path,
         build_environment["CHAT_LOADER_PROFILE"] = "staging194-static-main"
     _run_as_cms(config, web, ["/usr/bin/npm", "run", build_script], timeout=1800,
                 environment=build_environment, read_only_path=read_only_paths)
+    if needs_history and _historical_registry_environment(require_cohort=True, config=config) != history:
+        raise HostFailure('registry changed during capture or build')
     dist = web / dist_name
     if not dist.is_dir() or dist.is_symlink():
         raise HostFailure(f"static build did not produce a real {dist_name} directory")
@@ -3817,7 +5603,12 @@ def _cms_update(config: dict[str, Any], state: RehearsalState, args: argparse.Na
                 raise HostFailure("operation journal host helper identity differs from trusted provenance")
             _validate_prepared_cms_candidate(config, source_root, op, provenance,
                 allow_runtime_updater=phase.get("phase") == "cms-activated")
+    proof_record = next((row.get("proof") for row in state._operation_rows(op) if row.get("record") == "seminar-proof-admitted"), None)
+    if proof_record is not None and proof_record != provenance.get("seminarProofArtifact"):
+        raise HostFailure("seminar proof admission changed or was omitted on resume")
     if phase and phase.get("phase") == "cms-activated":
+        if (source_root / "web/scripts/lib/historical-exceptions.ts").is_file():
+            _historical_registry_environment(require_cohort=True, config=config)
         manifest = _backup_manifest(config, op)
         _verify_fence(config)
         _wait_health(config["cmsHealthUrl"], 1200)
@@ -3848,6 +5639,13 @@ def _cms_update(config: dict[str, Any], state: RehearsalState, args: argparse.Na
         _prepare_cms_candidate(config, source_root, op, provenance)
     else:
         _validate_prepared_cms_candidate(config, source_root, op, provenance)
+    if (_cms_artifact_path(source_root, op) / "scripts/verify-seminar-proof-artifact.py").is_file() and "seminarProofArtifact" not in provenance:
+        raise HostFailure("reviewed seminar migration requires source-admitted proof before writer fencing")
+    if "seminarProofArtifact" in provenance:
+        proof_admission = _verify_seminar_proof(source_root, provenance)
+        previous_proof = next((row.get("proof") for row in state._operation_rows(op) if row.get("record") == "seminar-proof-admitted"), None)
+        if phase and previous_proof != proof_admission:
+            raise HostFailure("seminar proof differs from durable root journal admission")
     site_workspace = (_prepare_paired_site_workspace(config, source_root, sha, op)
                       if config.get("profile") == "production-paired" else None)
     if profile in ("staging194", "production-paired"):
@@ -3866,6 +5664,8 @@ def _cms_update(config: dict[str, Any], state: RehearsalState, args: argparse.Na
         phase = _start_acquisition(config, state, op, sha, cms_artifact=cms_artifact)
     else:
         phase = _start_acquisition(config, state, op, sha)
+    if "seminarProofArtifact" in provenance and not any(row.get("record") == "seminar-proof-admitted" for row in state._operation_rows(op)):
+        state._append({"version": 1, "record": "seminar-proof-admitted", "operationId": op, "sourceSha": sha, "proof": provenance["seminarProofArtifact"]})
     backup_manifest_path = Path(config["backupRoot"]) / op / "manifest.json"
     if not backup_manifest_path.exists():
         _verify_fence(config)
@@ -3883,13 +5683,68 @@ def _cms_update(config: dict[str, Any], state: RehearsalState, args: argparse.Na
     if profile == "staging194":
         _preflight_staging194_source(config, source_root, sha, op)
     old_cms_root = Path(start["oldPair"]["cmsPath"])
-    candidate_db, cms_release, cms_payload_sha = _install_migrated_database(config, source_root, op, old_cms_root)
+    receipt_path = _cms_artifact_path(source_root, op).parent / "receipt.json"
+    submissions = [row["control"] for row in state._operation_rows(op) if row.get("record") in ("migration-review-admitted", "migration-review-submitted")]
+    review_controls = _effective_migration_reviews(submissions, receipt_path)
+    inherited_cohort = _admit_inherited_seminar_cohort(config, old_cms_root) if "seminarProofArtifact" in provenance else None
+    inherited_result = {}
+    control = None
+    review_digest = getattr(args, "migration_review_sha256", None)
+    if review_digest is not None:
+        if not SHA256_RE.fullmatch(review_digest):
+            raise HostFailure("migration review transport digest is invalid")
+        raw = sys.stdin.buffer.read(MIGRATION_REVIEW_TRANSPORT_LIMIT + 1)
+        if len(raw) > MIGRATION_REVIEW_TRANSPORT_LIMIT or hashlib.sha256(raw).hexdigest() != review_digest:
+            raise HostFailure("migration review transport digest mismatch")
+        try:
+            control = json.loads(raw)
+        except ValueError as error:
+            raise HostFailure("migration review transport is not JSON") from error
+        _migration_review_arguments(config, _cms_artifact_path(source_root, op).parent, op, sha, control)
+        if inherited_cohort is not None:
+            raise HostFailure("inherited cohort cannot accept replacement migration reviews")
+        review_controls = _effective_migration_reviews(submissions, receipt_path, control)
+        if control not in submissions:
+            state._append({"version": 1, "record": "migration-review-submitted", "operationId": op, "sourceSha": sha, "control": control})
+    attempt = None
+    if "seminarProofArtifact" in provenance:
+        attempt = uuid.uuid4().hex
+        state._append({"version": 1, "record": "migration-attempt-started", "operationId": op,
+                       "sourceSha": sha, "attempt": attempt})
+    if "seminarProofArtifact" in provenance:
+        migrated = _install_migrated_database(config, source_root, op, old_cms_root, review_controls=review_controls, provenance=provenance, current_review=control, inherited_cohort=inherited_cohort, inherited_result=inherited_result)
+    else:
+        migrated = _install_migrated_database(config, source_root, op, old_cms_root, provenance=provenance)
+    if isinstance(migrated, dict):
+        if attempt is None:
+            raise HostFailure("migration pause lacks an attempt")
+        operation_root = _cms_artifact_path(source_root, op).parent
+        with _migration_export_lock(operation_root) as verify_lock:
+            capture = _capture_migration_pause(operation_root, op, sha, cms_uid=pwd.getpwnam(config["cmsUser"]).pw_uid, config=config)
+            result_path = state.root / f"migration-pause-{attempt}.json"
+            if os.path.lexists(result_path):
+                raise HostFailure("migration pause result already exists")
+            durable_json(result_path, migrated)
+            result_sha = hashlib.sha256((json.dumps(migrated, sort_keys=True, separators=(",", ":")) + "\n").encode()).hexdigest()
+            verify_lock()
+            state._append({"version": 1, "record": "migration-pause-sealed", "operationId": op,
+                           "sourceSha": sha, "attempt": attempt, "files": capture["files"],
+                           "resultSha256": result_sha})
+        return {"operationId": op, "sourceSha": sha, "phase": "fenced", **migrated}
+    candidate_db, cms_release, cms_payload_sha = migrated
     capture = _create_capture_bundle(config, op, sha, source_root, candidate_db)
     if profile in ("staging194", "production-paired"):
         _validate_prepared_cms_candidate(config, source_root, op, provenance,
             allow_runtime_updater=True)
+    cohort_options = ({"state": state, "operation_id": op, "cohort_admission": inherited_result} if inherited_result else {})
+    registry_controls = [item["registryReview"] for item in review_controls if "registryReview" in item]
+    if registry_controls:
+        binding = json.loads(base64.b64decode(registry_controls[-1]["fileBase64"], validate=True))
+        receipt_path = _cms_artifact_path(source_root, op).parent / "receipt.json"
+        cohort_options = {"state": state, "operation_id": op, "cohort_admission": {"binding": binding,
+            "receiptPath": str(receipt_path), "receiptSha256": sha256_file(receipt_path), "registryPath": binding["registryPath"]}}
     proof = _activate_cms(config, cms_release, candidate_db, capture, source_root, sha, site_workspace,
-                          cms_artifact=cms_artifact)
+                          cms_artifact=cms_artifact, **cohort_options)
     _wait_health(config["cmsHealthUrl"], 1200)
     _verify_fence(config)
     state.mark_cms_activated(op)
@@ -5040,6 +6895,13 @@ def _recover(config: dict[str, Any], state: RehearsalState, operation_id: str,
                 and _media_state_sha256(_media_inventory(config)) == expected_media)
 
     def reopen_old_pair() -> bool:
+        _restore_historical_cohort(config, state, operation_id)
+        if str(_current_target(Path(config["currentCms"]))) != old_pair["cmsPath"]:
+            raise HostFailure("old CMS release is not selected during recovery reopen")
+        if not old_pair_content_matches():
+            raise HostFailure("restored CMS and media payload differs from the journaled old pair")
+        if _tree_sha256(_current_target(Path(config["currentStatic"]))) != old_pair["staticTreeSha256"]:
+            raise HostFailure("restored static pointer does not identify the recorded old bytes")
         if config.get("profile") == "production-paired":
             previous_environment = old_pair.get("cmsSourceEnvironment")
             if not isinstance(previous_environment, dict) or set(previous_environment) != set(PAIRED_CMS_ENV_KEYS):
@@ -5053,18 +6915,21 @@ def _recover(config: dict[str, Any], state: RehearsalState, operation_id: str,
         if config.get("profile", "staging194") == "staging194" and staging194_previous_environment is not None:
             _assert_staging194_process_source_env(config, staging194_previous_environment)
         _database_process_proof(_service_pid(config["cmsUnit"]), live)
-        if str(_current_target(Path(config["currentCms"]))) != old_pair["cmsPath"]:
-            raise HostFailure("old CMS release is not selected during recovery reopen")
-        if not old_pair_content_matches():
-            raise HostFailure("restored CMS and media payload differs from the journaled old pair")
-        if _tree_sha256(_current_target(Path(config["currentStatic"]))) != old_pair["staticTreeSha256"]:
-            raise HostFailure("restored static pointer does not identify the recorded old bytes")
         _wait_health(config["siteHealthUrl"], 1200)
         _set_flag(config, False)
         _write_gate(config, False)
         run(["/usr/bin/systemctl", "start", *config["writerUnits"]], timeout=120)
         return all(run(["/usr/bin/systemctl", "is-active", unit], check=False).returncode == 0
                    for unit in [config["cmsUnit"], *config["writerUnits"]])
+
+    def verify_restored_cohort(database_sha: str) -> bool:
+        if (sha256_file(live) != database_sha
+                or str(_current_target(Path(config['currentCms']))) != old_pair['cmsPath']
+                or _tree_sha256(_current_target(Path(config['currentStatic']))) != old_pair['staticTreeSha256']
+                or not old_pair_content_matches()):
+            return False
+        _restore_historical_cohort(config, state, operation_id, verified_database_sha256=database_sha)
+        return True
 
     prepared = next((row for row in state._operation_rows(operation_id)
                      if row.get("record") == "restore-prepared"), None)
@@ -5083,10 +6948,7 @@ def _recover(config: dict[str, Any], state: RehearsalState, operation_id: str,
                 expected_media_sha != prepared.get("mediaStateSha256") or
                 _media_state_sha256(_media_inventory(config)) != expected_media_sha):
             raise HostFailure("restored CMS media bytes or permissions differ from the staged operation backup")
-        state.recover(operation_id, lambda: sha256_file(live) == prepared["databaseSha256"]
-                      and _tree_sha256(_current_target(Path(config["currentStatic"]))) == old_pair["staticTreeSha256"]
-                      and old_pair_content_matches(),
-                      reopen_old_pair)
+        state.recover(operation_id, lambda: verify_restored_cohort(prepared['databaseSha256']), reopen_old_pair)
         return {"operationId": operation_id, "phase": "recovered", "restoredPair": old_pair,
                 "restoreFingerprint": fingerprint}
 
@@ -5094,6 +6956,7 @@ def _recover(config: dict[str, Any], state: RehearsalState, operation_id: str,
         if (prepared.get("databaseSha256") != sha256_file(live) or
                 prepared.get("fingerprint") != expected_fingerprint):
             raise HostFailure("staged restore database bytes changed; refusing retry")
+        _restore_historical_cohort(config, state, operation_id)
         return {"operationId": operation_id, "phase": "restore-staged", "restoredPair": old_pair,
                 "databaseSha256": prepared["databaseSha256"]}
     if already_recovered:
@@ -5102,6 +6965,17 @@ def _recover(config: dict[str, Any], state: RehearsalState, operation_id: str,
         state.recover(operation_id, lambda: False, reopen_old_pair)
         return {"operationId": operation_id, "phase": "recovered", "restoredPair": old_pair}
 
+    cohort_restored = next((row for row in state._operation_rows(operation_id)
+                            if row.get('record') == 'historical-cohort-restored'), None)
+    if (cohort_restored is not None and not stage_only
+            and config.get('profile') != 'production-paired'):
+        _restore_historical_cohort(config, state, operation_id)
+        state.recover(operation_id, lambda: verify_restored_cohort(cohort_restored['databaseSha256']), reopen_old_pair)
+        return {'operationId': operation_id, 'phase': 'recovered', 'restoredPair': old_pair}
+
+    # A production seal can also come from unchanged-pair recovery. Re-enter
+    # that full read-only proof below; imported/prepared restores still require
+    # provenance finalization and cannot take this path.
     if config.get("profile") == "production-paired" and not stage_only:
         imported_backup = Path(config["backupRoot"]) / operation_id / "offhost-backup"
         if prepared or imported_backup.exists():
@@ -5153,7 +7027,8 @@ def _recover(config: dict[str, Any], state: RehearsalState, operation_id: str,
             except (OSError, ValueError, sqlite3.Error, StopIteration):
                 unchanged = False
             if unchanged:
-                state.recover(operation_id, lambda: True, reopen_old_pair)
+                _record_historical_recovery_baseline(config, state, operation_id, old_pair)
+                state.recover(operation_id, lambda: verify_restored_cohort(sha256_file(live)), reopen_old_pair)
                 return {"operationId": operation_id, "phase": "recovered", "restoredPair": old_pair,
                         "dataRestored": False}
     if server_manifest.exists():
@@ -5171,8 +7046,12 @@ def _recover(config: dict[str, Any], state: RehearsalState, operation_id: str,
                 raise HostFailure("old database backup failed SQLite integrity verification")
         finally:
             checked.close()
+        _record_historical_recovery_baseline(config, state, operation_id, old_pair)
         _assert_no_database_handles(live)
-        _copy_atomic(database, live)
+        if cohort_restored is None:
+            _copy_atomic(database, live)
+        elif sha256_file(live) != manifest['databaseSha256']:
+            raise HostFailure('sealed restored historical cohort changed before staging')
         _restore_media(config, backup_dir, manifest)
         _switch_pointer(Path(config["currentCms"]), Path(old_pair["cmsPath"]), Path(config["releaseRoot"]))
         _switch_static_pointer(config, Path(config["currentStatic"]), Path(old_pair["staticPath"]),
@@ -5193,11 +7072,15 @@ def _recover(config: dict[str, Any], state: RehearsalState, operation_id: str,
             raise HostFailure("CMS code changed before backup; restore requires an intact old release")
         if str(_current_target(Path(config["currentStatic"]))) != old_pair["staticPath"]:
             raise HostFailure("static code changed before backup; restore requires the old release")
+        _record_historical_recovery_baseline(config, state, operation_id, old_pair)
         expected_database_sha = sha256_file(live)
     if stage_only:
         if (config.get("profile") != "production-paired" or not server_manifest.exists() or
                 not isinstance(expected_fingerprint, str) or not CONTENT_FINGERPRINT_RE.fullmatch(expected_fingerprint)):
             raise HostFailure("staged restore requires the verified production backup")
+        if (any(row.get('record') == 'historical-cohort-baseline' for row in state._operation_rows(operation_id))
+                and not verify_restored_cohort(expected_database_sha)):
+            raise HostFailure('staged historical cohort restore did not verify')
         state._append({"version": 1, "record": "restore-prepared", "operationId": operation_id,
                        "sourceSha": start["sourceSha"], "databaseSha256": expected_database_sha,
                        "staticTreeSha256": old_pair["staticTreeSha256"], "fingerprint": expected_fingerprint,
@@ -5205,9 +7088,7 @@ def _recover(config: dict[str, Any], state: RehearsalState, operation_id: str,
                        "mediaStateSha256": _media_state_sha256(manifest.get("media", []))})
         return {"operationId": operation_id, "phase": "restore-staged", "restoredPair": old_pair,
                 "databaseSha256": expected_database_sha}
-    state.recover(operation_id, lambda: sha256_file(live) == expected_database_sha
-                  and _tree_sha256(_current_target(Path(config["currentStatic"]))) == old_pair["staticTreeSha256"],
-                  reopen_old_pair)
+    state.recover(operation_id, lambda: verify_restored_cohort(expected_database_sha), reopen_old_pair)
     return {"operationId": operation_id, "phase": "recovered", "restoredPair": old_pair}
 
 
@@ -5272,7 +7153,7 @@ def dispatch(args: argparse.Namespace) -> dict[str, Any]:
             "static-main", "static-main-recover", "export-static-main", "status", "cleanup-site"):
         raise HostFailure("production-static permits only static-main publication and recovery")
     if profile == "production-paired" and args.action not in (
-            "cms-update", "static-publish", "export-backup", "export-static", "recover", "restore",
+            "cms-update", "static-publish", "export-backup", "export-static", "export-migration-pause", "recover", "restore",
             "finalize-recover", "status", "cleanup-site"):
         raise HostFailure("production-paired permits only paired CMS update, static publish, and recovery")
     if profile == "initial-prod" and args.action == "recover":
@@ -5388,6 +7269,11 @@ def dispatch(args: argparse.Namespace) -> dict[str, Any]:
             return {"status": "succeeded", **static_result,
                     "removedCmsReleases": _cleanup_cms_releases(config, state)}
         rows = state._operation_rows(args.operation_id)
+        if (args.action in ("recover", "restore", "static-publish", "finalize-recover")
+                and rows and rows[-1].get("record") == "migration-pause-sealed"):
+            state._append({"version": 1, "record": "migration-pause-invalidated",
+                           "operationId": args.operation_id, "sourceSha": rows[-1]["sourceSha"]})
+            rows = state._operation_rows(args.operation_id)
         static_main_owned = any(row.get("operationKind") == "static-main" for row in rows)
         if static_main_owned and args.action in ("cms-update", "static-publish", "recover", "restore", "finalize-recover"):
             raise HostFailure("static-main operations require static-main-recover; CMS recovery is forbidden")
@@ -5468,6 +7354,44 @@ def dispatch(args: argparse.Namespace) -> dict[str, Any]:
                     else:
                         result.update(cleanup)
             return result
+        if args.action == "export-migration-pause":
+            if profile not in ("staging194", "production-paired"):
+                raise HostFailure("migration pause export is restricted to paired profiles")
+            seal = _latest_migration_pause(rows)
+            if seal.get("sourceSha") != args.source_sha or state.phase(args.operation_id).get("phase") != "fenced":
+                raise HostFailure("migration pause does not match the fenced operation")
+            operation_root = _cms_artifact_path(_candidate_root(config, args.source_sha, args.operation_id), args.operation_id).parent
+            with _migration_export_lock(operation_root) as verify_lock:
+                captured = _capture_migration_pause(operation_root, args.operation_id, args.source_sha, include_bytes=True, cms_uid=pwd.getpwnam(config["cmsUser"]).pw_uid, config=config)
+                if captured["files"] != seal["files"]:
+                    raise HostFailure("migration pause differs from its durable seal")
+                result_path = state.root / f"migration-pause-{seal['attempt']}.json"
+                result_info = result_path.lstat()
+                if (not stat.S_ISREG(result_info.st_mode) or result_info.st_uid != 0 or result_info.st_nlink != 1
+                        or stat.S_IMODE(result_info.st_mode) != 0o600):
+                    raise HostFailure("sealed migration result is unsafe")
+                result_fd = os.open(result_path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+                try:
+                    opened = os.fstat(result_fd)
+                    if (opened.st_dev, opened.st_ino) != (result_info.st_dev, result_info.st_ino):
+                        raise HostFailure("sealed migration result changed during open")
+                    with os.fdopen(result_fd, "rb", closefd=False) as source:
+                        result_data = source.read()
+                    if hashlib.sha256(result_data).hexdigest() != seal["resultSha256"]:
+                        raise HostFailure("sealed migration result changed")
+                finally:
+                    os.close(result_fd)
+                output = io.BytesIO()
+                with tarfile.open(fileobj=output, mode="w") as archive:
+                    manifest = json.dumps({"operationId": args.operation_id, "sourceSha": args.source_sha,
+                        "attempt": seal["attempt"], "resultSha256": seal["resultSha256"],
+                        "files": seal["files"]}, sort_keys=True).encode()
+                    for name, raw in [("manifest.json", manifest), ("result.json", result_data), *sorted(captured["bytes"].items())]:
+                        info = tarfile.TarInfo(name)
+                        info.mode, info.size = 0o600, len(raw)
+                        archive.addfile(info, io.BytesIO(raw))
+                verify_lock()
+                return {"_bytes": output.getvalue()}
         if args.action == "export-backup":
             manifest = _backup_manifest(config, args.operation_id)
             return {"_stream": str(Path(config["backupRoot"]) / args.operation_id / "backup.tar"),
@@ -5541,6 +7465,7 @@ def main(argv: Optional[list[str]] = None, *, publication_lock_fd: Optional[int]
             command.add_argument("--provenance-b64", required=True)
             if name == "cms-update":
                 command.add_argument("--offhost-sha256")
+                command.add_argument("--migration-review-sha256")
                 command.add_argument("--expected-host-helper-identity")
             else:
                 command.add_argument("--browser-digest")
@@ -5549,11 +7474,11 @@ def main(argv: Optional[list[str]] = None, *, publication_lock_fd: Optional[int]
                 command.add_argument("--expected-installed-cms-sha")
         else:
             command.add_argument("--browser-digest")
-    for name in ("export-backup", "export-static", "export-static-main", "recover", "restore",
+    for name in ("export-backup", "export-static", "export-static-main", "export-migration-pause", "recover", "restore",
                  "finalize-recover", "static-main-recover", "status"):
         command = sub.add_parser(name)
         command.add_argument("--operation-id", required=True)
-        if name in ("export-static", "export-static-main"):
+        if name in ("export-static", "export-static-main", "export-migration-pause"):
             command.add_argument("--source-sha", required=True)
         if name in ("recover", "restore"):
             command.add_argument("--backup-sha256")

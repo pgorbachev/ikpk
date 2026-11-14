@@ -198,6 +198,9 @@ function buildRenderedRegistry(data: {
         production: { paths: seminarPaths, count: seminarPaths.length },
         demo: { sameAsProduction: true },
       },
+      ...['seminar-description', 'seminar-audience', 'seminar-learning_plan', 'seminar-learning_mode', 'seminar-recommendations'].map(id => ({
+        id, production: { paths: [], count: 0 }, demo: { sameAsProduction: true },
+      })),
       {
         id: 'teacher-bio',
         production: {

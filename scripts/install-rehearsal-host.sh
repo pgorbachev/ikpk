@@ -165,7 +165,7 @@ while index < len(argv):
 locked_actions = {
     "cms-update", "static-publish", "static-main", "static-main-recover",
     "recover", "restore", "finalize-recover", "cleanup-site",
-    "export-backup", "export-static", "export-static-main",
+    "export-backup", "export-static", "export-static-main", "export-migration-pause",
 }
 lock_mode = fcntl.LOCK_EX | fcntl.LOCK_NB
 if profile == "staging194" and action in locked_actions:

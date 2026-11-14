@@ -44,11 +44,19 @@ function pluralizeRu(value: number, one: string, few: string, many: string): str
 function formatDurationLabel(startAt: string, endAt: string, duration: string | number): string {
   const startDay = calendarDay(startAt);
   const endDay = calendarDay(endAt);
+  const rawDuration = String(duration ?? '').trim();
+  const hoursMatch = rawDuration.match(/^(\d+)(?:\s+час(?:а|ов)?)?$/u);
+  if (rawDuration && !hoursMatch) {
+    const dates = startDay === endDay
+      ? formatCalendarDate(startAt)
+      : `${formatCalendarDate(startAt)} - ${formatCalendarDate(endAt)}`;
+    return `${dates} - ${rawDuration}`;
+  }
   const start = calendarDayDate(startAt);
   const end = calendarDayDate(endAt);
   const diffDays = Math.max(1, Math.round((end.getTime() - start.getTime()) / 86400000) + 1);
   const dayLabel = `${diffDays} ${pluralizeRu(diffDays, 'день', 'дня', 'дней')}`;
-  const hoursValue = Number(duration) || 0;
+  const hoursValue = Number(hoursMatch?.[1]) || 0;
   const hoursLabel = hoursValue > 0 ? `${hoursValue} ${pluralizeRu(hoursValue, 'час', 'часа', 'часов')}` : '-';
 
   if (startDay === endDay) {

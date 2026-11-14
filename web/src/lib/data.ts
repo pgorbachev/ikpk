@@ -1,3 +1,4 @@
+import { resolveSeminar } from './seminar-identity';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { localizeAssetUrls } from './media.js';
@@ -168,7 +169,35 @@ export interface SeminarTeacherRef {
   order?: number;
 }
 
+export interface RegistryFact { name?: string | null; international?: boolean | null; subject?: 'training' | 'document' | null; url?: string | null; basis?: string | null }
+export interface SeminarDocument {
+  document: string;
+  document_type_unspecified?: boolean | null;
+  issuer?: string | null;
+  issuer_unknown?: boolean | null;
+  prior_education?: 'unspecified' | 'none' | 'medical' | 'physical-or-pedagogical' | 'other' | null;
+  prior_education_note?: string | null;
+  outcome?: 'completed' | 'assessment-failed' | 'assessment-not-completed' | 'partially-completed' | 'expelled' | null;
+  completion_scope?: 'unspecified' | 'this-seminar' | 'full-cycle' | 'other-seminar' | 'course' | null;
+  completion_required?: boolean | null;
+  completion_cycle_name?: string | null;
+  completion_after_seminar_number?: number | null;
+  other_seminar_href?: string | null;
+  other_seminar_label?: string | null;
+  signed_by?: 'teacher' | 'unspecified' | null;
+  qualification_topic?: string | null;
+  basis?: string | null;
+  hours_mode?: 'unspecified' | 'actual-completed' | null;
+  hours_may_vary?: boolean | null;
+  regulation_url?: string | null;
+  regulation_issuer?: string | null;
+  document_on_template?: boolean | null;
+  includes_completed_level?: boolean | null;
+  registry?: RegistryFact[] | null;
+}
+
 export interface Seminar {
+  documentId?: string;
   legacy_id: string;
   legacy_url: string;
   name: string;
@@ -179,6 +208,14 @@ export interface Seminar {
   description_html: string;
   description_text: string;
   full_text_html?: string | null;
+  duration?: string | null;
+  audience?: string | null;
+  content_format?: 'legacy' | 'structured' | null;
+  content_section_anchors?: Record<string, string | string[]> | null;
+  documents_state?: 'issued' | 'not-issued' | 'unconfirmed' | null;
+  documents?: SeminarDocument[] | null;
+  training_registries?: RegistryFact[] | null;
+  nmo?: { status?: 'unspecified' | 'possible' | 'awarded' | null; audience?: string | null; awarded_for?: string | null; completion_required?: boolean | null; purpose?: string | null; url?: string | null } | null;
   learning_mode?: string | null;
   learning_plan?: string | null;
   recommendations?: string | null;
@@ -258,7 +295,7 @@ export interface ScheduleEntry {
   id: number;
   status: string;
   name: string;
-  seminar: { id: number; name: string; slug: string };
+  seminar: { id: number; documentId?: string; name: string; slug: string };
   institute: { id: number; name: string; shortname: string };
   startAt: string;
   endAt: string;
@@ -398,7 +435,7 @@ export function getArticle(slug: string): Article | undefined {
 
 let _schedule: ScheduleEntry[] | null = null;
 export function getScheduleEntries(): ScheduleEntry[] {
-  if (!_schedule) _schedule = loadJson<ScheduleEntry[]>('schedule_entries.json').map(normalizeScheduleEntry).map(withSeminarTeachers);
+  if (!_schedule) _schedule = loadJson<ScheduleEntry[]>('schedule_entries.json').map(normalizeScheduleEntry).map(withSeminarDefaults).map(withSeminarTeachers);
   return _schedule;
 }
 
@@ -450,7 +487,7 @@ export function getCourseGroupForSeminar(seminar: Seminar): CourseGroup | undefi
 // Helper: format price
 export function formatPrice(price: number): string {
   // Бесплатность задаётся isFree у проведения, а не нулём в поле цены.
-  if (!Number.isFinite(price) || price <= 0) return 'Стоимость уточняется';
+  if (!Number.isFinite(price) || price <= 0) return 'Цена уточняется';
   return new Intl.NumberFormat('ru-RU').format(price) + ' ₽';
 }
 
@@ -542,18 +579,37 @@ export function normalizeScheduleEntry(raw: ScheduleEntry | Record<string, unkno
   const record = raw as Record<string, unknown>;
   return {
     ...(raw as ScheduleEntry),
-    city: normalizeCity(record.city),
+    city: record.isOnline === true ? { id: 0, name: 'Онлайн' } : normalizeCity(record.city),
     newPrice: finiteNumber(record.newPrice ?? record.price),
   };
 }
 
+export function shortDuration(value: string | null | undefined): string {
+  const duration = String(value ?? '').trim();
+  return /^\d+$/.test(duration) ? `${duration} ч` : duration;
+}
+
+function withSeminarDefaults(entry: ScheduleEntry): ScheduleEntry {
+  if (typeof entry.duration === 'string' && entry.duration.trim()) return entry;
+  const seminar = resolveSeminar(getSeminars(), entry.seminar ?? {});
+  return seminar?.duration ? { ...entry, duration: seminar.duration } : entry;
+}
+
 // Пустая связь проведения сохраняет прежнюю подстановку преподавателей семинара.
 function withSeminarTeachers(entry: ScheduleEntry): ScheduleEntry {
-  if (entry.teachers?.length || !entry.seminar?.slug) return entry;
-  const seminar = getSeminars().find((candidate) => candidate.slug === entry.seminar.slug);
+  if (entry.teachers?.length || !entry.seminar) return entry;
+  const seminar = resolveSeminar(getSeminars(), entry.seminar);
   if (!seminar?.teachers?.length) return entry;
   return {
     ...entry,
     teachers: seminar.teachers.map((teacher) => ({ id: teacher.legacy_id, fullName: teacher.name })),
   };
+}
+
+export function scheduleBelongsToSeminar(entry: ScheduleEntry, seminar: Seminar): boolean {
+  const resolved = resolveSeminar(getSeminars(), entry.seminar ?? {});
+  if (!resolved) return false;
+  if (resolved.documentId || seminar.documentId) return !!resolved.documentId && resolved.documentId === seminar.documentId;
+  return resolved.slug === seminar.slug && resolved.legacy_id === seminar.legacy_id &&
+    resolved.course_group_legacy_id === seminar.course_group_legacy_id;
 }

@@ -3,6 +3,7 @@ import { chmodSync, lstatSync, mkdirSync, readFileSync, readlinkSync, readdirSyn
 import { dirname, isAbsolute, join } from 'node:path';
 import {
   childEnvironment,
+  historicalRegistryEnvironment,
   installedCommit,
   publicationLockPath,
   publishTree,
@@ -84,7 +85,7 @@ function removeBuiltOutput(workspace, name) {
   rmSync(target, { recursive: true });
 }
 
-export async function executeRefresh() {
+export async function executeRefresh({ registryReader = historicalRegistryEnvironment } = {}) {
   const workspace = process.env.IKPK_BUILD_WORKSPACE;
   const webRoot = process.env.IKPK_WEB_ROOT;
   if (!webRoot || !isAbsolute(webRoot)) throw new Error('site root is invalid');
@@ -104,13 +105,15 @@ export async function executeRefresh() {
     const intent = { ...loaded.record };
     delete intent.refreshOperationToken;
     writeState({ ...intent, pid: process.pid, workerPid: process.pid });
-    return executeRefreshUnderLock(workspace, webRoot);
+    return executeRefreshUnderLock(workspace, webRoot, registryReader);
   }, { wait: true });
 }
 
-async function executeRefreshUnderLock(workspace, webRoot) {
+async function executeRefreshUnderLock(workspace, webRoot, registryReader) {
   let result;
   let buildOutputName = null;
+  let historicalRegistry;
+  const historyRequired = process.env.IKPK_CAPTURE_PROFILE === 'staging194' || process.env.INITIAL_PROD_PROFILE === '1';
   result = await runRefresh({
       webRoot,
       pid: process.pid,
@@ -119,6 +122,8 @@ async function executeRefreshUnderLock(workspace, webRoot) {
         ? { ...record, cleanupPending: true, buildArtifactsCleanupPending: true } : record),
       workspaceReady: () => workspaceReady(workspace),
       capture: () => {
+        historicalRegistry = registryReader({ required: historyRequired, requireCohort: historyRequired });
+        const historyEnv = { CONTENT_HISTORICAL_EXCEPTIONS_FILE: '', CONTENT_HISTORICAL_EXCEPTIONS_SHA256: '', ...historicalRegistry };
         const snapshotDir = join(workspace, 'web', '.snapshot');
         mkdirSync(snapshotDir, { recursive: true });
         if (process.env.IKPK_CAPTURE_PROFILE === 'staging194') {
@@ -152,7 +157,7 @@ async function executeRefreshUnderLock(workspace, webRoot) {
               [join(workspace, 'web', 'node_modules', 'tsx', 'dist', 'cli.mjs'),
                 'scripts/capture-content-snapshot.ts', '--server-capture', bundle],
               join(workspace, 'web'),
-              { CONTENT_SNAPSHOT_DIR: snapshotDir, CMS_URL: '', CMS_TOKEN: '', STRAPI_URL: '', STRAPI_API_TOKEN: '' },
+              { CONTENT_SNAPSHOT_DIR: snapshotDir, CMS_URL: '', CMS_TOKEN: '', STRAPI_URL: '', STRAPI_API_TOKEN: '', ...historyEnv },
               true,
             );
           } finally {
@@ -168,6 +173,7 @@ async function executeRefreshUnderLock(workspace, webRoot) {
             CONTENT_SNAPSHOT_DIR: snapshotDir,
             CMS_URL: process.env.CMS_URL || 'http://127.0.0.1:1337',
             CMS_TOKEN: process.env.CMS_TOKEN || '',
+            ...historyEnv,
           },
         );
       },
@@ -175,9 +181,16 @@ async function executeRefreshUnderLock(workspace, webRoot) {
       build: () => {
         const staging194 = process.env.IKPK_CAPTURE_PROFILE === 'staging194';
         const production = process.env.INITIAL_PROD_PROFILE === '1';
+        try {
+          if (JSON.stringify(registryReader({ required: historyRequired, requireCohort: historyRequired })) !== JSON.stringify(historicalRegistry)) return { ok: false, detail: 'historical registry changed after capture' };
+        } catch (error) { return { ok: false, detail: error.message }; }
+        const historyEnv = { CONTENT_HISTORICAL_EXCEPTIONS_FILE: '', CONTENT_HISTORICAL_EXCEPTIONS_SHA256: '', ...historicalRegistry };
         const built = runStep('npm', [ 'run', ...(staging194 ? ['build:demo193'] : ['build']) ],
-          join(workspace, 'web'), siteBuildEnv(workspace, staging194, production), staging194 || production);
+          join(workspace, 'web'), siteBuildEnv(workspace, staging194, production, process.env, historyEnv), staging194 || production);
         if (!built.ok) return built;
+        try {
+          if (JSON.stringify(registryReader({ required: historyRequired, requireCohort: historyRequired })) !== JSON.stringify(historicalRegistry)) return { ok: false, detail: 'historical registry changed during build' };
+        } catch (error) { return { ok: false, detail: error.message }; }
         const commit = installedCommit(webRoot, process.env.IKPK_INSTALLED_COMMIT);
         let snapshotId;
         try {

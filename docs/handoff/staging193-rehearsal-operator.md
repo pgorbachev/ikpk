@@ -67,3 +67,199 @@ Before global commit, recover explicitly with the same ID. If a final backup exi
 Run accepted release A first. Re-measure disk afterward. Do not remove anything until the owner approves an exact path list after readback; retain runtime dependencies, backups, journal, receipts, and logs. Then run pre-commit failure/recovery and release C after a new editor record is written.
 
 The three live acceptance scenarios are first accepted release A, pre-commit failure/recovery, and a second release C that preserves a new editor record and media. The rehearsal does not establish production readiness: TD-56's production journal-writer decision remains open, and production needs a separate admitted `main` SHA and canonical CI run. A01 and A02 are recovered. The standalone CMS build with a 1024 MiB Node heap failed with a V8 heap-limit error; the 1536 MiB CMS probe was stopped after two consecutive health timeouts and systemd timed out stopping its children, so it has no accepted result. The pinned-fixture web profile build passed in 4:43.69 with peak RSS 369420 KiB; this resource probe is not release acceptance.
+
+## Reviewed seminar migration: proof admission and resumable pauses
+
+The seminar migration additionally requires a complete proof source archive from
+`scripts/build-seminar-proof-artifact.sh`. Supply its independently recorded SHA-256:
+
+```sh
+python3 scripts/rehearsal/staging193.py --profile staging194 cms-update \
+  --operation-id <same-id> --source-sha <admitted-40-hex-sha> \
+  --seminar-proof-artifact /absolute/proof.tar.gz --seminar-proof-sha256 <sha256>
+```
+
+The operator still requires the existing canonical source/CI admission. It compares
+all archive members (including executable bits) with `git archive` of that exact
+commit before sending the proof. An archive PAX comment alone grants no authority.
+The host verifies the externally pinned archive bytes and their correspondence to
+the admitted source. The root journal retains the source/artifact identity across
+resumes. Production-paired retains its stable Release and exact-main gates.
+
+The first invocation exports the off-host backup and runs until the next required
+review. A successful pause prints `migrationPaused: true` and the runner's waiting
+reason; the detailed receipt and paths are available through the private export. Writers remain
+fenced and the live database/code pointers remain on the old cohort. Retain the
+same operation ID, source SHA, proof archive and digest on every invocation. A pause
+is not deployment acceptance; explicit recovery remains available with the same ID.
+
+On staging194, export the most recently sealed pause, including the exact source
+database and any WAL/SHM, to a private local directory:
+
+```sh
+python3 scripts/rehearsal/staging193.py --profile staging194 export-migration-pause \
+  --operation-id <same-id> --source-sha <admitted-40-hex-sha> --output-parent /absolute/private-parent
+```
+
+The command creates a new mode-0700 directory containing a mode-0600 archive and
+its SHA-256. It refuses if the latest operation attempt is not sealed and fenced,
+the runner is active, files or their identities changed, or the candidate has SQLite sidecars.
+The export is evidence for independent review, not an approval or a migration plan.
+For a separately authorized production migration, use the same command with
+`--profile production-paired` and that operation's exact ID and source SHA; it
+uses the configured production SSH identity and still requires a fenced pause.
+
+After independently reviewing each stage, create a local JSON manifest and pin its
+file SHA-256 separately. The manifest names the exact operation and source, plus
+one of the following bindings (absolute paths below are local review files):
+
+```json
+{
+  "operationId": "<same-id>",
+  "sourceSha": "<admitted-40-hex-sha>",
+  "reviewedStep": {
+    "id": "<versioned-plan-step-id>",
+    "reviewFilePath": "/absolute/review.json",
+    "expectedReviewFileSha256": "<review-file-sha256>",
+    "expectedPlanDigest": "<independently-reviewed-plan-digest>"
+  }
+}
+```
+
+Resume with both `--migration-review /absolute/manifest.json` and
+`--migration-review-sha256 <manifest-file-sha256>` in addition to the previous
+command's arguments. Review bytes travel on stdin after off-host backup confirmation,
+not in a shell argument. The complete base64-encoded transport is limited to 64 MiB;
+this includes all bindings and JSON overhead, not just the review file. The runner
+also limits individual composition and registry review files to 50,000,000 bytes;
+other per-step limits remain in force. A large or combined submission can still
+exceed the transport limit, so measure the encoded payload and available host
+memory before fencing. Host journal reads and replay may hold multiple copies of
+the control; account for concurrent CMS/Node processes and cgroup limits. Host paths are derived from the operation; review files
+are private and immutable by digest. Prior bindings are checked against the root
+journal, rather than accepted from the writable runner receipt. To stop after a
+specific snapshot, optionally add `"stopAfterStage": "<stage-id>"`; this applies
+only to that invocation. Omitting a new manifest resumes using previously admitted
+reviews without replaying committed data steps.
+
+For composition, replace `reviewedStep` with `compositionReview`, containing
+`reviewFilePath`, `expectedFileSha256`, and `expectedContractDigest`. Its approved
+contract must name the reported remote `proofArtifactPath` and the independently
+admitted proof archive SHA. The runner rechecks stage snapshots, reviewed plans,
+source/artifact identity, ledger, schema, schedule rules, document graphs, content
+render evidence, and proof source bytes. It then pauses for registry cohort binding.
+
+For the final binding, use `registryReview` with `reviewFilePath`,
+`expectedFileSha256`, and `registryFilePath` (the local, explicitly approved registry
+array). The review JSON must contain `version: 1`, `operationId`, `sourceCommit`,
+`migrationPlanDigest` (receipt `planSha256`), `sourceDatabaseSha256` (receipt
+`source.snapshotSha256`), `cmsArtifactSha256` (receipt's logical `artifactSha256`,
+not the compressed CI payload digest), `proofArtifactSha256`,
+`candidateDatabaseSha256` (exact checkpointed candidate file), `registrySha256`,
+and the fixed remote `registryPath`:
+`<receipt-directory>/reviews/registry-<registrySha256>.json`.
+
+Registry bytes do not authorize themselves: the review file and its externally
+supplied SHA authorize their association with this exact candidate. The runner
+repeats the entire composition audit before validating the binding and returning
+`prepared`. The host then supplies the independently journaled binding and exact
+receipt digest to the cohort activation gate. Changed source, candidate, reviews,
+proof bytes, registry or mismatched operation identity fail closed. No registry
+entries are generated or approved automatically by these commands.
+
+### Subsequent deployments and corrected submissions
+
+After the first accepted seminar migration, subsequent paired deployments inherit
+its selected root-owned v2 cohort. Before creating a candidate, the host checks the
+selected CMS/database identity and the previous receipt against the sealed manifest.
+The runner checks all four step IDs/hashes, the entire lineage row, and exact ledger
+rows (including prior results and timestamps). It preserves that history without
+replaying the steps or asking for new migration reviews. The unchanged approved
+registry is bound to the new candidate, plan, source and proof; the ordinary
+source/CI admission, full preservation audit and cohort activation gate still run.
+A modified step, lineage, ledger, registry or previous receipt is a refusal.
+
+First-time seminar composition also requires the legacy classification and documents
+normalization steps to be present with their exact hashes in the original source
+ledger. If they are pending, run their separately audited migration first: the
+seminar composition contract does not authorize additional legacy data changes.
+
+A review transport is journaled as `migration-review-submitted` before execution.
+A rejected submission can be corrected under the same operation only if no durable
+binding or completed step prevents replacement. When a reviewed data step fails,
+the runner releases its tentative binding only after confirming both the absence
+of a completion row and an unchanged full logical database (schema and all rows).
+Committed steps remain immutable, even if someone removes a binding from the
+writable receipt. An interruption with an uncertain outcome requires the original
+submission or explicit recovery.
+
+### Offline schedule and documents review preparation
+
+`cms/scripts/migration-review-cli.mjs` prepares only schedule and document review
+files and audits their exact stage postimages. It does not approve inputs, apply a
+plan, create a migration manifest, or establish stage provenance. Run it in a
+clean checkout with the CMS dependencies installed. First independently identify
+and export the exact **offline, quiescent** stage snapshots and record their file
+SHA-256 values from the operation's trusted evidence. The tool rejects SQLite
+WAL/journal/SHM sidecars and databases whose SQLite header declares WAL mode; do not use it against a live database. Convert a separate exported copy to rollback-journal mode before independently pinning its bytes. A hash check
+cannot guard against a concurrent process changing and restoring bytes.
+
+All input files must be canonical absolute paths, owner-only regular files with
+one link, inside an owner-only canonical directory. The new output directory must
+not exist; its parent must be canonical and owner-only. Outputs contain private
+content even though the terminal shows only counts and hashes. Decisions and
+proposals must already be separately saved, reviewed and pinned: schedule input
+is the decisions object; documents input is the proposals array with independently
+reviewed `reviewedPreimages` for every physical version. The tool never fills in
+preimages or approval fields. Source commit is the exact **tool checkout** HEAD;
+it must be independently verified and tracked migration code and CMS package
+manifests must be unchanged. Separately establish the snapshot's operation and
+admitted source identity from the trusted receipt; a database hash alone cannot
+prove provenance.
+
+```sh
+node cms/scripts/migration-review-cli.mjs prepare schedule \
+  --source /private/stages/schema.db --source-sha256 "$SCHEMA_SHA256" \
+  --input /private/inputs/decisions.json --input-sha256 "$DECISIONS_SHA256" \
+  --source-commit "$TOOL_CHECKOUT_SHA" --output-dir /private/reviews/schedule-new
+node cms/scripts/migration-review-cli.mjs prepare documents \
+  --source /private/stages/schedule.db --source-sha256 "$SCHEDULE_SHA256" \
+  --input /private/inputs/document-proposals.json --input-sha256 "$PROPOSALS_SHA256" \
+  --source-commit "$TOOL_CHECKOUT_SHA" --output-dir /private/reviews/documents-new
+```
+
+The generated review must fit the runner reader limit (20,000,000 bytes for schedule; 50,000,000 bytes for documents), or preparation refuses before creating the directory. The emitted file hash and plan digest identify the generated proposal; they are
+not approvals. Review its complete private contents and record the independently
+approved file hash and plan digest separately. After the separately authorized
+runner creates the next exact stage, verify both hashes and that postimage:
+
+```sh
+node cms/scripts/migration-review-cli.mjs audit schedule \
+  --source /private/stages/schema.db --source-sha256 "$SCHEMA_SHA256" \
+  --candidate /private/stages/schedule.db --candidate-sha256 "$SCHEDULE_SHA256" \
+  --review /private/reviews/schedule-new/review.json --review-sha256 "$APPROVED_REVIEW_SHA256" \
+  --plan-digest "$APPROVED_PLAN_DIGEST" --source-commit "$TOOL_CHECKOUT_SHA"
+node cms/scripts/migration-review-cli.mjs audit documents \
+  --source /private/stages/schedule.db --source-sha256 "$SCHEDULE_SHA256" \
+  --candidate /private/stages/documents.db --candidate-sha256 "$DOCUMENTS_SHA256" \
+  --review /private/reviews/documents-new/review.json --review-sha256 "$APPROVED_REVIEW_SHA256" \
+  --plan-digest "$APPROVED_PLAN_DIGEST" --source-commit "$TOOL_CHECKOUT_SHA"
+```
+
+These audits intentionally allow runner metadata changes and do not validate the
+runner ledger, source-to-stage schema transition or complete composition. They
+are partial evidence, not deployment acceptance. Use `web/scripts/seminar-migration/README.md`
+for the independently reviewed renderer, document receipt and content rehearsal.
+Composition still requires an independently reviewed v1 contract, five distinct
+pinned snapshots, plan and renderer bindings, proof artifact and ledger/schema
+contracts. The authoritative `auditSeminarMigrationComposition` contract and
+checks are in `cms/scripts/audit-seminar-migration-composition.mjs`; submit its
+independently pinned composition review using the operator manifest above. No
+composition review is generated or approved by this CLI. Registry binding and
+the runner's complete composition audit remain mandatory.
+
+Before the writer fence is closed, measure the actual fully serialized review
+transport including its envelope and encoding against the runner/host transport
+limit. Individual JSON or base64 sizes do not prove that the envelope fits. This
+CLI does not construct or measure that transport; an unverified or oversized
+transport is a stop condition.

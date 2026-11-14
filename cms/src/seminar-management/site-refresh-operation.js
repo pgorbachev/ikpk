@@ -1,5 +1,6 @@
 import { constants, cpSync, existsSync, fchmodSync, fstatSync, fsyncSync, ftruncateSync, lstatSync, mkdirSync, openSync, closeSync, readFileSync, readlinkSync, realpathSync, readdirSync, renameSync, symlinkSync, unlinkSync, writeFileSync, writeSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { basename, dirname, isAbsolute, join, normalize } from 'node:path';
 
 export const MESSAGES = {
@@ -480,12 +481,74 @@ export function childEnvironment(source, { includeCmsCredentials = true } = {}) 
 }
 
 /** Окружение `npm run build`. Телеметрия Astro пишет в домашний каталог до проверки отключения. */
-export function siteBuildEnv(workspace, staging194 = false, production = false, source = process.env) {
+export function historicalRegistryEnvironment({ directory = '/etc/ikpk-cms/seminar-history', trustedUid = 0, required = true, requireCohort = false, sourceCommit = process.env.IKPK_INSTALLED_COMMIT, databasePath = process.env.IKPK_CAPTURE_DATABASE } = {}) {
+  if (!isAbsolute(directory) || normalize(directory) !== directory) throw new Error('registry directory is not canonical');
+  let dir = directory;
+  while (true) {
+    let info;
+    try { info = lstatSync(dir); } catch (error) {
+      if (!required && dir === directory && error?.code === 'ENOENT') return {};
+      throw new Error('registry manifest directory is unavailable', { cause: error });
+    }
+    if (!info.isDirectory() || info.isSymbolicLink() || ![0, trustedUid].includes(info.uid) || (info.mode & 0o022)) throw new Error('registry directory ownership or mode is unsafe');
+    const parent = dirname(dir); if (parent === dir) break; dir = parent;
+  }
+  const readTrusted = (file, optional = false) => {
+    let info;
+    try { info = lstatSync(file); } catch (error) {
+      if (optional && error?.code === 'ENOENT') return null;
+      throw new Error('registry manifest or file is unavailable', { cause: error });
+    }
+    if (!info.isFile() || info.isSymbolicLink() || info.nlink !== 1 || info.uid !== trustedUid || (info.mode & 0o022) || info.size > 8 * 1024 * 1024) throw new Error('registry file ownership or mode is unsafe');
+    const fd = openSync(file, constants.O_RDONLY | constants.O_NOFOLLOW);
+    try {
+      const current = fstatSync(fd);
+      if (current.dev !== info.dev || current.ino !== info.ino || current.size !== info.size) throw new Error('registry file changed during open');
+      return readFileSync(fd);
+    } finally { closeSync(fd); }
+  };
+  const raw = readTrusted(join(directory, 'current.json'), !required);
+  if (raw === null) return {};
+  let manifest;
+  try { manifest = JSON.parse(raw.toString('utf8')); } catch { throw new Error('registry manifest is malformed'); }
+  if (!manifest || ![1, 2].includes(manifest.version) || !/^[a-f0-9]{64}$/.test(manifest.registrySha256 || '') ||
+      !/^[a-f0-9]{64}$/.test(manifest.migrationPlanDigest || '') || !/^[a-f0-9]{64}$/.test(manifest.sourceDatabaseSha256 || '') ||
+      !/^[a-f0-9]{40}$/.test(manifest.sourceCommit || '')) throw new Error('registry manifest identity is malformed');
+  if (requireCohort || manifest.version === 2) {
+    if (manifest.version !== 2 || typeof manifest.operationId !== 'string' ||
+        !['candidateDatabaseSha256', 'receiptSha256', 'cmsArtifactSha256', 'cmsArtifactPayloadSha256', 'proofArtifactSha256'].every(key => /^[a-f0-9]{64}$/.test(manifest[key] || '')) ||
+        typeof manifest.cmsPointer !== 'string' || !isAbsolute(manifest.cmsPointer) ||
+        typeof manifest.cmsRelease !== 'string' || !isAbsolute(manifest.cmsRelease) ||
+        !manifest.database || typeof manifest.database.path !== 'string' || !isAbsolute(manifest.database.path)) {
+      throw new Error('registry has no sealed CMS/database cohort');
+    }
+    if (!lstatSync(manifest.cmsPointer).isSymbolicLink() || realpathSync(manifest.cmsPointer) !== manifest.cmsRelease ||
+        realpathSync(manifest.database.path) !== manifest.database.path) throw new Error('registry CMS/database selection differs from the active cohort');
+    const database = lstatSync(manifest.database.path);
+    if (!database.isFile() || database.isSymbolicLink() || database.nlink !== 1 ||
+        database.dev !== manifest.database.device || database.ino !== manifest.database.inode ||
+        (sourceCommit !== undefined && sourceCommit !== manifest.sourceCommit) ||
+        (databasePath !== undefined && realpathSync(databasePath) !== manifest.database.path)) {
+      throw new Error('registry CMS/database identity differs from the active cohort');
+    }
+    if (requireCohort && !/^[a-f0-9]{40}$/.test(sourceCommit || '')) throw new Error('active CMS source identity is missing');
+  }
+  const file = join(directory, `registry-${manifest.registrySha256}.json`);
+  const bytes = readTrusted(file);
+  if (createHash('sha256').update(bytes).digest('hex') !== manifest.registrySha256) throw new Error('registry digest mismatch');
+  try { if (!Array.isArray(JSON.parse(bytes.toString('utf8')))) throw new Error(); }
+  catch { throw new Error('registry file is malformed'); }
+  return { CONTENT_HISTORICAL_EXCEPTIONS_FILE: file, CONTENT_HISTORICAL_EXCEPTIONS_SHA256: manifest.registrySha256,
+    IKPK_HISTORICAL_REGISTRY_MANIFEST_SHA256: createHash('sha256').update(raw).digest('hex') };
+}
+
+export function siteBuildEnv(workspace, staging194 = false, production = false, source = process.env, historicalRegistry = {}) {
   const env = {
     CONTENT_SNAPSHOT_DIR: join(workspace, 'web', '.snapshot'),
     NODE_OPTIONS: '--max-old-space-size=480',
     ASTRO_TELEMETRY_DISABLED: '1',
   };
+  Object.assign(env, historicalRegistry);
   if (staging194) Object.assign(env, {
     DEMO_PROFILE: 'demo193',
     DEMO_SITE_URL: 'https://194.226.99.10',

@@ -23,6 +23,7 @@ test('панель Content Manager включает русские действ�
   // Песочница читает только `config.locales`, поэтому соседний модуль
   // транслируется так же и наружу не отдаётся.
   const require = (id) => {
+    if (id === './components/OccurrenceRelations') return { OccurrenceRelations: () => null };
     const imported = path.join(path.dirname(sourcePath), id);
     const importedPath = fs.existsSync(imported) ? imported : `${imported}.ts`;
     const importedModule = { exports: {} };
@@ -55,7 +56,11 @@ test('панель Content Manager включает русские действ�
   const managerRu = manager.default ?? manager;
   assert.equal(typeof managerRu, 'object');
   assert.ok(Object.keys(managerRu).length > 0);
-  assert.equal(source.includes('addFields'), false);
+  const fields = [];
+  module.exports.default.register({ addFields: (field) => fields.push(field), customFields: { register() {} } });
+  assert.equal(fields.length, 1);
+  assert.equal(fields[0].type, 'relation');
+  assert.equal(typeof fields[0].Component, 'function');
 
   const schedule = JSON.parse(
     fs.readFileSync(

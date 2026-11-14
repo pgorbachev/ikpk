@@ -46,9 +46,10 @@ function pluralizeRu(value: number, one: string, few: string, many: string): str
 function formatDurationLabel(entry: ScheduleEntry): string {
   const raw = String(entry.duration || '').trim();
   if (!raw) return '';
-  if (!/^\d+$/.test(raw)) return raw;
+  const hoursMatch = raw.match(/^(\d+)(?:\s+час(?:а|ов)?)?$/u);
+  if (!hoursMatch) return raw;
 
-  const hours = Number(raw);
+  const hours = Number(hoursMatch[1]);
   const hoursLabel = `${hours} ${pluralizeRu(hours, 'час', 'часа', 'часов')}`;
   const start = calendarDayDate(entry.startAt);
   const end = calendarDayDate(entry.endAt);

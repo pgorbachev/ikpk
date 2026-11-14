@@ -583,6 +583,7 @@ jobs:
           cache-dependency-path: |
             scripts/package-lock.json
             web/package-lock.json
+            cms/package-lock.json
 
       # Some scripts tests exercise the shared web HTML sanitizer. Install its
       # dependencies as well so those tests run with the same parse5 version as
@@ -590,6 +591,10 @@ jobs:
       - name: Install web dependencies used by shared-source tests
         working-directory: .
         run: npm ci --prefix web
+
+      - name: Install CMS dependencies used by migration tests
+        working-directory: .
+        run: npm ci --prefix cms
 
       - name: Install dependencies
         run: npm ci
@@ -600,9 +605,48 @@ jobs:
       - name: Verify manual publication transport
         run: node --test tests/publication-*.test.mjs
 
+      - name: Verify seminar migration and review tools
+        working-directory: .
+        run: >-
+          node --test cms/tests/*.test.mjs
+          scripts/tests/data-migration-runner.test.mjs
+          scripts/tests/documents-migration-writer-red.test.mjs
+          scripts/tests/documents-runner-atomicity.test.mjs
+          scripts/tests/schedule-data-migration-red.test.mjs
+          scripts/tests/schedule-duration-inheritance-red.test.mjs
+          scripts/tests/schedule-runner-atomicity.test.mjs
+          scripts/tests/migration-review-cli.test.mjs
+          scripts/tests/test_seminar_review_builder.mjs
+          web/tests/candidate-history-gate.test.mjs
+
       - name: Verify staging193 rehearsal command and recovery boundaries
         working-directory: .
         run: python3 -m unittest scripts.tests.test_rehearsal_state scripts.tests.test_rehearsal_host scripts.tests.test_rehearsal_install scripts.tests.test_rehearsal_operator scripts.tests.test_host_helper_artifact scripts.tests.test_production_static_release_admission -v
+
+      - name: Verify seminar migration admission and recovery
+        working-directory: .
+        run: >-
+          python3 -m unittest
+          scripts.tests.test_candidate_capture_gate
+          scripts.tests.test_cms_artifact_host_consumer
+          scripts.tests.test_cohort_fifo_regressions
+          scripts.tests.test_historical_cohort
+          scripts.tests.test_historical_cohort_crashes
+          scripts.tests.test_historical_cohort_recovery_regressions
+          scripts.tests.test_historical_registry_delivery
+          scripts.tests.test_extract_migration_pause
+          scripts.tests.test_migration_pause_export
+          scripts.tests.test_large_migration_review_transport
+          scripts.tests.test_operator_review_limit
+          scripts.tests.test_pause_host_to_extractor
+          scripts.tests.test_private_dependency_installer
+          scripts.tests.test_protected_migration_artifact
+          scripts.tests.test_review_transport_race_regression
+          scripts.tests.test_reviewed_migration_admission
+          scripts.tests.test_reviewed_resume_corrections
+          scripts.tests.test_root_sealed_dependencies
+          scripts.tests.test_seminar_proof_artifact
+          scripts.tests.test_unchanged_production_cohort_recovery -v
 
       - name: Classify dependency-only change for scripts test-count
         id: scripts-dependency-scope

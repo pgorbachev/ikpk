@@ -1,5 +1,5 @@
 {
-  "generatedFromSha": "d736c689a9777b77ec13381acf91c4aba3d0e400",
+  "generatedFromSha": "30415627a7f23b049991beea9d8af1dc2d4b946d",
   "selectors": [
     "articles[*].body_html",
     "course_groups[*].description_html",
@@ -21,6 +21,7 @@
     "cms:schedule-entry.additionalText",
     "cms:seminar.description",
     "cms:seminar.full_text",
+    "cms:seminar.audience",
     "cms:seminar.learning_plan",
     "cms:seminar.learning_mode",
     "cms:seminar.recommendations",
@@ -800,6 +801,18 @@
       "attr": "description",
       "entityId": "schedule-entry.description",
       "jsonPath": "cms:schedule-entry.description",
+      "byteLength": 0,
+      "empty": true
+    },
+    {
+      "selectorId": "cms:seminar.audience",
+      "kind": "cms-richtext",
+      "file": "seminars.json",
+      "field": null,
+      "singularName": "seminar",
+      "attr": "audience",
+      "entityId": "seminar.audience",
+      "jsonPath": "cms:seminar.audience",
       "byteLength": 0,
       "empty": true
     },

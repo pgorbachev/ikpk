@@ -107,7 +107,74 @@ def validate_journal_history(rows):
                 refs.update(old)
                 state['baseline'] = True
                 state['old_static_digest'] = row['oldPair'].get('staticTreeSha256')
+            elif record in ('seminar-proof-admitted', 'migration-review-admitted', 'migration-review-submitted') and phase == 'start':
+                if record == 'seminar-proof-admitted':
+                    proof = row.get('proof')
+                    if not isinstance(proof, dict) or proof.get('sourceSha') != sha or not _digest(proof.get('payloadSha256')):
+                        raise ValueError('invalid seminar proof admission')
+                else:
+                    control = row.get('control')
+                    if not isinstance(control, dict) or control.get('operationId') != op or control.get('sourceSha') != sha:
+                        raise ValueError('invalid migration review admission')
+            elif record == 'migration-attempt-started' and phase == 'start':
+                if not isinstance(row.get('attempt'), str) or not re.fullmatch(r'[a-f0-9]{32}', row['attempt']):
+                    raise ValueError('invalid migration attempt')
+                state['migration_attempt'] = row['attempt']
+            elif record == 'migration-pause-sealed' and phase == 'start':
+                files = row.get('files')
+                if (not isinstance(row.get('attempt'), str) or not re.fullmatch(r'[a-f0-9]{32}', row['attempt'])
+                        or row.get('attempt') != state.get('migration_attempt') or not isinstance(files, dict)
+                        or not files or any(not isinstance(k, str) or not _digest(v) for k, v in files.items())
+                        or not _digest(row.get('resultSha256'))):
+                    raise ValueError('invalid migration pause seal')
+                state['migration_attempt'] = None
+            elif record == 'migration-pause-invalidated' and phase == 'start':
+                state['migration_attempt'] = None
+            elif record == 'historical-cohort-baseline' and phase in ('start', 'bundle', 'restoring') and not state.get('cohort_baseline'):
+                previous = row.get('previousManifest')
+                if (previous is not None and (not isinstance(previous, dict) or previous.get('version') != 2
+                        or previous.get('cmsRelease') != state['cms'])):
+                    raise ValueError('invalid historical recovery baseline')
+                if state.get('cohort_intent') and state['cohort_intent'].get('previousManifest') != previous:
+                    raise ValueError('historical baseline differs from activation intent')
+                state['cohort_baseline'] = row
+            elif record == 'historical-cohort-restored' and phase in ('start', 'bundle', 'restoring') and state.get('cohort_baseline') and not state.get('cohort_restored'):
+                previous = state['cohort_baseline']['previousManifest']
+                manifest, database = row.get('manifest'), row.get('database')
+                if (not _digest(row.get('databaseSha256')) or not isinstance(database, dict)
+                        or type(database.get('device')) is not int or database['device'] < 0
+                        or type(database.get('inode')) is not int or database['inode'] <= 0):
+                    raise ValueError('invalid restored historical database identity')
+                _path(database.get('path'))
+                if manifest != (None if previous is None else {**previous, 'database': database}):
+                    raise ValueError('restored historical manifest differs from baseline')
+                state['cohort_restored'] = row
+            elif record == 'historical-cohort-intent' and phase == 'start' and not state.get('cohort_intent'):
+                binding = row.get('binding')
+                if (not isinstance(binding, dict) or binding.get('version') != 1
+                        or binding.get('operationId') != op or binding.get('sourceCommit') != sha
+                        or any(not _digest(binding.get(key)) for key in ('migrationPlanDigest',
+                            'sourceDatabaseSha256', 'candidateDatabaseSha256', 'registrySha256',
+                            'cmsArtifactSha256', 'proofArtifactSha256'))
+                        or not _digest(row.get('receiptSha256'))
+                        or not isinstance(row.get('cmsArtifact'), dict)
+                        or not _digest(row['cmsArtifact'].get('payloadSha256'))):
+                    raise ValueError('invalid historical cohort intent')
+                refs.add(_path(row.get('cmsRelease')))
+                state['cohort_intent'] = row
+            elif record == 'historical-cohort-selected' and phase == 'start' and state.get('cohort_intent') and not state.get('cohort_selected'):
+                intent = state['cohort_intent']
+                manifest = row.get('manifest')
+                if (not isinstance(manifest, dict) or manifest.get('version') != 2
+                        or any(manifest.get(key) != value for key, value in intent['binding'].items() if key != 'version')
+                        or manifest.get('cmsRelease') != intent['cmsRelease']
+                        or manifest.get('receiptSha256') != intent['receiptSha256']
+                        or manifest.get('cmsArtifactPayloadSha256') != intent['cmsArtifact']['payloadSha256']):
+                    raise ValueError('selected historical cohort differs from intent')
+                state['cohort_selected'] = True
             elif record == 'new-bundle' and phase == 'start':
+                if state.get('cohort_intent') and not state.get('cohort_selected'):
+                    raise ValueError('historical cohort was not selected before bundle acceptance')
                 _validate_bundle(row.get('newPair'), sha)
                 state['phase'] = 'bundle'
             elif record == 'restore-prepared' and phase in ('start', 'bundle', 'restoring'):

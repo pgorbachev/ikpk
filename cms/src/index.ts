@@ -13,6 +13,9 @@ import { registerSiteRefresh } from './seminar-management/site-refresh';
 export default {
   register({ strapi }) {
     strapi.customFields.register({ name: 'wall-clock-datetime', type: 'datetime' });
+    strapi.customFields.register({ name: 'occurrence-city', type: 'string' });
+    strapi.customFields.register({ name: 'occurrence-price', type: 'decimal' });
+    strapi.customFields.register({ name: 'occurrence-duration', type: 'string' });
     registerSeminarUid(strapi);
     registerSeminarDocuments(strapi);
     registerUnlinkedEntryList(strapi);

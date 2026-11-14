@@ -254,6 +254,7 @@ describe('гигиена репозитория', () => {
       // vite-плагина Astro, поэтому файл живёт в тех же двух списках, что и остальные
       // тесты с особым предметом.
       ...(await load('vitest.render.config.ts')).include,
+      ...(await load('vitest.migration.config.ts')).include,
       // Docker-провижининг не входит в обязательный прогон GitHub: контейнер
       // там не успевает убраться. Свой конфиг запускается локально.
       ...(await load('vitest.provision.config.ts')).include,

@@ -49,6 +49,18 @@ cp src/lib/demo193-source-empty-fields.json "$OUT/src/lib/demo193-source-empty-f
 # План ссылается только на versioned entrypoints внутри database/migrations/data-steps.
 mkdir -p "$OUT/scripts"
 cp scripts/run-data-migrations.mjs \
+  scripts/seminar-migration-snapshot.mjs \
+  scripts/migrate-schedule-data.mjs \
+  scripts/audit-schedule-business-rules.mjs \
+  scripts/documents-migration-writer.mjs \
+  scripts/content-migration-writer.mjs \
+  scripts/audit-content-migration.mjs \
+  scripts/verify-seminar-proof-artifact.py \
+  scripts/audit-seminar-migration-composition.mjs \
+  scripts/audit-migration-stage-ledger.mjs \
+  scripts/audit-seminar-schema-sync.mjs \
+  scripts/audit-schedule-migration.mjs \
+  scripts/audit-documents-migration.mjs \
   scripts/audit-data-migration.mjs \
   scripts/audit-schema-snapshot.mjs \
   scripts/institute-method-author-classification.mjs \

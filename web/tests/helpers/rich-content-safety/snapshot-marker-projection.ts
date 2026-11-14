@@ -8,6 +8,8 @@ export type SnapshotContent = {
   seminars: {
     slug: string;
     course_group_legacy_id: string;
+    content_format?: string | null;
+    audience?: string | null;
     description_html?: string | null;
     full_text_html?: string | null;
     learning_mode?: string | null;
@@ -40,7 +42,7 @@ function pathsAreUnique(paths: string[], id: string): string[] {
 }
 
 /**
- * The checked-in registry describes the synthetic fixture corpus. These two sinks vary
+ * The checked-in registry describes the synthetic fixture corpus. Seminar and teacher sinks vary
  * with the build snapshot, so project only their exact source-backed routes here. This
  * never reads the built HTML; the inventory gate still checks every route, count and extra
  * marker against the independent rendered output.
@@ -53,6 +55,8 @@ export function projectSnapshotMarkers(sinks: RenderedSink[], content: SnapshotC
   const institutes = uniqueMap(content.institutes, (item) => item.slug, 'institutes');
   const courseGroups = uniqueMap(content.course_groups, (item) => item.legacy_id, 'course_groups');
 
+  const structuredFields = ['description_html', 'audience', 'learning_plan', 'learning_mode', 'recommendations'] as const;
+  const structuredPaths = new Map(structuredFields.map(field => [field, [] as string[]]));
   const seminarPaths = content.seminars.flatMap((seminar) => {
     const bodyParts = [
       seminar.description_html ? stripLegacySeminarTail(seminar.description_html) : '',
@@ -61,13 +65,21 @@ export function projectSnapshotMarkers(sinks: RenderedSink[], content: SnapshotC
       seminar.learning_plan ? `<h2>Учебный план</h2>${seminar.learning_plan}` : '',
       seminar.recommendations ?? '',
     ].filter((html) => html.trim().length > 0);
-    if (bodyParts.length === 0) return [];
+    const fields = seminar.content_format === 'structured'
+      ? structuredFields.filter(field => field === 'description_html' ? Boolean(seminar[field]) : Boolean(seminar[field]?.trim()))
+      : [];
+    if (seminar.content_format === 'structured' ? fields.length === 0 : bodyParts.length === 0) return [];
 
     const group = courseGroups.get(seminar.course_group_legacy_id);
     assert(group, `seminar-body ${seminar.slug}: неизвестная course_group ${seminar.course_group_legacy_id}`);
     const institute = institutes.get(group.institute_legacy_id);
     assert(institute, `seminar-body ${seminar.slug}: неизвестный institute ${group.institute_legacy_id}`);
-    return [`/${institute.slug}/${group.slug}/${seminar.slug}`];
+    const route = `/${institute.slug}/${group.slug}/${seminar.slug}`;
+    if (seminar.content_format === 'structured') {
+      for (const field of fields) structuredPaths.get(field)!.push(route);
+      return [];
+    }
+    return [route];
   });
 
   const teacherPaths = content.teachers.flatMap((teacher) => {
@@ -81,6 +93,10 @@ export function projectSnapshotMarkers(sinks: RenderedSink[], content: SnapshotC
   const replacements = new Map<string, string[]>([
     ['seminar-body', pathsAreUnique(seminarPaths, 'seminar-body')],
     ['teacher-bio', pathsAreUnique(teacherPaths, 'teacher-bio')],
+    ...structuredFields.map(field => {
+      const id = `seminar-${field === 'description_html' ? 'description' : field}`;
+      return [id, pathsAreUnique(structuredPaths.get(field)!, id)] as [string, string[]];
+    }),
   ]);
   for (const id of replacements.keys()) requiredSink(sinks, id);
 

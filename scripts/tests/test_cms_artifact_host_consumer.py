@@ -126,7 +126,7 @@ class CmsArtifactHostConsumerTests(unittest.TestCase):
             with artifact_validation_patches(f)[0], artifact_validation_patches(f)[1], \
                  patch.object(rehearsal_host, "_run_as_cms") as runner:
                 with self.assertRaisesRegex(rehearsal_host.HostFailure, "artifact bytes differ"):
-                    rehearsal_host._install_migrated_database(config, f["source"], f["operationId"], root / "old-cms")
+                    rehearsal_host._install_migrated_database(config, f["source"], f["operationId"], root / "old-cms", provenance=f["provenance"])
             runner.assert_not_called()
             operation_root = f["artifact"].parent
             self.assertFalse((operation_root / "candidate.db").exists())
@@ -138,7 +138,7 @@ class CmsArtifactHostConsumerTests(unittest.TestCase):
             f = prepared_artifact(root, "retry-op")
             (f["artifact"] / "dist/config/database.js").write_bytes(b"corrupt after journal start")
             start = {"record": "start", "cmsArtifact": f["evidence"],
-                     "oldPair": {"cmsPath": str(root / "old-cms")}}
+                     "oldPair": {"cmsPath": str(root / "old-cms"), "cmsSourceEnvironment": {}}}
 
             class State:
                 def phase(self, _operation_id):
@@ -167,7 +167,7 @@ class CmsArtifactHostConsumerTests(unittest.TestCase):
             backup_dir.mkdir(parents=True)
             (backup_dir / "manifest.json").write_text("{}", encoding="utf-8")
             start = {"record": "start", "cmsArtifact": f["evidence"],
-                     "oldPair": {"cmsPath": str(root / "old-cms")}}
+                     "oldPair": {"cmsPath": str(root / "old-cms"), "cmsSourceEnvironment": {}}}
 
             class State:
                 def phase(self, _operation_id):
@@ -178,7 +178,7 @@ class CmsArtifactHostConsumerTests(unittest.TestCase):
                              provenance_b64=base64.b64encode(json.dumps(f["provenance"]).encode()).decode(),
                              archive_sha256=None, offhost_sha256="e" * 64)
 
-            def corrupt_after_migration(*_args):
+            def corrupt_after_migration(*_args, **_kwargs):
                 (f["artifact"] / "dist/config/database.js").write_bytes(b"changed during migration")
                 return root / "candidate.db", f["artifact"], "f" * 64
 
@@ -186,6 +186,7 @@ class CmsArtifactHostConsumerTests(unittest.TestCase):
                  patch.object(rehearsal_host, "_candidate_root", return_value=f["source"]), \
                  patch.object(rehearsal_host, "_start_acquisition", return_value={"phase": "fenced"}), \
                  patch.object(rehearsal_host, "_backup_manifest", return_value={"archiveSha256": "e" * 64}), \
+                 patch.object(rehearsal_host, "_preflight_staging194_source"), \
                  patch.object(rehearsal_host, "_install_migrated_database", side_effect=corrupt_after_migration), \
                  patch.object(rehearsal_host, "_create_capture_bundle", return_value=root / "capture"), \
                  patch.object(rehearsal_host, "_activate_cms") as activate:

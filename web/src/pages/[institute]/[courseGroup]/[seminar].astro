@@ -1,8 +1,10 @@
 ---
+import { scheduleBelongsToSeminar } from '../../../lib/data';
 import { seminarTitleFallback, seminarDescriptionFallback } from '../../../lib/seo-fallback';
 import BaseLayout from '../../../layouts/BaseLayout.astro';
 import Breadcrumbs from '../../../components/Breadcrumbs.astro';
 import SeminarSchedulePanel from '../../../components/seminars/SeminarSchedulePanel.astro';
+import SeminarDocuments from '../../../components/seminars/SeminarDocuments.astro';
 import {
   getInstitutes,
   getCourseGroups,
@@ -46,7 +48,7 @@ const { seminar, courseGroup, institute } = Astro.props as {
 // Dated offers expire at start; the description and route remain available.
 const today = getSeminarBuildNow();
 const schedule = getScheduleEntries().filter(
-  (e) => e.seminar?.slug === seminar.slug && e.status === 'active' && isBeforeStart(e, today)
+  (e) => scheduleBelongsToSeminar(e, seminar) && e.status === 'active' && isBeforeStart(e, today)
 );
 const sortedSchedule = [...schedule].sort(
   (a, b) => calendarDay(a.startAt).localeCompare(calendarDay(b.startAt))
@@ -69,6 +71,7 @@ const scheduleRows = sortedSchedule.map((entry) => ({
     };
   }),
 }));
+const structuredContent = seminar.content_format === 'structured';
 const seminarBodyParts = [
   seminar.description_html ? stripLegacySeminarTail(seminar.description_html) : '',
   seminar.full_text_html ?? '',
@@ -76,9 +79,39 @@ const seminarBodyParts = [
   seminar.learning_plan ? `<h2>Учебный план</h2>${seminar.learning_plan}` : '',
   seminar.recommendations ?? '',
 ].filter((html) => html.trim().length > 0);
-const seminarBodyHtml = seminarBodyParts.length
+const seminarBodyHtml = !structuredContent && seminarBodyParts.length
   ? cleanBodyHtml(seminarBodyParts.join('\n'), Astro.url.pathname)
   : '';
+const cleanSection = (html: string) => cleanBodyHtml(html, { type: 'seminar', id: seminar.slug });
+const sectionKeys = ['audience', 'learning_plan', 'learning_mode', 'documents', 'recommendations'] as const;
+const fallbackId = (key: string) => `seminar-${key.replaceAll('_', '-')}`;
+const anchorMap: Record<string, { id: string; aliases: string[] }> = {};
+if (structuredContent) {
+  const input = seminar.content_section_anchors;
+  const failAnchors = () => { throw new Error(`Некорректные якоря разделов семинара ${seminar.slug}`); };
+  if (input != null && (typeof input !== 'object' || Array.isArray(input))) failAnchors();
+  const used = new Set<string>();
+  for (const [key, value] of Object.entries(input ?? {})) {
+    if (!sectionKeys.includes(key as typeof sectionKeys[number])) failAnchors();
+    const values = typeof value === 'string' ? [value] : value;
+    if (!Array.isArray(values) || !values.length || values.some((v) => typeof v !== 'string' || !/^[A-Za-z0-9_.:-]+$/.test(v))) failAnchors();
+    const legacySections = values.filter((v) => /^section-[1-9]\d*$/.test(v));
+    if (legacySections.length > 1) failAnchors();
+    const id = legacySections[0] || fallbackId(key);
+    for (const v of values) {
+      if (used.has(v) || sectionKeys.some((other) => other !== key && fallbackId(other) === v)) failAnchors();
+      used.add(v);
+    }
+    anchorMap[key] = { id, aliases: values.filter((v) => v !== id) };
+  }
+}
+const sectionId = (key: string) => anchorMap[key]?.id ?? fallbackId(key);
+const sectionAliases = (key: string) => anchorMap[key]?.aliases ?? [];
+const sections = [
+  { key: 'audience', title: 'Для кого подойдёт', html: seminar.audience },
+  { key: 'learning_plan', title: 'Учебный план', html: seminar.learning_plan },
+  { key: 'learning_mode', title: 'Как проходит обучение', html: seminar.learning_mode },
+];
 
 // Описание для схемы: у части семинаров нет ни seo-описания, ни секций (живой
 // API отдаёт их пустыми — таких 5 из 126). Пустое description ломает разметку
@@ -115,19 +148,20 @@ const seminarSchema =
           name: 'ИКПК',
           url: 'https://ikpk.su',
         },
-        location: {
+        location: schedule[0].city?.name && schedule[0].city.name !== 'Онлайн' ? {
           '@type': 'Place',
           name: 'ИКПК',
           address: {
             '@type': 'PostalAddress',
-            addressLocality: 'Санкт-Петербург',
-            addressCountry: 'RU',
+            addressLocality: schedule[0].city.name,
           },
-        },
+        } : undefined,
         startDate: calendarDay(schedule[0].startAt),
         endDate: calendarDay(schedule[0].endAt),
         eventStatus: 'https://schema.org/EventScheduled',
-        eventAttendanceMode: 'https://schema.org/OfflineEventAttendanceMode',
+        eventAttendanceMode: schedule[0].city?.name === 'Онлайн'
+          ? 'https://schema.org/OnlineEventAttendanceMode'
+          : 'https://schema.org/OfflineEventAttendanceMode',
         offers: schedule[0].isFree === true || (Number.isFinite(schedule[0].newPrice) && schedule[0].newPrice > 0) ? {
           '@type': 'Offer',
           url: seminarUrl,
@@ -167,7 +201,24 @@ const seminarSchema =
         <SeminarSchedulePanel rows={scheduleRows} />
 
         <div class="seminar-main">
-          {seminarBodyHtml ? (
+          {structuredContent ? (
+            <div class="seminar-content rich-content">
+              {seminar.description_html && <RichContent html={cleanSection(seminar.description_html)} sinkId="seminar-description" />}
+              {sections.map((section) => section.html?.trim() && (
+                <>
+                  {sectionAliases(section.key).map((id) => <span id={id} aria-hidden="true"></span>)}
+                  <details open id={sectionId(section.key)}><summary>{section.title}</summary><RichContent html={cleanSection(section.html)} sinkId={`seminar-${section.key}`} /></details>
+                </>
+              ))}
+              <SeminarDocuments seminar={seminar} id={sectionId('documents')} aliases={sectionAliases('documents')} />
+              {seminar.recommendations?.trim() && (
+                <>
+                  {sectionAliases('recommendations').map((id) => <span id={id} aria-hidden="true"></span>)}
+                  <details open id={sectionId('recommendations')}><summary>Рекомендации</summary><RichContent html={cleanSection(seminar.recommendations)} sinkId="seminar-recommendations" /></details>
+                </>
+              )}
+            </div>
+          ) : seminarBodyHtml ? (
             <div class="seminar-content rich-content">
               <RichContent html={seminarBodyHtml} sinkId="seminar-body" />
             </div>

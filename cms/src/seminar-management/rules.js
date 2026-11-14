@@ -104,7 +104,7 @@ export function dateOrderError(startAt, endAt) {
   return null;
 }
 
-export function entryPublicationErrors({ seminarId, seminarName, startAt, endAt }) {
+export function entryPublicationErrors({ seminarId, seminarName, startAt, endAt, isFree, price }) {
   const errors = [];
   if (!text(seminarId)) errors.push('Укажите семинар перед публикацией проведения.');
   else if (!text(seminarName)) {
@@ -112,6 +112,12 @@ export function entryPublicationErrors({ seminarId, seminarName, startAt, endAt 
   }
   const dates = dateOrderError(startAt, endAt);
   if (dates) errors.push(dates);
+  if (isFree && (price == null || price === '' || !Number.isFinite(Number(price)) || Number(price) !== 0)) {
+    errors.push('Для бесплатного проведения цена должна быть равна нулю.');
+  }
+  if (!isFree && price != null && price !== '' && (!Number.isFinite(Number(price)) || Number(price) <= 0)) {
+    errors.push('Для платного проведения укажите положительную цену или оставьте её пустой.');
+  }
   return errors;
 }
 
@@ -157,8 +163,8 @@ export function adminLabel(startAt, city) {
  * Если момент не менялся, день подписи не пересчитывается: в `Z` нет зоны редактора.
  * Новый выбор в форме приходит со сдвигом браузера, и день берётся из этой строки.
  */
-export function entryAdminLabel({ startAt, city, existingLabel, existingStartAt }) {
-  const place = text(city) || 'город не указан';
+export function entryAdminLabel({ startAt, city, isOnline, existingLabel, existingStartAt }) {
+  const place = isOnline ? 'Онлайн' : text(city) || 'город не указан';
   if (hasExplicitOffset(startAt)) return `${adminDate(startAt)} · ${place}`;
   if (text(existingLabel) && sameInstant(startAt, existingStartAt)) {
     const datePart = text(existingLabel).split(' · ')[0];

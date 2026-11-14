@@ -28,6 +28,7 @@ from typing import Optional
 ROOT = Path(__file__).resolve().parents[2]
 SHA = re.compile(r"[a-f0-9]{40}\Z")
 OP = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}\Z")
+MIGRATION_REVIEW_TRANSPORT_LIMIT = 64 * 1024 * 1024
 TARGET_HOST = "194.226.99.10"
 TARGET_USER = "root"
 TARGET_OPERATOR_DIR = Path.home() / ".local/share/ikpk-rehearsal/staging194/ssh"
@@ -639,7 +640,92 @@ finally:
         raise Refusal(f"staging194 host helper installation failed: {failure}") from failure
 
 
-def make_archive(sha: str, provenance: dict, *, cms_artifact: Optional[bytes] = None) -> tuple[bytes, str]:
+def _proof_members(payload: bytes) -> dict:
+    """Compare content, names and executable bits, never trust a PAX comment."""
+    result = {}
+    try:
+        with tarfile.open(fileobj=io.BytesIO(payload), mode="r:*") as archive:
+            for member in archive.getmembers():
+                path = PurePosixPath(member.name)
+                if (path.is_absolute() or not path.parts or ".." in path.parts
+                        or path.as_posix() in result or not (member.isfile() or member.isdir())):
+                    raise Refusal("proof artifact contains an unsafe, duplicate or unsupported member")
+                content = archive.extractfile(member).read() if member.isfile() else b""
+                result[path.as_posix()] = ("file" if member.isfile() else "dir", bool(member.mode & 0o111) if member.isfile() else False, hashlib.sha256(content).hexdigest())
+    except (tarfile.TarError, OSError) as error:
+        raise Refusal("proof artifact is not a readable source archive") from error
+    return result
+
+
+def admit_seminar_proof(path: str, digest: str, sha: str, provenance: dict) -> bytes:
+    if not re.fullmatch(r"[a-f0-9]{64}", digest or "") or provenance.get("sourceSha") != sha:
+        raise Refusal("proof artifact requires an independent digest and admitted source SHA")
+    archive_path = Path(path)
+    if archive_path.is_symlink() or not archive_path.is_file():
+        raise Refusal("proof artifact must be a regular non-symlink file")
+    payload = archive_path.read_bytes()
+    if hashlib.sha256(payload).hexdigest() != digest:
+        raise Refusal("proof artifact differs from the independently supplied SHA-256")
+    capture_types = ("institute", "course-group", "seminar", "teacher", "article", "schedule-entry", "news-item", "promotion", "page", "video-playlist")
+    capture_paths = ["web", "cms/src/components", "cms/src/lib/demo193-source-empty-fields.json",
+        "fixtures/content-snapshot/collapsible_panels.json", "fixtures/content-snapshot/url_map.csv",
+        *(f"scripts/lib/{name}.mjs" for name in ("staging193-capture-bundle", "server-capture-sqlite", "seal-staging193-capture")),
+        *(f"cms/src/api/{name}/content-types/{name}/schema.json" for name in capture_types)]
+    expected = capture_bytes(["git", "archive", "--format=tar", sha, *capture_paths])
+    members = _proof_members(payload)
+    if members != _proof_members(expected):
+        raise Refusal("proof artifact contents differ from the exact CI-admitted source commit")
+    required = {"web/package.json", "web/package-lock.json", "web/astro.config.mjs", "web/scripts/seminar-migration/render-audit.ts", "web/scripts/seminar-migration/rehearse.py", "web/tests/seminar-real-migration.migration.test.ts", "web/tests/seminar-separate-fields.migration.test.ts", "fixtures/content-snapshot/collapsible_panels.json"}
+    if not required.issubset(members) or not any(name.startswith("web/src/") for name in members):
+        raise Refusal("proof artifact is missing mandatory render proof sources")
+    provenance["seminarProofArtifact"] = {"sourceSha": sha, "payloadSha256": digest}
+    return payload
+
+
+def migration_review_payload(path: Optional[str], digest: Optional[str], sha: str, operation_id: str) -> Optional[bytes]:
+    if path is None and digest is None:
+        return None
+    if not isinstance(sha, str) or not SHA.fullmatch(sha):
+        raise Refusal("migration review requires a full source SHA")
+    if not path or not re.fullmatch(r"[a-f0-9]{64}", digest or ""):
+        raise Refusal("migration review requires both file and independent SHA-256")
+    raw = Path(path).read_bytes()
+    if hashlib.sha256(raw).hexdigest() != digest:
+        raise Refusal("migration review manifest digest mismatch")
+    try:
+        control = json.loads(raw)
+    except ValueError as error:
+        raise Refusal("migration review manifest is not JSON") from error
+    if not isinstance(control, dict) or control.get("sourceSha") != sha or control.get("operationId") != operation_id:
+        raise Refusal("migration review manifest belongs to another source or operation")
+    for kind, digest_key in (("reviewedStep", "expectedReviewFileSha256"), ("compositionReview", "expectedFileSha256"), ("registryReview", "expectedFileSha256")):
+        if kind not in control:
+            continue
+        binding = control[kind]
+        if not isinstance(binding, dict) or not isinstance(binding.get("reviewFilePath"), str):
+            raise Refusal("migration review binding is malformed")
+        review_path = Path(binding.pop("reviewFilePath"))
+        if not review_path.is_absolute() or review_path.is_symlink() or not review_path.is_file():
+            raise Refusal("migration review file must be an absolute regular non-symlink file")
+        content = review_path.read_bytes()
+        if hashlib.sha256(content).hexdigest() != binding.get(digest_key):
+            raise Refusal("migration review file digest mismatch")
+        if kind == "registryReview":
+            registry_path = Path(binding.pop("registryFilePath", ""))
+            if not registry_path.is_absolute() or registry_path.is_symlink() or not registry_path.is_file():
+                raise Refusal("registry file must be an absolute regular non-symlink file")
+            registry = registry_path.read_bytes()
+            if hashlib.sha256(registry).hexdigest() != json.loads(content).get("registrySha256"):
+                raise Refusal("registry bytes differ from the approved binding")
+            binding["registryBase64"] = base64.b64encode(registry).decode("ascii")
+        binding["fileBase64"] = base64.b64encode(content).decode("ascii")
+    payload = json.dumps(control, sort_keys=True, separators=(",", ":")).encode()
+    if len(payload) > MIGRATION_REVIEW_TRANSPORT_LIMIT:
+        raise Refusal("migration review transport exceeds the 64 MiB limit")
+    return payload
+
+
+def make_archive(sha: str, provenance: dict, *, cms_artifact: Optional[bytes] = None, seminar_proof: Optional[bytes] = None) -> tuple[bytes, str]:
     source = capture_bytes(["git", "archive", "--format=tar", sha])
     tar_buffer = io.BytesIO(source)
     out = io.BytesIO()
@@ -665,6 +751,12 @@ def make_archive(sha: str, provenance: dict, *, cms_artifact: Optional[bytes] = 
             info.size = len(cms_artifact)
             info.mode = 0o600
             dst.addfile(info, io.BytesIO(cms_artifact))
+        if seminar_proof is not None:
+            if any(member.name == ".ikpk-seminar-proof.tar.gz" for member in src.getmembers()):
+                raise Refusal("source archive contains reserved seminar proof member")
+            info = tarfile.TarInfo(".ikpk-seminar-proof.tar.gz")
+            info.size, info.mode = len(seminar_proof), 0o600
+            dst.addfile(info, io.BytesIO(seminar_proof))
         payload = json.dumps(provenance, sort_keys=True, separators=(",", ":")).encode() + b"\n"
         info = tarfile.TarInfo(".ikpk-rehearsal-ci.json")
         info.size = len(payload)
@@ -693,6 +785,14 @@ def ssh_remote(arguments: list[str], *, profile: str = "staging194", input_bytes
     if result.returncode:
         raise Refusal(f"host operation failed ({result.returncode}): {result.stderr.decode(errors='replace').strip()}")
     return result.stdout
+
+
+def migration_pause_summary(completed: dict) -> dict:
+    migration = completed.get("migration")
+    pause = {key: migration[key] for key in ("waitingForReview", "waitingForCompositionReview",
+             "waitingForRegistryBinding", "pausedAfterStage") if isinstance(migration, dict) and key in migration}
+    return {"operationId": completed["operationId"], "sourceSha": completed["sourceSha"],
+            "phase": "fenced", "migrationPaused": True, "pause": pause}
 
 
 def parse_host_json(payload: bytes) -> dict:
@@ -1308,6 +1408,10 @@ def invoke(args: argparse.Namespace, *, admission: Optional[dict] = None) -> Opt
         raise Refusal("initial-prod permits only its fixed operation ID and has no DB restore command")
     if not OP.fullmatch(args.operation_id):
         raise Refusal("operation ID has invalid characters")
+    review_payload = None
+    if args.command == "cms-update":
+        review_payload = migration_review_payload(getattr(args, "migration_review", None),
+            getattr(args, "migration_review_sha256", None), getattr(args, "source_sha", None), args.operation_id)
     automatic_static_capacity = profile == "production-static" and args.command == "static-main"
     helper_install_capacity = install_host_helper and profile == "staging194"
     if args.command == "space-preflight" or automatic_static_capacity or helper_install_capacity:
@@ -1348,6 +1452,16 @@ def invoke(args: argparse.Namespace, *, admission: Optional[dict] = None) -> Opt
         provenance = (validate_production_paired_admission(args.source_sha) if profile == "production-paired"
                       else validate_sha_and_ci(args.source_sha, profile))
         ci_admission = dict(provenance)
+        seminar_proof = None
+        proof_path, proof_digest = getattr(args, "seminar_proof_artifact", None), getattr(args, "seminar_proof_sha256", None)
+        if proof_path is not None or proof_digest is not None:
+            if profile not in ("staging194", "production-paired"):
+                raise Refusal("reviewed migration is supported only for paired staging194 or production admission")
+            if not proof_path or not proof_digest:
+                raise Refusal("seminar proof requires both archive and independent SHA-256")
+            seminar_proof = admit_seminar_proof(proof_path, proof_digest, args.source_sha, provenance)
+        if review_payload is not None and seminar_proof is None:
+            raise Refusal("reviewed migration requires the admitted seminar proof archive")
         cms_artifact = (fetch_cms_candidate_artifact(provenance, args.source_sha)
                         if profile in ("staging194", "production-paired") else None)
         helper_payload = None
@@ -1382,7 +1496,7 @@ def invoke(args: argparse.Namespace, *, admission: Optional[dict] = None) -> Opt
                 install_staging194_host_helper(helper_payload, helper_evidence["payloadSha256"], args.operation_id)
             elif resume_phase not in ("acquiring", "fenced", "cms-activated"):
                 raise Refusal(f"same-ID CMS continuation is not available from host phase {resume_phase!r}")
-        archive, digest = (make_archive(args.source_sha, provenance, cms_artifact=cms_artifact)
+        archive, digest = (make_archive(args.source_sha, provenance, cms_artifact=cms_artifact, **({"seminar_proof": seminar_proof} if seminar_proof is not None else {}))
                            if cms_artifact is not None else make_archive(args.source_sha, provenance))
         provenance_b64 = base64.b64encode(json.dumps(provenance, sort_keys=True, separators=(",", ":")).encode()).decode("ascii")
         common = ["cms-update", "--operation-id", args.operation_id, "--source-sha", args.source_sha,
@@ -1423,7 +1537,15 @@ def invoke(args: argparse.Namespace, *, admission: Optional[dict] = None) -> Opt
                 current_admission = validate_sha_and_ci(args.source_sha, profile)
                 if current_admission != ci_admission:
                     raise Refusal("staging194 exact-SHA workflow proofs changed before CMS activation; operation remains fenced for same-ID recovery")
-            completed = parse_host_json(ssh_remote(common + ["--offhost-sha256", digest], profile=profile))
+            resume_args = common + ["--offhost-sha256", digest]
+            if review_payload is not None:
+                resume_args += ["--migration-review-sha256", hashlib.sha256(review_payload).hexdigest()]
+                completed = parse_host_json(ssh_remote(resume_args, profile=profile, input_bytes=review_payload))
+            else:
+                completed = parse_host_json(ssh_remote(resume_args, profile=profile))
+            if completed.get("migrationPaused") is True:
+                print(json.dumps(migration_pause_summary(completed), sort_keys=True))
+                return completed
             if completed.get("phase") != "cms-activated":
                 raise Refusal(f"CMS command ended in an unexpected state: {completed.get('phase')}")
         elif first.get("phase") != "cms-activated":
@@ -1646,14 +1768,46 @@ def main(argv: Optional[list[str]] = None) -> int:
             command.add_argument("--install-host-helper", action="store_true")
         if action == "cms-update":
             command.add_argument("--install-host-helper", action="store_true")
+            command.add_argument("--seminar-proof-artifact")
+            command.add_argument("--seminar-proof-sha256")
+            command.add_argument("--migration-review")
+            command.add_argument("--migration-review-sha256")
         if action == "space-preflight":
             command.add_argument("--for", dest="preflight_for", required=True,
                                  choices=("cms-update", "static-main"))
             command.add_argument("--source-sha", required=True)
+    export = sub.add_parser("export-migration-pause")
+    export.add_argument("--operation-id", required=True)
+    export.add_argument("--source-sha", required=True)
+    export.add_argument("--output-parent", required=True)
     args = parser.parse_args(argv)
     args.release_tag = getattr(args, "release_tag", None)
     try:
+        if args.command == "export-migration-pause":
+            if args.profile not in ("staging194", "production-paired"):
+                raise Refusal("migration pause export is restricted to paired profiles")
+            if not SHA.fullmatch(args.source_sha):
+                raise Refusal("source SHA must be a full lowercase commit ID")
+            parent = Path(args.output_parent).expanduser().resolve(strict=True)
+            if not parent.is_dir():
+                raise Refusal("output parent must be a directory")
+            data = ssh_remote(["export-migration-pause", "--operation-id", args.operation_id,
+                               "--source-sha", args.source_sha], profile=args.profile, binary=True)
+            output = Path(tempfile.mkdtemp(prefix="ikpk-migration-pause-", dir=parent))
+            os.chmod(output, 0o700)
+            target = output / "pause.tar"
+            for path, payload in ((target, data), (output / "pause.tar.sha256",
+                    (hashlib.sha256(data).hexdigest() + "  pause.tar\n").encode())):
+                fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0), 0o600)
+                with os.fdopen(fd, "wb") as stream:
+                    stream.write(payload)
+                    stream.flush()
+                    os.fsync(stream.fileno())
+            print(json.dumps({"directory": str(output), "sha256": hashlib.sha256(data).hexdigest()}))
+            return 0
         if args.command == "cms-update" and args.source_sha is None:
+            if args.migration_review is not None or args.migration_review_sha256 is not None:
+                raise Refusal("--source-sha is required when submitting a migration review")
             if args.profile != "staging194":
                 raise Refusal("--source-sha is required outside the staging194 profile")
             try:

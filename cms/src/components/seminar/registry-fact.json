@@ -1,0 +1,29 @@
+{
+  "collectionName": "components_seminar_registry_facts",
+  "info": {
+    "displayName": "Реестр",
+    "icon": "database"
+  },
+  "attributes": {
+    "name": {
+      "type": "string"
+    },
+    "international": {
+      "type": "boolean",
+      "default": false
+    },
+    "subject": {
+      "type": "enumeration",
+      "enum": [
+        "training",
+        "document"
+      ]
+    },
+    "url": {
+      "type": "string"
+    },
+    "basis": {
+      "type": "string"
+    }
+  }
+}

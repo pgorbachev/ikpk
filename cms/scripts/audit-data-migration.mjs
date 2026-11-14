@@ -181,7 +181,7 @@ function normalizeAddedTableDefinition(definition, table, column) {
   const normalized = definition.sql.replace(new RegExp(`,\\s*${quoted}\\s+${columnType}(?:\\s+null)?(?=\\s*,|\\s*\\)$)`, 'i'), '');
   return { ...definition, sql: normalized };
 }
-function deriveKnownTransforms(sourceDb, plan) {
+function deriveKnownTransforms(sourceDb, plan, receipt) {
   const transforms = { nativeRename: false, nativeRenameTables: new Set(), classification: null, documentsState: null, nativeSteps: [] };
   for (const step of plan.steps) {
     if (step.kind === 'strapi-native' && step.id === '2026.09.21T00.00.00.rename-status-columns'
@@ -225,6 +225,12 @@ function deriveKnownTransforms(sourceDb, plan) {
       const derived = { blocked, candidateRows, logicalDocuments: blocked ? 0 : ids.length };
       if (derived.blocked) throw new Error('documents-state normalization source has contradictory component or identity evidence');
       transforms.documentsState = derived;
+    } else if (receipt?.inheritedCohort && ['content-admin-permissions', 'reviewed-schedule', 'reviewed-documents', 'reviewed-content'].includes(step.handler)) {
+      const row = sourceDb.prepare('SELECT operation_id,step_id,payload_sha256,result_json,completed_at FROM ikpk_data_migration_history WHERE lineage_id=? AND step_id=?').get(receipt.seminarLineageId, step.id);
+      const sealed = receipt.seminarStepHistory?.find(item => item.step_id === step.id);
+      if (!row || !sealed || row.operation_id === receipt.operationId || row.payload_sha256 !== step.sha256 || json(row) !== json(sealed)) throw new Error(`inherited seminar step differs from sealed source history: ${step.id}`);
+      // No transform is allowed: generic table/row comparisons below still
+      // require the entire user data and inherited ledger to be preserved.
     } else {
       throw new Error(`unsupported or changed migration step in audit plan: ${step.id}`);
     }
@@ -727,7 +733,9 @@ function allowRunnerRows(sourceDb, candidateDb, plan, receipt, transforms, diffe
       : step.handler === 'normalize-documents-state'
         ? Number.isSafeInteger(result?.updatedRows) && result.updatedRows >= 0 && Number.isSafeInteger(result?.logicalDocuments) && result.logicalDocuments >= 0
         : false;
-    if (!expectedResult || (row.operation_id === receipt.operationId ? json(result) !== json(expectedResult) : !validHistoricalResult)) {
+    const inheritedSeminar = receipt.inheritedCohort && ['content-admin-permissions', 'reviewed-schedule', 'reviewed-documents', 'reviewed-content'].includes(step.handler)
+      && row.operation_id !== receipt.operationId && sourceLedger.some(old => json(valueKey(old)) === json(valueKey(row)));
+    if (!inheritedSeminar && (!expectedResult || (row.operation_id === receipt.operationId ? json(result) !== json(expectedResult) : !validHistoricalResult))) {
       differences.push({ table: 'ikpk_data_migration_history', kind: 'ledger-result-mismatch', stepId: step.id });
     }
   }
@@ -798,7 +806,7 @@ export function auditMigration({ sourceDbPath, candidateDbPath, plan, receipt })
   const source = dbOpen(sourceDbPath); const candidate = dbOpen(candidateDbPath);
   try {
     const sourceSchema = schema(source); const candidateSchema = schema(candidate);
-    const transforms = deriveKnownTransforms(source, plan);
+    const transforms = deriveKnownTransforms(source, plan, receipt);
     const differences = [];
     const acceptedSchemaSnapshot = validateSchemaHistory(source, candidate, candidateSchema, differences);
     const sourceIntegrity = integrity(source); const candidateIntegrity = integrity(candidate);

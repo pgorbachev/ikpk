@@ -38,10 +38,16 @@
     },
     "city": {
       "type": "string",
+      "customField": "global::occurrence-city",
       "required": false
     },
+    "isOnline": {
+      "type": "boolean",
+      "default": false
+    },
     "price": {
-      "type": "decimal"
+      "type": "decimal",
+      "customField": "global::occurrence-price"
     },
     "oldPrice": {
       "type": "decimal"
@@ -74,7 +80,8 @@
       "type": "richtext"
     },
     "duration": {
-      "type": "string"
+      "type": "string",
+      "customField": "global::occurrence-duration"
     },
     "legacy_id": {
       "type": "string",

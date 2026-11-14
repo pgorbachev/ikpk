@@ -89,13 +89,21 @@ export const FIELD_MAP: readonly FieldMapEntry[] = [
   { type: 'course_groups', field: 'description_text', source: 'description', transform: 'htmlToText' },
   { type: 'course_groups', field: 'image', source: 'image', transform: 'mediaRef' },
 
-  // seminars — без `seminar_status`, `price` и `duration`: в установленной схеме CMS их нет.
+  // seminars — без `seminar_status` и `price`: в установленной схеме CMS их нет.
   // Цена и длительность приходят из проведений, статус сайт не читает (`data.ts`, `Seminar`).
   // БЕЗ institute_legacy_id: у семинара в схеме нет отношения `institute`
   // (только `course_group`). Институт восстанавливается ниже по цепочке group→institute.
   { type: 'seminars', field: 'legacy_id', source: 'legacy_id' },
   { type: 'seminars', field: 'legacy_url', source: 'legacy_id', transform: 'legacyUrlFromId' },
   { type: 'seminars', field: 'name', source: 'name' },
+  { type: 'seminars', field: 'duration', source: 'duration' },
+  { type: 'seminars', field: 'audience', source: 'audience' },
+  { type: 'seminars', field: 'content_format', source: 'content_format' },
+  { type: 'seminars', field: 'content_section_anchors', source: 'content_section_anchors' },
+  { type: 'seminars', field: 'documents_state', source: 'documents_state' },
+  { type: 'seminars', field: 'documents', source: 'documents' },
+  { type: 'seminars', field: 'training_registries', source: 'training_registries' },
+  { type: 'seminars', field: 'nmo', source: 'nmo' },
   { type: 'seminars', field: 'slug', source: 'slug' },
   { type: 'seminars', field: 'order', source: 'order' },
   { type: 'seminars', field: 'images', source: 'image', transform: 'mediaUrlList' },
@@ -142,6 +150,7 @@ export const FIELD_MAP: readonly FieldMapEntry[] = [
   { type: 'schedule_entries', field: 'startAt', source: 'startAt' },
   { type: 'schedule_entries', field: 'endAt', source: 'endAt' },
   { type: 'schedule_entries', field: 'city', source: 'city' },
+  { type: 'schedule_entries', field: 'isOnline', source: 'isOnline' },
   { type: 'schedule_entries', field: 'price', source: 'price' },
   { type: 'schedule_entries', field: 'oldPrice', source: 'oldPrice' },
   { type: 'schedule_entries', field: 'isFree', source: 'isFree' },
@@ -210,9 +219,7 @@ export const UNMAPPED_SCHEMA_FIELDS: Readonly<Record<string, Readonly<Record<str
     schedule_entries: REVERSE,
     seminar_status: OLD_SCHEMA,
     price: OLD_SCHEMA,
-    duration: OLD_SCHEMA,
-    documents: UNSHOWN,
-    documents_state: NOT_YET,
+    documents_owner_verified: NOT_YET,
     documents_confirmation_author: NOT_YET,
     documents_confirmation_date: NOT_YET,
     documents_confirmation_source: NOT_YET,
@@ -289,7 +296,13 @@ export function hasValue(value: unknown): boolean {
  */
 export function filledUnshownContentFields(type: string, record: Record<string, unknown>): string[] {
   const fields = UNMAPPED_SCHEMA_FIELDS[type] ?? {};
-  return Object.keys(fields).filter((f) => fields[f] === UNSHOWN && hasValue(record[f])).map((f) => `${type}.${f}`);
+  const missing = Object.keys(fields).filter((f) => fields[f] === UNSHOWN && hasValue(record[f])).map((f) => `${type}.${f}`);
+  if (type === 'seminars' && record.content_format !== 'structured') {
+    for (const field of ['documents', 'training_registries', 'nmo']) {
+      if (hasValue(record[field])) missing.push(`${type}.${field}`);
+    }
+  }
+  return missing;
 }
 
 /**

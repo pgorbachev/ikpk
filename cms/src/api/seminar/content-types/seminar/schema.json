@@ -28,6 +28,20 @@
     "full_text": {
       "type": "richtext"
     },
+    "audience": {
+      "type": "richtext"
+    },
+    "content_format": {
+      "type": "enumeration",
+      "enum": ["legacy", "structured"],
+      "default": "legacy"
+    },
+    "content_section_anchors": {
+      "type": "json"
+    },
+    "duration": {
+      "type": "string"
+    },
     "image": {
       "type": "media",
       "multiple": true,
@@ -99,6 +113,20 @@
     },
     "documents_confirmation_author": {
       "type": "string"
+    },
+    "documents_owner_verified": {
+      "type": "boolean",
+      "default": false
+    },
+    "training_registries": {
+      "type": "component",
+      "component": "seminar.registry-fact",
+      "repeatable": true
+    },
+    "nmo": {
+      "type": "component",
+      "component": "seminar.nmo-fact",
+      "repeatable": false
     }
   }
 }

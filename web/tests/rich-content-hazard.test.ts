@@ -298,8 +298,9 @@ describe('rich-content: whole-document hazard scanner', () => {
     expect(ok).toEqual([]);
   });
 
-  it('snapshot projection ограничена seminar-body и teacher-bio, остальные sinks остаются fixture-owned', () => {
+  it('snapshot projection ограничена seminar sinks и teacher-bio, остальные sinks остаются fixture-owned', () => {
     const sinks = [
+      ...['seminar-description', 'seminar-audience', 'seminar-learning_plan', 'seminar-learning_mode', 'seminar-recommendations'].map(id => ({ id, production: { paths: [], count: 0 }, demo: { sameAsProduction: true } })),
       { id: 'article-body', production: { paths: ['/statyi/fixture'], count: 1 }, demo: { sameAsProduction: true } },
       { id: 'seminar-body', production: { paths: ['/fixture-seminar'], count: 1 }, demo: { sameAsProduction: true } },
       { id: 'teacher-bio', production: { paths: ['/fixture-teacher'], count: 1 }, demo: { sameAsProduction: true } },
@@ -319,6 +320,22 @@ describe('rich-content: whole-document hazard scanner', () => {
     expect(projected.find((sink) => sink.id === 'article-body')?.production).toEqual({ paths: ['/statyi/fixture'], count: 1 });
     expect(projected.find((sink) => sink.id === 'seminar-body')?.production).toEqual({ paths: ['/inst/group/with-body'], count: 1 });
     expect(projected.find((sink) => sink.id === 'teacher-bio')?.production).toEqual({ paths: ['/inst/prepodavatel/with-bio'], count: 1 });
+  });
+
+  it('projects structured seminar markers without admitting missing, duplicate or legacy markers', () => {
+    const sinks = loadFixture<{ sinks: Parameters<typeof projectSnapshotMarkers>[0] }>('rendered-registry.json').sinks;
+    const projected = projectSnapshotMarkers(sinks, {
+      institutes: [{ legacy_id: 'inst-id', slug: 'inst' }],
+      course_groups: [{ legacy_id: 'cg-id', slug: 'group', institute_legacy_id: 'inst' }],
+      seminars: [{ slug: 'structured', course_group_legacy_id: 'cg-id', content_format: 'structured', description_html: ' ', audience: '<p>Audience</p>', learning_plan: ' ', learning_mode: '<p>Mode</p>', recommendations: '<p>Advice</p>', full_text_html: '<p>Ignored legacy</p>' }], teachers: [],
+    }).filter(s => s.id.startsWith('seminar-'));
+    const route = '/inst/group/structured';
+    for (const id of ['seminar-description', 'seminar-audience', 'seminar-learning_mode', 'seminar-recommendations']) expect(projected.find(s => s.id === id)?.production).toEqual({ paths: [route], count: 1 });
+    for (const id of ['seminar-body', 'seminar-learning_plan']) expect(projected.find(s => s.id === id)?.production).toEqual({ paths: [], count: 0 });
+    const html = ['description', 'audience', 'learning_mode', 'recommendations'].map(id => `<div data-safe-rich-content="seminar-${id}">safe</div>`).join('');
+    expect(collectMarkerInventoryErrors(projected, 'production', [{route, html}])).toEqual([]);
+    for (const bad of [html.replace('data-safe-rich-content="seminar-audience"', ''), html + '<div data-safe-rich-content="seminar-audience"></div>', html + '<div data-safe-rich-content="seminar-body"></div>']) expect(collectMarkerInventoryErrors(projected, 'production', [{route, html:bad}]).length).toBeGreaterThan(0);
+    expect(collectMarkerInventoryErrors(projected, 'production', [{route,html},{route:'/unreviewed',html}]).length).toBeGreaterThan(0);
   });
 
   it('snapshot marker projection fails closed when source relation maps are missing', () => {

@@ -90,6 +90,7 @@ describe('ключ-источник в ответе и заполненные п
   it('feature-поле рекомендаций переносится, а непереносимые документы названы', () => {
     expect(filledUnshownContentFields('seminars', { recommendations: '<p>Совет</p>', learning_plan: null, documents: [] })).toEqual([]);
     expect(filledUnshownContentFields('seminars', { documents: [{ id: 1, title: 'Удостоверение' }] })).toEqual(['seminars.documents']);
+    expect(filledUnshownContentFields('seminars', { content_format: 'structured', documents: [{ id: 1, title: 'Удостоверение' }] })).toEqual([]);
   });
 
   it('служебная отметка о документах заполненным содержимым не считается', () => {
