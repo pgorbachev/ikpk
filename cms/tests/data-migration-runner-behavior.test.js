@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { chmodSync, copyFileSync, cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { chmodSync, copyFileSync, cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import { createRequire } from 'node:module';
@@ -69,7 +69,7 @@ function dbBytes(path) {
   return readFileSync(path);
 }
 
-function installFakeStrapi(f, { failOnLoad = false } = {}) {
+function installFakeStrapi(f, { failOnLoad = false, noisy = false } = {}) {
   const dependencyRoot = addExternalDependencies(f);
   const packageDir = join(dependencyRoot, '@strapi/strapi');
   writeFileSync(join(packageDir, 'package.json'), JSON.stringify({ name: '@strapi/strapi', version: '5.51.2', main: 'index.js' }));
@@ -78,11 +78,14 @@ const assert = require('node:assert/strict');
 const path = require('node:path');
 const { createRequire } = require('node:module');
 const Database = require(${JSON.stringify(cmsRequire.resolve('better-sqlite3'))});
+${noisy ? `const logger = require(${JSON.stringify(cmsRequire.resolve('@strapi/logger'))}).createLogger({ level: 'http' });
+const Strapi = require(${JSON.stringify(join(dirname(cmsRequire.resolve('@strapi/core')), 'Strapi.js'))});` : ''}
 exports.createStrapi = ({ appDir }) => {
  assert.equal(process.env.IKPK_MIGRATION_CLOSED_LOAD, 'true', 'migration flag must be set before Strapi construction');
  return {
   config: { get(name) { return name === 'database.connection' ? { client: process.env.DATABASE_CLIENT, connection: { filename: process.env.DATABASE_FILENAME } } : undefined; } },
   async load() {
+    ${noisy ? "process.stdout.write('Strapi load diagnostic\\n');" : ''}
     assert.equal(process.cwd(), appDir);
     assert.equal(process.env.TZ, 'UTC', 'closed Strapi must use UTC for date-sensitive bootstrap work');
     assert.equal(process.env.DATABASE_CLIENT, 'sqlite');
@@ -118,6 +121,13 @@ exports.createStrapi = ({ appDir }) => {
     `}
   },
   async destroy() {
+    ${noisy ? "process.stdout.write('Strapi destroy diagnostic\\n');" : ''}
+    ${noisy ? `await Strapi.prototype.destroy.call({
+      log: logger, runPluginsLifecycles: async () => {}, runUserLifecycles: async () => {},
+      get: (name) => name === 'admin' ? null : { destroy() {} },
+      ai: { mcp: { isRunning: () => false } },
+      server: { async destroy() {} }, eventHub: { destroy() {} }, db: null,
+    });` : ''}
     assert.equal(process.cwd(), appDir);
     assert.equal(process.env.TZ, 'UTC', 'destroy must remain inside the isolated UTC environment');
     assert.equal(process.env.DATABASE_CLIENT, 'sqlite');
@@ -133,6 +143,37 @@ exports.createStrapi = ({ appDir }) => {
 }; };
 `);
 }
+
+test('CLI emits one JSON document while closed lifecycle diagnostics go to stderr', (t) => {
+  const f = fixture(t, { operationId: 'op-cli-json' });
+  installFakeStrapi(f, { noisy: true });
+  // Resolve this isolated fake via NODE_PATH; a node_modules link in the
+  // artifact would require a real host-issued root-sealed v3 attestation.
+  unlinkSync(join(f.artifactDir, 'node_modules'));
+  const snapshots = join(f.root, 'snapshots');
+  mkdirSync(snapshots, { mode: 0o700 });
+  const args = [runnerPath, 'prepare', '--operation-id', f.operationId,
+    '--source-db', f.sourceDbPath, '--source-cms-root', f.sourceCmsRoot,
+    '--candidate-db', f.candidateDbPath, '--artifact-dir', f.artifactDir,
+    '--receipt', f.receiptPath, '--stage-snapshot-dir', snapshots, '--stop-after-stage', 'schema'];
+  const child = spawnSync(process.execPath, args, { encoding: 'utf8', timeout: 120000,
+    env: { ...process.env, NODE_PATH: join(f.root, 'immutable-deps', 'node_modules') } });
+  assert.equal(child.status, 0, child.stderr || child.error?.message);
+  const result = JSON.parse(child.stdout);
+  assert.equal(result.operationId, f.operationId);
+  assert.equal(result.pausedAfterStage, 'schema');
+  assert.match(child.stderr, /Strapi load diagnostic/);
+  assert.match(child.stderr, /Strapi destroy diagnostic/);
+  assert.match(child.stderr, /Shutting down Strapi/);
+  assert.match(child.stderr, /Strapi has been shut down/);
+});
+
+test('CLI failure reports diagnostics only on stderr', () => {
+  const child = spawnSync(process.execPath, [runnerPath, 'status'], { encoding: 'utf8', timeout: 120000 });
+  assert.notEqual(child.status, 0);
+  assert.equal(child.stdout, '');
+  assert.match(child.stderr, /candidateDbPath must be an absolute path/);
+});
 
 function fixture(t, { operationId = 'op-fixture-1', statusShape = 'old' } = {}) {
   const root = sandbox(t);

@@ -273,7 +273,7 @@
   ],
   "integrity": {
     "files": [
-      {"path": "scripts/run-data-migrations.mjs", "sha256": "9569327c382ae56d6fc491f60c462fe8093170abfdd47f99300bf773027d476d"},
+      {"path": "scripts/run-data-migrations.mjs", "sha256": "a6b4b6833f2d26f07268a62f1c01b3c813b0f58d8da60d5dbf20c4681f12ff69"},
       {"path": "scripts/seminar-migration-snapshot.mjs", "sha256": "21bd1f42a09e3be591a4b39914992cac26474b15bd774eccf2308c815a251e44"},
       {"path": "scripts/audit-seminar-migration-composition.mjs", "sha256": "47011f15b8f919128ceb642fb9eac4f065cc92491111c4036803136e8938c4a5"},
       {"path": "scripts/audit-migration-stage-ledger.mjs", "sha256": "da45c499ad2e987cd94656bac85d62264a69825f947835a706885de3597357a1"},

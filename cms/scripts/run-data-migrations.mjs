@@ -1480,8 +1480,8 @@ function parseArgs(argv) {
   }
   return { command, options };
 }
-function usage() {
-  process.stdout.write([
+function usage(writeOutput) {
+  writeOutput([
     'Usage:',
     '  node cms/scripts/run-data-migrations.mjs prepare --source-db PATH --source-cms-root PATH --candidate-db PATH --artifact-dir PATH --receipt PATH --operation-id ID [--stage-snapshot-dir PATH --stop-after-stage ID]',
     '    For a waiting reviewed step: --review-step ID --review-file PATH --review-file-sha256 SHA --review-plan-digest SHA',
@@ -1494,9 +1494,9 @@ function usage() {
     'Activation and rollback operate only inside a private directory containing .ikpk-rehearsal-target. The runner never starts a listener.',
   ].join('\n'));
 }
-export async function main(argv = process.argv.slice(2)) {
+export async function main(argv = process.argv.slice(2), writeOutput = process.stdout.write.bind(process.stdout)) {
   const parsed = parseArgs(argv);
-  if (parsed.command === 'help') return usage();
+  if (parsed.command === 'help') return usage(writeOutput);
   const { command, options } = parsed;
   const common = { operationId: options.operationId, receiptPath: options.receipt };
   let result;
@@ -1520,11 +1520,16 @@ export async function main(argv = process.argv.slice(2)) {
     activePairPath: options.activePair, sandboxRoot: options.sandboxRoot,
   });
   else result = rollbackMigration({ ...common, activePairPath: options.activePair, sandboxRoot: options.sandboxRoot });
-  process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+  writeOutput(`${JSON.stringify(result, null, 2)}\n`);
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === MODULE_PATH) {
-  main().catch((error) => {
+  // Strapi and its dependencies write diagnostics to stdout during closed
+  // load/destroy. Reserve the CLI's stdout for the single machine-readable
+  // response, including any diagnostics emitted after the result is ready.
+  const writeOutput = process.stdout.write.bind(process.stdout);
+  process.stdout.write = process.stderr.write.bind(process.stderr);
+  main(undefined, writeOutput).catch((error) => {
     process.stderr.write(`${error.message}\n`);
     process.exitCode = 1;
   });
