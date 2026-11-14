@@ -5,6 +5,32 @@ import { refreshStatusLines } from './refresh-status-copy.ts';
 const COMMIT = 'a'.repeat(40);
 const FAILED = 'Новый релиз не прошёл проверку после переключения. Это не успех и не автоматический откат.';
 
+test('старый успех показан как прошедшее событие, без сообщения о новом обновлении', () => {
+  const lines = refreshStatusLines({ status: 'succeeded', message: 'Сайт обновлён. Опубликован весь снимок CMS, не только открытый семинар.', finishedAt: '2026-11-11T06:35:00Z' }, Date.parse('2026-11-13T06:35:00Z'));
+  assert.equal(lines.message, '');
+  assert.equal(lines.attempt, 'Последнее успешное обновление: 11 ноября 2026, 09:35 МСК.');
+});
+
+test('недавний успех показывается до 30 минут, но не при неверном или будущем времени', () => {
+  const view = { status: 'succeeded', message: 'Сайт обновлён. Опубликован весь снимок CMS, не только открытый семинар.', finishedAt: '2026-11-11T06:35:00Z' };
+  assert.equal(refreshStatusLines(view, Date.parse('2026-11-11T07:04:59Z')).message, 'Сайт обновлён.');
+  assert.equal(refreshStatusLines(view, Date.parse('2026-11-11T07:05:00Z')).message, '');
+  assert.equal(refreshStatusLines(view, Date.parse('2026-11-11T06:34:00Z')).message, '');
+  assert.equal(refreshStatusLines({ ...view, finishedAt: 'invalid' }).message, '');
+});
+
+test('возврат предыдущего релиза не называется публикацией', () => {
+  const lines = refreshStatusLines({ status: 'succeeded', message: 'Возвращён предыдущий релиз.', finishedAt: '2026-11-11T06:35:00Z' }, Date.parse('2026-11-13T06:35:00Z'));
+  assert.equal(lines.message, 'Возвращён предыдущий релиз.');
+  assert.match(lines.attempt ?? '', /^Завершено /);
+});
+
+test('подготовка материалов понятна и для сохранённого прежнего текста', () => {
+  const lines = refreshStatusLines({ status: 'running', phase: 'capture', message: 'Снимается опубликованный снимок. Черновики в него не входят.' });
+  assert.equal(lines.message, 'Подготавливаются опубликованные материалы. Черновики не попадут на сайт.');
+  assert.equal(lines.phase, 'Подготавливаются опубликованные материалы');
+});
+
 test('успех называет время, релиз и коммит этой попытки', () => {
   const lines = refreshStatusLines({
     status: 'succeeded',
@@ -17,7 +43,7 @@ test('успех называет время, релиз и коммит это�
   assert.equal(lines.phase, null);
   assert.equal(
     lines.attempt,
-    `Завершено 27 сентября 2026, 03:00 МСК — релиз content-1, коммит ${COMMIT}.`,
+    `Последнее успешное обновление: 27 сентября 2026, 03:00 МСК — релиз content-1, коммит ${COMMIT}.`,
   );
 });
 

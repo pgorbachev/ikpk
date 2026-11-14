@@ -7,7 +7,7 @@
  */
 
 const PHASE: Record<string, string> = {
-  capture: 'Снимается опубликованный снимок',
+  capture: 'Подготавливаются опубликованные материалы',
   build: 'Собирается сайт',
   switching: 'Сайт переключается',
   verifying: 'Проверяется выложенный релиз',
@@ -63,10 +63,20 @@ function detailSentence(detail: string): string {
   return detail;
 }
 
-export function refreshStatusLines(view: RefreshStatusView): RefreshStatusLines {
+export const SUCCESS_NOTICE_MS = 30 * 60 * 1000;
+
+export function refreshStatusLines(view: RefreshStatusView, now = Date.now()): RefreshStatusLines {
   const running = view.status === 'running';
-  const message = view.message || 'Состояние ещё не загружено.';
+  const publication = view.status === 'succeeded' && (view.message ?? '').startsWith('Сайт обновлён.');
+  const completed = view.finishedAt ? Date.parse(view.finishedAt) : NaN;
+  const age = now - completed;
+  let message = publication
+    ? (Number.isFinite(age) && age >= 0 && age < SUCCESS_NOTICE_MS ? 'Сайт обновлён.' : '')
+    : view.message || 'Состояние ещё не загружено.';
   if (running) {
+    if (view.phase === 'capture' && message === 'Снимается опубликованный снимок. Черновики в него не входят.') {
+      message = 'Подготавливаются опубликованные материалы. Черновики не попадут на сайт.';
+    }
     let phase = view.phase ? PHASE[view.phase] ?? null : null;
     if (phase && view.releaseId) phase = `${phase}: ${view.releaseId}`;
     return { message, phase, attempt: null };
@@ -77,7 +87,7 @@ export function refreshStatusLines(view: RefreshStatusView): RefreshStatusLines 
   const outcome = view.detail ? detailSentence(view.detail) : '';
   if (!when && !who && !outcome) return { message, phase: null, attempt: null };
 
-  const head = when ? `Завершено ${when}` : 'Последняя сохранённая попытка';
+  const head = when ? (publication ? `Последнее успешное обновление: ${when}` : `Завершено ${when}`) : 'Последняя сохранённая попытка';
   const named = who ? `${head} — ${who}` : head;
   if (!outcome) return { message, phase: null, attempt: `${named}.` };
   const sentence = `${outcome.charAt(0).toUpperCase()}${outcome.slice(1)}`;
