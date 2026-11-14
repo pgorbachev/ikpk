@@ -160,3 +160,14 @@ absolute dependency link are identical. The active CMS artifact stays in its
 existing path for runtime caches/uploads, and existing pre-activation checks
 continue to verify it against the admitted archive. This copy protects closed
 migration execution; it does not change the ownership policy of running CMS code.
+
+
+The sealed dependency copier accepts npm-created internal hardlinks only after a
+complete descriptor-relative metadata census. For each device/inode, the number
+of names inside the private install tree must equal the inode's link count;
+external or mixed internal/external hardlinks are refused before file contents
+are copied. Identity, link count and change timestamps are checked during reads
+and against a final census. Each destination pathname receives a new independent
+root inode; source aliases are never preserved as links into the sealed tree.
+This relies on the existing root-controlled private install parent and completed
+dedicated-installer process drain. No npm package/path gets a special exception.

@@ -20,8 +20,8 @@ class RootSealedDependencies(unittest.TestCase):
 
     def copy(self, name='sealed'):
         target = self.root / name
-        digest = host._copy_sealed_dependency_tree(self.source, target)
         self.addCleanup(self.make_writable, target)
+        digest = host._copy_sealed_dependency_tree(self.source, target)
         return target, digest
 
     @staticmethod
@@ -52,6 +52,56 @@ class RootSealedDependencies(unittest.TestCase):
         (self.source / 'external').unlink(); os.link(outside, self.source / 'alias')
         self.addCleanup(self.make_writable, self.root / 'bad2')
         with self.assertRaisesRegex(host.HostFailure, 'hard link'): host._copy_sealed_dependency_tree(self.source, self.root / 'bad2')
+
+    def test_npm_esbuild_internal_hardlinks_become_distinct_root_inodes(self):
+        package=self.source/'@esbuild/linux-x64/bin/esbuild';package.parent.mkdir(parents=True);package.write_bytes(b'native executable')
+        package.chmod(0o755)
+        alias=self.source/'esbuild/bin/esbuild';alias.parent.mkdir(parents=True);os.link(package,alias)
+        self.assertEqual(package.stat().st_nlink,2)
+        with package.open('r+b') as retained:
+            sealed,_=self.copy()
+            retained.write(b'changed after seal');retained.flush()
+        left=sealed/'@esbuild/linux-x64/bin/esbuild';right=sealed/'esbuild/bin/esbuild'
+        self.assertEqual(left.read_bytes(),b'native executable');self.assertEqual(right.read_bytes(),left.read_bytes())
+        self.assertEqual(len({package.stat().st_ino,left.stat().st_ino,right.stat().st_ino}),3)
+        self.assertEqual(left.stat().st_nlink,1);self.assertEqual(right.stat().st_nlink,1)
+        self.assertEqual(stat.S_IMODE(left.stat().st_mode),0o555)
+
+    def test_mixed_internal_and_external_hardlinks_are_rejected_before_reading(self):
+        original=self.source/'nested/code.js'
+        os.link(original,self.source/'alias.js');os.link(original,self.root/'external-alias')
+        destination=self.root/'mixed';self.addCleanup(self.make_writable,destination)
+        with self.assertRaisesRegex(host.HostFailure,'hard link'):
+            host._copy_sealed_dependency_tree(self.source,destination)
+        self.assertFalse(destination.exists(),'outside aliases must be refused before copying any bytes')
+
+    def test_hardlink_added_during_copy_prevents_sealing(self):
+        original=self.source/'nested/code.js';os.link(original,self.source/'alias.js')
+        actual_fdopen=os.fdopen;injected=False
+        def open_reader(fd,*args,**kwargs):
+            nonlocal injected
+            if not injected and os.fstat(fd).st_ino==original.stat().st_ino:
+                injected=True;os.link(original,self.root/'late-external-alias')
+            return actual_fdopen(fd,*args,**kwargs)
+        target=self.root/'raced-hardlink';self.addCleanup(self.make_writable,target)
+        with patch.object(host.os,'fdopen',side_effect=open_reader):
+            with self.assertRaisesRegex(host.HostFailure,'changed|hard link'):
+                host._copy_sealed_dependency_tree(self.source,target)
+        self.assertTrue(injected)
+
+    def test_external_hardlink_added_after_file_copy_is_caught_by_final_census(self):
+        original=self.source/'nested/code.js';os.link(original,self.source/'alias.js')
+        target=self.root/'late-link';self.addCleanup(self.make_writable,target)
+        actual_fsync=os.fsync;injected=False
+        def sync(fd):
+            nonlocal injected
+            if not injected and target.exists() and os.fstat(fd).st_ino==target.stat().st_ino:
+                injected=True;os.link(original,self.root/'external-after-copy')
+            return actual_fsync(fd)
+        with patch.object(host.os,'fsync',side_effect=sync):
+            with self.assertRaisesRegex(host.HostFailure,'changed|hard link'):
+                host._copy_sealed_dependency_tree(self.source,target)
+        self.assertTrue(injected)
 
     def test_cms_directory_replacement_cannot_redirect_root_copy(self):
         outside = self.root / 'outside'; outside.mkdir(); (outside / 'secret').write_text('must not be copied')

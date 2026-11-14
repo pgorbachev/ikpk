@@ -627,6 +627,7 @@ jobs:
         run: >-
           python3 -m unittest
           scripts.tests.test_candidate_capture_gate
+          scripts.tests.test_cms_artifact_host_consumer
           scripts.tests.test_cohort_fifo_regressions
           scripts.tests.test_historical_cohort
           scripts.tests.test_historical_cohort_crashes

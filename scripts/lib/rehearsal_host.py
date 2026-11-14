@@ -2727,15 +2727,65 @@ def _copy_sealed_dependency_tree(source: Path, destination: Path) -> str:
     chmod/chown in place leaves old writable descriptors valid. Path-based root
     traversal also lets a racing CMS-owned directory redirect reads elsewhere.
     Both are avoided by new inodes and O_NOFOLLOW directory descriptors.
+    Callers retain the root-controlled private install parent after draining the
+    dedicated installer UID. A metadata census proves every regular-file hard
+    link name is inside this tree before any contents are read; metadata and link
+    counts are checked again during copying and in a final census. Internal
+    aliases are copied into separate destination inodes, never linked in place.
     """
     entries = []
     directory_flags = os.O_RDONLY | getattr(os, 'O_DIRECTORY', 0) | getattr(os, 'O_NOFOLLOW', 0)
+    def identity(info):
+        return (info.st_dev, info.st_ino, info.st_mode, info.st_uid, info.st_gid,
+                info.st_nlink, info.st_size, info.st_mtime_ns, info.st_ctime_ns)
+
+    def census(root_fd: int) -> dict[str, tuple]:
+        inventory = {}
+        file_links = {}
+        def scan(directory_fd: int, prefix: str) -> None:
+            before = os.fstat(directory_fd)
+            inventory[prefix] = identity(before)
+            for name in sorted(os.listdir(directory_fd)):
+                relative = f'{prefix}/{name}' if prefix else name
+                info = os.stat(name, dir_fd=directory_fd, follow_symlinks=False)
+                snapshot = identity(info)
+                if stat.S_ISDIR(info.st_mode):
+                    child_fd = os.open(name, directory_flags, dir_fd=directory_fd)
+                    try:
+                        if identity(os.fstat(child_fd)) != snapshot:
+                            raise HostFailure('dependency source changed during hard link census')
+                        scan(child_fd, relative)
+                    finally:
+                        os.close(child_fd)
+                elif stat.S_ISREG(info.st_mode):
+                    inventory[relative] = snapshot
+                    key = (info.st_dev, info.st_ino)
+                    previous, names = file_links.setdefault(key, (snapshot, []))
+                    if previous != snapshot:
+                        raise HostFailure('dependency source changed during hard link census')
+                    names.append(relative)
+                elif stat.S_ISLNK(info.st_mode):
+                    inventory[relative] = snapshot
+                else:
+                    raise HostFailure('dependency tree contains a special file')
+            if identity(os.fstat(directory_fd)) != identity(before):
+                raise HostFailure('dependency directory changed during hard link census')
+        scan(root_fd, '')
+        for snapshot, names in file_links.values():
+            if snapshot[5] != len(names):
+                raise HostFailure('dependency source contains a hard link outside the private tree')
+        return inventory
+
     def visit(source_fd: int, dst: Path, prefix: str) -> None:
+        if identity(os.fstat(source_fd)) != inventory.get(prefix):
+            raise HostFailure('dependency directory changed after hard link census')
         dst.mkdir(mode=0o700)
         entries.append({'path': prefix, 'type': 'directory'})
         for name in sorted(os.listdir(source_fd)):
             info = os.stat(name, dir_fd=source_fd, follow_symlinks=False)
             target, relative = dst / name, f'{prefix}/{name}' if prefix else name
+            if identity(info) != inventory.get(relative):
+                raise HostFailure('dependency source changed after hard link census')
             if stat.S_ISLNK(info.st_mode):
                 link = os.readlink(name, dir_fd=source_fd)
                 if Path(link).is_absolute():
@@ -2754,8 +2804,8 @@ def _copy_sealed_dependency_tree(source: Path, destination: Path) -> str:
                 if stat.S_ISDIR(before.st_mode):
                     visit(fd, target, relative)
                     continue
-                if before.st_nlink != 1:
-                    raise HostFailure('dependency source contains a hard link')
+                if identity(before) != inventory[relative]:
+                    raise HostFailure('dependency source changed before sealing')
                 digest = hashlib.sha256()
                 with os.fdopen(fd, 'rb', closefd=False) as reader, target.open('xb') as writer:
                     for block in iter(lambda: reader.read(1024 * 1024), b''):
@@ -2763,12 +2813,14 @@ def _copy_sealed_dependency_tree(source: Path, destination: Path) -> str:
                     os.fchmod(writer.fileno(), 0o555 if info.st_mode & 0o111 else 0o444)
                     writer.flush(); os.fsync(writer.fileno())
                 after = os.fstat(fd)
-                if (before.st_size, before.st_mtime_ns, before.st_ctime_ns) != (after.st_size, after.st_mtime_ns, after.st_ctime_ns):
+                if identity(before) != identity(after):
                     raise HostFailure('dependency source changed while sealing')
                 entries.append({'path': relative, 'type': 'file', 'sha256': digest.hexdigest(),
                                 'executable': bool(info.st_mode & 0o111)})
             finally:
                 os.close(fd)
+        if identity(os.fstat(source_fd)) != inventory[prefix]:
+            raise HostFailure('dependency directory changed while sealing')
         os.chmod(dst, 0o555)
         target_fd = os.open(dst, directory_flags)
         try:
@@ -2777,7 +2829,10 @@ def _copy_sealed_dependency_tree(source: Path, destination: Path) -> str:
             os.close(target_fd)
     source_fd = os.open(source, directory_flags)
     try:
+        inventory = census(source_fd)
         visit(source_fd, destination, '')
+        if census(source_fd) != inventory:
+            raise HostFailure('dependency source changed while sealing')
     finally:
         os.close(source_fd)
     # Validate the immutable copy, not racing targets in the CMS-owned source.
