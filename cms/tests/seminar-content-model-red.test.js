@@ -201,7 +201,7 @@ describe('семинары в собранном Strapi', { timeout: 360000 }, (
     const seminars = app.documents('api::seminar.seminar');
     const seminar = await seminars.create({ data: { name: '', teachers: [teacher.documentId] } });
     const entries = app.documents('api::schedule-entry.schedule-entry');
-    const entry = await entries.create({ data: { seminar: seminar.documentId, teachers: [teacher.documentId], isOnline: true, duration: '24 часа', startAt: '2026-12-01T00:00:00.000Z', endAt: '2026-12-02T00:00:00.000Z', entry_status: 'active', isFree: false, price: 500 } });
+    const entry = await entries.create({ data: { seminar: seminar.documentId, teachers: [teacher.documentId], isOnline: true, duration: '24 часа', startAt: '2026-12-01T00:00:00.000Z', endAt: '2026-12-02T00:00:00.000Z', entry_status: 'active', isFree: false, price: 500, registrationFormLink: 'https://example.org/register' } });
     await seminars.update({ documentId: seminar.documentId, data: { name: 'Название после создания', ...validSeminarPublicationFields, course_group: publishedProgram.documentId } });
     await seminars.publish({ documentId: seminar.documentId });
     await entries.publish({ documentId: entry.documentId });
@@ -234,7 +234,7 @@ describe('семинары в собранном Strapi', { timeout: 360000 }, (
     const teacher = await app.documents('api::teacher.teacher').create({ status: 'published', data: { name: 'Преподаватель цены', slug: 'prepodavatel-tseny', legacy_id: 'prepodavatel-tseny', trait: 'teacher' } });
     const seminar = await app.documents('api::seminar.seminar').create({ status: 'published', data: { name: 'Семинар цены', ...validSeminarPublicationFields, course_group: publishedProgram.documentId, teachers: [teacher.documentId] } });
     const entries = app.documents('api::schedule-entry.schedule-entry');
-    const fields = { seminar: seminar.documentId, teachers: [teacher.documentId], city: 'Москва', duration: '24 часа', startAt: '2026-12-01T00:00:00.000Z', endAt: '2026-12-02T00:00:00.000Z', entry_status: 'active', isFree: false };
+    const fields = { seminar: seminar.documentId, teachers: [teacher.documentId], city: 'Москва', duration: '24 часа', startAt: '2026-12-01T00:00:00.000Z', endAt: '2026-12-02T00:00:00.000Z', entry_status: 'active', isFree: false, registrationFormLink: 'https://example.org/register' };
     const control = await entries.create({ status: 'published', data: { ...fields, price: 500 } });
     assert.ok(control.publishedAt, 'контроль: положительная цена публикуется');
     const draft = await entries.create({ data: fields });
@@ -250,7 +250,7 @@ describe('семинары в собранном Strapi', { timeout: 360000 }, (
     const seminar = await app.documents('api::seminar.seminar').create({ status: 'published', data: { name: 'Проверка цены', ...validSeminarPublicationFields, course_group: publishedProgram.documentId, teachers: [teacher.documentId] } });
     const entries = app.documents('api::schedule-entry.schedule-entry');
     for (const price of [null, 100]) {
-      const entry = await entries.create({ status: 'published', data: { seminar: seminar.documentId, teachers: [teacher.documentId], city: 'Москва', duration: '24 часа', startAt: '2026-12-01T00:00:00.000Z', endAt: '2026-12-02T00:00:00.000Z', entry_status: 'active', isFree: false, price: 500 } });
+      const entry = await entries.create({ status: 'published', data: { seminar: seminar.documentId, teachers: [teacher.documentId], city: 'Москва', duration: '24 часа', startAt: '2026-12-01T00:00:00.000Z', endAt: '2026-12-02T00:00:00.000Z', entry_status: 'active', isFree: false, price: 500, registrationFormLink: 'https://example.org/register' } });
       await app.db.connection('schedule_entries').where({ document_id: entry.documentId }).whereNull('published_at').update({ is_free: true, price });
       await assert.rejects(() => entries.publish({ documentId: entry.documentId }), /бесплатн.*цен/i);
       const draft = await entries.findOne({ documentId: entry.documentId, status: 'draft' });
@@ -309,7 +309,7 @@ describe('семинары в собранном Strapi', { timeout: 360000 }, (
     const teacher = await app.documents('api::teacher.teacher').create({ status: 'published', data: { name: 'Преподаватель версий', slug: 'prepodavatel-versiy', legacy_id: 'prepodavatel-versiy', trait: 'teacher' } });
     const seminar = await app.documents('api::seminar.seminar').create({ status: 'published', data: { name: 'Семинар версий цены', ...validSeminarPublicationFields, course_group: publishedProgram.documentId, teachers: [teacher.documentId] } });
     const entries = app.documents('api::schedule-entry.schedule-entry');
-    const published = await entries.create({ status: 'published', data: { seminar: seminar.documentId, teachers: [teacher.documentId], city: 'Москва', duration: '24 часа', startAt: '2026-12-01T00:00:00.000Z', endAt: '2026-12-02T00:00:00.000Z', entry_status: 'active', isFree: false, price: 500 } });
+    const published = await entries.create({ status: 'published', data: { seminar: seminar.documentId, teachers: [teacher.documentId], city: 'Москва', duration: '24 часа', startAt: '2026-12-01T00:00:00.000Z', endAt: '2026-12-02T00:00:00.000Z', entry_status: 'active', isFree: false, price: 500, registrationFormLink: 'https://example.org/register' } });
     assert.ok(published.publishedAt);
     const draft = await entries.update({ documentId: published.documentId, data: { isFree: true } });
     assert.equal(draft.isFree, true);
@@ -365,7 +365,7 @@ describe('семинары в собранном Strapi', { timeout: 360000 }, (
     });
     return {
       seminar: seminar.documentId, teachers: [teacher.documentId], duration: '24 часа', price: 500, isFree: false,
-      startAt: '2026-12-01T00:00:00.000Z', endAt: '2026-12-02T00:00:00.000Z', entry_status: 'active',
+      startAt: '2026-12-01T00:00:00.000Z', endAt: '2026-12-02T00:00:00.000Z', entry_status: 'active', registrationFormLink: 'https://example.org/register',
     };
   }
 

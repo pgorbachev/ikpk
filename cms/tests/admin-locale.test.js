@@ -57,7 +57,7 @@ test('панель Content Manager включает русские действ�
   assert.equal(typeof managerRu, 'object');
   assert.ok(Object.keys(managerRu).length > 0);
   const fields = [];
-  module.exports.default.register({ addFields: (field) => fields.push(field), customFields: { register() {} } });
+  module.exports.default.register({ router: { addRoute() {} }, addFields: (field) => fields.push(field), customFields: { register() {} } });
   assert.equal(fields.length, 1);
   assert.equal(fields[0].type, 'relation');
   assert.equal(typeof fields[0].Component, 'function');

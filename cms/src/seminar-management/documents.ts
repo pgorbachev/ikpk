@@ -321,6 +321,7 @@ async function assertPublishedWrite(strapi, context) {
     endAt: Object.prototype.hasOwnProperty.call(data, 'endAt') ? data.endAt : existing?.endAt,
     isFree: Object.prototype.hasOwnProperty.call(data, 'isFree') ? data.isFree : existing?.isFree,
     price: Object.prototype.hasOwnProperty.call(data, 'price') ? data.price : existing?.price,
+    registrationFormLink: Object.prototype.hasOwnProperty.call(data, 'registrationFormLink') ? data.registrationFormLink : existing?.registrationFormLink,
   });
   if (messages.length > 0) throw new ValidationError(messages.join(' '));
   await assertEntryRequirements(strapi, seminarId,
@@ -403,6 +404,7 @@ async function assertEntryPublishable(strapi, context) {
     endAt: draft.endAt,
     isFree: draft.isFree,
     price: draft.price,
+    registrationFormLink: draft.registrationFormLink,
   });
   if (messages.length > 0) throw new ValidationError(messages.join(' '));
   await assertEntryRequirements(strapi, seminarId, draft.duration, draft.teachers ?? []);

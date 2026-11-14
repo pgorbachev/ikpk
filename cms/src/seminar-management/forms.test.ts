@@ -109,6 +109,11 @@ test('подсказки говорят, где поле видно на сай�
   assert.match(hint(seminar, 'full_text'), /старого формата/);
   assert.match(hint(seminar, 'documents_owner_verified'), /не читает/);
   assert.match(hint(seminar, 'learning_mode'), /Как проходит обучение/);
+  assert.match(hint(seminar, 'image'), /seminary/);
+  assert.match(hint(seminar, 'image'), /картинка программы/);
+  assert.equal(entry.metadatas.registrationFormLink?.edit?.label, 'Ссылка на регистрацию на семинар');
+  assert.match(hint(entry, 'registrationFormLink'), /в расписании скрыта/);
+  assert.match(hint(entry, 'registrationFormLink'), /Обязательна для публикации/);
   assert.match(hint(entry, 'startAt'), /Порядок/);
   assert.match(hint(entry, 'entry_status'), /active/);
   assert.match(hint(entry, 'oldPrice'), /не показывает/);

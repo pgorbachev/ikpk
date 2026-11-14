@@ -105,6 +105,23 @@ describe('цена проведения в админке', { timeout: 360000 },
     assert.equal(await price.isEnabled(), true);
     assert.equal(await price.inputValue(), '', 'ноль очищается до сохранения');
   });
+  test('после сохранения бесплатного и обратного переключения цена остаётся неопределённой', async () => {
+    const entry = await openDraft(1500);
+    const price = page.locator('input[name="price"]');
+    const free = page.getByRole('checkbox', { name: 'Бесплатно', exact: true });
+    await free.check();
+    let saved = page.waitForResponse(r => r.request().method() === 'PUT' && r.url().includes(entry.documentId));
+    await page.getByRole('button', { name: 'Сохранить' }).click();
+    assert.ok((await saved).ok());
+    await free.uncheck();
+    assert.equal(await price.inputValue(), '');
+    saved = page.waitForResponse(r => r.request().method() === 'PUT' && r.url().includes(entry.documentId));
+    await page.getByRole('button', { name: 'Сохранить' }).click();
+    assert.ok((await saved).ok());
+    const stored = await app.documents(uid).findOne({ documentId: entry.documentId });
+    assert.equal(stored.isFree, false);
+    assert.equal(stored.price ?? null, null);
+  });
   test('платное проведение с пустой ценой сохраняется', async () => {
     const entry = await openDraft(1500);
     const price = page.locator('input[name="price"]');
