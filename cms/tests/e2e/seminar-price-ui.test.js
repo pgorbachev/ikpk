@@ -70,6 +70,62 @@ describe('цена проведения в админке', { timeout: 360000 },
     await page.locator('input[name="city"]').waitFor();
     return entry;
   }
+  test('в окне создания проведения цена видна и сохраняется для платного формата', async () => {
+    await page.goto(`${base}/admin/content-manager/collection-types/api::seminar.seminar/${seminarId}`);
+    await page.getByText('Проведения', { exact: true }).first().waitFor();
+    await page.locator('input[name="schedule_entries"]').click();
+    await page.getByRole('option', { name: 'Create a relation' }).click();
+    const dialog = page.getByRole('dialog');
+    const price = dialog.locator('input[name="price"][type="number"]');
+    const free = dialog.getByRole('checkbox', { name: 'Бесплатно', exact: true });
+    await price.waitFor();
+    assert.equal(await free.isChecked(), false);
+    assert.equal(await price.isEnabled(), true);
+    await price.pressSequentially('1500');
+    assert.equal(await price.inputValue(), '1500');
+    const style = await price.evaluate(input => ({ color: getComputedStyle(input).color, background: getComputedStyle(input).backgroundColor }));
+    assert.notEqual(style.color, style.background);
+    await free.check();
+    assert.equal(await price.inputValue(), '0');
+    assert.equal(await price.isDisabled(), true);
+    await free.uncheck();
+    assert.equal(await price.isEnabled(), true);
+    assert.equal(await price.inputValue(), '');
+    await price.pressSequentially('2500');
+    assert.equal(await price.inputValue(), '2500');
+    const response = page.waitForResponse(r => r.request().method() === 'POST' && r.url().includes(uid));
+    await dialog.getByRole('button', { name: 'Сохранить', exact: true }).click();
+    const saved = await response;
+    assert.ok(saved.ok());
+    const body = await saved.json();
+    const entry = await app.documents(uid).findOne({ documentId: body.data.documentId });
+    assert.equal(entry.isFree, false);
+    assert.equal(Number(entry.price), 2500);
+  });
+  test('новое платное проведение: цифры цены видны и сохраняются при последовательном вводе', async () => {
+    await page.goto(`${base}/admin/content-manager/collection-types/${uid}/create?fromSeminar=${seminarId}`);
+    const price = page.locator('input[name="price"]');
+    const free = page.getByRole('checkbox', { name: 'Бесплатно', exact: true });
+    await price.waitFor();
+    assert.equal(await free.isChecked(), false);
+    assert.equal(await price.isEnabled(), true);
+    await price.pressSequentially('1500');
+    assert.equal(await price.inputValue(), '1500');
+    const style = await price.evaluate((input) => {
+      const css = getComputedStyle(input);
+      return { color: css.color, background: css.backgroundColor, opacity: css.opacity };
+    });
+    assert.notEqual(style.color, style.background, 'цифры должны отличаться от фона');
+    assert.notEqual(style.opacity, '0', 'цифры должны быть видимы');
+    const response = page.waitForResponse(r => r.request().method() === 'POST' && r.url().includes(uid));
+    await page.getByRole('button', { name: 'Сохранить' }).click();
+    const saved = await response;
+    assert.ok(saved.ok());
+    const body = await saved.json();
+    const entry = await app.documents(uid).findOne({ documentId: body.data.documentId });
+    assert.equal(entry.isFree, false);
+    assert.equal(Number(entry.price), 1500);
+  });
   test('бесплатно немедленно устанавливает ноль и блокирует цену', async () => {
     await openDraft(1250);
     const price = page.locator('input[name="price"]');
