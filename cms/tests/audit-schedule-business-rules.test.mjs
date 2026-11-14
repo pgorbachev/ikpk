@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
 import { createHash } from 'node:crypto';
 import { auditScheduleBusinessRules } from '../scripts/audit-schedule-business-rules.mjs';
+import { planScheduleDataMigration } from '../scripts/migrate-schedule-data.mjs';
 
 const sha = value => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 function fixture() {
@@ -33,5 +34,51 @@ test('rejects decision tampering and source drift',()=>{const f=fixture();try{f.
 function resealSource(f){const source=Object.fromEntries(['seminars','schedule_entries','schedule_entries_seminar_lnk','files_related_mph'].map(t=>[t,f.db.prepare(`SELECT * FROM ${t} ORDER BY rowid`).all().map(r=>({...r}))]));f.plan.sourceDigest=sha(source);f.plan=reseal(f.plan);}
 test('disagreeing versions preserve both overrides and forbid a seminar default',()=>{const f=fixture();try{f.db.exec("UPDATE schedule_entries SET duration='36' WHERE id=4");f.plan.seminars=[];for(const e of f.plan.entries)delete e.changes.duration;resealSource(f);assert.equal(run(f).passed,true);f.plan.entries[0].changes.duration=null;f.plan=reseal(f.plan);assert.throws(()=>run(f),/unjustified/)}finally{f.db.close();}});
 test('an occurrence with only a draft cannot supply a default or lose its override',()=>{const f=fixture();try{f.db.exec('DELETE FROM schedule_entries_seminar_lnk WHERE schedule_entry_id=4;DELETE FROM schedule_entries WHERE id=4');f.plan.entries=f.plan.entries.filter(e=>e.rowId!==4);f.plan.seminars=[];delete f.plan.entries[0].changes.duration;resealSource(f);assert.equal(run(f).passed,true);f.plan.entries[0].changes.duration=null;f.plan=reseal(f.plan);assert.throws(()=>run(f),/unjustified/)}finally{f.db.close();}});
-test('even an accepted exception prohibits moving any duration in its group',()=>{const f=fixture();try{f.db.exec('UPDATE schedule_entries SET price=-1 WHERE id=4');f.plan.entries[1].changes={};delete f.plan.entries[0].changes.duration;f.plan.seminars=[];f.plan.exceptions=[{documentId:'e',rowId:4,errors:['paid-price-conflict']}];f.decisions.acceptedExceptions=[{documentId:'e',rowId:4,error:'paid-price-conflict'}];f.plan.decisionDigest=sha(f.decisions);resealSource(f);assert.equal(run(f).passed,true);f.plan.entries[0].changes.duration=null;f.plan=reseal(f.plan);assert.throws(()=>run(f),/unjustified/)}finally{f.db.close();}});
+test('accepted price conflicts allow independent changes while unrelated errors still block the row',()=>{const f=fixture();try{
+  f.db.exec("UPDATE schedule_entries SET city='Москва',is_online=NULL");
+  f.decisions.paid=[];f.decisions.online=[];
+  f.decisions.acceptedExceptions=[3,4].map(rowId=>({documentId:'e',rowId,error:'paid-price-conflict'}));
+  f.plan=planScheduleDataMigration(f.db,{decisions:f.decisions});
+  assert.deepEqual(f.plan.entries.map(entry=>entry.changes),[
+    {is_online:0,duration:null},{is_online:0,duration:null},
+  ]);
+  assert.equal(run(f).passed,true);
+  f.db.exec('UPDATE schedule_entries SET is_free=2 WHERE id=4');
+  const blocked=planScheduleDataMigration(f.db,{decisions:f.decisions});
+  assert.deepEqual(blocked.entries[1].changes,{});
+  assert.deepEqual(blocked.seminars,[]);
+  assert.ok(blocked.exceptions.some(exception=>exception.rowId===4&&exception.errors.includes('invalid-free-flag')));
+}finally{f.db.close();}});
+test('negative paid-price conflicts block independent changes even when acknowledged',()=>{const f=fixture();try{
+  f.db.exec("UPDATE schedule_entries SET city='Москва',is_online=NULL,price=-1");
+  f.decisions.paid=[];f.decisions.online=[];
+  f.decisions.acceptedExceptions=[3,4].map(rowId=>({documentId:'e',rowId,error:'paid-price-conflict'}));
+  f.plan=planScheduleDataMigration(f.db,{decisions:f.decisions});
+  assert.deepEqual(f.plan.entries.map(entry=>entry.changes),[{},{}]);
+  assert.deepEqual(f.plan.seminars,[]);
+  assert.equal(run(f).passed,true);
+}finally{f.db.close();}});
+test('accepted zero-price exceptions do not suppress online-mismatch blockers',()=>{const f=fixture();try{
+  f.db.exec("UPDATE schedule_entries SET city='Москва',is_online=NULL");
+  f.db.exec("UPDATE schedule_entries SET city='Онлайн' WHERE id=4");
+  f.decisions.paid=[];f.decisions.online=[];
+  f.decisions.acceptedExceptions=[3,4].map(rowId=>({documentId:'e',rowId,error:'paid-price-conflict'}));
+  f.plan=planScheduleDataMigration(f.db,{decisions:f.decisions});
+  assert.deepEqual(f.plan.entries.map(entry=>entry.changes),[{is_online:0},{}]);
+  assert.deepEqual(f.plan.seminars,[]);
+  assert.ok(f.plan.exceptions.some(exception=>exception.rowId===4&&exception.errors.includes('online-requires-confirmation')));
+  assert.throws(()=>run(f),/not been accepted/);
+}finally{f.db.close();}});
+test('preserves accepted paid-price conflicts while auditing independent offline and inherited duration changes',()=>{const f=fixture();try{
+  f.db.exec("UPDATE schedule_entries SET city='Москва',is_online=NULL");
+  f.decisions.paid=[];f.decisions.online=[];
+  f.decisions.acceptedExceptions=[3,4].map(rowId=>({documentId:'e',rowId,error:'paid-price-conflict'}));
+  f.plan=planScheduleDataMigration(f.db,{decisions:f.decisions});
+  assert.deepEqual(f.plan.entries.map(entry=>entry.changes),[
+    {is_online:0,duration:null},{is_online:0,duration:null},
+  ]);
+  assert.equal(run(f).passed,true);
+  f.plan.entries[0].changes.is_online=1;f.plan=reseal(f.plan);
+  assert.throws(()=>run(f),/unjustified/);
+}finally{f.db.close();}});
 for(const [name,sql] of [['cross-stage link','UPDATE schedule_entries_seminar_lnk SET seminar_id=1 WHERE schedule_entry_id=4'],['duplicate link','INSERT INTO schedule_entries_seminar_lnk VALUES(1,3)'],['existing default',"UPDATE seminars SET duration='24 часа' WHERE id=1"]])test(`${name} preserves occurrence overrides`,()=>{const f=fixture();try{f.db.exec(sql);f.plan.seminars=[];for(const e of f.plan.entries)delete e.changes.duration;resealSource(f);assert.equal(run(f).passed,true);f.plan.entries[0].changes.duration=null;f.plan=reseal(f.plan);assert.throws(()=>run(f),/unjustified/)}finally{f.db.close();}});

@@ -15,6 +15,15 @@ function digest(value) {
 function duration(value) {
   return typeof value === 'string' ? value.trim() : '';
 }
+function acceptedHistoricalZeroPriceConflict(row, decisions) {
+  return row.is_free === 0 && row.price === 0 &&
+    (decisions.acceptedExceptions ?? []).some((item) => item.documentId === row.document_id &&
+      item.rowId === row.id && item.error === 'paid-price-conflict');
+}
+function blocksIndependentChanges(errors, row, decisions) {
+  return errors.some((error) => error !== 'paid-price-conflict') ||
+    (errors.includes('paid-price-conflict') && !acceptedHistoricalZeroPriceConflict(row, decisions));
+}
 function seminarDuration(value) {
   if (!/^\d+$/.test(value)) return value;
   const hours = Number(value);
@@ -58,7 +67,8 @@ export function planScheduleDataMigration(db, { decisions }) {
     } else if (row.is_online == null) changes.is_online = 0;
     if (errors.length) exceptions.push({ documentId: id, rowId: row.id, errors });
     if (!duration(row.duration)) exceptions.push({ documentId: id, rowId: row.id, errors: ['duration-needs-review'] });
-    return { documentId: id, rowId: row.id, published: row.published_at != null, changes: errors.length ? {} : changes };
+    return { documentId: id, rowId: row.id, published: row.published_at != null,
+      changes: blocksIndependentChanges(errors, row, decisions) ? {} : changes };
   });
   const seminarById = new Map(source.seminars.map((row) => [row.id, row]));
   const entryById = new Map(source.schedule_entries.map((row) => [row.id, row]));
@@ -96,7 +106,8 @@ export function planScheduleDataMigration(db, { decisions }) {
         const target = links.length === 1 ? seminarById.get(links[0].seminar_id) : null;
         const planned = entries.find((entry) => entry.rowId === row.id);
         return target?.document_id === documentId && (target.published_at != null) === (row.published_at != null) &&
-          planned && !exceptions.some((exception) => exception.rowId === row.id);
+          planned && !exceptions.some((exception) => exception.rowId === row.id &&
+            blocksIndependentChanges(exception.errors, row, decisions));
       });
     });
     if (!safe) continue;
