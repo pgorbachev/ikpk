@@ -93,7 +93,8 @@ fenced and the live database/code pointers remain on the old cohort. Retain the
 same operation ID, source SHA, proof archive and digest on every invocation. A pause
 is not deployment acceptance; explicit recovery remains available with the same ID.
 
-On staging194, export the most recently sealed pause to a private local directory:
+On staging194, export the most recently sealed pause, including the exact source
+database and any WAL/SHM, to a private local directory:
 
 ```sh
 python3 scripts/rehearsal/staging193.py --profile staging194 export-migration-pause \
@@ -102,8 +103,11 @@ python3 scripts/rehearsal/staging193.py --profile staging194 export-migration-pa
 
 The command creates a new mode-0700 directory containing a mode-0600 archive and
 its SHA-256. It refuses if the latest operation attempt is not sealed and fenced,
-the runner is active, files or their identities changed, or SQLite sidecars exist.
+the runner is active, files or their identities changed, or the candidate has SQLite sidecars.
 The export is evidence for independent review, not an approval or a migration plan.
+For a separately authorized production migration, use the same command with
+`--profile production-paired` and that operation's exact ID and source SHA; it
+uses the configured production SSH identity and still requires a fenced pause.
 
 After independently reviewing each stage, create a local JSON manifest and pin its
 file SHA-256 separately. The manifest names the exact operation and source, plus

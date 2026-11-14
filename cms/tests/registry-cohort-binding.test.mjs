@@ -18,3 +18,10 @@ test('exact independent registry approval binds checkpointed candidate',t=>{veri
 for(const field of ['operationId','sourceCommit','migrationPlanDigest','sourceDatabaseSha256','cmsArtifactSha256','proofArtifactSha256','candidateDatabaseSha256','registrySha256'])test(`registry binding rejects changed ${field}`,t=>{const f=fixture(t);f.binding[field]='f'.repeat(64);assert.throws(()=>verifyRegistryBinding(f),/differs|mismatch/);});
 test('registry binding refuses pending WAL',t=>{const f=fixture(t);writeFileSync(f.candidateDbPath+'-wal','pending');assert.throws(()=>verifyRegistryBinding(f),/pending WAL/);});
 test('registry binding refuses malformed or duplicate exception rows even with matching bytes hash',t=>{const f=fixture(t);const raw='[{}]';writeFileSync(f.binding.registryPath,raw);f.binding.registrySha256=hash(raw);assert.throws(()=>verifyRegistryBinding(f),/invalid reviewed/);});
+
+test('registry binding accepts the site fingerprint format and rejects unprefixed or malformed fingerprints',t=>{
+ const f=fixture(t);const row={documentId:'doc',publishedAt:'2026-01-01',updatedAt:'2026-01-01',condition:'missing-duration',recordFingerprint:'sha256:'+'a'.repeat(64)};
+ const set=()=>{const raw=JSON.stringify([row]);writeFileSync(f.binding.registryPath,raw);f.binding.registrySha256=hash(raw)};
+ set();assert.doesNotThrow(()=>verifyRegistryBinding(f));
+ for(const bad of ['a'.repeat(64),'sha256:xyz']){row.recordFingerprint=bad;set();assert.throws(()=>verifyRegistryBinding(f),/invalid reviewed/)}
+});

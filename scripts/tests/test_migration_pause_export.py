@@ -4,13 +4,14 @@ import os
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock
 from scripts.lib import rehearsal_host as host
 from scripts.lib.housekeeping_journal import validate_journal_history
 from scripts.lib.rehearsal_state import RehearsalState
 from scripts.rehearsal import staging193 as operator
-from contextlib import redirect_stdout
+from contextlib import redirect_stdout, nullcontext
 import io
+import argparse
 
 
 class MigrationPauseExport(unittest.TestCase):
@@ -135,6 +136,108 @@ class MigrationPauseExport(unittest.TestCase):
         summary = operator.migration_pause_summary(result)
         self.assertEqual(summary['pause'], {'waitingForReview':'schedule'})
         self.assertNotIn('secret', json.dumps(summary))
+
+    def test_source_database_and_wal_match_receipt_fingerprint(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve()
+            live = root / 'live.db'
+            live.write_bytes(b'live bytes')
+            wal = root / 'live.db-wal'
+            wal.write_bytes(b'wal bytes')
+            entries = [{'file':live.name, 'sha256':hashlib.sha256(live.read_bytes()).hexdigest()},
+                       {'file':wal.name, 'sha256':hashlib.sha256(wal.read_bytes()).hexdigest()}]
+            fingerprint = hashlib.sha256(json.dumps(entries, separators=(',', ':')).encode()).hexdigest()
+            receipt = {'sourceDbPath':str(live), 'source':{'sourceFileFingerprint':fingerprint}}
+            with patch.object(host, '_assert_no_database_handles'), patch.object(host, '_verify_fence'):
+                result = host._capture_migration_source({'cmsDatabase':str(live)}, receipt)
+                self.assertEqual(result['source/live.db'], b'live bytes')
+                self.assertEqual(result['source/live.db-wal'], b'wal bytes')
+                wal.write_bytes(b'changed')
+                with self.assertRaises(host.HostFailure):
+                    host._capture_migration_source({'cmsDatabase':str(live)}, receipt)
+                receipt['sourceDbPath'] = str(root/'other.db')
+                with self.assertRaises(host.HostFailure):
+                    host._capture_migration_source({'cmsDatabase':str(live)}, receipt)
+
+    def test_pause_seal_capture_includes_exact_source_digest(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve()
+            work = root/'work'
+            work.mkdir(mode=0o700)
+            (work/'stage-snapshots').mkdir(mode=0o700)
+            (work/'candidate.db').write_bytes(b'candidate')
+            (work/'candidate.db').chmod(0o600)
+            live = root/'data.db'
+            live.write_bytes(b'raw-live-source')
+            entries = [{'file':live.name, 'sha256':hashlib.sha256(live.read_bytes()).hexdigest()},
+                       {'file':live.name+'-wal', 'absent':True}]
+            receipt = {'operationId':'op', 'sourceCommitSha':'a'*40, 'candidateDbPath':str(work/'candidate.db'),
+                       'stageSnapshotDir':str(work/'stage-snapshots'), 'stageSnapshots':{}, 'sourceDbPath':str(live),
+                       'source':{'sourceFileFingerprint':hashlib.sha256(json.dumps(entries, separators=(',', ':')).encode()).hexdigest()}}
+            (work/'receipt.json').write_text(json.dumps(receipt))
+            (work/'receipt.json').chmod(0o600)
+            with patch.object(host, '_assert_no_database_handles'), patch.object(host, '_verify_fence'):
+                captured = host._capture_migration_pause(work, 'op', 'a'*40, config={'cmsDatabase':str(live)}, include_bytes=True)
+                self.assertEqual(captured['bytes']['source/data.db'], b'raw-live-source')
+                self.assertEqual(captured['files']['source/data.db'], hashlib.sha256(b'raw-live-source').hexdigest())
+                live.write_bytes(b'changed')
+                with self.assertRaises(host.HostFailure):
+                    host._capture_migration_pause(work, 'op', 'a'*40, config={'cmsDatabase':str(live)})
+
+    def test_production_paired_operator_export_uses_pinned_profile(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            with patch.object(operator, 'ssh_remote', return_value=b'archive') as ssh, redirect_stdout(io.StringIO()):
+                rc = operator.main(['--profile','production-paired','export-migration-pause', '--operation-id','op',
+                                    '--source-sha','a'*40, '--output-parent',tmp])
+            self.assertEqual(rc, 0)
+            self.assertEqual(ssh.call_args.kwargs['profile'], 'production-paired')
+
+    def test_production_host_export_rejects_missing_operation_seal(self):
+        args = argparse.Namespace(action='export-migration-pause', profile='production-paired',
+                                  operation_id='other', source_sha='a'*40)
+        state = MagicMock()
+        state.lock.return_value = nullcontext()
+        state.read_journal_for_cleanup.return_value = []
+        state._operation_rows.return_value = []
+        with patch.object(host.os, 'geteuid', return_value=0), \
+             patch.object(host, '_root_config', return_value={'profile':'production-paired', 'stateDir':'/state'}), \
+             patch.object(host, '_configure_profile_temp'), \
+             patch.object(host, '_destination_publication_lock', return_value=nullcontext()), \
+             patch.object(host, '_read_site_publication_marker', return_value=None), \
+             patch.object(host, 'RehearsalState', return_value=state):
+            with self.assertRaisesRegex(host.HostFailure, 'no current sealed pause'):
+                host.dispatch(args)
+
+    def test_source_export_refuses_active_or_unknown_writer(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            live = Path(tmp).resolve()/'db'
+            live.write_bytes(b'source')
+            receipt = {'sourceDbPath':str(live), 'source':{'sourceFileFingerprint':'a'*64}}
+            for code, status in ((0, 'active'), (4, 'unknown')):
+                process = type('Process', (), {'returncode':code, 'stdout':status})()
+                with patch.object(host, '_verify_fence'), patch.object(host, 'run', return_value=process), \
+                     patch.object(host, '_assert_no_database_handles'):
+                    with self.assertRaisesRegex(host.HostFailure, 'writer unit'):
+                        host._capture_migration_source({'cmsDatabase':str(live), 'writerUnits':['cms.service']}, receipt)
+
+    def test_source_without_wal_and_unsafe_sidecars(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve()
+            live = root/'db'
+            live.write_bytes(b'source')
+            entries = [{'file':'db', 'sha256':hashlib.sha256(b'source').hexdigest()},
+                       {'file':'db-wal', 'absent':True}]
+            receipt = {'sourceDbPath':str(live), 'source':{'sourceFileFingerprint':hashlib.sha256(
+                json.dumps(entries, separators=(',', ':')).encode()).hexdigest()}}
+            with patch.object(host, '_assert_no_database_handles'), patch.object(host, '_verify_fence'):
+                self.assertEqual(host._capture_migration_source({'cmsDatabase':str(live)}, receipt), {'source/db':b'source'})
+                (root/'db-journal').write_bytes(b'journal')
+                with self.assertRaises(host.HostFailure):
+                    host._capture_migration_source({'cmsDatabase':str(live)}, receipt)
+                (root/'db-journal').unlink()
+                os.symlink(live, root/'db-wal')
+                with self.assertRaises(host.HostFailure):
+                    host._capture_migration_source({'cmsDatabase':str(live)}, receipt)
 
     def test_local_export_is_private_and_records_digest(self):
         with tempfile.TemporaryDirectory() as tmp:

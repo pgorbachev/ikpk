@@ -861,7 +861,7 @@ export function verifyRegistryBinding({ binding, receipt, candidateDbPath, contr
   for (const entry of entries) {
     if (!entry || typeof entry.documentId !== 'string' || !entry.documentId
         || typeof entry.publishedAt !== 'string' || !entry.publishedAt || typeof entry.updatedAt !== 'string' || !entry.updatedAt
-        || !['paid-zero-price', 'missing-duration'].includes(entry.condition) || !HASH.test(entry.recordFingerprint ?? '')) fail('invalid reviewed historical registry entry');
+        || !['paid-zero-price', 'missing-duration'].includes(entry.condition) || !/^sha256:[a-f0-9]{64}$/.test(entry.recordFingerprint ?? '')) fail('invalid reviewed historical registry entry');
     const identity = JSON.stringify([entry.documentId, entry.condition]);
     if (identities.has(identity)) fail('duplicate reviewed historical registry entry');
     identities.add(identity);

@@ -1776,8 +1776,8 @@ def main(argv: Optional[list[str]] = None) -> int:
     args.release_tag = getattr(args, "release_tag", None)
     try:
         if args.command == "export-migration-pause":
-            if args.profile != "staging194":
-                raise Refusal("migration pause export is restricted to staging194")
+            if args.profile not in ("staging194", "production-paired"):
+                raise Refusal("migration pause export is restricted to paired profiles")
             if not SHA.fullmatch(args.source_sha):
                 raise Refusal("source SHA must be a full lowercase commit ID")
             parent = Path(args.output_parent).expanduser().resolve(strict=True)

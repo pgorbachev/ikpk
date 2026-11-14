@@ -616,6 +616,7 @@ jobs:
           scripts/tests/schedule-duration-inheritance-red.test.mjs
           scripts/tests/schedule-runner-atomicity.test.mjs
           scripts/tests/migration-review-cli.test.mjs
+          scripts/tests/test_seminar_review_builder.mjs
           web/tests/candidate-history-gate.test.mjs
 
       - name: Verify staging193 rehearsal command and recovery boundaries
