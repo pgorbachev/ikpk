@@ -11,6 +11,15 @@ const hours = value => {
   return `${value} ${suffix}`;
 };
 function reject(message) { throw new Error(`independent schedule business audit: ${message}`); }
+function acceptedHistoricalZeroPriceConflict(row, decisions) {
+  return row.is_free === 0 && row.price === 0 &&
+    (decisions.acceptedExceptions ?? []).some(item => item.documentId === row.document_id &&
+      item.rowId === row.id && item.error === 'paid-price-conflict');
+}
+function blocksIndependentChanges(errors, row, decisions) {
+  return errors.some(error => error !== 'paid-price-conflict') ||
+    (errors.includes('paid-price-conflict') && !acceptedHistoricalZeroPriceConflict(row, decisions));
+}
 
 /** Independently check the reviewed decisions and each proposed field against source rows.
  * This is read-only and does not depend on the migration planner or on its output digest.
@@ -52,7 +61,7 @@ export function auditScheduleBusinessRules(db, { plan, decisions, expectedPlanDi
     else if (row.is_online == null) changes.is_online = 0;
     if (errors.length) expectedExceptions.push({ documentId: row.document_id, rowId: row.id, errors });
     if (!duration(row.duration)) expectedExceptions.push({ documentId: row.document_id, rowId: row.id, errors: ['duration-needs-review'] });
-    expectedEntryChanges.set(row.id, errors.length ? {} : changes);
+    expectedEntryChanges.set(row.id, blocksIndependentChanges(errors, row, decisions) ? {} : changes);
   }
   if (serial(expectedExceptions) !== serial(plan.exceptions)) reject('exception set differs from source');
   const accepted = new Set((decisions.acceptedExceptions ?? []).map(x => serial([x.documentId, x.rowId, x.error])));
@@ -66,7 +75,8 @@ export function auditScheduleBusinessRules(db, { plan, decisions, expectedPlanDi
     if (!linksByDocument.has(sem.document_id)) linksByDocument.set(sem.document_id, []);
     linksByDocument.get(sem.document_id).push({ sem, entry });
   }
-  const expectedSeminars = new Map(), excludedRows = new Set(expectedExceptions.map(item => item.rowId));
+  const expectedSeminars = new Map(), excludedRows = new Set(expectedExceptions
+    .filter(item => blocksIndependentChanges(item.errors, sourceEntries.get(item.rowId), decisions)).map(item => item.rowId));
   for (const [documentId, links] of linksByDocument) {
     const versions = source.seminars.filter(row => row.document_id === documentId);
     if (versions.length !== 2 || new Set(versions.map(row => row.published_at != null)).size !== 2 || versions.some(row => duration(row.duration))) continue;
