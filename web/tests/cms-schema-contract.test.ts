@@ -385,10 +385,10 @@ describe('схема CMS: событие расписания приведено
     expect(teachers!.type, 'преподаватели события остались json').toBe('relation');
   });
 
-  it('цена и длительность не продублированы у семинара', () => {
+  it('цена задаётся у проведения, а длительность семинара доступна как значение по умолчанию', () => {
     const attributes = schema('seminar').attributes ?? {};
     expect(Object.keys(attributes), 'цена продублирована у семинара').not.toContain('price');
-    expect(Object.keys(attributes), 'длительность продублирована у семинара').not.toContain('duration');
+    expect(attributes.duration).toMatchObject({ type: 'string' });
   });
 });
 

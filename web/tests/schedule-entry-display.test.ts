@@ -67,6 +67,7 @@ describe('загрузка снимка сводит CMS-форму', () => {
         referenceDate: '2026-09-20',
         content: {
           types: {
+            seminars: [],
             schedule_entries: [
               {
                 id: 469,

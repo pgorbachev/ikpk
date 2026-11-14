@@ -28,7 +28,7 @@ function fixture() {
     types: {
       articles: [{ slug: 'articles-one', title: 'Article', body: '<p>Text</p>', page_title: 'Article', page_description: 'Description', image: '/uploads/one.jpg' }],
       seminars: [{ slug: 'seminars-one' }],
-      schedule_entries: [{ seminar: { slug: 'seminars-one' } }],
+      schedule_entries: [{ seminar: { slug: 'seminars-one' }, duration: '8' }],
       teachers: [{ slug: 'teachers-one' }],
     },
     media: [{ ref: '/uploads/one.jpg', contentId: 'media-one' }],
