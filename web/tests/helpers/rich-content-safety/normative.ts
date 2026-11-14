@@ -115,6 +115,14 @@ export const CMS_RICHTEXT_SELECTORS: CmsRichtextSelector[] = [
     jsonFile: 'seminars.json',
     jsonField: null,
   },
+  // Structured audience is CMS-only in the pinned file snapshot, like learning_plan.
+  {
+    id: 'cms:seminar.audience',
+    singularName: 'seminar',
+    attr: 'audience',
+    jsonFile: 'seminars.json',
+    jsonField: null,
+  },
   // Секции семинара (design.md, D1/G4: три поля произвольного содержимого —
   // учебный план, режим обучения, рекомендации). Как full_text выше: поля
   // только в схеме CMS, в файловом снимке их нет.

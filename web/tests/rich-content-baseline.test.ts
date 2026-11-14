@@ -60,6 +60,7 @@ describe('rich-content baseline: source discovery', () => {
     expect(playlists.length).toBeGreaterThan(0);
     expect(playlists.some((e) => !e.empty)).toBe(true);
     expect(registry.entries.some((e) => e.selectorId === 'cms:seminar.full_text')).toBe(true);
+    expect(registry.entries.some((e) => e.selectorId === 'cms:seminar.audience' && e.kind === 'cms-richtext' && e.field === null)).toBe(true);
     expect(registry.entries.some((e) => e.selectorId === 'cms:schedule-entry.description')).toBe(true);
     expect(registry.entries.some((e) => e.selectorId === 'cms:schedule-entry.additionalText')).toBe(true);
   });

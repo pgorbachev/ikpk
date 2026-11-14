@@ -238,6 +238,56 @@
       }
     },
     {
+      "id": "seminar-description",
+      "production": {
+        "paths": [],
+        "count": 0
+      },
+      "demo": {
+        "sameAsProduction": true
+      }
+    },
+    {
+      "id": "seminar-audience",
+      "production": {
+        "paths": [],
+        "count": 0
+      },
+      "demo": {
+        "sameAsProduction": true
+      }
+    },
+    {
+      "id": "seminar-learning_plan",
+      "production": {
+        "paths": [],
+        "count": 0
+      },
+      "demo": {
+        "sameAsProduction": true
+      }
+    },
+    {
+      "id": "seminar-learning_mode",
+      "production": {
+        "paths": [],
+        "count": 0
+      },
+      "demo": {
+        "sameAsProduction": true
+      }
+    },
+    {
+      "id": "seminar-recommendations",
+      "production": {
+        "paths": [],
+        "count": 0
+      },
+      "demo": {
+        "sameAsProduction": true
+      }
+    },
+    {
       "id": "teacher-bio",
       "production": {
         "paths": [
