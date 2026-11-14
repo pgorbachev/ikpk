@@ -636,6 +636,7 @@ jobs:
           scripts.tests.test_historical_registry_delivery
           scripts.tests.test_extract_migration_pause
           scripts.tests.test_migration_pause_export
+          scripts.tests.test_pause_host_to_extractor
           scripts.tests.test_private_dependency_installer
           scripts.tests.test_protected_migration_artifact
           scripts.tests.test_review_transport_race_regression
