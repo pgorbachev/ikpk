@@ -609,6 +609,7 @@ jobs:
         working-directory: .
         run: >-
           node --test cms/tests/*.test.mjs
+          scripts/tests/data-migration-runner.test.mjs
           scripts/tests/documents-migration-writer-red.test.mjs
           scripts/tests/documents-runner-atomicity.test.mjs
           scripts/tests/schedule-data-migration-red.test.mjs
