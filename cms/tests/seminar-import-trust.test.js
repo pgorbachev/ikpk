@@ -53,6 +53,7 @@ describe('доверенный перенос в собранном Strapi', { t
   let siteUserJwt;
   let seminar;
   let publishedProgram;
+  let fixtureTeacher;
 
   const createPublishedSeminar = (data) => app.documents(SEMINAR).create({
     status: 'published',
@@ -60,6 +61,8 @@ describe('доверенный перенос в собранном Strapi', { t
       description: 'Описание семинара для проверки переноса',
       seo: { seo_title: 'Семинар для проверки', seo_description: 'Описание для проверки' },
       documents_state: 'not-issued',
+      duration: '16 часов',
+      teachers: [fixtureTeacher.documentId],
       ...data,
       course_group: publishedProgram.documentId,
     },
@@ -222,6 +225,10 @@ describe('доверенный перенос в собранном Strapi', { t
         seo: { seo_title: 'Программа переноса', seo_description: 'Описание для поиска' },
         institute: institute.documentId,
       },
+    });
+    fixtureTeacher = await app.documents(TEACHER).create({
+      status: 'published',
+      data: { name: 'Преподаватель переноса', slug: 'trust-fixture-teacher', trait: 'teacher', legacy_id: '987654' },
     });
     seminar = await createPublishedSeminar({ name: 'НПК-1' });
   });
@@ -659,16 +666,14 @@ describe('доверенный перенос в собранном Strapi', { t
       data: { seminar: published.documentId, city: 'Прежний город', entry_status: 'active', legacy_id: ids.publishedEntry, ...dates },
     });
 
-    // Опубликованное проведение семинара, которого в CMS ещё нет: этот прогон его СОЗДАСТ
-    // (POST без query публикует по умолчанию). Placeholder-семинар даёт проведению связь
-    // до переноса — перенос переставит её на созданный.
+    // Существующее проведение нельзя переназначить на семинар, создаваемый переносом.
     const placeholderHost = await createPublishedSeminar({ name: 'Заглушка до переноса' });
     const entryOfCreatedSeminar = await entries.create({
       status: 'published',
       data: { seminar: placeholderHost.documentId, city: 'Прежний город', entry_status: 'active', legacy_id: ids.entryOfCreatedSeminar, ...dates },
     });
 
-    fixtures = { host, hidden, entryOfUnpublished, published, publishedEntry, entryOfCreatedSeminar };
+    fixtures = { host, hidden, entryOfUnpublished, published, publishedEntry, entryOfCreatedSeminar, placeholderHost };
 
     const createdSeminarSlug = 'sozdan-v-etom-zapuske-perenosa';
 
@@ -676,11 +681,12 @@ describe('доверенный перенос в собранном Strapi', { t
     const transfer = path.join(work, 'transfer');
     fs.mkdirSync(transfer, { recursive: true });
     for (const file of [
-      'institutes.json', 'teachers.json', 'articles.json', 'video_playlists.json',
+      'institutes.json', 'articles.json', 'video_playlists.json',
       'static_pages.json', 'news.json', 'promotions.json', 'course_groups.json',
     ]) {
       fs.writeFileSync(path.join(transfer, file), '[]');
     }
+    fs.writeFileSync(path.join(transfer, 'teachers.json'), JSON.stringify([{ legacy_id: '987654', name: 'Преподаватель переноса', slug: 'trust-fixture-teacher', trait: 'teacher' }]));
     fs.writeFileSync(
       path.join(transfer, 'seminars.json'),
       JSON.stringify([
@@ -688,7 +694,7 @@ describe('доверенный перенос в собранном Strapi', { t
         { legacy_id: ids.unpublished, name: 'Снят с публикации', slug: unpublished.slug, description_html: 'из повторного переноса', seo_title: 'Снят с публикации', seo_description: 'Описание переноса', documents_state: 'not-issued' },
         { legacy_id: ids.published, name: 'Остаётся опубликованным', slug: published.slug, description_html: 'из повторного переноса', seo_title: 'Остаётся опубликованным', seo_description: 'Описание переноса', documents_state: 'not-issued' },
         { legacy_id: ids.createdSeminar, name: 'Создан в этом прогоне переноса', slug: createdSeminarSlug, description_html: 'из повторного переноса', seo_title: 'Создан в этом прогоне переноса', seo_description: 'Описание переноса', documents_state: 'not-issued' },
-      ].map((row) => ({ ...row, course_group_legacy_id: 'trust-program' }))),
+      ].map((row) => ({ ...row, course_group_legacy_id: 'trust-program', teachers: [{ legacy_id: '987654' }] }))),
     );
     // Семинаров проведений нет в seminars.json: связь ищется запросом по slug (поиск с черновиками).
     fs.writeFileSync(
@@ -698,7 +704,7 @@ describe('доверенный перенос в собранном Strapi', { t
         { id: ids.entryOfUnpublished, name: hidden.name, city: { name: 'Новый город' }, seminar: { slug: hidden.slug }, ...dates },
         { id: ids.publishedEntry, name: published.name, city: { name: 'Новый город' }, seminar: { slug: published.slug }, ...dates },
         { id: ids.entryOfCreatedSeminar, name: 'Проведение созданного семинара', city: { name: 'Новый город' }, seminar: { slug: createdSeminarSlug }, ...dates },
-      ]),
+      ].map((row) => ({ ...row, duration: '16 часов', teachers: [{ id: 987654 }] }))),
     );
 
     // import.ts ищет каталог материала по `<корень>/migration/legacy-transfer-dir.json`, где
@@ -714,11 +720,16 @@ describe('доверенный перенос в собранном Strapi', { t
     fs.symlinkSync(path.join(cmsRoot, 'node_modules'), path.join(work, 'node_modules'));
 
     // Асинхронно: синхронный запуск остановил бы цикл событий, на котором отвечает этот же Strapi.
-    const { stdout, stderr } = await promisify(execFile)(process.execPath, [bundle, '--skip-media'], {
-      env: { ...process.env, STRAPI_URL: base, STRAPI_API_TOKEN: fullToken },
-      maxBuffer: 16 * 1024 * 1024,
-    });
-    return stdout + stderr;
+    try {
+      await promisify(execFile)(process.execPath, [bundle, '--skip-media'], {
+        env: { ...process.env, STRAPI_URL: base, STRAPI_API_TOKEN: fullToken },
+        maxBuffer: 16 * 1024 * 1024,
+      });
+      assert.fail('перенос должен сообщить об ошибке смены семинара');
+    } catch (error) {
+      assert.equal(error.code, 1, `неожиданный сбой запуска импорта: ${error}`);
+      return error.stdout + error.stderr;
+    }
   }
   const reimport = () => (importRun ??= prepareReimport());
   const versions = async (uid, legacyId) => ({
@@ -766,16 +777,15 @@ describe('доверенный перенос в собранном Strapi', { t
     assert.equal(published[0].city, 'Новый город');
   });
 
-  test('повторный перенос опубликованного проведения семинара, созданного в этом же прогоне, обновляет опубликованную версию', async () => {
+  test('перенос не переназначает сохранённое проведение на созданный семинар', async () => {
     const output = await reimport();
-    assert.equal(output.includes(`❌ schedule-entries [${ids.entryOfCreatedSeminar}]`), false, `ошибка переноса:\n${output}`);
-    const { published } = await versions(ENTRY, ids.entryOfCreatedSeminar);
-    assert.equal(published.length, 1, `опубликованная версия пропала:\n${output}`);
-    assert.equal(
-      published[0].city,
-      'Новый город',
-      'опубликованная версия не обновилась: созданный в этом прогоне семинар кеширован как неопубликованный, и перенос форсирует черновик',
-    );
+    assert.ok(output.includes(`❌ schedule-entries [${ids.entryOfCreatedSeminar}]`), `ожидался отказ переназначения:\n${output}`);
+    assert.ok(output.includes('Нельзя изменить семинар сохранённого проведения'));
+    const entry = await app.documents(ENTRY).findOne({
+      documentId: fixtures.entryOfCreatedSeminar.documentId, status: 'published', populate: ['seminar'],
+    });
+    assert.equal(entry.city, 'Прежний город');
+    assert.equal(entry.seminar?.documentId, fixtures.placeholderHost.documentId);
   });
 
   test('опубликованное проведение неопубликованного семинара: опубликованная версия нетронута', async () => {

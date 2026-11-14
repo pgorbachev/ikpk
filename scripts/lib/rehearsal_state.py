@@ -183,7 +183,7 @@ class RehearsalState:
             raise RehearsalRefusal("operation journal has an incomplete tail; recover it before cleanup")
         rows = []
         known_records = {
-            "start", "fenced-baseline", "seminar-proof-admitted", "migration-review-admitted", "migration-review-submitted", "new-bundle", "committed", "recovered",
+            "start", "fenced-baseline", "migration-attempt-started", "migration-pause-sealed", "migration-pause-invalidated", "seminar-proof-admitted", "migration-review-admitted", "migration-review-submitted", "new-bundle", "committed", "recovered",
             "static-main-start", "static-main-prepared", "static-main-switch-intent",
             "static-main-switched", "static-main-committed", "static-main-recovered",
             "static-main-rolled-back", "static-main-rollback-intent",

@@ -112,6 +112,9 @@ export function entryPublicationErrors({ seminarId, seminarName, startAt, endAt,
   }
   const dates = dateOrderError(startAt, endAt);
   if (dates) errors.push(dates);
+  if (isFree && (price == null || price === '' || !Number.isFinite(Number(price)) || Number(price) !== 0)) {
+    errors.push('Для бесплатного проведения цена должна быть равна нулю.');
+  }
   if (!isFree && price != null && price !== '' && (!Number.isFinite(Number(price)) || Number(price) <= 0)) {
     errors.push('Для платного проведения укажите положительную цену или оставьте её пустой.');
   }

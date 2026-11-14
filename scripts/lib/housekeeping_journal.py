@@ -116,6 +116,20 @@ def validate_journal_history(rows):
                     control = row.get('control')
                     if not isinstance(control, dict) or control.get('operationId') != op or control.get('sourceSha') != sha:
                         raise ValueError('invalid migration review admission')
+            elif record == 'migration-attempt-started' and phase == 'start':
+                if not isinstance(row.get('attempt'), str) or not re.fullmatch(r'[a-f0-9]{32}', row['attempt']):
+                    raise ValueError('invalid migration attempt')
+                state['migration_attempt'] = row['attempt']
+            elif record == 'migration-pause-sealed' and phase == 'start':
+                files = row.get('files')
+                if (not isinstance(row.get('attempt'), str) or not re.fullmatch(r'[a-f0-9]{32}', row['attempt'])
+                        or row.get('attempt') != state.get('migration_attempt') or not isinstance(files, dict)
+                        or not files or any(not isinstance(k, str) or not _digest(v) for k, v in files.items())
+                        or not _digest(row.get('resultSha256'))):
+                    raise ValueError('invalid migration pause seal')
+                state['migration_attempt'] = None
+            elif record == 'migration-pause-invalidated' and phase == 'start':
+                state['migration_attempt'] = None
             elif record == 'historical-cohort-baseline' and phase in ('start', 'bundle', 'restoring') and not state.get('cohort_baseline'):
                 previous = row.get('previousManifest')
                 if (previous is not None and (not isinstance(previous, dict) or previous.get('version') != 2

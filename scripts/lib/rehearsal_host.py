@@ -71,7 +71,7 @@ HOST_HELPER_RUNTIME_MODULES = ("rehearsal_host.py", "rehearsal_state.py", "house
 DESTINATION_LOCKED_ACTIONS = frozenset({
     "cms-update", "static-publish", "static-main", "static-main-recover",
     "recover", "restore", "finalize-recover", "cleanup-site",
-    "export-backup", "export-static", "export-static-main",
+    "export-backup", "export-static", "export-static-main", "export-migration-pause",
 })
 CONTENT_FINGERPRINT_RE = re.compile(r"sha256:[a-f0-9]{64}\Z")
 PREFIX_RE = re.compile(r"/[A-Za-z0-9_./*?=-]+\Z")
@@ -4248,6 +4248,163 @@ def _protected_cms_migration_artifact(config: dict[str, Any], source_root: Path,
         archive.close()
 
 
+def _latest_migration_pause(rows: list[dict]) -> dict:
+    if (len(rows) < 2 or rows[-1].get("record") != "migration-pause-sealed"
+            or rows[-2].get("record") != "migration-attempt-started"
+            or not isinstance(rows[-1].get("attempt"), str)
+            or not re.fullmatch(r"[a-f0-9]{32}", rows[-1]["attempt"])
+            or rows[-1].get("attempt") != rows[-2].get("attempt")):
+        raise HostFailure("migration has no current sealed pause")
+    return rows[-1]
+
+
+@contextmanager
+def _migration_export_lock(root: Path):
+    """Cooperate with the runner's O_EXCL PID lock, including orphaned runners."""
+    directory = _open_directory_without_symlinks(root)
+    name = "candidate.db.migration-lock"
+    token = f"{os.getpid()}:{uuid.uuid4()}\n".encode()
+    fd = None
+    try:
+        try:
+            fd = os.open(name, os.O_CREAT | os.O_EXCL | os.O_RDWR | getattr(os, "O_NOFOLLOW", 0), 0o600, dir_fd=directory)
+        except FileExistsError as error:
+            raise HostFailure("migration runner lock exists; inspect or retry after runner exits") from error
+        if os.write(fd, token) != len(token):
+            raise HostFailure("migration runner lock could not be written")
+        os.fsync(fd)
+        def verify_lock() -> None:
+            try:
+                held = os.fstat(fd)
+                named = os.stat(name, dir_fd=directory, follow_symlinks=False)
+                if ((held.st_dev, held.st_ino, held.st_nlink) != (named.st_dev, named.st_ino, 1)
+                        or os.pread(fd, len(token) + 1, 0) != token):
+                    raise HostFailure("migration runner lock changed during capture")
+            except OSError as error:
+                raise HostFailure("migration runner lock disappeared during capture") from error
+        yield verify_lock
+        verify_lock()
+    finally:
+        if fd is not None:
+            held = os.fstat(fd)
+            try:
+                named = os.stat(name, dir_fd=directory, follow_symlinks=False)
+                if (held.st_dev, held.st_ino) == (named.st_dev, named.st_ino):
+                    os.unlink(name, dir_fd=directory)
+            finally:
+                os.close(fd)
+        os.close(directory)
+
+
+def _capture_migration_pause(root: Path, operation_id: str, source_sha: str, *, include_bytes: bool = False, cms_uid: Optional[int] = None) -> dict:
+    """Read only the fixed, receipt-bound private files through pinned directory descriptors."""
+    _assert_no_database_handles(root / "candidate.db")
+    root_fd = _open_directory_without_symlinks(root)
+    snap_fd = None
+    cms_uid = os.getuid() if cms_uid is None else cms_uid
+    try:
+        root_info = os.fstat(root_fd)
+        if root_info.st_uid != cms_uid or stat.S_IMODE(root_info.st_mode) & 0o077:
+            raise HostFailure("migration directory has unsafe owner or mode")
+        for suffix in ("-wal", "-shm", "-journal"):
+            try:
+                os.stat("candidate.db" + suffix, dir_fd=root_fd, follow_symlinks=False)
+            except FileNotFoundError:
+                continue
+            raise HostFailure("migration candidate has a SQLite sidecar")
+        snap_fd = os.open("stage-snapshots", os.O_RDONLY | os.O_DIRECTORY | getattr(os, "O_NOFOLLOW", 0), dir_fd=root_fd)
+        snap_info = os.fstat(snap_fd)
+        if snap_info.st_uid != cms_uid or stat.S_IMODE(snap_info.st_mode) & 0o077:
+            raise HostFailure("snapshot directory has unsafe owner or mode")
+        identities = []
+        def read_regular(directory: int, name: str) -> bytes:
+            before = os.stat(name, dir_fd=directory, follow_symlinks=False)
+            if (not stat.S_ISREG(before.st_mode) or before.st_nlink != 1 or before.st_uid != cms_uid
+                    or stat.S_IMODE(before.st_mode) & 0o077):
+                raise HostFailure("migration file is unsafe")
+            fd = os.open(name, os.O_RDONLY | os.O_NONBLOCK | getattr(os, "O_NOFOLLOW", 0), dir_fd=directory)
+            try:
+                opened = os.fstat(fd)
+                if (not stat.S_ISREG(opened.st_mode) or opened.st_nlink != 1 or opened.st_uid != cms_uid
+                        or stat.S_IMODE(opened.st_mode) & 0o077
+                        or (opened.st_dev, opened.st_ino) != (before.st_dev, before.st_ino)):
+                    raise HostFailure("migration file changed during open")
+                with os.fdopen(fd, "rb", closefd=False) as f:
+                    content = f.read()
+                after = os.fstat(fd)
+                named = os.stat(name, dir_fd=directory, follow_symlinks=False)
+                fields = lambda x: (x.st_dev, x.st_ino, x.st_size, x.st_mtime_ns, x.st_ctime_ns, x.st_nlink, x.st_mode)
+                if fields(opened) != fields(after) or fields(after) != fields(named):
+                    raise HostFailure("migration file changed during capture")
+                identities.append((directory, name, fields(after)))
+                return content
+            finally:
+                os.close(fd)
+        data = {"candidate.db": read_regular(root_fd, "candidate.db"), "receipt.json": read_regular(root_fd, "receipt.json")}
+        try:
+            receipt = json.loads(data["receipt.json"])
+            snapshots = receipt["stageSnapshots"]
+            if (receipt["operationId"] != operation_id or receipt["sourceCommitSha"] != source_sha
+                    or receipt.get("candidateDbPath") != str(root / "candidate.db")
+                    or receipt.get("stageSnapshotDir") != str(root / "stage-snapshots")
+                    or receipt.get("pendingSnapshotStep") or not isinstance(snapshots, dict)):
+                raise ValueError()
+            names = set()
+            for stage, info in snapshots.items():
+                if not isinstance(stage, str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", stage):
+                    raise ValueError()
+                name = f"{operation_id}.{stage}.db"
+                if not isinstance(info, dict) or info.get("path") != str(root / "stage-snapshots" / name):
+                    raise ValueError()
+                names.add(name)
+            if set(os.listdir(snap_fd)) != names:
+                raise ValueError()
+            for name in sorted(names):
+                raw = read_regular(snap_fd, name)
+                data["stage-snapshots/" + name] = raw
+                stage = name[len(operation_id) + 1:-3]
+                fingerprint = hashlib.sha256(json.dumps([hashlib.sha256(raw).hexdigest(), None], separators=(",", ":")).encode()).hexdigest()
+                if snapshots[stage].get("snapshotFingerprint") != fingerprint:
+                    raise HostFailure("stage snapshot fingerprint differs from receipt")
+        except (ValueError, KeyError, TypeError) as error:
+            raise HostFailure("migration receipt or snapshot set is invalid") from error
+        # Verify that every ancestor still resolves to the pinned directories.
+        check_fd = _open_directory_without_symlinks(root)
+        try:
+            if (os.fstat(check_fd).st_dev, os.fstat(check_fd).st_ino) != (os.fstat(root_fd).st_dev, os.fstat(root_fd).st_ino):
+                raise HostFailure("migration directory changed during capture")
+            named = os.stat("stage-snapshots", dir_fd=root_fd, follow_symlinks=False)
+            if (named.st_dev, named.st_ino) != (os.fstat(snap_fd).st_dev, os.fstat(snap_fd).st_ino):
+                raise HostFailure("snapshot directory changed during capture")
+        finally:
+            os.close(check_fd)
+        for suffix in ("-wal", "-shm", "-journal"):
+            try:
+                os.stat("candidate.db" + suffix, dir_fd=root_fd, follow_symlinks=False)
+            except FileNotFoundError:
+                continue
+            raise HostFailure("migration candidate gained a SQLite sidecar")
+        if set(os.listdir(snap_fd)) != names:
+            raise HostFailure("snapshot directory changed during capture")
+        for directory, name, expected in identities:
+            current = os.stat(name, dir_fd=directory, follow_symlinks=False)
+            actual = (current.st_dev, current.st_ino, current.st_size, current.st_mtime_ns,
+                      current.st_ctime_ns, current.st_nlink, current.st_mode)
+            if actual != expected:
+                raise HostFailure("migration file changed before capture completed")
+        _assert_no_database_handles(root / "candidate.db")
+        result = {"files": {name: hashlib.sha256(raw).hexdigest() for name, raw in data.items()}}
+        if include_bytes:
+            result["bytes"] = data
+        return result
+    except OSError as error:
+        raise HostFailure("cannot securely capture migration pause") from error
+    finally:
+        if snap_fd is not None:
+            os.close(snap_fd)
+        os.close(root_fd)
+
+
 def _install_migrated_database(config: dict[str, Any], source_root: Path, operation_id: str,
                                old_cms_root: Path, *, review_controls: Optional[list[dict]] = None,
                                provenance: Optional[dict] = None, current_review: Optional[dict] = None,
@@ -5401,11 +5558,30 @@ def _cms_update(config: dict[str, Any], state: RehearsalState, args: argparse.Na
         review_controls = _effective_migration_reviews(submissions, receipt_path, control)
         if control not in submissions:
             state._append({"version": 1, "record": "migration-review-submitted", "operationId": op, "sourceSha": sha, "control": control})
+    attempt = None
+    if "seminarProofArtifact" in provenance:
+        attempt = uuid.uuid4().hex
+        state._append({"version": 1, "record": "migration-attempt-started", "operationId": op,
+                       "sourceSha": sha, "attempt": attempt})
     if "seminarProofArtifact" in provenance:
         migrated = _install_migrated_database(config, source_root, op, old_cms_root, review_controls=review_controls, provenance=provenance, current_review=control, inherited_cohort=inherited_cohort, inherited_result=inherited_result)
     else:
         migrated = _install_migrated_database(config, source_root, op, old_cms_root, provenance=provenance)
     if isinstance(migrated, dict):
+        if attempt is None:
+            raise HostFailure("migration pause lacks an attempt")
+        operation_root = _cms_artifact_path(source_root, op).parent
+        with _migration_export_lock(operation_root) as verify_lock:
+            capture = _capture_migration_pause(operation_root, op, sha, cms_uid=pwd.getpwnam(config["cmsUser"]).pw_uid)
+            result_path = state.root / f"migration-pause-{attempt}.json"
+            if os.path.lexists(result_path):
+                raise HostFailure("migration pause result already exists")
+            durable_json(result_path, migrated)
+            result_sha = hashlib.sha256((json.dumps(migrated, sort_keys=True, separators=(",", ":")) + "\n").encode()).hexdigest()
+            verify_lock()
+            state._append({"version": 1, "record": "migration-pause-sealed", "operationId": op,
+                           "sourceSha": sha, "attempt": attempt, "files": capture["files"],
+                           "resultSha256": result_sha})
         return {"operationId": op, "sourceSha": sha, "phase": "fenced", **migrated}
     candidate_db, cms_release, cms_payload_sha = migrated
     capture = _create_capture_bundle(config, op, sha, source_root, candidate_db)
@@ -6945,6 +7121,11 @@ def dispatch(args: argparse.Namespace) -> dict[str, Any]:
             return {"status": "succeeded", **static_result,
                     "removedCmsReleases": _cleanup_cms_releases(config, state)}
         rows = state._operation_rows(args.operation_id)
+        if (args.action in ("recover", "restore", "static-publish", "finalize-recover")
+                and rows and rows[-1].get("record") == "migration-pause-sealed"):
+            state._append({"version": 1, "record": "migration-pause-invalidated",
+                           "operationId": args.operation_id, "sourceSha": rows[-1]["sourceSha"]})
+            rows = state._operation_rows(args.operation_id)
         static_main_owned = any(row.get("operationKind") == "static-main" for row in rows)
         if static_main_owned and args.action in ("cms-update", "static-publish", "recover", "restore", "finalize-recover"):
             raise HostFailure("static-main operations require static-main-recover; CMS recovery is forbidden")
@@ -7025,6 +7206,44 @@ def dispatch(args: argparse.Namespace) -> dict[str, Any]:
                     else:
                         result.update(cleanup)
             return result
+        if args.action == "export-migration-pause":
+            if profile != "staging194":
+                raise HostFailure("migration pause export is restricted to staging194")
+            seal = _latest_migration_pause(rows)
+            if seal.get("sourceSha") != args.source_sha or state.phase(args.operation_id).get("phase") != "fenced":
+                raise HostFailure("migration pause does not match the fenced operation")
+            operation_root = _cms_artifact_path(_candidate_root(config, args.source_sha, args.operation_id), args.operation_id).parent
+            with _migration_export_lock(operation_root) as verify_lock:
+                captured = _capture_migration_pause(operation_root, args.operation_id, args.source_sha, include_bytes=True, cms_uid=pwd.getpwnam(config["cmsUser"]).pw_uid)
+                if captured["files"] != seal["files"]:
+                    raise HostFailure("migration pause differs from its durable seal")
+                result_path = state.root / f"migration-pause-{seal['attempt']}.json"
+                result_info = result_path.lstat()
+                if (not stat.S_ISREG(result_info.st_mode) or result_info.st_uid != 0 or result_info.st_nlink != 1
+                        or stat.S_IMODE(result_info.st_mode) != 0o600):
+                    raise HostFailure("sealed migration result is unsafe")
+                result_fd = os.open(result_path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+                try:
+                    opened = os.fstat(result_fd)
+                    if (opened.st_dev, opened.st_ino) != (result_info.st_dev, result_info.st_ino):
+                        raise HostFailure("sealed migration result changed during open")
+                    with os.fdopen(result_fd, "rb", closefd=False) as source:
+                        result_data = source.read()
+                    if hashlib.sha256(result_data).hexdigest() != seal["resultSha256"]:
+                        raise HostFailure("sealed migration result changed")
+                finally:
+                    os.close(result_fd)
+                output = io.BytesIO()
+                with tarfile.open(fileobj=output, mode="w") as archive:
+                    manifest = json.dumps({"operationId": args.operation_id, "sourceSha": args.source_sha,
+                        "attempt": seal["attempt"], "resultSha256": seal["resultSha256"],
+                        "files": seal["files"]}, sort_keys=True).encode()
+                    for name, raw in [("manifest.json", manifest), ("result.json", result_data), *sorted(captured["bytes"].items())]:
+                        info = tarfile.TarInfo(name)
+                        info.mode, info.size = 0o600, len(raw)
+                        archive.addfile(info, io.BytesIO(raw))
+                verify_lock()
+                return {"_bytes": output.getvalue()}
         if args.action == "export-backup":
             manifest = _backup_manifest(config, args.operation_id)
             return {"_stream": str(Path(config["backupRoot"]) / args.operation_id / "backup.tar"),
@@ -7107,11 +7326,11 @@ def main(argv: Optional[list[str]] = None, *, publication_lock_fd: Optional[int]
                 command.add_argument("--expected-installed-cms-sha")
         else:
             command.add_argument("--browser-digest")
-    for name in ("export-backup", "export-static", "export-static-main", "recover", "restore",
+    for name in ("export-backup", "export-static", "export-static-main", "export-migration-pause", "recover", "restore",
                  "finalize-recover", "static-main-recover", "status"):
         command = sub.add_parser(name)
         command.add_argument("--operation-id", required=True)
-        if name in ("export-static", "export-static-main"):
+        if name in ("export-static", "export-static-main", "export-migration-pause"):
             command.add_argument("--source-sha", required=True)
         if name in ("recover", "restore"):
             command.add_argument("--backup-sha256")

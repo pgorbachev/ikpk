@@ -87,11 +87,23 @@ the admitted source. The root journal retains the source/artifact identity acros
 resumes. Production-paired retains its stable Release and exact-main gates.
 
 The first invocation exports the off-host backup and runs until the next required
-review. A successful pause prints `migrationPaused: true`, the runner's waiting
-reason, `stageSnapshotDir`, `receiptPath`, and `proofArtifactPath`. Writers remain
+review. A successful pause prints `migrationPaused: true` and the runner's waiting
+reason; the detailed receipt and paths are available through the private export. Writers remain
 fenced and the live database/code pointers remain on the old cohort. Retain the
 same operation ID, source SHA, proof archive and digest on every invocation. A pause
 is not deployment acceptance; explicit recovery remains available with the same ID.
+
+On staging194, export the most recently sealed pause to a private local directory:
+
+```sh
+python3 scripts/rehearsal/staging193.py --profile staging194 export-migration-pause \
+  --operation-id <same-id> --source-sha <admitted-40-hex-sha> --output-parent /absolute/private-parent
+```
+
+The command creates a new mode-0700 directory containing a mode-0600 archive and
+its SHA-256. It refuses if the latest operation attempt is not sealed and fenced,
+the runner is active, files or their identities changed, or SQLite sidecars exist.
+The export is evidence for independent review, not an approval or a migration plan.
 
 After independently reviewing each stage, create a local JSON manifest and pin its
 file SHA-256 separately. The manifest names the exact operation and source, plus
@@ -170,3 +182,74 @@ of a completion row and an unchanged full logical database (schema and all rows)
 Committed steps remain immutable, even if someone removes a binding from the
 writable receipt. An interruption with an uncertain outcome requires the original
 submission or explicit recovery.
+
+### Offline schedule and documents review preparation
+
+`cms/scripts/migration-review-cli.mjs` prepares only schedule and document review
+files and audits their exact stage postimages. It does not approve inputs, apply a
+plan, create a migration manifest, or establish stage provenance. Run it in a
+clean checkout with the CMS dependencies installed. First independently identify
+and export the exact **offline, quiescent** stage snapshots and record their file
+SHA-256 values from the operation's trusted evidence. The tool rejects SQLite
+WAL/journal/SHM sidecars and databases whose SQLite header declares WAL mode; do not use it against a live database. Convert a separate exported copy to rollback-journal mode before independently pinning its bytes. A hash check
+cannot guard against a concurrent process changing and restoring bytes.
+
+All input files must be canonical absolute paths, owner-only regular files with
+one link, inside an owner-only canonical directory. The new output directory must
+not exist; its parent must be canonical and owner-only. Outputs contain private
+content even though the terminal shows only counts and hashes. Decisions and
+proposals must already be separately saved, reviewed and pinned: schedule input
+is the decisions object; documents input is the proposals array with independently
+reviewed `reviewedPreimages` for every physical version. The tool never fills in
+preimages or approval fields. Source commit is the exact **tool checkout** HEAD;
+it must be independently verified and tracked migration code and CMS package
+manifests must be unchanged. Separately establish the snapshot's operation and
+admitted source identity from the trusted receipt; a database hash alone cannot
+prove provenance.
+
+```sh
+node cms/scripts/migration-review-cli.mjs prepare schedule \
+  --source /private/stages/schema.db --source-sha256 "$SCHEMA_SHA256" \
+  --input /private/inputs/decisions.json --input-sha256 "$DECISIONS_SHA256" \
+  --source-commit "$TOOL_CHECKOUT_SHA" --output-dir /private/reviews/schedule-new
+node cms/scripts/migration-review-cli.mjs prepare documents \
+  --source /private/stages/schedule.db --source-sha256 "$SCHEDULE_SHA256" \
+  --input /private/inputs/document-proposals.json --input-sha256 "$PROPOSALS_SHA256" \
+  --source-commit "$TOOL_CHECKOUT_SHA" --output-dir /private/reviews/documents-new
+```
+
+The generated review must fit the runner reader limit (20,000,000 bytes for schedule; 50,000,000 bytes for documents), or preparation refuses before creating the directory. The emitted file hash and plan digest identify the generated proposal; they are
+not approvals. Review its complete private contents and record the independently
+approved file hash and plan digest separately. After the separately authorized
+runner creates the next exact stage, verify both hashes and that postimage:
+
+```sh
+node cms/scripts/migration-review-cli.mjs audit schedule \
+  --source /private/stages/schema.db --source-sha256 "$SCHEMA_SHA256" \
+  --candidate /private/stages/schedule.db --candidate-sha256 "$SCHEDULE_SHA256" \
+  --review /private/reviews/schedule-new/review.json --review-sha256 "$APPROVED_REVIEW_SHA256" \
+  --plan-digest "$APPROVED_PLAN_DIGEST" --source-commit "$TOOL_CHECKOUT_SHA"
+node cms/scripts/migration-review-cli.mjs audit documents \
+  --source /private/stages/schedule.db --source-sha256 "$SCHEDULE_SHA256" \
+  --candidate /private/stages/documents.db --candidate-sha256 "$DOCUMENTS_SHA256" \
+  --review /private/reviews/documents-new/review.json --review-sha256 "$APPROVED_REVIEW_SHA256" \
+  --plan-digest "$APPROVED_PLAN_DIGEST" --source-commit "$TOOL_CHECKOUT_SHA"
+```
+
+These audits intentionally allow runner metadata changes and do not validate the
+runner ledger, source-to-stage schema transition or complete composition. They
+are partial evidence, not deployment acceptance. Use `web/scripts/seminar-migration/README.md`
+for the independently reviewed renderer, document receipt and content rehearsal.
+Composition still requires an independently reviewed v1 contract, five distinct
+pinned snapshots, plan and renderer bindings, proof artifact and ledger/schema
+contracts. The authoritative `auditSeminarMigrationComposition` contract and
+checks are in `cms/scripts/audit-seminar-migration-composition.mjs`; submit its
+independently pinned composition review using the operator manifest above. No
+composition review is generated or approved by this CLI. Registry binding and
+the runner's complete composition audit remain mandatory.
+
+Before the writer fence is closed, measure the actual fully serialized review
+transport including its envelope and encoding against the runner/host transport
+limit. Individual JSON or base64 sizes do not prove that the envelope fits. This
+CLI does not construct or measure that transport; an unverified or oversized
+transport is a stop condition.

@@ -245,6 +245,22 @@ describe('семинары в собранном Strapi', { timeout: 360000 }, (
     assert.equal(published.price ?? null, null);
   });
 
+  test('публикация не исправляет противоречивую историческую цену и сохраняет опубликованную версию', async () => {
+    const teacher = await app.documents('api::teacher.teacher').create({ status: 'published', data: { name: 'Преподаватель проверки цены', slug: 'price-conflict-teacher', legacy_id: 'price-conflict-teacher', trait: 'teacher' } });
+    const seminar = await app.documents('api::seminar.seminar').create({ status: 'published', data: { name: 'Проверка цены', ...validSeminarPublicationFields, course_group: publishedProgram.documentId, teachers: [teacher.documentId] } });
+    const entries = app.documents('api::schedule-entry.schedule-entry');
+    for (const price of [null, 100]) {
+      const entry = await entries.create({ status: 'published', data: { seminar: seminar.documentId, teachers: [teacher.documentId], city: 'Москва', duration: '24 часа', startAt: '2026-12-01T00:00:00.000Z', endAt: '2026-12-02T00:00:00.000Z', entry_status: 'active', isFree: false, price: 500 } });
+      await app.db.connection('schedule_entries').where({ document_id: entry.documentId }).whereNull('published_at').update({ is_free: true, price });
+      await assert.rejects(() => entries.publish({ documentId: entry.documentId }), /бесплатн.*цен/i);
+      const draft = await entries.findOne({ documentId: entry.documentId, status: 'draft' });
+      const published = await entries.findOne({ documentId: entry.documentId, status: 'published' });
+      assert.equal(draft.price == null ? null : Number(draft.price), price);
+      assert.equal(Number(published.price), 500);
+      assert.equal(published.isFree, false);
+    }
+  });
+
   for (const price of [0, -1]) {
     test(`платная цена ${price} отклоняется при сохранении`, async () => {
       const seminar = await app.documents('api::seminar.seminar').create({ data: { name: `Недопустимая цена ${price}` } });

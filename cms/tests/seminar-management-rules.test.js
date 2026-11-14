@@ -174,6 +174,14 @@ test('ошибочные даты блокируют публикацию, не�
   assert.equal(seminarPublicationError('НПК-1'), null);
 });
 
+test('при публикации бесплатного проведения требуется явная нулевая цена', () => {
+  const valid = { seminarId: 'sem-1', seminarName: 'Семинар', startAt: null, endAt: null, isFree: true };
+  for (const price of [null, '', 100]) {
+    assert.match(entryPublicationErrors({ ...valid, price }).join(' '), /бесплатн.*цен/i);
+  }
+  assert.deepEqual(entryPublicationErrors({ ...valid, price: 0 }), []);
+});
+
 test('пустой новый семинар не получает slug модели, заполненное название его создаёт', () => {
   assert.deepEqual(
     decideSeminarSlug({

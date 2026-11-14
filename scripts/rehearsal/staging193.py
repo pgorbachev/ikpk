@@ -781,6 +781,14 @@ def ssh_remote(arguments: list[str], *, profile: str = "staging194", input_bytes
     return result.stdout
 
 
+def migration_pause_summary(completed: dict) -> dict:
+    migration = completed.get("migration")
+    pause = {key: migration[key] for key in ("waitingForReview", "waitingForCompositionReview",
+             "waitingForRegistryBinding", "pausedAfterStage") if isinstance(migration, dict) and key in migration}
+    return {"operationId": completed["operationId"], "sourceSha": completed["sourceSha"],
+            "phase": "fenced", "migrationPaused": True, "pause": pause}
+
+
 def parse_host_json(payload: bytes) -> dict:
     try:
         result = json.loads(payload.decode("utf-8"))
@@ -1528,7 +1536,7 @@ def invoke(args: argparse.Namespace, *, admission: Optional[dict] = None) -> Opt
             else:
                 completed = parse_host_json(ssh_remote(resume_args, profile=profile))
             if completed.get("migrationPaused") is True:
-                print(json.dumps(completed, sort_keys=True))
+                print(json.dumps(migration_pause_summary(completed), sort_keys=True))
                 return completed
             if completed.get("phase") != "cms-activated":
                 raise Refusal(f"CMS command ended in an unexpected state: {completed.get('phase')}")
@@ -1760,9 +1768,35 @@ def main(argv: Optional[list[str]] = None) -> int:
             command.add_argument("--for", dest="preflight_for", required=True,
                                  choices=("cms-update", "static-main"))
             command.add_argument("--source-sha", required=True)
+    export = sub.add_parser("export-migration-pause")
+    export.add_argument("--operation-id", required=True)
+    export.add_argument("--source-sha", required=True)
+    export.add_argument("--output-parent", required=True)
     args = parser.parse_args(argv)
     args.release_tag = getattr(args, "release_tag", None)
     try:
+        if args.command == "export-migration-pause":
+            if args.profile != "staging194":
+                raise Refusal("migration pause export is restricted to staging194")
+            if not SHA.fullmatch(args.source_sha):
+                raise Refusal("source SHA must be a full lowercase commit ID")
+            parent = Path(args.output_parent).expanduser().resolve(strict=True)
+            if not parent.is_dir():
+                raise Refusal("output parent must be a directory")
+            data = ssh_remote(["export-migration-pause", "--operation-id", args.operation_id,
+                               "--source-sha", args.source_sha], profile=args.profile, binary=True)
+            output = Path(tempfile.mkdtemp(prefix="ikpk-migration-pause-", dir=parent))
+            os.chmod(output, 0o700)
+            target = output / "pause.tar"
+            for path, payload in ((target, data), (output / "pause.tar.sha256",
+                    (hashlib.sha256(data).hexdigest() + "  pause.tar\n").encode())):
+                fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0), 0o600)
+                with os.fdopen(fd, "wb") as stream:
+                    stream.write(payload)
+                    stream.flush()
+                    os.fsync(stream.fileno())
+            print(json.dumps({"directory": str(output), "sha256": hashlib.sha256(data).hexdigest()}))
+            return 0
         if args.command == "cms-update" and args.source_sha is None:
             if args.profile != "staging194":
                 raise Refusal("--source-sha is required outside the staging194 profile")
