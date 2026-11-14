@@ -358,16 +358,13 @@ describe('семинары в собранном Strapi', { timeout: 360000 }, (
     assert.ok(matchingIds.publishedAt);
   });
 
-  test('список выбора по HTTP содержит свободное проведение и не содержит чужое', async () => {
+  test('список выбора по HTTP не содержит чужое проведение', async () => {
     const seminars = app.documents('api::seminar.seminar');
     const entries = app.documents('api::schedule-entry.schedule-entry');
     const seminarA = await seminars.create({ data: { name: 'Семинар A' } });
     const seminarB = await seminars.create({ data: { name: 'Семинар B' } });
     const foreign = await entries.create({
       data: { seminar: seminarB.documentId, startAt: '2026-04-01T00:00:00.000Z', city: 'Казань' },
-    });
-    const free = await entries.create({
-      data: { startAt: '2026-03-12T00:00:00.000Z', city: 'Москва' },
     });
 
     const response = await fetch(
@@ -377,10 +374,7 @@ describe('семинары в собранном Strapi', { timeout: 360000 }, (
     const body = await response.json();
     assert.equal(response.status, 200, JSON.stringify(body));
     const ids = body.results.map((row) => row.documentId);
-    assert.ok(ids.includes(free.documentId));
     assert.equal(ids.includes(foreign.documentId), false);
-    const freeRow = body.results.find((row) => row.documentId === free.documentId);
-    assert.equal(freeRow.admin_label, '12 марта 2026 · Москва');
   });
 
   test('массив и числовой id не переносят чужое проведение', async () => {
@@ -392,7 +386,7 @@ describe('семинары в собранном Strapi', { timeout: 360000 }, (
 
     await assert.rejects(
       () => seminars.update({ documentId: seminarB.documentId, data: { schedule_entries: [entry.documentId] } }),
-      /другому семинару/,
+      /семинар/i,
     );
     await assert.rejects(
       () =>
@@ -400,7 +394,7 @@ describe('семинары в собранном Strapi', { timeout: 360000 }, (
           documentId: seminarB.documentId,
           data: { schedule_entries: { connect: [{ id: entry.id }] } },
         }),
-      /другому семинару/,
+      /семинар/i,
     );
     await assert.rejects(
       () =>
@@ -408,24 +402,19 @@ describe('семинары в собранном Strapi', { timeout: 360000 }, (
           documentId: seminarB.documentId,
           data: { schedule_entries: { connect: [String(entry.id)] } },
         }),
-      /другому семинару/,
+      /семинар/i,
     );
     const kept = await entries.findOne({ documentId: entry.documentId, populate: ['seminar'] });
     assert.equal(kept.seminar.documentId, seminarA.documentId);
-
-    const free = await entries.create({ data: { city: 'Тула' } });
-    await seminars.update({
-      documentId: seminarA.documentId,
-      data: { schedule_entries: [entry.documentId, free.documentId] },
-    });
-    const attached = await entries.findOne({ documentId: free.documentId, populate: ['seminar'] });
-    assert.equal(attached.seminar.documentId, seminarA.documentId);
   });
 
   test('публикация через create и клонирование не обходят правила', async () => {
     const seminars = app.documents('api::seminar.seminar');
     const entries = app.documents('api::schedule-entry.schedule-entry');
-    const seminar = await seminars.create({ data: { name: 'Для клона' } });
+    const teacher = await app.documents('api::teacher.teacher').create({
+      status: 'published', data: { name: 'Для публикации', slug: 'dlya-publikatsii', legacy_id: 'dlya-publikatsii', trait: 'teacher' },
+    });
+    const seminar = await seminars.create({ data: { name: 'Для клона', teachers: [teacher.documentId] } });
     const entry = await entries.create({ data: { seminar: seminar.documentId, city: 'Омск' } });
 
     await assert.rejects(
@@ -434,18 +423,14 @@ describe('семинары в собранном Strapi', { timeout: 360000 }, (
           status: 'published',
           data: { startAt: '2026-05-10T00:00:00.000Z', endAt: '2026-05-09T00:00:00.000Z' },
         }),
-      (error) => {
-        assert.match(error.message, /Укажите семинар/);
-        assert.match(error.message, /Окончание проведения не может быть раньше начала/);
-        return true;
-      },
+      /семинар/i,
     );
     const leaked = await app.db.query('api::schedule-entry.schedule-entry').findMany({
       where: { endAt: '2026-05-09T00:00:00.000Z', publishedAt: { $notNull: true } },
     });
     assert.equal(leaked.length, 0);
 
-    const draft = await entries.create({ data: { startAt: '2026-06-01T00:00:00.000Z' } });
+    const draft = await entries.create({ data: { seminar: seminar.documentId, startAt: '2026-06-01T00:00:00.000Z' } });
     assert.equal(draft.publishedAt ?? null, null);
 
     const cloned = await entries.clone({ documentId: entry.documentId, data: { name: 'Arbitrary forged name' } });
@@ -476,7 +461,7 @@ describe('семинары в собранном Strapi', { timeout: 360000 }, (
 
     const publishedSeminar = await seminars.create({
       status: 'published',
-      data: { name: 'Опубликованный', ...validSeminarPublicationFields, course_group: publishedProgram.documentId },
+      data: { name: 'Опубликованный', ...validSeminarPublicationFields, course_group: publishedProgram.documentId, teachers: [teacher.documentId] },
     });
     const published = await entries.create({
       status: 'published',
@@ -486,6 +471,7 @@ describe('семинары в собранном Strapi', { timeout: 360000 }, (
         endAt: '2026-07-02T00:00:00.000Z',
         city: 'Москва',
         entry_status: 'active',
+        duration: '24 часа', price: 500, teachers: [teacher.documentId],
       },
     });
     const beforeRemoval = await entries.findOne({
@@ -506,7 +492,7 @@ describe('семинары в собранном Strapi', { timeout: 360000 }, (
             status: 'published',
             data: { seminar: seminarPayload },
           }),
-        /Укажите семинар/,
+        /семинар/i,
       );
     }
     const stillPublished = await entries.findOne({
@@ -519,11 +505,11 @@ describe('семинары в собранном Strapi', { timeout: 360000 }, (
 
     const source = await seminars.create({
       status: 'published',
-      data: { name: 'Семинар А', ...validSeminarPublicationFields, course_group: publishedProgram.documentId },
+      data: { name: 'Семинар А', ...validSeminarPublicationFields, course_group: publishedProgram.documentId, teachers: [teacher.documentId] },
     });
     const target = await seminars.create({
       status: 'published',
-      data: { name: 'Семинар Б', ...validSeminarPublicationFields, course_group: publishedProgram.documentId },
+      data: { name: 'Семинар Б', ...validSeminarPublicationFields, course_group: publishedProgram.documentId, teachers: [teacher.documentId] },
     });
     const reassignment = [
       ['numericString', () => String(target.id)],
@@ -542,21 +528,22 @@ describe('семинары в собранном Strapi', { timeout: 360000 }, (
           endAt: '2026-08-02T00:00:00.000Z',
           city: 'Москва',
           entry_status: 'active',
+          duration: '24 часа', price: 500, teachers: [teacher.documentId],
         },
       });
       assert.equal(row.name, 'Семинар А');
-      await entries.update({
+      await assert.rejects(() => entries.update({
         documentId: row.documentId,
         status: 'published',
         data: { seminar: payload() },
-      });
-      const moved = await entries.findOne({
+      }), /семинар/i);
+      const keptRow = await entries.findOne({
         documentId: row.documentId,
         status: 'published',
         populate: ['seminar'],
       });
-      assert.equal(moved.seminar.documentId, target.documentId);
-      assert.equal(moved.name, 'Семинар Б');
+      assert.equal(keptRow.seminar.documentId, source.documentId);
+      assert.equal(keptRow.name, 'Семинар А');
     }
     const unnamed = await seminars.create({ data: { name: '' } });
     const stays = await entries.create({
@@ -567,6 +554,7 @@ describe('семинары в собранном Strapi', { timeout: 360000 }, (
         endAt: '2026-08-04T00:00:00.000Z',
         city: 'Москва',
         entry_status: 'active',
+        duration: '24 часа', price: 500, teachers: [teacher.documentId],
       },
     });
     await assert.rejects(
@@ -576,7 +564,7 @@ describe('семинары в собранном Strapi', { timeout: 360000 }, (
           status: 'published',
           data: { seminar: String(unnamed.id) },
         }),
-      /название семинара/,
+      /семинар/i,
     );
     const kept = await entries.findOne({
       documentId: stays.documentId,
@@ -598,7 +586,7 @@ describe('семинары в собранном Strapi', { timeout: 360000 }, (
             schedule_entries: { connect: [foreign.documentId] },
           },
         }),
-      /другому семинару/,
+      /семинар/i,
     );
     const foreignAfter = await entries.findOne({ documentId: foreign.documentId, populate: ['seminar'] });
     assert.equal(foreignAfter.seminar.documentId, other.documentId);

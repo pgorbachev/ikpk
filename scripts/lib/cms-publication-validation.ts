@@ -50,7 +50,9 @@ function checkPublication({
   type: string;
   record: Record<string, unknown>;
 }): PublicationVerdict {
-  const missing = requiredFields(type).filter((field) => isEmpty(record[field]));
+  const missing = requiredFields(type).filter((field) =>
+    !(type === 'schedule-entry' && field === 'city' && record.isOnline === true) && isEmpty(record[field]),
+  );
 
   if (type === 'person' && !isEmpty(record.trait)) {
     const trait = record.trait;
@@ -132,10 +134,13 @@ function checkDocumentsStateChange({
 
 function checkDocumentRecord(record: DocumentRecord): Verdict {
   if (isEmpty(record.document)) return { ok: false, message: 'не назван документ' };
-  if (isEmpty(record.issuer)) return { ok: false, message: 'не названо выдающее лицо' };
+  if (isEmpty(record.issuer) && record.issuerUnknown !== true) return { ok: false, message: 'не названо выдающее лицо' };
+  if (!isEmpty(record.issuer) && record.issuerUnknown === true) return { ok: false, message: 'выдающее лицо не может быть одновременно указано и неизвестно' };
+  if (record.completionScope === 'other-seminar' && isEmpty(record.otherSeminarHref)) return { ok: false, message: 'укажите ссылку на другой семинар' };
   if (Array.isArray(record.priorEducation)) {
     return { ok: false, message: 'составное значение по исходному образованию недопустимо' };
   }
+  if (isEmpty(record.priorEducation)) return { ok: false, message: 'укажите требование к образованию или отметьте, что оно не указано' };
   if (Array.isArray(record.outcome)) {
     return { ok: false, message: 'составное значение по результату обучения недопустимо' };
   }
@@ -172,15 +177,24 @@ function aggregateCompliance(seminars: SeminarDocuments[]): {
     document: string;
     issuer: string;
     outcome?: DocumentRecord['outcome'];
+    issuerUnknown?: boolean;
+    completionScope?: DocumentRecord['completionScope'];
+    otherSeminarHref?: string;
+    registries?: DocumentRecord['registries'];
   }[];
   notIssued: string[];
   unconfirmed: string[];
+  supplemental?: { seminar: string; nmo?: SeminarDocuments['nmo']; trainingRegistries?: SeminarDocuments['trainingRegistries'] }[];
 } {
   const rows: ReturnType<typeof aggregateCompliance>['rows'] = [];
   const notIssued: string[] = [];
   const unconfirmed: string[] = [];
+  const supplemental: NonNullable<ReturnType<typeof aggregateCompliance>['supplemental']> = [];
 
   for (const s of seminars) {
+    if (s.nmo || s.trainingRegistries?.length) {
+      supplemental.push({ seminar: s.identifier, ...(s.nmo ? { nmo: s.nmo } : {}), ...(s.trainingRegistries?.length ? { trainingRegistries: s.trainingRegistries } : {}) });
+    }
     if (s.documentsState === 'not-issued') {
       notIssued.push(s.identifier);
       continue;
@@ -195,15 +209,19 @@ function aggregateCompliance(seminars: SeminarDocuments[]): {
         // Контракт объявляет поле обязательным, но исходные записи из старой
         // системы не всегда называют образование (см. тест «документ по
         // непрохождению аттестации») — сохраняем значение как есть.
-        priorEducation: d.priorEducation as PriorEducation,
+        priorEducation: d.priorEducation ?? 'unspecified',
         document: d.document,
         issuer: d.issuer,
         outcome: d.outcome,
+        ...(d.issuerUnknown !== undefined ? { issuerUnknown: d.issuerUnknown } : {}),
+        ...(d.completionScope !== undefined ? { completionScope: d.completionScope } : {}),
+        ...(d.otherSeminarHref !== undefined ? { otherSeminarHref: d.otherSeminarHref } : {}),
+        ...(d.registries !== undefined ? { registries: d.registries } : {}),
       });
     }
   }
 
-  return { rows, notIssued, unconfirmed };
+  return { rows, notIssued, unconfirmed, ...(supplemental.length ? { supplemental } : {}) };
 }
 
 const contentValidation: ContentValidation = {

@@ -2,13 +2,15 @@
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { createRequire } from 'node:module';
 import {
-  chmodSync, closeSync, existsSync, lstatSync, mkdirSync, openSync, readFileSync,
-  realpathSync, readdirSync, readlinkSync, renameSync, symlinkSync, unlinkSync, writeFileSync,
+  chmodSync, closeSync, constants, existsSync, fstatSync, lstatSync, mkdirSync, openSync, readFileSync,
+  realpathSync, readdirSync, readlinkSync, readSync, renameSync, symlinkSync, unlinkSync, writeFileSync,
 } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { pathToFileURL, fileURLToPath } from 'node:url';
 import { auditMigration } from './audit-data-migration.mjs';
+import { captureSeminarStageSnapshot, snapshotFingerprint } from './seminar-migration-snapshot.mjs';
+import { auditSeminarMigrationComposition } from './audit-seminar-migration-composition.mjs';
 
 const MODULE_PATH = fileURLToPath(import.meta.url);
 const CMS_ROOT = resolve(dirname(MODULE_PATH), '..');
@@ -23,6 +25,7 @@ const CLOSED_STRAPI_RUNTIME_KEYS = [
   'HOST',
   'PORT',
   'STRAPI_TELEMETRY_DISABLED',
+  'IKPK_MIGRATION_CLOSED_LOAD',
   'IKPK_ENABLE_CAPTURE_TOKEN_BOOTSTRAP',
   'CONTENT_ADMIN_EMAIL',
   'CONTENT_ADMIN_PASSWORD',
@@ -190,6 +193,21 @@ function sqliteSnapshot(db) {
   ]));
   return { engine: 'sqlite', sqliteVersion: version, userVersion, tables, columns, schemaFingerprint: sqliteSchemaFingerprint(db) };
 }
+function logicalDatabaseFingerprint(path) {
+  const db = openDatabase(path, { readonly: true });
+  db.defaultSafeIntegers(true);
+  const canonical = value => typeof value === 'bigint' ? { integer: value.toString() }
+    : value instanceof Uint8Array ? { blob: Buffer.from(value).toString('base64') }
+    : Array.isArray(value) ? value.map(canonical)
+    : value && typeof value === 'object' ? Object.fromEntries(Object.keys(value).sort().map(key => [key, canonical(value[key])])) : value;
+  try {
+    const schema = db.prepare("SELECT type,name,tbl_name,sql FROM sqlite_master ORDER BY type,name,tbl_name").all();
+    const tables = schema.filter(row => row.type === 'table').map(row => row.name);
+    const rows = tables.map(table => [table, db.prepare(`SELECT * FROM "${table.replaceAll('"', '""')}"`).all().map(row => JSON.stringify(canonical(row))).sort()]);
+    return jsonHash(canonical({ schema, rows, userVersion: db.pragma('user_version', { simple: true }) }));
+  } finally { db.close(); }
+}
+
 function validateSourceSchema(snapshot, plan, db) {
   for (const step of plan.steps) {
     if (step.source?.schema?.engine !== snapshot.engine) fail(`unsupported source engine for ${step.id}: expected ${step.source?.schema?.engine}, found ${snapshot.engine}`);
@@ -279,6 +297,66 @@ export function validateSealedInstallMetadata({ receipt, dependencyRoot, expecte
   }
 }
 
+export const ROOT_SEALED_DEPENDENCIES_VERSION = 3;
+const ROOT_SEALED_DEPENDENCY_MARKER = '.ikpk-install-provenance-v3.json';
+
+function rootRuntimeFileSha256(path) {
+  const fd = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW);
+  try {
+    const digest = createHash('sha256'), buffer = Buffer.alloc(1024 * 1024);
+    for (let count; (count = readSync(fd, buffer, 0, buffer.length, null)) > 0;) digest.update(buffer.subarray(0, count));
+    return digest.digest('hex');
+  } finally { closeSync(fd); }
+}
+
+export function validateRootSealedInstallMetadata({ receipt, dependencyRoot, dependencyStat, expectedStrapiVersion, packageLockSha256, packageJsonSha256 }) {
+  if (receipt?.schemaVersion !== 3 || receipt.installCommand !== 'npm ci --no-audit --no-fund' || receipt.exitCode !== 0) fail('root-sealed dependency proof does not record the successful full npm ci command');
+  if (receipt.installerUser !== 'ikpk-deps' || receipt.installIsolation !== 'dedicated-uid-cgroup-drained-v1' ||
+      !Number.isInteger(receipt.installerUid) || receipt.installerUid <= 0 || receipt.installerUid === process.getuid?.() ||
+      !Number.isInteger(receipt.installerGid) || receipt.installerGid <= 0 ||
+      typeof receipt.nodeBinary !== 'string' || receipt.nodeBinary !== realpathSync(process.execPath) ||
+      !HASH.test(receipt.nodeBinarySha256 ?? '') || rootRuntimeFileSha256(receipt.nodeBinary) !== receipt.nodeBinarySha256 ||
+      typeof receipt.npmCli !== 'string' || !isAbsolute(receipt.npmCli) || !HASH.test(receipt.npmCliSha256 ?? '')) fail('root-sealed dependency installer isolation or runtime proof differs');
+  if (receipt.dependencyRoot !== dependencyRoot || receipt.generation !== dirname(dependencyRoot)) fail('root-sealed dependency generation differs from its proof');
+  if (receipt.dependencyDevice !== dependencyStat.dev || receipt.dependencyInode !== dependencyStat.ino) fail('root-sealed dependency inode differs from its proof');
+  if (!HASH.test(receipt.dependencyTreeSha256 ?? '') || receipt.packageLockSha256 !== packageLockSha256 || !HASH.test(receipt.packageLockSha256 ?? '')) fail('root-sealed dependency tree or lock digest differs');
+  if (!HASH.test(receipt.packageJsonSha256 ?? '') || receipt.packageJsonSha256 !== packageJsonSha256) fail('root-sealed dependency package.json digest differs');
+  if (receipt.nodeAbi !== process.versions.modules || receipt.nodeVersion !== process.version) fail('root-sealed dependency Node runtime differs');
+  if (receipt.strapiVersion !== expectedStrapiVersion) fail('root-sealed dependency Strapi version differs');
+  if (!/^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/.test(receipt.npmVersion ?? '')) fail('root-sealed dependency npm version is malformed');
+  if (typeof receipt.completionObservedAt !== 'string' || !receipt.completionObservedAt.endsWith('Z') || !Number.isFinite(Date.parse(receipt.completionObservedAt)) || new Date(receipt.completionObservedAt).toISOString() !== receipt.completionObservedAt) fail('root-sealed dependency completion timestamp is malformed');
+}
+
+export function readRootSealedDependencyProvenance({ dependencyRoot, expectedStrapiVersion, packageLockSha256, packageJsonSha256,
+  trustedUid = 0, platform = process.platform, mountInfo } = {}) {
+  const protectedPath = (path, directory) => {
+    if (!isAbsolute(path) || realpathSync(path) !== path) fail('root-sealed dependency path is not canonical');
+    const info = lstatSync(path);
+    if ((directory ? !info.isDirectory() : !info.isFile() || info.nlink !== 1) || info.uid !== trustedUid || (info.mode & 0o022)) fail('root-sealed dependency path owner or mode is unsafe');
+    for (let parent = dirname(path);; parent = dirname(parent)) {
+      const ancestor = lstatSync(parent);
+      if (!ancestor.isDirectory() || ancestor.isSymbolicLink() || ![0, trustedUid].includes(ancestor.uid) || (ancestor.mode & 0o022)) fail('root-sealed dependency ancestor is writable or untrusted');
+      if (dirname(parent) === parent) break;
+    }
+    return info;
+  };
+  const dependencyStat = protectedPath(dependencyRoot, true);
+  const path = join(dirname(dependencyRoot), ROOT_SEALED_DEPENDENCY_MARKER);
+  const info = protectedPath(path, false);
+  if (info.size > 16384) fail('root-sealed dependency proof is too large');
+  const fd = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW);
+  let bytes;
+  try {
+    const opened = fstatSync(fd);
+    if (opened.dev !== info.dev || opened.ino !== info.ino || opened.size !== info.size) fail('root-sealed dependency proof changed while opening');
+    bytes = readFileSync(fd);
+  } finally { closeSync(fd); }
+  const receipt = JSON.parse(bytes.toString('utf8'));
+  validateRootSealedInstallMetadata({ receipt, dependencyRoot, dependencyStat, expectedStrapiVersion, packageLockSha256, packageJsonSha256 });
+  if (platform !== 'linux' || !hasExactReadOnlyMount(mountInfo ?? readFileSync('/proc/self/mountinfo', 'utf8'), dependencyRoot)) fail('root-sealed dependency root is not an exact read-only Linux mountpoint');
+  return { receipt, proofSha256: hash(bytes) };
+}
+
 function artifactFingerprint(root, expectedStrapiVersion) {
   const entries = [];
   function visit(directory, prefix = '', dependencyRoot = null) {
@@ -315,7 +393,7 @@ function artifactFingerprint(root, expectedStrapiVersion) {
     const dependencyRoot = realpathSync(dependencyLink);
     externalDependencyRoot = dependencyRoot;
     const dependencyStat = lstatSync(dependencyRoot);
-    if (basename(dependencyRoot) !== 'node_modules' || !dependencyStat.isDirectory() || dependencyStat.uid !== process.getuid?.() || (dependencyStat.mode & 0o022) !== 0) {
+    if (basename(dependencyRoot) !== 'node_modules' || !dependencyStat.isDirectory() || (dependencyStat.mode & 0o022) !== 0) {
       fail('external node_modules root must be a canonical, owned, non-writable dependency directory');
     }
     const lock = readJson(join(root, 'package-lock.json'), 'artifact package-lock.json');
@@ -328,24 +406,19 @@ function artifactFingerprint(root, expectedStrapiVersion) {
     let provenanceInfo;
     try { provenanceInfo = lstatSync(provenancePath); }
     catch (error) { if (error.code !== 'ENOENT') throw error; }
-    if (provenanceInfo) {
-      if (!provenanceInfo.isFile() || provenanceInfo.isSymbolicLink() || provenanceInfo.uid !== 0 || (provenanceInfo.mode & 0o077) !== 0) {
-        fail('sealed install provenance must be a root-owned private regular file');
-      }
-      const rootInfo = lstatSync(root);
-      if (rootInfo.uid !== 0 || (rootInfo.mode & 0o077) !== 0) fail('sealed CMS artifact root must be root-owned and private');
-      if (process.platform !== 'linux') fail('sealed dependency provenance requires Linux read-only mount verification');
-      const provenance = readJson(provenancePath, 'sealed install provenance');
-      if (dependencyStat.uid !== 0 || (dependencyStat.mode & 0o077) !== 0) fail('sealed node_modules root must be root-owned and private');
-      const lockSha256 = hash(readFileSync(join(root, 'package-lock.json')));
-      validateSealedInstallMetadata({ receipt: provenance, dependencyRoot, expectedStrapiVersion, packageLockSha256: lockSha256 });
-      const mountInfo = readFileSync('/proc/self/mountinfo', 'utf8');
-      if (!hasExactReadOnlyMount(mountInfo, dependencyRoot)) fail('sealed dependency root is not an exact read-only Linux mountpoint');
-      artifactIdentityKind = 'sealed-install-provenance';
-      entries.push({ path: 'node_modules', type: artifactIdentityKind, target: readlinkSync(dependencyLink), resolved: dependencyRoot, packageLockSha256: lockSha256, npmVersion: provenance.npmVersion, nodeAbi: provenance.nodeAbi, strapiVersion: provenance.strapiVersion, installCommand: provenance.installCommand, exitCode: provenance.exitCode, completionObservedAt: provenance.completionObservedAt });
+    let sharedProofInfo;
+    try { sharedProofInfo = lstatSync(join(dirname(dependencyRoot), ROOT_SEALED_DEPENDENCY_MARKER)); }
+    catch (error) { if (error.code !== 'ENOENT') throw error; }
+    if (sharedProofInfo) {
+      if (provenanceInfo) fail('artifact and generation have conflicting dependency proofs');
+      const { receipt: proof, proofSha256 } = readRootSealedDependencyProvenance({ dependencyRoot,
+        expectedStrapiVersion, packageLockSha256: hash(readFileSync(join(root, 'package-lock.json'))),
+        packageJsonSha256: hash(readFileSync(join(root, 'package.json'))) });
+      artifactIdentityKind = 'root-sealed-generation-v3';
+      entries.push({ path: 'node_modules', type: artifactIdentityKind, target: readlinkSync(dependencyLink),
+        resolved: dependencyRoot, proofSha256, dependencyTreeSha256: proof.dependencyTreeSha256 });
     } else {
-      entries.push({ path: 'node_modules', type: 'dependency-root', target: readlinkSync(dependencyLink), resolved: dependencyRoot });
-      visit(dependencyRoot, 'node_modules', dependencyRoot);
+      fail('v3 runner requires root-sealed dependency attestation; legacy fallback is forbidden');
     }
   }
   visit(root);
@@ -392,7 +465,7 @@ function resolvePlan(artifactDir, { fingerprint = true } = {}) {
     if (!['strapi-native', 'data'].includes(step.kind)) fail(`unsupported migration step kind for ${step.id}`);
     if (step.kind === 'strapi-native' && step.phase !== 'before-sync') fail(`native Strapi migration must be before-sync: ${step.id}`);
     if (step.kind === 'data' && step.phase !== 'after-sync') fail(`explicit data migration must be after-sync: ${step.id}`);
-    if (step.kind === 'data' && !['classification', 'normalize-documents-state'].includes(step.handler)) fail(`unsupported data migration handler for ${step.id}`);
+    if (step.kind === 'data' && !['classification', 'normalize-documents-state', 'content-admin-permissions', 'reviewed-schedule', 'reviewed-documents', 'reviewed-content'].includes(step.handler)) fail(`unsupported data migration handler for ${step.id}`);
     if (typeof step.path !== 'string' || !step.path || isAbsolute(step.path) || step.path.split(/[\\/]/).includes('..')) fail(`invalid migration payload path for ${step.id}`);
     if (!HASH.test(step.sha256 ?? '')) fail(`missing SHA-256 for migration payload ${step.id}`);
     if (paths.has(step.path)) fail(`duplicate migration payload path: ${step.path}`);
@@ -408,6 +481,13 @@ function resolvePlan(artifactDir, { fingerprint = true } = {}) {
     }
     return { ...step, absolutePath: file };
   });
+  const reviewedSchedule = steps.filter(step => step.handler === 'reviewed-schedule');
+  const reviewedDocuments = steps.filter(step => step.handler === 'reviewed-documents');
+  if (reviewedSchedule.length > 1 || reviewedDocuments.length > 1 || (reviewedDocuments.length && (!reviewedSchedule.length || steps.indexOf(reviewedSchedule[0]) >= steps.indexOf(reviewedDocuments[0])))) fail('reviewed schedule must precede reviewed documents, with at most one of each');
+  const reviewedContent = steps.filter(step => step.handler === 'reviewed-content');
+  if (reviewedContent.length > 1 || (reviewedContent.length && (!reviewedDocuments.length || steps.indexOf(reviewedDocuments[0]) >= steps.indexOf(reviewedContent[0])))) fail('reviewed documents must precede reviewed content, with at most one content step');
+  const permissionSteps = steps.filter(step => step.handler === 'content-admin-permissions');
+  if (permissionSteps.length > 1 || (permissionSteps.length && reviewedSchedule.length && steps.indexOf(permissionSteps[0]) >= steps.indexOf(reviewedSchedule[0]))) fail('content-admin permissions must precede reviewed schedule, with at most one step');
   const nativeFiles = new Set(steps.filter(({ kind }) => kind === 'strapi-native').map(({ path }) => path));
   for (const entry of (awaitlessReadDir(migrationsRoot))) {
     if (entry.isFile() && /\.(?:js|sql)$/.test(entry.name) && !nativeFiles.has(entry.name)) fail(`unplanned native migration payload: ${entry.name}`);
@@ -524,7 +604,7 @@ function recordStep(db, { operationId, lineageId, step, result }) {
 }
 
 let defaultLifecycleQueue = Promise.resolve();
-function productionLifecycle(artifactDir, closedLoadSecrets) {
+export function productionLifecycle(artifactDir, closedLoadSecrets) {
   return {
     loadClosed({ candidateDbPath, onCheckpoint }) {
       const predecessor = defaultLifecycleQueue;
@@ -556,6 +636,7 @@ function productionLifecycle(artifactDir, closedLoadSecrets) {
         process.env.HOST = '127.0.0.1';
         process.env.PORT = '0';
         process.env.STRAPI_TELEMETRY_DISABLED = 'true';
+        process.env.IKPK_MIGRATION_CLOSED_LOAD = 'true';
         process.env.IKPK_ENABLE_CAPTURE_TOKEN_BOOTSTRAP = '0';
         delete process.env.CONTENT_ADMIN_EMAIL;
         delete process.env.CONTENT_ADMIN_PASSWORD;
@@ -575,7 +656,7 @@ function productionLifecycle(artifactDir, closedLoadSecrets) {
           }
           await instance.load();
           destroyInstance = instance.destroy.bind(instance);
-          lifecycleHandle = { destroy: async (...args) => {
+          lifecycleHandle = { strapi: instance, destroy: async (...args) => {
             try { return await destroyInstance(...args); }
             finally { restoreContext(); }
           } };
@@ -659,6 +740,51 @@ function verifyPlanAndReceipt(plan, receipt) {
   }
 }
 
+function verifyStageSnapshot(receipt, stageId) {
+  const saved = receipt.stageSnapshots?.[stageId], expectedPath = join(receipt.stageSnapshotDir, `${receipt.operationId}.${stageId}.db`);
+  if (!saved || saved.path !== expectedPath) fail(`stage snapshot missing or misbound: ${stageId}`);
+  const info = lstatSync(saved.path);
+  if (!info.isFile() || info.isSymbolicLink() || info.nlink !== 1 || realpathSync(saved.path) !== saved.path || (info.mode & 0o777) !== 0o400 || (typeof process.getuid === 'function' && info.uid !== process.getuid()) || snapshotFingerprint(saved.path) !== saved.snapshotFingerprint) fail(`stage snapshot changed: ${stageId}`);
+}
+function verifyCompletedStageSnapshots(receipt, plan) {
+  if (!receipt.stageSnapshotDir) return;
+  privateDirectory(receipt.stageSnapshotDir, 'stage snapshot directory');
+  const required = ['schema', ...plan.steps.filter(step => step.kind === 'data').map(step => step.id)];
+  if (receipt.pendingSnapshotStep || JSON.stringify(Object.keys(receipt.stageSnapshots ?? {}).sort()) !== JSON.stringify([...required].sort())) fail('stage snapshot set is incomplete or pending');
+  for (const stageId of required) verifyStageSnapshot(receipt, stageId);
+  if (!receipt.inheritedCohort) for (const step of plan.steps.filter(step => ['reviewed-schedule', 'reviewed-documents', 'reviewed-content'].includes(step.handler))) verifyReviewedStepBinding(step, receipt.reviewedSteps?.[step.id]);
+}
+function readPrivateReview(pathValue, expectedFileSha256, label) {
+  if (!HASH.test(expectedFileSha256 ?? '')) fail(`missing review file hash: ${label}`);
+  const path = abs(pathValue, 'review file');
+  if (path !== pathValue || privateDirectory(dirname(path), 'review file directory') !== dirname(path)) fail(`review file path is not canonical: ${label}`);
+  const fd = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW);
+  try {
+    const info = fstatSync(fd);
+    if (!info.isFile() || info.nlink !== 1 || info.size > 50_000_000 || (info.mode & 0o077) || (typeof process.getuid === 'function' && info.uid !== process.getuid())) fail(`review file must be private and unlinked: ${label}`);
+    const bytes = readFileSync(fd);
+    if (hash(bytes) !== expectedFileSha256) fail(`review file changed: ${label}`);
+    try { return JSON.parse(bytes.toString('utf8')); } catch { fail(`review file is invalid JSON: ${label}`); }
+  } finally { closeSync(fd); }
+}
+function verifyReviewedStepBinding(step, binding) {
+  if (!binding || !HASH.test(binding.expectedPlanDigest ?? '')) fail(`missing reviewed binding for ${step.id}`);
+  const reviewed = readPrivateReview(binding.reviewFilePath, binding.expectedReviewFileSha256, step.id);
+  const actual = step.handler === 'reviewed-schedule' ? reviewed?.plan?.planDigest : reviewed?.digest;
+  if (actual !== binding.expectedPlanDigest) fail(`review plan digest differs: ${step.id}`);
+}
+async function recordStepInKnex(trx, { operationId, lineageId, step, result }) {
+  if (typeof trx !== 'function') fail('content-admin migration did not provide its database transaction');
+  const existing = await trx(LEDGER_TABLE).where({ lineage_id: lineageId, step_id: step.id }).first();
+  if (existing) {
+    if (existing.payload_sha256 !== step.sha256) fail(`step ID ${step.id} has a different payload hash`);
+    return existing;
+  }
+  const row = { lineage_id: lineageId, operation_id: operationId, step_id: step.id, payload_sha256: step.sha256, result_json: JSON.stringify(result ?? {}), completed_at: new Date().toISOString() };
+  await trx(LEDGER_TABLE).insert(row);
+  return row;
+}
+
 function preservationAudit(receipt, plan) {
   receipt.candidatePostMigrationSha256 = hash(readFileSync(receipt.candidateDbPath));
   receipt.candidatePostMigrationFileFingerprint = sourceFileFingerprint(receipt.candidateDbPath);
@@ -682,12 +808,75 @@ function preservationAudit(receipt, plan) {
 }
 
 /** Prepare a private, consistent SQLite candidate and execute its versioned migration plan. */
-export async function prepareMigration({ sourceDbPath: rawSourceDbPath, candidateDbPath: rawCandidateDbPath, artifactDir: rawArtifactDir, receiptPath: rawReceiptPath, operationId, sourceCmsRoot, sourceStrapiVersion, lifecycleAdapter, onCheckpoint }) {
+const SEMINAR_HANDLERS = new Set(['content-admin-permissions', 'reviewed-schedule', 'reviewed-documents', 'reviewed-content']);
+function seminarSteps(plan) { return plan.steps.filter(step => SEMINAR_HANDLERS.has(step.handler)); }
+function sealedJson(pathValue, expected, label) {
+  if (!HASH.test(expected ?? '')) fail(`${label} needs an independently admitted digest`);
+  const path = abs(pathValue, label), info = lstatSync(path);
+  if (!info.isFile() || info.isSymbolicLink() || info.nlink !== 1 || realpathSync(path) !== path) fail(`${label} path is unsafe`);
+  const bytes = readFileSync(path);
+  if (hash(bytes) !== expected) fail(`${label} differs from independent admission`);
+  return JSON.parse(bytes.toString('utf8'));
+}
+function verifyInheritedSeminarCohort(admission, sourceDbPath, plan) {
+  const manifest = sealedJson(admission.manifestPath, admission.expectedManifestSha256, 'inherited cohort manifest');
+  const prior = sealedJson(admission.receiptPath, admission.expectedReceiptSha256, 'inherited cohort receipt');
+  if (manifest.version !== 2 || manifest.receiptSha256 !== admission.expectedReceiptSha256
+      || manifest.database?.path !== sourceDbPath || prior.phase !== 'prepared'
+      || prior.operationId !== manifest.operationId || prior.sourceCommitSha !== manifest.sourceCommit
+      || prior.artifactSha256 !== manifest.cmsArtifactSha256 || prior.planSha256 !== manifest.migrationPlanDigest
+      || prior.registryBinding?.registrySha256 !== manifest.registrySha256
+      || !HASH.test(prior.seminarLineageId ?? '')) fail('inherited cohort is not a sealed prior migration');
+  const expectedSteps = seminarSteps(plan);
+  if (expectedSteps.length !== 4 || new Set(expectedSteps.map(step => step.handler)).size !== 4) fail('inherited cohort requires the exact four seminar steps');
+  for (const step of expectedSteps) {
+    const old = prior.steps.find(item => item.id === step.id);
+    if (!old || old.sha256 !== step.sha256 || old.handler !== step.handler) fail('inherited seminar step identity changed');
+  }
+  const source = readCandidateState(sourceDbPath), ids = new Set(expectedSteps.map(step => step.id));
+  const inherited = source.history.filter(row => ids.has(row.step_id));
+  if (source.lineage.lineage_id !== prior.seminarLineageId || JSON.stringify(source.lineage) !== JSON.stringify(prior.seminarLineage) || inherited.length !== 4
+      || JSON.stringify(inherited) !== JSON.stringify(prior.seminarStepHistory)
+      || inherited.some(row => row.payload_sha256 !== expectedSteps.find(step => step.id === row.step_id).sha256)) fail('inherited seminar ledger differs from the sealed cohort');
+  const registryPath = abs(admission.registryPath, 'inherited registry');
+  if (hash(readFileSync(registryPath)) !== manifest.registrySha256) fail('inherited registry differs from the sealed cohort');
+  return { manifest, history: inherited, lineageId: source.lineage.lineage_id };
+}
+
+export function verifyRegistryBinding({ binding, receipt, candidateDbPath, contract }) {
+  if (!binding || binding.version !== 1 || binding.operationId !== receipt.operationId
+      || binding.sourceCommit !== receipt.sourceCommitSha || binding.migrationPlanDigest !== receipt.planSha256
+      || binding.sourceDatabaseSha256 !== receipt.source.snapshotSha256 || binding.cmsArtifactSha256 !== receipt.artifactSha256
+      || binding.proofArtifactSha256 !== contract.proofArtifact.sha256
+      || !HASH.test(binding.candidateDatabaseSha256 ?? '') || !HASH.test(binding.registrySha256 ?? '')) fail('registry cohort identity differs from the reviewed migration');
+  const registryPath = abs(binding.registryPath, 'registry file');
+  assertDistinctPaths([...databasePathSet('source database', receipt.sourceDbPath), ...databasePathSet('candidate database', candidateDbPath), ['registry file', registryPath]]);
+  const registryInfo = lstatSync(registryPath);
+  if (!registryInfo.isFile() || registryInfo.isSymbolicLink() || registryInfo.nlink !== 1) fail('registry file must be a regular single-link file');
+  const bytes = readFileSync(registryPath);
+  if (hash(bytes) !== binding.registrySha256) fail('registry file differs from its independently reviewed SHA-256');
+  let entries; try { entries = JSON.parse(bytes.toString('utf8')); } catch { fail('registry file is not JSON'); }
+  if (!Array.isArray(entries)) fail('registry must be an array');
+  const identities = new Set();
+  for (const entry of entries) {
+    if (!entry || typeof entry.documentId !== 'string' || !entry.documentId
+        || typeof entry.publishedAt !== 'string' || !entry.publishedAt || typeof entry.updatedAt !== 'string' || !entry.updatedAt
+        || !['paid-zero-price', 'missing-duration'].includes(entry.condition) || !HASH.test(entry.recordFingerprint ?? '')) fail('invalid reviewed historical registry entry');
+    const identity = JSON.stringify([entry.documentId, entry.condition]);
+    if (identities.has(identity)) fail('duplicate reviewed historical registry entry');
+    identities.add(identity);
+  }
+  if (existsSync(`${candidateDbPath}-wal`) && lstatSync(`${candidateDbPath}-wal`).size !== 0) fail('registry binding requires a checkpointed candidate without pending WAL');
+  if (hash(readFileSync(candidateDbPath)) !== binding.candidateDatabaseSha256) fail('registry binding candidate database digest mismatch');
+}
+
+export async function prepareMigration({ sourceDbPath: rawSourceDbPath, candidateDbPath: rawCandidateDbPath, artifactDir: rawArtifactDir, receiptPath: rawReceiptPath, operationId, sourceCmsRoot, sourceStrapiVersion, sourceCommitSha, lifecycleAdapter, onCheckpoint, stageSnapshotDir: rawStageSnapshotDir, stopAfterStage, reviewedStep, compositionReview, registryReview, inheritedCohort, proofArtifactSha256 }) {
   const closedLoadSecrets = createClosedStrapiSecrets();
   const sourceDbPath = abs(rawSourceDbPath, 'sourceDbPath');
   const candidateDbPath = abs(rawCandidateDbPath, 'candidateDbPath');
   const artifactDir = abs(rawArtifactDir, 'artifactDir');
   const receiptPath = abs(rawReceiptPath, 'receiptPath');
+  const stageSnapshotDir = rawStageSnapshotDir === undefined ? null : privateDirectory(abs(rawStageSnapshotDir, 'stageSnapshotDir'), 'stage snapshot directory');
   if (!STEP_ID.test(operationId ?? '')) fail('operationId must be a stable non-empty identifier');
   if (onCheckpoint !== undefined && typeof onCheckpoint !== 'function') fail('onCheckpoint must be a function when provided');
   const artifactReal = realpathSync(artifactDir);
@@ -700,8 +889,27 @@ export async function prepareMigration({ sourceDbPath: rawSourceDbPath, candidat
     ['operation receipt', receiptPath],
   ]);
   if (isWithin(artifactReal, receiptPath) || isWithin(artifactReal, candidateDbPath)) fail('candidate database and operation receipt must be outside the CMS artifact/Git tree');
+  if (stageSnapshotDir && (isWithin(artifactReal, stageSnapshotDir) || isWithin(stageSnapshotDir, sourceDbPath) || isWithin(stageSnapshotDir, candidateDbPath) || isWithin(stageSnapshotDir, receiptPath))) fail('stage snapshot directory must be private and separate from the artifact, source, candidate and receipt');
   if (candidateDbPath === sourceDbPath) fail('candidate database must not be the source database');
   let release = resolvePlan(artifactReal, { fingerprint: false });
+  const reviewedHandlers = new Set(['reviewed-schedule', 'reviewed-documents', 'reviewed-content']);
+  if (release.steps.some(step => reviewedHandlers.has(step.handler)) && !/^[a-f0-9]{40}$/.test(sourceCommitSha ?? '')) fail('reviewed seminar steps require a full source commit SHA from the trusted release admission');
+  if (sourceCommitSha !== undefined && !/^[a-f0-9]{40}$/.test(sourceCommitSha)) fail('source commit SHA is invalid');
+  if (release.steps.some(step => reviewedHandlers.has(step.handler) || step.handler === 'content-admin-permissions') && !stageSnapshotDir) fail('seminar migration steps require private stage snapshots');
+  if (reviewedStep !== undefined) {
+    if (!reviewedStep || !release.steps.some(step => step.id === reviewedStep.id && reviewedHandlers.has(step.handler)) || !HASH.test(reviewedStep.expectedReviewFileSha256 ?? '') || !HASH.test(reviewedStep.expectedPlanDigest ?? '')) fail('reviewedStep requires a known reviewed data step and independent SHA-256 digests');
+    reviewedStep = { id: reviewedStep.id, reviewFilePath: abs(reviewedStep.reviewFilePath, 'review file'), expectedReviewFileSha256: reviewedStep.expectedReviewFileSha256, expectedPlanDigest: reviewedStep.expectedPlanDigest };
+  }
+  if (compositionReview !== undefined) {
+    if (!compositionReview || !HASH.test(compositionReview.expectedFileSha256 ?? '') || !HASH.test(compositionReview.expectedContractDigest ?? '')) fail('composition review requires independent SHA-256 digests');
+    compositionReview = { reviewFilePath: abs(compositionReview.reviewFilePath, 'composition review file'), expectedFileSha256: compositionReview.expectedFileSha256, expectedContractDigest: compositionReview.expectedContractDigest };
+  }
+  if (registryReview !== undefined) {
+    if (!registryReview || !HASH.test(registryReview.expectedFileSha256 ?? '')) fail('registry review requires an independent SHA-256');
+    registryReview = { reviewFilePath: abs(registryReview.reviewFilePath, 'registry review file'), expectedFileSha256: registryReview.expectedFileSha256 };
+  }
+  if (stageSnapshotDir && release.steps.some(x => x.kind === 'data' && x.id === 'schema')) fail('data step id conflicts with schema snapshot');
+  if (stopAfterStage !== undefined && (!stageSnapshotDir || !['schema', ...release.steps.filter(x => x.kind === 'data').map(x => x.id)].includes(stopAfterStage))) fail('stopAfterStage requires snapshots and a known stage');
   const strapiVersion = sourceStrapiVersion ?? readSourceStrapiVersion(sourceCmsRoot, release);
   const releaseVersions = new Set(release.steps.map(({ source }) => source.strapiVersion));
   if (!releaseVersions.has(strapiVersion)) fail(`source Strapi version ${strapiVersion} is not supported by this migration plan`);
@@ -714,6 +922,12 @@ export async function prepareMigration({ sourceDbPath: rawSourceDbPath, candidat
   } finally { preflightSource.close(); }
   const actualSourceVersion = readSourceStrapiVersion(sourceCmsRoot, release, sourceStrapiVersion);
   if (actualSourceVersion !== strapiVersion) fail(`source version evidence differs: ${actualSourceVersion} vs ${strapiVersion}`);
+  let inherited = null;
+  if (inheritedCohort !== undefined) {
+    if (!HASH.test(proofArtifactSha256 ?? '')) fail('inherited cohort requires the independently admitted current proof digest');
+    inherited = verifyInheritedSeminarCohort(inheritedCohort, sourceDbPath, release);
+    if (reviewedStep || compositionReview || registryReview) fail('inherited cohort cannot introduce replacement migration reviews');
+  }
   release = fingerprintPlanArtifact(release);
   const unlock = acquireTargetLock(candidateDbPath);
   let preserveReceiptOnFailure = false;
@@ -729,12 +943,15 @@ export async function prepareMigration({ sourceDbPath: rawSourceDbPath, candidat
     let lineageId;
     if (candidateExists) {
       receipt = receiptFrom(receiptPath, operationId);
+      if (JSON.stringify(receipt.inheritedCohort ?? null) !== JSON.stringify(inheritedCohort ?? null)) fail('inherited cohort differs from operation receipt');
+      if ((receipt.sourceCommitSha ?? null) !== (sourceCommitSha ?? null)) fail('source commit SHA differs from the operation receipt');
+      if ((receipt.stageSnapshotDir ?? null) !== stageSnapshotDir) fail('stage snapshot directory differs from the operation receipt');
       verifyPlanAndReceipt(release, receipt);
       if (resolve(receipt.candidateDbPath) !== candidateDbPath || resolve(receipt.sourceDbPath) !== sourceDbPath) fail('candidate or source path differs from the durable operation receipt');
       if (receipt.source.strapiVersion !== strapiVersion) fail('source Strapi version differs from the original operation receipt');
       assertNoOpenHandles([sourceDbPath, `${sourceDbPath}-wal`]);
       if (sourceFileFingerprint(sourceDbPath) !== receipt.source.sourceFileFingerprint) fail('original SQLite source changed after preparation; refusing to resume this candidate');
-      const resumablePhases = new Set(['candidate-created', 'schema-ready', 'data-steps-in-progress', 'prepared']);
+      const resumablePhases = new Set(['candidate-created', 'schema-ready', 'data-steps-in-progress', 'awaiting-composition-review', 'awaiting-registry-binding', 'prepared']);
       if (!resumablePhases.has(receipt.phase)) {
         preserveReceiptOnFailure = true;
         if (['activation-intent', 'activated', 'rolled-back'].includes(receipt.phase)) {
@@ -828,11 +1045,17 @@ export async function prepareMigration({ sourceDbPath: rawSourceDbPath, candidat
         artifactDir: artifactReal,
         artifactSha256: release.artifactSha256,
         artifactIdentityKind: release.artifactIdentityKind,
+        sourceCommitSha: sourceCommitSha ?? null,
+        inheritedCohort: inheritedCohort ?? null,
         externalDependencyRoot: release.externalDependencyRoot,
         planSha256: release.planSha256,
         steps: release.steps.map(({ id, phase, kind, handler, path, sha256 }) => ({ id, phase, kind, handler, path, sha256 })),
         source: { strapiVersion, engine: sourceSnapshot.engine, sqliteVersion: sourceSnapshot.sqliteVersion, userVersion: sourceSnapshot.userVersion, schemaFingerprint: sourceSnapshot.schemaFingerprint, snapshotSha256: sourceSnapshotSha256, sourceFileFingerprint: beforeSourceFiles },
         lifecycle: [],
+        stageSnapshotDir,
+        stageSnapshots: {},
+        pendingSnapshotStep: null,
+        reviewedSteps: {},
         recovery: 'candidate may be resumed only when this receipt, source lineage, and Strapi native history all agree; otherwise discard and reprepare from a pristine source',
       };
       atomicJson(receiptPath, receipt);
@@ -865,6 +1088,25 @@ export async function prepareMigration({ sourceDbPath: rawSourceDbPath, candidat
       await onCheckpoint?.('closed-load-destroyed');
     }
 
+    const snapshotStage = async (stageId, { allowCapture }) => {
+      if (!stageSnapshotDir) return;
+      const expectedPath = join(stageSnapshotDir, `${operationId}.${stageId}.db`);
+      const saved = receipt.stageSnapshots?.[stageId];
+      if (saved) {
+        verifyStageSnapshot(receipt, stageId);
+        return;
+      }
+      if (!allowCapture) fail(`stage snapshot missing after later data steps: ${stageId}`);
+      assertNoOpenHandles([candidateDbPath, `${candidateDbPath}-wal`, `${candidateDbPath}-shm`]);
+      const captured = await captureSeminarStageSnapshot(candidateDbPath, expectedPath);
+      receipt.stageSnapshots ??= {};
+      receipt.stageSnapshots[stageId] = captured;
+      atomicJson(receiptPath, receipt);
+      await onCheckpoint?.('stage-snapshot-captured', { stageId, snapshot: captured });
+    };
+    await snapshotStage('schema', { allowCapture: receipt.phase === 'schema-ready' });
+    if (stopAfterStage === 'schema') return { ...publicStatus(receipt, readCandidateState(candidateDbPath)), pausedAfterStage: 'schema' };
+
     const dataSteps = release.steps.filter(({ kind }) => kind === 'data');
     for (const step of dataSteps) {
       const candidate = openDatabase(candidateDbPath);
@@ -873,34 +1115,159 @@ export async function prepareMigration({ sourceDbPath: rawSourceDbPath, candidat
         ensureLedger(candidate);
         existing = completedStep(candidate, lineageId, step);
       } finally { candidate.close(); }
-      if (existing) continue;
-      const runDataStep = adapter.runDataStep ?? defaultRunDataStep;
-      await runDataStep({
-        step, candidateDbPath, operationId,
-        onCheckpoint: async (name) => {
-          receipt.lifecycle.push({ event: name, stepId: step.id, at: new Date().toISOString() });
-          atomicJson(receiptPath, receipt);
-        },
-        recordCompletion: (dbForTransaction, result) => recordStep(dbForTransaction, { operationId, lineageId, step, result }),
-      });
+      if (!inherited && existing && existing.operation_id !== operationId && SEMINAR_HANDLERS.has(step.handler)) fail('existing seminar steps require a sealed inherited cohort; refusing replay');
+      if (inherited && SEMINAR_HANDLERS.has(step.handler) && (!existing || existing.payload_sha256 !== step.sha256)) fail('inherited seminar step is missing; refusing replay');
+      let binding;
+      if (reviewedHandlers.has(step.handler) && !inherited) {
+        binding = receipt.reviewedSteps?.[step.id];
+        if (reviewedStep?.id === step.id) {
+          const supplied = { ...reviewedStep }; delete supplied.id;
+          if (binding && JSON.stringify(binding) !== JSON.stringify(supplied)) fail(`review binding differs from the operation receipt: ${step.id}`);
+          if (!binding) {
+            assertDistinctPaths([...databasePathSet('source database', sourceDbPath), ...databasePathSet('candidate database', candidateDbPath), ['operation receipt', receiptPath], [`review file ${step.id}`, supplied.reviewFilePath]]);
+            verifyReviewedStepBinding(step, supplied);
+            receipt.reviewedSteps ??= {}; receipt.reviewedSteps[step.id] = supplied; binding = supplied; atomicJson(receiptPath, receipt);
+          }
+        }
+        if (!binding) {
+          if (reviewedStep && reviewedStep.id !== step.id) fail(`review is required for earlier step: ${step.id}`);
+          return { ...publicStatus(receipt, readCandidateState(candidateDbPath)), waitingForReview: step.id };
+        }
+        assertDistinctPaths([...databasePathSet('source database', sourceDbPath), ...databasePathSet('candidate database', candidateDbPath), ['operation receipt', receiptPath], [`review file ${step.id}`, binding.reviewFilePath]]);
+        verifyReviewedStepBinding(step, binding);
+      }
+      if (stageSnapshotDir && !receipt.stageSnapshots?.[step.id]) {
+        if (receipt.pendingSnapshotStep && receipt.pendingSnapshotStep !== step.id) fail(`stage snapshot is pending for another step: ${receipt.pendingSnapshotStep}`);
+        if (existing?.operation_id === operationId && !receipt.pendingSnapshotStep) fail(`cannot reconstruct missing stage snapshot: ${step.id}`);
+        receipt.pendingSnapshotStep = step.id;
+        atomicJson(receiptPath, receipt);
+      }
+      if (existing) {
+        await snapshotStage(step.id, { allowCapture: receipt.pendingSnapshotStep === step.id });
+        if (receipt.pendingSnapshotStep === step.id) { receipt.pendingSnapshotStep = null; atomicJson(receiptPath, receipt); }
+        if (stopAfterStage === step.id) return { ...publicStatus(receipt, readCandidateState(candidateDbPath)), pausedAfterStage: step.id };
+        continue;
+      }
+      if (step.handler === 'content-admin-permissions') {
+        receipt.phase = 'permission-load-in-progress';atomicJson(receiptPath, receipt);
+        let instance;
+        try {
+          instance = await adapter.loadClosed({ candidateDbPath, onCheckpoint: async name => { receipt.lifecycle.push({ event: name, stepId: step.id, at: new Date().toISOString() }); atomicJson(receiptPath, receipt); } });
+          const module = await import(pathToFileURL(step.absolutePath).href);
+          if (typeof module.apply !== 'function' || !instance?.strapi) fail('content-admin step requires a closed Strapi instance and apply export');
+          await module.apply(instance.strapi, { onApplied: (trx, result) => recordStepInKnex(trx, { operationId, lineageId, step, result }) });
+        } finally { if (instance !== undefined) await adapter.destroy(instance); }
+        receipt.phase = 'data-steps-in-progress';atomicJson(receiptPath, receipt);
+      } else {
+        const runDataStep = adapter.runDataStep ?? defaultRunDataStep;
+        const beforeAttempt = binding ? logicalDatabaseFingerprint(candidateDbPath) : null;
+        try { await runDataStep({
+          step, candidateDbPath, operationId, reviewedStepBinding: binding,
+          onCheckpoint: async (name) => {
+            receipt.lifecycle.push({ event: name, stepId: step.id, at: new Date().toISOString() });
+            atomicJson(receiptPath, receipt);
+          },
+          recordCompletion: (dbForTransaction, result) => recordStep(dbForTransaction, { operationId, lineageId, step, result }),
+        }); } catch (error) {
+          if (binding) {
+            const afterAttempt = readCandidateState(candidateDbPath);
+            if (!afterAttempt.history.some(row => row.step_id === step.id)
+                && logicalDatabaseFingerprint(candidateDbPath) === beforeAttempt) {
+              delete receipt.reviewedSteps[step.id];
+              atomicJson(receiptPath, receipt);
+            }
+          }
+          throw error;
+        }
+      }
       await onCheckpoint?.('data-step-transaction-committed', { stepId: step.id });
       const after = openDatabase(candidateDbPath);
       try {
         const row = completedStep(after, lineageId, step);
         if (!row) fail(`data step ${step.id} returned without committing its durable ID and SHA record`);
       } finally { after.close(); }
+      await snapshotStage(step.id, { allowCapture: receipt.pendingSnapshotStep === step.id });
+      receipt.pendingSnapshotStep = null;
       receipt.lifecycle.push({ event: 'data-step-committed', stepId: step.id, at: new Date().toISOString() });
       receipt.phase = 'data-steps-in-progress';
       atomicJson(receiptPath, receipt);
+      if (stopAfterStage === step.id) return { ...publicStatus(receipt, readCandidateState(candidateDbPath)), pausedAfterStage: step.id };
     }
+    if (stageSnapshotDir && receipt.pendingSnapshotStep) fail(`stage snapshot remains pending: ${receipt.pendingSnapshotStep}`);
+    verifyCompletedStageSnapshots(receipt, release);
     const finalState = readCandidateState(candidateDbPath);
     const status = publicStatus(receipt, finalState);
     if (status.steps.some((step) => step.phase === 'after-sync' && step.status !== 'completed')) fail('not all planned data steps are recorded complete');
+    if (inherited) {
+      const ids = new Set(seminarSteps(release).map(step => step.id));
+      if (finalState.lineage.lineage_id !== inherited.lineageId
+          || JSON.stringify(finalState.history.filter(row => ids.has(row.step_id))) !== JSON.stringify(inherited.history)) fail('inherited seminar ledger changed in the candidate');
+      receipt.registryBinding = { version: 1, operationId, sourceCommit: sourceCommitSha,
+        migrationPlanDigest: receipt.planSha256, sourceDatabaseSha256: receipt.source.snapshotSha256,
+        cmsArtifactSha256: receipt.artifactSha256, proofArtifactSha256,
+        candidateDatabaseSha256: hash(readFileSync(candidateDbPath)), registrySha256: inherited.manifest.registrySha256,
+        registryPath: inheritedCohort.registryPath };
+      verifyRegistryBinding({ binding: receipt.registryBinding, receipt, candidateDbPath, contract: { proofArtifact: { sha256: proofArtifactSha256 } } });
+      receipt.compositionAudit = { passed: true, partial: false, mode: 'inherited-cohort', priorReceiptSha256: inheritedCohort.expectedReceiptSha256 };
+    } else if (release.steps.some(step => reviewedHandlers.has(step.handler))) {
+      const permission = release.steps.find(step => step.handler === 'content-admin-permissions'), schedule = release.steps.find(step => step.handler === 'reviewed-schedule'), documents = release.steps.find(step => step.handler === 'reviewed-documents'), content = release.steps.find(step => step.handler === 'reviewed-content');
+      if (!permission || !schedule || !documents || !content) fail('composition requires content-admin, reviewed schedule, reviewed documents and reviewed content steps');
+      const bound = receipt.compositionReview;
+      if (bound && compositionReview && JSON.stringify(bound) !== JSON.stringify(compositionReview)) fail('composition review binding differs from the operation receipt');
+      const approval = bound ?? compositionReview;
+      if (!approval) { receipt.phase = 'awaiting-composition-review'; atomicJson(receiptPath, receipt); return { ...publicStatus(receipt, finalState), waitingForCompositionReview: true }; }
+      assertDistinctPaths([...databasePathSet('source database', sourceDbPath), ...databasePathSet('candidate database', candidateDbPath), ['operation receipt', receiptPath], ['composition review file', approval.reviewFilePath]]);
+      const contract = readPrivateReview(approval.reviewFilePath, approval.expectedFileSha256, 'composition');
+      if (jsonHash(contract) !== approval.expectedContractDigest) fail('composition contract digest mismatch');
+      const ids = { permissions: permission, schedule, documents, content };
+      for (const [name, step] of Object.entries(ids)) if (contract.steps?.[name]?.id !== step.id || contract.steps[name].sha256 !== step.sha256) fail(`composition step identity mismatch: ${name}`);
+      if (contract.ledger?.operationId !== operationId || contract.ledger?.lineageId !== finalState.lineage.lineage_id || contract.ledger?.sourceSnapshotSha256 !== receipt.source.snapshotSha256 || contract.ledger?.sourceSchemaSha256 !== receipt.source.schemaFingerprint) fail('composition source binding differs from operation receipt');
+      if (contract.sourceCommitSha !== receipt.sourceCommitSha || contract.cmsArtifactSha256 !== receipt.artifactSha256) fail('composition source commit or CMS artifact differs from operation receipt');
+      if (contract.schedule?.expectedPlanDigest !== receipt.reviewedSteps?.[schedule.id]?.expectedPlanDigest || contract.documents?.expectedPlanDigest !== receipt.reviewedSteps?.[documents.id]?.expectedPlanDigest || contract.content?.expectedPlanDigest !== receipt.reviewedSteps?.[content.id]?.expectedPlanDigest) fail('composition reviewed plan binding differs from receipt');
+      if (snapshotFingerprint(candidateDbPath) !== receipt.stageSnapshots[content.id].candidateFingerprint) fail('candidate changed after final reviewed snapshot');
+      const paths = { source: sourceDbPath, schema: receipt.stageSnapshots[permission.id].path, schedule: receipt.stageSnapshots[schedule.id].path, documents: receipt.stageSnapshots[documents.id].path, content: receipt.stageSnapshots[content.id].path };
+      const result = auditSeminarMigrationComposition({ paths, contract, expectedContractDigest: approval.expectedContractDigest });
+      if (!result.partial || result.passed !== false || result.blockedOn !== 'registry-cohort-binding') fail('unexpected composition audit result');
+      receipt.compositionReview = approval;
+      receipt.compositionAudit = { partial: true, passed: false, blockedOn: result.blockedOn, auditedAt: new Date().toISOString() };
+      const registryApproval = registryReview ?? receipt.registryReview;
+      if (!registryApproval) {
+        receipt.phase = 'awaiting-registry-binding'; atomicJson(receiptPath, receipt);
+        return { ...publicStatus(receipt, finalState), waitingForRegistryBinding: true };
+      }
+      if (receipt.registryReview && JSON.stringify(receipt.registryReview) !== JSON.stringify(registryApproval)) fail('registry review binding differs from the operation receipt');
+      assertDistinctPaths([...databasePathSet('source database', sourceDbPath), ...databasePathSet('candidate database', candidateDbPath), ['operation receipt', receiptPath], ['registry review file', registryApproval.reviewFilePath]]);
+      const binding = readPrivateReview(registryApproval.reviewFilePath, registryApproval.expectedFileSha256, 'registry');
+      verifyRegistryBinding({ binding, receipt, candidateDbPath, contract });
+      if (receipt.registryBinding && JSON.stringify(receipt.registryBinding) !== JSON.stringify(binding)) fail('registry cohort binding differs from the operation receipt');
+      receipt.registryReview = registryApproval;
+      receipt.registryBinding = binding;
+      receipt.compositionAudit = { ...receipt.compositionAudit, partial: false, passed: true, blockedOn: null, registrySha256: binding.registrySha256 };
+    }
+    if (seminarSteps(release).length === 4) {
+      const ids = new Set(seminarSteps(release).map(step => step.id));
+      receipt.seminarLineageId = finalState.lineage.lineage_id;
+      receipt.seminarLineage = finalState.lineage;
+      receipt.seminarStepHistory = finalState.history.filter(row => ids.has(row.step_id));
+    }
     receipt.phase = 'prepared';
     receipt.preparedAt = new Date().toISOString();
-    preservationAudit(receipt, release);
+    if (!inherited && receipt.compositionAudit?.passed === true) {
+      const original = readCandidateState(sourceDbPath);
+      for (const step of release.steps.filter(step => step.kind === 'data' && !SEMINAR_HANDLERS.has(step.handler))) {
+        if (!original.history.some(row => row.step_id === step.id && row.payload_sha256 === step.sha256)) fail('legacy steps require a separate audited migration before seminar composition');
+      }
+      // The independently reviewed composition checks schema, all four data
+      // stages and every inherited ledger row. The legacy end-to-end auditor
+      // cannot model these newly reviewed transforms.
+      receipt.candidatePostMigrationSha256 = hash(readFileSync(candidateDbPath));
+      receipt.candidatePostMigrationFileFingerprint = sourceFileFingerprint(candidateDbPath);
+      receipt.preservation = { private: true, passed: true, mode: 'reviewed-composition', auditedAt: new Date().toISOString() };
+    } else preservationAudit(receipt, release);
     atomicJson(receiptPath, receipt);
-    return publicStatus(receipt, finalState);
+    return { ...publicStatus(receipt, finalState), ...(inherited ? { inheritedCohortResult: {
+      binding: receipt.registryBinding, receiptSha256: hash(readFileSync(receiptPath)),
+    } } : {}) };
   } catch (error) {
     try {
       const current = readJson(receiptPath, 'operation receipt');
@@ -916,13 +1283,13 @@ export async function prepareMigration({ sourceDbPath: rawSourceDbPath, candidat
 function linkExclusive(source, destination) {
   require('node:fs').linkSync(source, destination);
 }
-async function defaultRunDataStep({ step, candidateDbPath, recordCompletion }) {
+async function defaultRunDataStep({ step, candidateDbPath, recordCompletion, reviewedStepBinding }) {
   const helperPath = step.absolutePath ?? resolve(CMS_ROOT, 'database/migrations', step.path);
   const module = await import(pathToFileURL(helperPath).href);
   if (typeof module.apply !== 'function') fail(`data helper ${step.path} does not export apply(db,{onApplied})`);
   const db = openDatabase(candidateDbPath);
   try {
-    module.apply(db, { onApplied: (sameDb, result) => recordCompletion(sameDb, result) });
+    module.apply(db, { ...reviewedStepBinding, onApplied: (sameDb, result) => recordCompletion(sameDb, result) });
   } finally { db.close(); }
 }
 
@@ -995,8 +1362,11 @@ export async function activateMigration({ candidateDbPath: rawCandidateDbPath, c
   try {
     const receipt = receiptFrom(receiptPath, operationId);
     if (receipt.phase !== 'prepared') fail(`operation is not ready for activation (phase ${receipt.phase})`);
+    if (receipt.registryBinding) fail('registry cohort activation requires the root host capture gate');
     if (resolve(receipt.candidateDbPath) !== candidateDbPath) fail('candidate path differs from receipt');
     const release = verifyCandidatePlan(receipt, codeRelease);
+    if (seminarSteps(release).length) fail('seminar cohort activation requires the root host capture gate');
+    verifyCompletedStageSnapshots(receipt, release);
     const status = getMigrationStatus({ candidateDbPath, operationId, receiptPath });
     if (status.steps.some((step) => step.phase === 'after-sync' && step.status !== 'completed')) fail('activation refused: data steps are incomplete');
     preservationAudit(receipt, release);
@@ -1113,7 +1483,10 @@ function parseArgs(argv) {
 function usage() {
   process.stdout.write([
     'Usage:',
-    '  node cms/scripts/run-data-migrations.mjs prepare --source-db PATH --source-cms-root PATH --candidate-db PATH --artifact-dir PATH --receipt PATH --operation-id ID',
+    '  node cms/scripts/run-data-migrations.mjs prepare --source-db PATH --source-cms-root PATH --candidate-db PATH --artifact-dir PATH --receipt PATH --operation-id ID [--stage-snapshot-dir PATH --stop-after-stage ID]',
+    '    For a waiting reviewed step: --review-step ID --review-file PATH --review-file-sha256 SHA --review-plan-digest SHA',
+    '    For the composed audit: --composition-review-file PATH --composition-file-sha256 SHA --composition-contract-digest SHA',
+    '    Reviewed seminar steps also require --source-commit-sha SHA from trusted release admission.',
     '  node cms/scripts/run-data-migrations.mjs status --candidate-db PATH --receipt PATH --operation-id ID',
     '  node cms/scripts/run-data-migrations.mjs activate --candidate-db PATH --code-release PATH --active-pair PATH --sandbox-root PATH --receipt PATH --operation-id ID',
     '  node cms/scripts/run-data-migrations.mjs rollback --active-pair PATH --sandbox-root PATH --receipt PATH --operation-id ID',
@@ -1129,7 +1502,17 @@ export async function main(argv = process.argv.slice(2)) {
   let result;
   if (command === 'prepare') result = await prepareMigration({
     ...common, sourceDbPath: options.sourceDb, sourceCmsRoot: options.sourceCmsRoot,
-    candidateDbPath: options.candidateDb, artifactDir: options.artifactDir,
+    candidateDbPath: options.candidateDb, artifactDir: options.artifactDir, stageSnapshotDir: options.stageSnapshotDir, stopAfterStage: options.stopAfterStage, sourceCommitSha: options.sourceCommitSha,
+    reviewedStep: [options.reviewStep, options.reviewFile, options.reviewFileSha256, options.reviewPlanDigest].some(value => value !== undefined)
+      ? { id: options.reviewStep, reviewFilePath: options.reviewFile, expectedReviewFileSha256: options.reviewFileSha256, expectedPlanDigest: options.reviewPlanDigest }
+      : undefined,
+    inheritedCohort: options.inheritedCohortB64 ? JSON.parse(Buffer.from(options.inheritedCohortB64, 'base64').toString('utf8')) : undefined,
+    proofArtifactSha256: options.proofArtifactSha256,
+    registryReview: [options.registryReviewFile, options.registryFileSha256].some(value => value !== undefined)
+      ? { reviewFilePath: options.registryReviewFile, expectedFileSha256: options.registryFileSha256 } : undefined,
+    compositionReview: [options.compositionReviewFile, options.compositionFileSha256, options.compositionContractDigest].some(value => value !== undefined)
+      ? { reviewFilePath: options.compositionReviewFile, expectedFileSha256: options.compositionFileSha256, expectedContractDigest: options.compositionContractDigest }
+      : undefined,
   });
   else if (command === 'status') result = getMigrationStatus({ ...common, candidateDbPath: options.candidateDb });
   else if (command === 'activate') result = await activateMigration({

@@ -5,7 +5,7 @@ import { createHash } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 
 const TYPES = ['institute', 'course-group', 'seminar', 'teacher', 'article', 'schedule-entry', 'news-item', 'promotion', 'page', 'video-playlist'];
-const COMPONENTS = ['shared.seo', 'seminar.document-record'];
+const COMPONENTS = ['shared.seo', 'seminar.document-record', 'seminar.registry-fact', 'seminar.nmo-fact'];
 const scalarTypes = new Set(['string', 'text', 'richtext', 'uid', 'enumeration', 'integer', 'decimal', 'boolean', 'json', 'date', 'datetime']);
 const snake = (s) => s.replace(/[A-Z]/g, (c) => `_${c.toLowerCase()}`).replaceAll('-', '_');
 const quote = (s) => { if (!/^[a-z_][a-z0-9_]*$/.test(s)) throw new Error(`unsupported SQL identifier: ${s}`); return `"${s}"`; };

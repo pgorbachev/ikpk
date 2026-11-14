@@ -1,0 +1,416 @@
+[
+  {
+    "group": 1,
+    "documentId": "jsyryk93mf6mrxxsaytn9kpz",
+    "route": "/institut-apledzhera/kraniosakralnaya-terapiya/kraniosakralnaya-terapiya-edvans-1",
+    "sourceSha256": "5011c7110c9365b5c75cf9d1232fc5f746116a4909156cbdfd05d23f4b20655b"
+  },
+  {
+    "group": 1,
+    "documentId": "j7k2ko99vgs49la24u598rpy",
+    "route": "/institut-apledzhera/kraniosakralnaya-terapiya/kraniosakralnaya-terapiya-edvans-2",
+    "sourceSha256": "5011c7110c9365b5c75cf9d1232fc5f746116a4909156cbdfd05d23f4b20655b"
+  },
+  {
+    "group": 1,
+    "documentId": "bd3rmqq21vny8yx1to06do4c",
+    "route": "/institut-apledzhera/kraniosakralnaya-terapiya-specializirovannye/kraniosakralnaya-terapiya-za-predelami-osnovaniya-cherepa",
+    "sourceSha256": "5011c7110c9365b5c75cf9d1232fc5f746116a4909156cbdfd05d23f4b20655b"
+  },
+  {
+    "group": 1,
+    "documentId": "xs0qbk8kprpnn77xjsxux5hx",
+    "route": "/institut-apledzhera/kraniosakralnaya-terapiya-specializirovannye/kraniosakralnaya-terapiya-i-somato-emocionalnoe-osvobozhdenie",
+    "sourceSha256": "5011c7110c9365b5c75cf9d1232fc5f746116a4909156cbdfd05d23f4b20655b"
+  },
+  {
+    "group": 1,
+    "documentId": "jagb00w0pxmtiame8kxwijdz",
+    "route": "/institut-apledzhera/kraniosakralnaya-terapiya-specializirovannye/kraniosakralnaya-terapiya-i-zhiznennyj-cikl",
+    "sourceSha256": "5011c7110c9365b5c75cf9d1232fc5f746116a4909156cbdfd05d23f4b20655b"
+  },
+  {
+    "group": 1,
+    "documentId": "y7z4elk6m973u5azi5nlmm6g",
+    "route": "/institut-apledzhera/imunnyj-otvet/kraniosakralnaya-terapiya-i-immunnyj-otvet",
+    "sourceSha256": "5011c7110c9365b5c75cf9d1232fc5f746116a4909156cbdfd05d23f4b20655b"
+  },
+  {
+    "group": 1,
+    "documentId": "ceyjkz9i2wp6rfy7yuh0gd16",
+    "route": "/institut-apledzhera/dolgoletie/kraniosakralnaya-terapiya-dlya-omolozheniya-i-dolgoletiya",
+    "sourceSha256": "5011c7110c9365b5c75cf9d1232fc5f746116a4909156cbdfd05d23f4b20655b"
+  },
+  {
+    "group": 1,
+    "documentId": "jsql671uh0m77a2jc76h4u8h",
+    "route": "/institut-apledzhera/kraniosakralnaya-terapiya/kraniosakralnaya-terapiya-1",
+    "sourceSha256": "5011c7110c9365b5c75cf9d1232fc5f746116a4909156cbdfd05d23f4b20655b"
+  },
+  {
+    "group": 1,
+    "documentId": "bibmg2vwge9abrqtypphe7sz",
+    "route": "/institut-apledzhera/kraniosakralnaya-terapiya/kraniosakralnaya-terapiya-2",
+    "sourceSha256": "5011c7110c9365b5c75cf9d1232fc5f746116a4909156cbdfd05d23f4b20655b"
+  },
+  {
+    "group": 1,
+    "documentId": "jo3qpne9c1228yja258l3rp6",
+    "route": "/institut-apledzhera/kraniosakralnaya-terapiya/somato-emocionalnoe-osvobozhdenie-1",
+    "sourceSha256": "5011c7110c9365b5c75cf9d1232fc5f746116a4909156cbdfd05d23f4b20655b"
+  },
+  {
+    "group": 1,
+    "documentId": "fe1cynsa35bxptncuvoh9yn3",
+    "route": "/institut-apledzhera/kraniosakralnaya-terapiya/somato-emocionalnoe-osvobozhdenie-2",
+    "sourceSha256": "5011c7110c9365b5c75cf9d1232fc5f746116a4909156cbdfd05d23f4b20655b"
+  },
+  {
+    "group": 1,
+    "documentId": "pcz2jhv37l2t26b88fcszdd1",
+    "route": "/institut-apledzhera/mozg/mozg-govorit-1",
+    "sourceSha256": "1cea9328b12b3f2bcd91256da9a101b360ce560c975a212a3ba026499bbb58c0"
+  },
+  {
+    "group": 1,
+    "documentId": "cvqanqj5bhusn5etraqiddek",
+    "route": "/institut-apledzhera/mozg/mozg-govorit-2",
+    "sourceSha256": "1cea9328b12b3f2bcd91256da9a101b360ce560c975a212a3ba026499bbb58c0"
+  },
+  {
+    "group": 1,
+    "documentId": "aocaojrzfx57uiazpk2y2qgy",
+    "route": "/institut-apledzhera/primenenie-principov-akupunktury/ispolzovanie-meridianov-v-kranio-sakralnoj-terapii-1",
+    "sourceSha256": "5011c7110c9365b5c75cf9d1232fc5f746116a4909156cbdfd05d23f4b20655b"
+  },
+  {
+    "group": 1,
+    "documentId": "i35p3a00dlkpcr7hyj9knk2a",
+    "route": "/institut-apledzhera/primenenie-principov-akupunktury/ispolzovanie-meridianov-v-kranio-sakralnoj-terapii-2",
+    "sourceSha256": "5011c7110c9365b5c75cf9d1232fc5f746116a4909156cbdfd05d23f4b20655b"
+  },
+  {
+    "group": 1,
+    "documentId": "cx67kp1bf0qprem2n7iod8f0",
+    "route": "/institut-apledzhera/primenenie-principov-akupunktury/ispolzovanie-meridianov-v-kranio-sakralnoj-terapii-3",
+    "sourceSha256": "5011c7110c9365b5c75cf9d1232fc5f746116a4909156cbdfd05d23f4b20655b"
+  },
+  {
+    "group": 1,
+    "documentId": "sgxn85ay2l28ic49drct50j2",
+    "route": "/institut-apledzhera/primenenie-principov-akupunktury/ispolzovanie-meridianov-v-kranio-sakralnoj-terapii-4",
+    "sourceSha256": "5011c7110c9365b5c75cf9d1232fc5f746116a4909156cbdfd05d23f4b20655b"
+  },
+  {
+    "group": 2,
+    "documentId": "ja9innqdnrdvt5dlg86livdu",
+    "route": "/institut-barralya/tehniki-vyslushivaniya/integrativnyj-podhod-k-ocenke-1",
+    "sourceSha256": "ec6bf03145266d0526c2896070930d9d5e1756d200e56370222f4d45203a2ea2"
+  },
+  {
+    "group": 2,
+    "documentId": "ec60oh85d2fruq8eb8tux0jy",
+    "route": "/institut-barralya/novyj-manualnyj-podhod-k-sustavam/nizhnie-konechnosti",
+    "sourceSha256": "ec6bf03145266d0526c2896070930d9d5e1756d200e56370222f4d45203a2ea2"
+  },
+  {
+    "group": 2,
+    "documentId": "y4u1mou6v73khlppk8qy380m",
+    "route": "/institut-barralya/novyj-manualnyj-podhod-k-sustavam/pozvonochnik-i-taz",
+    "sourceSha256": "c520296c4de532f8714b585592ce23fc06a4d2fcd085fb2f4e16b9028e7e8850"
+  },
+  {
+    "group": 2,
+    "documentId": "blic9jogpimgoabcer8xaz4v",
+    "route": "/institut-barralya/novyj-manualnyj-podhod-k-sustavam/verhnie-konechnosti",
+    "sourceSha256": "ec6bf03145266d0526c2896070930d9d5e1756d200e56370222f4d45203a2ea2"
+  },
+  {
+    "group": 2,
+    "documentId": "ilq1n79v6as3ma8d4etr8ic0",
+    "route": "/institut-barralya/nevralnye-tehniki/integrativnyj-podhod-k-travme",
+    "sourceSha256": "4692102efe6cbb00a7b8435f7050c6ee9c219eede4a6a3f009bed4ca42e97a0c"
+  },
+  {
+    "group": 2,
+    "documentId": "zdkweq35h32jztoygqoe80k6",
+    "route": "/institut-barralya/nevralnye-tehniki/tehniki-raboty-na-perifericheskih-nervah-verhnyaya-chast-tela",
+    "sourceSha256": "4692102efe6cbb00a7b8435f7050c6ee9c219eede4a6a3f009bed4ca42e97a0c"
+  },
+  {
+    "group": 2,
+    "documentId": "btn95tss9v4o9vz7wfayyyru",
+    "route": "/institut-barralya/nevralnye-tehniki/tehniki-raboty-na-perifericheskih-nervah-nizhnyaya-chast-tela",
+    "sourceSha256": "4692102efe6cbb00a7b8435f7050c6ee9c219eede4a6a3f009bed4ca42e97a0c"
+  },
+  {
+    "group": 2,
+    "documentId": "dcvqeoqi4mi9kodwlbw20s1l",
+    "route": "/institut-barralya/nevralnye-tehniki/manipulyacii-na-kranialnyh-nervah",
+    "sourceSha256": "4692102efe6cbb00a7b8435f7050c6ee9c219eede4a6a3f009bed4ca42e97a0c"
+  },
+  {
+    "group": 2,
+    "documentId": "f9vynwy0idwefcwgz76gf3i6",
+    "route": "/institut-barralya/nevralnye-tehniki/centralnye-i-perifericheskie-svyazi",
+    "sourceSha256": "4692102efe6cbb00a7b8435f7050c6ee9c219eede4a6a3f009bed4ca42e97a0c"
+  },
+  {
+    "group": 2,
+    "documentId": "chj1g89rmr78diw6uhu41h9m",
+    "route": "/institut-barralya/visceralnye-tehniki/bryushnaya-polost-1",
+    "sourceSha256": "4692102efe6cbb00a7b8435f7050c6ee9c219eede4a6a3f009bed4ca42e97a0c"
+  },
+  {
+    "group": 2,
+    "documentId": "els3hzdy1z56620b05an8t1d",
+    "route": "/institut-barralya/visceralnye-tehniki/bryushnaya-polost-2",
+    "sourceSha256": "4692102efe6cbb00a7b8435f7050c6ee9c219eede4a6a3f009bed4ca42e97a0c"
+  },
+  {
+    "group": 2,
+    "documentId": "bbp4islqz87sk7j5zkthktyg",
+    "route": "/institut-barralya/visceralnye-tehniki/taz",
+    "sourceSha256": "4692102efe6cbb00a7b8435f7050c6ee9c219eede4a6a3f009bed4ca42e97a0c"
+  },
+  {
+    "group": 2,
+    "documentId": "n3uhgvajhlh0jj5ot3nvff8v",
+    "route": "/institut-barralya/visceralnye-tehniki/grudnaya-kletka",
+    "sourceSha256": "4692102efe6cbb00a7b8435f7050c6ee9c219eede4a6a3f009bed4ca42e97a0c"
+  },
+  {
+    "group": 2,
+    "documentId": "ixwkkquixsmae4czfl03tsot",
+    "route": "/institut-barralya/visceralnye-tehniki/manualnaya-termoocenka-i-vvedenie-v-viscero-emocionalnuyu-sferu",
+    "sourceSha256": "4692102efe6cbb00a7b8435f7050c6ee9c219eede4a6a3f009bed4ca42e97a0c"
+  },
+  {
+    "group": 2,
+    "documentId": "aw1kieytbf9s8tlodfogk0co",
+    "route": "/institut-barralya/prodvinutye-visceralnye-tehniki/visceralnye-komponenty-shei-i-grudnoj-kletki",
+    "sourceSha256": "4692102efe6cbb00a7b8435f7050c6ee9c219eede4a6a3f009bed4ca42e97a0c"
+  },
+  {
+    "group": 2,
+    "documentId": "zhgm8tytdhw1poux1l746qv9",
+    "route": "/institut-barralya/prodvinutye-visceralnye-tehniki/viscero-sosudistye-tehniki-nizhnyaya-chast-tela",
+    "sourceSha256": "4692102efe6cbb00a7b8435f7050c6ee9c219eede4a6a3f009bed4ca42e97a0c"
+  },
+  {
+    "group": 3,
+    "documentId": "z8j5tf8x4xozvzgub6x41lx8",
+    "route": "/institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya/osnovy-manualnogo-myshechnogo-testirovaniya",
+    "sourceSha256": "ffa10708f03126236303a539c5d0aaa6fff50b351fdff920bbf0273966401821"
+  },
+  {
+    "group": 3,
+    "documentId": "awxkrtz1ih6f8chjasd1lf7u",
+    "route": "/institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya/strukturnaya-sostavlyayushaya-treugolnika-zdorovya-obshie-diagnosticheskie-i-lechebnye-procedury-2",
+    "sourceSha256": "ffa10708f03126236303a539c5d0aaa6fff50b351fdff920bbf0273966401821"
+  },
+  {
+    "group": 3,
+    "documentId": "qty2vpynb6z3j0zwe8xyiwyg",
+    "route": "/institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya/strukturnaya-sostavlyayushaya-treugolnika-zdorovya-obshie-diagnosticheskie-i-lechebnye-procedury",
+    "sourceSha256": "ffa10708f03126236303a539c5d0aaa6fff50b351fdff920bbf0273966401821"
+  },
+  {
+    "group": 3,
+    "documentId": "ikp5maz3wbhz5ae74ogeya10",
+    "route": "/institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya/visceralnaya-terapiya-s-osnovami-prikladnoj-kineziologii-organov-grudnoj-i-bryushnoj-polostej-i-malogo-taza",
+    "sourceSha256": "ffa10708f03126236303a539c5d0aaa6fff50b351fdff920bbf0273966401821"
+  },
+  {
+    "group": 3,
+    "documentId": "mwhk7nz5hacpj95ujxedzc98",
+    "route": "/institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya/kraniosakralnaya-sistema",
+    "sourceSha256": "ffa10708f03126236303a539c5d0aaa6fff50b351fdff920bbf0273966401821"
+  },
+  {
+    "group": 3,
+    "documentId": "mi5rg9w4a1royyy483tpppnn",
+    "route": "/institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya/funkcionalnye-narusheniya-emocionalnoj-sfery",
+    "sourceSha256": "ffa10708f03126236303a539c5d0aaa6fff50b351fdff920bbf0273966401821"
+  },
+  {
+    "group": 3,
+    "documentId": "iht5zu3qgsqwev91eri9y2j5",
+    "route": "/institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya/funkcionalnye-narusheniya-biohimicheskih-processov",
+    "sourceSha256": "ffa10708f03126236303a539c5d0aaa6fff50b351fdff920bbf0273966401821"
+  },
+  {
+    "group": 3,
+    "documentId": "xsmsys4jhrb0lxsgvu8cxxr2",
+    "route": "/institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya/funkcionalnye-narusheniya-elektromagnitnyh-processov",
+    "sourceSha256": "ffa10708f03126236303a539c5d0aaa6fff50b351fdff920bbf0273966401821"
+  },
+  {
+    "group": 4,
+    "documentId": "z8davm2bjlkqdugo53choj8s",
+    "route": "/institut-klinicheskoy-prikladnoy-kineziologii/psihokineziologiya/antistressovaya-kineziologiya-2",
+    "sourceSha256": "1b88ae23349a472da82b9ef931450a5dfdaf892b02b969b8f40ec55bd3e05b14"
+  },
+  {
+    "group": 4,
+    "documentId": "vfzugf8d3rnht7kgsdbcq9ja",
+    "route": "/institut-klinicheskoy-prikladnoy-kineziologii/psihokineziologiya/individualnye-osobennosti-cheloveka-1",
+    "sourceSha256": "1b88ae23349a472da82b9ef931450a5dfdaf892b02b969b8f40ec55bd3e05b14"
+  },
+  {
+    "group": 4,
+    "documentId": "mjgo67wpy7nrnvgm35qznc6n",
+    "route": "/institut-klinicheskoy-prikladnoy-kineziologii/psihokineziologiya/individualnye-osobennosti-cheloveka-2",
+    "sourceSha256": "1b88ae23349a472da82b9ef931450a5dfdaf892b02b969b8f40ec55bd3e05b14"
+  },
+  {
+    "group": 4,
+    "documentId": "ub0y6mwsilz6ytktqz98rxay",
+    "route": "/institut-klinicheskoy-prikladnoy-kineziologii/psihokineziologiya/kineziologiya-zdorovya-2",
+    "sourceSha256": "1b88ae23349a472da82b9ef931450a5dfdaf892b02b969b8f40ec55bd3e05b14"
+  },
+  {
+    "group": 5,
+    "documentId": "bkbvl6m8q4ru2ykwm07na0qj",
+    "route": "/institut-klinicheskoy-prikladnoy-kineziologii/massazh/karta-patologij",
+    "sourceSha256": "aa0be97e84d72212ccc0a610e1caea87b1053c90f711b15c52765edde3183a79"
+  },
+  {
+    "group": 5,
+    "documentId": "aq9ssi03jey6zane02e73hmh",
+    "route": "/institut-klinicheskoy-prikladnoy-kineziologii/massazh/miofascialnyj-massazh-tela-armoplastika",
+    "sourceSha256": "aa0be97e84d72212ccc0a610e1caea87b1053c90f711b15c52765edde3183a79"
+  },
+  {
+    "group": 5,
+    "documentId": "hodasyvhd1kt4bqsisu2q2cp",
+    "route": "/institut-klinicheskoy-prikladnoy-kineziologii/massazh/miofascialnyj-massazh-tela-zhenskij-massazh",
+    "sourceSha256": "c331977a1fcaf3f5e618ef702f640038736c53dfea70b17e999ebf0f58b4e5c7"
+  },
+  {
+    "group": 6,
+    "documentId": "ldgi1dviv84qefz7snpxt011",
+    "route": "/institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya-dlya-fitnesa/diagnostika-prichin-oslableniya-myshc-i-algoritm-raboty-so-slabymi-myshcami",
+    "sourceSha256": "db6eaf232ce9a3928b3b7fe3cdecad240248dd0cc98bcf0dea86d3a115fa2c58"
+  },
+  {
+    "group": 6,
+    "documentId": "sbc2h7zuij4wypuosgbab4k3",
+    "route": "/institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya-dlya-fitnesa/bolevye-sindromy-i-rabota-s-nimi",
+    "sourceSha256": "b8729e64f16b518134f815b7756e2078217475fb5557a9dd0438675a92eafe8a"
+  },
+  {
+    "group": 6,
+    "documentId": "neurc2z4x7hx0a16lbg5prpd",
+    "route": "/institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya-dlya-fitnesa/vnutrennie-organy-i-ih-vliyanie-na-myshcy",
+    "sourceSha256": "b8729e64f16b518134f815b7756e2078217475fb5557a9dd0438675a92eafe8a"
+  },
+  {
+    "group": 7,
+    "documentId": "vytkwm2ddi0e6u54v3hacsug",
+    "route": "/institut-klinicheskoy-prikladnoy-kineziologii/kurs-po-kitajskoj-medicine-s-pozicij-prikladnoj-kineziologii/meridiany-kitajskaya-klassicheskaya-medicina-s-pozicii-prikladnoj-kineziologii-i-nevrologii-nejro-tkm-1",
+    "sourceSha256": "5762cbee934f40444c83305a4271e306f6db1530c0ae50f71ce2e71d1cfb289d"
+  },
+  {
+    "group": 7,
+    "documentId": "j96rojxbp57nqk8gi38xqfhm",
+    "route": "/institut-klinicheskoy-prikladnoy-kineziologii/kurs-po-kitajskoj-medicine-s-pozicij-prikladnoj-kineziologii/meridiany-kitajskaya-klassicheskaya-medicina-s-pozicii-prikladnoj-kineziologii-i-nevrologii-nejro-tkm-2",
+    "sourceSha256": "5762cbee934f40444c83305a4271e306f6db1530c0ae50f71ce2e71d1cfb289d"
+  },
+  {
+    "group": 7,
+    "documentId": "jbpo1f552tjle76zw3q6p20p",
+    "route": "/institut-klinicheskoy-prikladnoy-kineziologii/kurs-po-kitajskoj-medicine-s-pozicij-prikladnoj-kineziologii/meridiany-kitajskaya-klassicheskaya-medicina-s-pozicii-prikladnoj-kineziologii-i-nevrologii-nejro-tkm-3",
+    "sourceSha256": "5762cbee934f40444c83305a4271e306f6db1530c0ae50f71ce2e71d1cfb289d"
+  },
+  {
+    "group": 8,
+    "documentId": "erd3wnv8d8fc9zksrisnfo0v",
+    "route": "/institut-klinicheskoy-prikladnoy-kineziologii/postdiplomnye-programmy-po-prikladnoj-kineziologii/disfunkciya-visochno-nizhnechelyustnogo-sustava-vnchs",
+    "sourceSha256": "e5bc6093f81258df73a79e446cdde137a67ebfc901514e79532f54045d028666"
+  },
+  {
+    "group": 8,
+    "documentId": "b5zh5xm94quv8y7o1in5gl4s",
+    "route": "/institut-klinicheskoy-prikladnoy-kineziologii/postdiplomnye-programmy-po-prikladnoj-kineziologii/strukturnaya-sostavlyayushaya-treugolnika-zdorovya",
+    "sourceSha256": "e5bc6093f81258df73a79e446cdde137a67ebfc901514e79532f54045d028666"
+  },
+  {
+    "group": 9,
+    "documentId": "ivpe2m3yw00uqfk7nliqqtu1",
+    "route": "/institut-apledzhera/kraniosakralnaya-terapiya-specializirovannye/csstr-kraniosakralnaya-terapiya-i-reakciya-na-stressovuyu-travmu",
+    "sourceSha256": "c7c023797faafac529b834399885ade4e0e8126536fb430e72a0c861cdbbf016"
+  },
+  {
+    "group": 10,
+    "documentId": "nu8g53761j9zdddzy8qxjora",
+    "route": "/institut-apledzhera/vebinary-i-mezhseminarskie-vstrechi/mezhseminarskaya-vstrecha-praktikum-dlya-specialistov-kst",
+    "sourceSha256": "1b10dd5ae7a093273fc73a97b229f8cdf5a66c4062c3a276087c53bf6a76d0ed"
+  },
+  {
+    "group": 11,
+    "documentId": "j38gmu5l8vc7g76093fyedrj",
+    "route": "/institut-klinicheskoy-prikladnoy-kineziologii/psihokineziologiya/antistressovaya-kineziologiya-vvedenie-1",
+    "sourceSha256": "001e04c464fa5d39445c20a44329aa10228ff8426cd9c0076678ef3456fa65ff"
+  },
+  {
+    "group": 12,
+    "documentId": "fk9rlx4ynbhc4m045ll4e44e",
+    "route": "/institut-klinicheskoy-prikladnoy-kineziologii/psihokineziologiya/kineziologiya-zdorovya-1",
+    "sourceSha256": "c69791b2ffd5f8b0e8ef472addee314b9233b01ea366147456987eff7ea3ec3d"
+  },
+  {
+    "group": 13,
+    "documentId": "r1i3xvu88ahmf0ue1zqel82v",
+    "route": "/institut-klinicheskoy-prikladnoy-kineziologii/pereprogrammirovanie-nejroreceptornyh-zon-v-pk/seminar-4-nejropatii-s-pozicii-nejroreceptornyh-polej",
+    "sourceSha256": "dd103c3baf45dce5c13be3ec613de9f095be8c74a4b96c8d9bce88cf60e44887"
+  },
+  {
+    "group": 14,
+    "documentId": "fznt0rum8p9o4qdc2csh57va",
+    "route": "/institut-klinicheskoy-prikladnoy-kineziologii/massazh/sistemnoe-primenenie-kineziologicheskogo-tejpirovaniya-lica-i-tela",
+    "sourceSha256": "05abbfc2baec5bbe4c399b8208bb821deaf33f52bba1c340af998b5d3f16685b"
+  },
+  {
+    "group": 15,
+    "documentId": "umporbt4wtfsthtdvmugv50r",
+    "route": "/institut-klinicheskoy-prikladnoy-kineziologii/massazh/kineziotejpirovanie-lica-i-tela",
+    "sourceSha256": "f5ec7349585d413257e7c17dd581d122fb2ccbfa47ee6c36294f47d3e4edf970"
+  },
+  {
+    "group": 16,
+    "documentId": "wwhi2w83jdhfte7ipb265egi",
+    "route": "/institut-klinicheskoy-prikladnoy-kineziologii/specializirovannye/infekcii-i-psevdoinfekcii-vvedenie-v-gelmintologiyu-nematody",
+    "sourceSha256": "61e771d391d84e3b6000813d261834aceb0eedf3758b9630ed00a6aa659ad11e"
+  },
+  {
+    "group": 17,
+    "documentId": "e1lw56opp3qr6wyy2tu7gnea",
+    "route": "/institut-klinicheskoy-prikladnoy-kineziologii/massazh/miofascialnyj-i-bukkalnyj-massazh-lica",
+    "sourceSha256": "772eb5e36782430c634b5a2385fa80e9dd0c272bcb5ddf0be8f5336806863a16"
+  },
+  {
+    "group": 18,
+    "documentId": "kqpcum850gq8m09v4le5si6v",
+    "route": "/institut-klinicheskoy-prikladnoy-kineziologii/specializirovannye/gelmintozy-nematodozy-cestodozy-trematodozy",
+    "sourceSha256": "ec9ff6a040e16997325eba7e19a70816162e712658ca7b2175864e4603e84333"
+  },
+  {
+    "group": 19,
+    "documentId": "w432xpcyxa2nfsa2nlh2hpw7",
+    "route": "/institut-klinicheskoy-prikladnoy-kineziologii/specializirovannye/disfunkcii-yader-cherepno-mozgovyh-nervov",
+    "sourceSha256": "46d52e44ce2b52b47cfaef724bf65796f45c02d63131d751d42886c9581a2a27"
+  },
+  {
+    "group": 20,
+    "documentId": "xmq55ikrdrzvlnmcbmd27ify",
+    "route": "/institut-klinicheskoy-prikladnoy-kineziologii/prikladnaya-kineziologiya-dlya-fitnesa/myshechnoe-testirovanie-mmt-podhody-k-diagnostike-i-algoritmy-raboty-s-myshcami",
+    "sourceSha256": "bce5d02c5995569f8002e4976adffb6838e5f37afbac4ee1f90ab4cfb191e6ef"
+  },
+  {
+    "group": 21,
+    "documentId": "jzsjlrdytrlge2yg8d16l4c7",
+    "route": "/institut-klinicheskoy-prikladnoy-kineziologii/specializirovannye/rabota-s-chakrami-v-terapevticheskoj-telesnoj-praktike",
+    "sourceSha256": "b10a019704d64f77ebc47786e7cc51331b8153cffd1598050dcec43ff199b47f"
+  }
+]

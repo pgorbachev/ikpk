@@ -9,12 +9,15 @@
  */
 
 export type DocumentsState = 'issued' | 'not-issued' | 'unconfirmed';
-export type PriorEducation = 'none' | 'medical' | 'physical-or-pedagogical' | 'other';
-export type LearningOutcome = 'completed' | 'assessment-failed' | 'partially-completed' | 'expelled';
+export type PriorEducation = 'unspecified' | 'none' | 'medical' | 'physical-or-pedagogical' | 'other';
+export type LearningOutcome = 'completed' | 'assessment-failed' | 'assessment-not-completed' | 'partially-completed' | 'expelled';
 
 export interface DocumentRecord {
   document: string;
   issuer: string;
+  issuerUnknown?: boolean;
+  completionScope?: 'unspecified' | 'this-seminar' | 'full-cycle' | 'other-seminar' | 'course';
+  otherSeminarHref?: string;
   priorEducation?: PriorEducation;
   priorEducationNote?: string;
   outcome?: LearningOutcome;
@@ -66,7 +69,9 @@ export function checkPublication({
   type: string;
   record: Record<string, unknown>;
 }): PublicationVerdict {
-  const missing = requiredFields(type).filter((field) => isEmpty(record[field]));
+  const missing = requiredFields(type).filter((field) =>
+    !(type === 'schedule-entry' && field === 'city' && record.isOnline === true) && isEmpty(record[field]),
+  );
 
   if (type === 'person' && !isEmpty(record.trait)) {
     const trait = record.trait;
@@ -133,10 +138,13 @@ export function checkDocumentsStateChange({
 
 export function checkDocumentRecord(record: DocumentRecord): Verdict {
   if (isEmpty(record.document)) return { ok: false, message: 'не назван документ' };
-  if (isEmpty(record.issuer)) return { ok: false, message: 'не названо выдающее лицо' };
+  if (isEmpty(record.issuer) && record.issuerUnknown !== true) return { ok: false, message: 'не названо выдающее лицо' };
+  if (!isEmpty(record.issuer) && record.issuerUnknown === true) return { ok: false, message: 'выдающее лицо не может быть одновременно указано и неизвестно' };
+  if (record.completionScope === 'other-seminar' && isEmpty(record.otherSeminarHref)) return { ok: false, message: 'укажите ссылку на другой семинар' };
   if (Array.isArray(record.priorEducation)) {
     return { ok: false, message: 'составное значение по исходному образованию недопустимо' };
   }
+  if (isEmpty(record.priorEducation)) return { ok: false, message: 'укажите требование к образованию или отметьте, что оно не указано' };
   if (Array.isArray(record.outcome)) {
     return { ok: false, message: 'составное значение по результату обучения недопустимо' };
   }

@@ -1,0 +1,71 @@
+---
+import type { Seminar, SeminarDocument } from '../../lib/data';
+
+const { seminar, id, aliases = [] } = Astro.props as { seminar: Seminar; id?: string; aliases?: string[] };
+const docs = seminar.documents ?? [];
+const registries = (seminar.training_registries ?? []).filter((registry) => registry.subject === 'training');
+const nmo = seminar.nmo;
+const visible = seminar.documents_state === 'not-issued' ||
+  (seminar.documents_state === 'issued' && (docs.length > 0 || registries.length > 0 || Boolean(nmo)));
+function safeHref(value?: string | null): string | undefined {
+  const href = value?.trim();
+  if (!href) return undefined;
+  if (/^\/(?!\/)/.test(href) || /^#[a-z0-9_-]+$/i.test(href) || /^https?:\/\//i.test(href)) return href;
+  return undefined;
+}
+function education(doc: SeminarDocument): string {
+  switch (doc.prior_education) {
+    case 'none': return 'Требования к исходному образованию отсутствуют.';
+    case 'medical': return 'При наличии медицинского образования.';
+    case 'physical-or-pedagogical': return 'При наличии высшего физкультурного или педагогического образования.';
+    case 'other': return doc.prior_education_note || '';
+    case 'unspecified': return 'Требования к образованию не указаны.';
+    default: return '';
+  }
+}
+function outcome(doc: SeminarDocument): string {
+  switch (doc.outcome) {
+    case 'completed': return 'При успешном освоении обучения.';
+    case 'assessment-failed': return 'При неудовлетворительном результате итоговой аттестации.';
+    case 'assessment-not-completed': return 'Для не прошедших итоговую аттестацию.';
+    case 'partially-completed': return 'При частичном освоении программы.';
+    case 'expelled': return 'При отчислении.';
+    default: return '';
+  }
+}
+---
+{visible && (
+  <>
+  {aliases.map((alias) => <span id={alias} aria-hidden="true"></span>)}
+  <details open id={id}>
+    <summary>Выдаваемые документы</summary>
+    {seminar.documents_state === 'not-issued' ? <p>Выдача документов не предусмотрена.</p> : (
+      <>
+        {docs.map((doc) => (
+          <div>
+            <p>
+              {doc.document}{doc.issuer ? <> — {doc.issuer}</> : doc.issuer_unknown ? <>. Выдающая организация не указана</> : ''}{doc.signed_by === 'teacher' ? <> за подписью преподавателя</> : ''}.
+            </p>
+            {education(doc) && <p>{education(doc)}</p>}
+            {outcome(doc) && <p>{outcome(doc)}</p>}
+            {doc.completion_scope === 'full-cycle' && <p>После завершения всего курса{doc.completion_cycle_name ? ` «${doc.completion_cycle_name}»` : ''}{doc.completion_after_seminar_number ? ` — после ${doc.completion_after_seminar_number}-го семинара` : ''}{safeHref(doc.other_seminar_href) && <> — после <a href={safeHref(doc.other_seminar_href)}>{doc.other_seminar_label || 'указанного семинара'}</a></>}.</p>}
+            {doc.completion_scope === 'course' && <p>После окончания курса.</p>}
+            {doc.completion_scope === 'this-seminar' && <p>После окончания этого семинара.</p>}
+            {doc.completion_required && (!doc.completion_scope || doc.completion_scope === 'unspecified') && <p>После окончания обучения.</p>}
+            {doc.completion_scope === 'other-seminar' && <p>После завершения {safeHref(doc.other_seminar_href) ? <a href={safeHref(doc.other_seminar_href)}>{doc.other_seminar_label || 'другого семинара'}</a> : (doc.other_seminar_label || 'другого семинара')}.</p>}
+            {doc.qualification_topic && <p>Тема: {doc.qualification_topic}.</p>}
+            {doc.basis && <p>{doc.basis}</p>}
+            {doc.hours_mode === 'actual-completed' && <p>Указываются фактически пройденные часы{doc.hours_may_vary ? ', их количество может варьироваться' : ''}.</p>}
+            {doc.document_on_template && <p>Документ выдаётся по образцу.</p>}
+            {safeHref(doc.regulation_url) && <p>Порядок заполнения и выдачи регламентирован <a href={safeHref(doc.regulation_url)}>положением</a>{doc.regulation_issuer ? ` ${doc.regulation_issuer}` : ''}.</p>}
+            {doc.includes_completed_level && <p>Указывается пройденный уровень.</p>}
+            {(doc.registry ?? []).filter((registry) => registry.subject === 'document').map((registry) => <p>Данные о документе вносятся в {registry.international ? 'международный ' : ''}реестр {safeHref(registry.url) ? <a href={safeHref(registry.url)}>{registry.name}</a> : registry.name}{registry.basis ? `: ${registry.basis}` : ''}.</p>)}
+          </div>
+        ))}
+        {registries.map((registry) => <p>Данные об обучении вносятся в {registry.international ? 'международный ' : ''}реестр {safeHref(registry.url) ? <a href={safeHref(registry.url)}>{registry.name}</a> : registry.name}{registry.basis ? `: ${registry.basis}` : ''}.</p>)}
+        {(nmo?.status === 'possible' || nmo?.status === 'awarded') && <p>{nmo.completion_required ? 'После окончания обучения: ' : ''}{nmo.status === 'possible' ? 'возможно получение баллов НМО' : 'начисляются баллы НМО'}{nmo.audience ? `: ${nmo.audience}` : ''}{nmo.purpose ? ` (${nmo.purpose})` : ''}{nmo.awarded_for ? ` — ${nmo.awarded_for}` : ''}{safeHref(nmo.url) ? <>. <a href={safeHref(nmo.url)}>Подробнее</a></> : ''}.</p>}
+      </>
+    )}
+  </details>
+  </>
+)}

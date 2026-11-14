@@ -10,10 +10,10 @@
 идемпотентности на сервере.
 
 В текущем дереве `getScheduleEntries` загружает тип расписания из снимка
-(`web/src/lib/data.ts:129`, `const records = loadSnapshot().content.types[type];`), нормализует
-записи и добавляет имена преподавателей (`web/src/lib/data.ts:401`, `if (!_schedule) _schedule = loadJson<ScheduleEntry[]>('schedule_entries.json').map(normalizeScheduleEntry).map(withSeminarTeachers);`).
+(`web/src/lib/data.ts:130`, `const records = loadSnapshot().content.types[type];`), нормализует
+записи и добавляет имена преподавателей (`web/src/lib/data.ts:438`, `if (!_schedule) _schedule = loadJson<ScheduleEntry[]>('schedule_entries.json').map(normalizeScheduleEntry).map(withSeminarDefaults).map(withSeminarTeachers);`).
 Страница расписания получает этот набор и фильтрует его по состоянию и актуальности
-(`web/src/pages/raspisanie-i-tseny.astro:65`, `.filter((entry) => entry.status === 'active' && isBeforeStart(entry, todayDate))`).
+(`web/src/pages/raspisanie-i-tseny.astro:73`, `.filter((entry) => entry.status === 'active' && isBeforeStart(entry, todayDate))`).
 Текущая реализация не объединяет основной список с отдельным списком дополнений. Исторический
 замер 23.08.2026 описан отдельно в proposal и относится к составу данных и коду на ту дату.
 
@@ -112,7 +112,7 @@
 
 **Дробная цена входит в тот же запрет, и это не предусмотрительность впрок.** Схема
 хранилища объявляет цену типом `decimal`
-(`cms/src/api/schedule-entry/content-types/schedule-entry/schema.json:43`, `"price": {`),
+(`cms/src/api/schedule-entry/content-types/schedule-entry/schema.json:48`, `"price": {`),
 поэтому `1500.5` данными допускается, а форма принимает только целые рубли. В снимке на
 23.08.2026 нецелых положительных цен ноль — то есть ветвь непройденная, и проверять её надо
 фикстурами (дробная, отсутствующая), а не наблюдением над текущими данными.

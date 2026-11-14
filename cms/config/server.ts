@@ -9,6 +9,9 @@ const config = ({ env }: Core.Config.Shared.ConfigParams): Core.Config.Server =>
   // `HOST=0.0.0.0` в окружении, если кому-то понадобится слушать все интерфейсы.
   host: env('HOST', '127.0.0.1'),
   port: env.int('PORT', 1337),
+  // The isolated migration load hashes its artifact before booting Strapi.
+  // Prevent the update notifier from writing mutable state into that artifact.
+  logger: { updates: { enabled: !env.bool('IKPK_MIGRATION_CLOSED_LOAD', false) } },
   app: {
     keys: env.array('APP_KEYS'),
   },

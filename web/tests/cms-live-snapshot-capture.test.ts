@@ -7,8 +7,10 @@
 //
 // Три требования, восемь сценариев. Соответствие «сценарий → тест» — в отчёте сессии.
 
-import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
+import { createHash } from 'node:crypto';
+import { contentFingerprint, type SnapshotContent } from '../scripts/lib/content-snapshot';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -101,7 +103,7 @@ function dataset(over: Record<string, StubCollection> = {}): Record<string, Stub
   const teachers = Array.from({ length: 5 }, (_, i) =>
     ({ ...base('teach', i + 1, `Преподаватель ${i + 1}`), photo: media(i + 1), bio: '<p>Биография</p>', order: i, trait: i === 0 ? 'method-author' : 'teacher', institute: ref('inst', 1, 'Институт 1') }));
   const seminars = Array.from({ length: 4 }, (_, i) =>
-    ({ ...base('sem', i + 1, `Семинар ${i + 1}`), description: '<p>О семинаре</p>', full_text: '<p>Подробно</p>', image: media(i + 1), price: 1000 + i, duration: '2 дня', seminar_status: 'planned', learning_mode: null, learning_plan: null, recommendations: null, course_group: ref('cg', 1, 'Программа 1'), order: i, teachers: [ref('teach', 1, 'Преподаватель 1')], seo: seo(`Семинар ${i + 1}`) }));
+    ({ ...base('sem', i + 1, `Семинар ${i + 1}`), description: '<p>О семинаре</p>', full_text: '<p>Подробно</p>', image: media(i + 1), price: 1000 + i, duration: '2 дня', seminar_status: 'planned', audience: null, content_format: 'legacy', content_section_anchors: null, documents_state: null, documents: [], training_registries: [], nmo: null, learning_mode: null, learning_plan: null, recommendations: null, course_group: ref('cg', 1, 'Программа 1'), order: i, teachers: [ref('teach', 1, 'Преподаватель 1')], seo: seo(`Семинар ${i + 1}`) }));
   const scheduleEntries = Array.from({ length: 3 }, (_, i) => ({
     ...without(base('ev', i + 1, `Событие ${i + 1}`), 'slug'),
     startAt: `2026-09-0${i + 1}T00:00:00.000Z`,
@@ -110,6 +112,7 @@ function dataset(over: Record<string, StubCollection> = {}): Record<string, Stub
     price: 5000,
     oldPrice: 6000,
     isFree: false,
+    isOnline: false,
     entry_status: 'active',
     registrationFormLink: 'https://example.invalid/form',
     description: '<p>Описание события</p>',
@@ -1008,13 +1011,29 @@ describe('съём понимает формы данных установлен
     expect(typesOf(readSnapshot(dir)).seminars?.find((record) => record.slug === 'sem-002')?.recommendations).toBe('<p>Совет</p>');
   });
 
-  it('отметка documents_state у семинара не мешает съёму и названа в выводе', async () => {
+  it('состояние документов переносится в снимок', async () => {
     const cms = await stub({ seminars: { records: d.seminars!.records.map((r, i) => ({ ...r, documents_state: i < 2 ? 'unconfirmed' : null })) } });
-
-    const run = await runCapture({ CMS_URL: cms.url, CONTENT_SNAPSHOT_DIR: outDir() });
+    const dir = outDir();
+    const run = await runCapture({ CMS_URL: cms.url, CONTENT_SNAPSHOT_DIR: dir });
 
     expect(run.status, run.output).toBe(0);
-    expect(run.output).toMatch(/seminars\.documents_state.*2/);
+    expect(typesOf(readSnapshot(dir)).seminars?.filter((record) => record.documents_state === 'unconfirmed')).toHaveLength(2);
+  });
+
+  it('структурированные документы и вложенные реестры проходят из CMS в снимок', async () => {
+    const cms = await stub({ seminars: { records: d.seminars!.records.map((r, i) => i === 0 ? {
+      ...r, content_format: 'structured', full_text: null, documents_state: 'issued',
+      documents: [{ document: 'Удостоверение', issuer_unknown: true, prior_education: 'medical', registry: [{ name: 'ФИС ФРДО', subject: 'document', url: 'https://example.org/#registry' }] }],
+      training_registries: [{ name: 'IAHE', subject: 'training', url: 'https://example.org/#training' }],
+      nmo: { status: 'possible', url: 'https://example.org/#nmo' },
+    } : r) } });
+    const dir = outDir();
+    const run = await runCapture({ CMS_URL: cms.url, CONTENT_SNAPSHOT_DIR: dir });
+    expect(run.status, run.output).toBe(0);
+    const seminar = typesOf(readSnapshot(dir)).seminars?.find((record) => record.slug === 'sem-001');
+    expect(seminar?.documents).toEqual([{ document: 'Удостоверение', issuer_unknown: true, prior_education: 'medical', registry: [{ name: 'ФИС ФРДО', subject: 'document', url: 'https://example.org/#registry' }] }]);
+    expect(seminar?.training_registries).toEqual([{ name: 'IAHE', subject: 'training', url: 'https://example.org/#training' }]);
+    expect(seminar?.nmo).toEqual({ status: 'possible', url: 'https://example.org/#nmo' });
   });
 
   it('заполненный seo.noindex назван в выводе', async () => {
@@ -1036,5 +1055,136 @@ describe('съём понимает формы данных установлен
 
     expect(run.status).not.toBe(0);
     expect(run.output).toMatch(/поля CMS без решения: teachers\.mystery/s);
+  });
+});
+
+// seminar-content-and-occurrence-model: exercise the CLI, not its private mapRecord.
+describe('historical exceptions survive actual live snapshot capture', () => {
+  it('pinned capture carries the explicit historical registry in its identified artifact', async () => {
+    const dir = outDir();
+    const run = await runCapture({ CONTENT_SNAPSHOT_DIR: dir });
+    expect(run.status, run.output).toBe(0);
+    const captured = readSnapshot(dir) as { content: SnapshotContent; fingerprint: string };
+    expect(captured.content.historicalExceptions?.length ?? 0).toBeGreaterThan(0);
+    expect(captured.fingerprint).toBe(contentFingerprint(captured.content));
+    const zero = captured.content.types.schedule_entries.find((record) => record.isFree === false && record.newPrice === 0);
+    expect(zero).toBeDefined();
+    const withoutRegistry = structuredClone(captured.content);
+    delete withoutRegistry.historicalExceptions;
+    expect(captured.fingerprint).not.toBe(contentFingerprint(withoutRegistry));
+  });
+
+  it('keeps logical document identity alongside publication and update timestamps', async () => {
+    const cms = await stub();
+    const dir = outDir();
+    const run = await runCapture({ CMS_URL: cms.url, CONTENT_SNAPSHOT_DIR: dir });
+    expect(run.status, run.output).toBe(0);
+    const captured = typesOf(readSnapshot(dir)).schedule_entries![0]!;
+    expect(captured.documentId).toBe('ev-doc-1');
+    expect(captured.publishedAt).toBe('2026-02-01T00:00:00.000Z');
+    expect(captured.updatedAt).toBe('2026-02-01T00:00:00.000Z');
+  });
+
+  it('new paid zero stops capture and does not leave an accepted artifact', async () => {
+    const source = dataset();
+    source['schedule-entries']!.records[0]!.price = 0;
+    const cms = await stub(source);
+    const dir = outDir();
+    const run = await runCapture({ CMS_URL: cms.url, CONTENT_SNAPSHOT_DIR: dir });
+    expect(run.status, run.output).not.toBe(0);
+    expect(run.output).toMatch(/price/);
+    expect(run.output).toMatch(/ev-doc-1|ev-001|\b1\b/);
+    expect(existsSync(join(dir, 'snapshot.json'))).toBe(false);
+  });
+
+  it('reviewed registry file plus separate byte pin enters the identified live artifact', async () => {
+    const source = dataset();
+    const cms = await stub(source);
+    const dir = outDir();
+    const first = await runCapture({ CMS_URL: cms.url, CONTENT_SNAPSHOT_DIR: dir });
+    expect(first.status, first.output).toBe(0);
+    const projected = typesOf(readSnapshot(dir)).schedule_entries![0]!;
+    // Independent expected projection: identity must not disappear in mapRecord.
+    projected.documentId = 'ev-doc-1';
+    projected.price = 0;
+    const registry = [{
+      documentId: 'ev-doc-1', publishedAt: projected.publishedAt, updatedAt: projected.updatedAt,
+      condition: 'paid-zero-price',
+      recordFingerprint: contentFingerprint({ types: { schedule_entries: [projected] }, media: [] }),
+    }];
+    const path = join(dir, 'reviewed-exceptions.json');
+    const bytes = JSON.stringify(registry);
+    writeFileSync(path, bytes);
+    source['schedule-entries']!.records[0]!.price = 0;
+    const run = await runCapture({
+      CMS_URL: cms.url, CONTENT_SNAPSHOT_DIR: dir,
+      CONTENT_HISTORICAL_EXCEPTIONS_FILE: path,
+      CONTENT_HISTORICAL_EXCEPTIONS_SHA256: createHash('sha256').update(bytes).digest('hex'),
+    });
+    expect(run.status, run.output).toBe(0);
+    const captured = readSnapshot(dir) as { content: SnapshotContent; fingerprint: string };
+    expect(captured.content.historicalExceptions).toEqual(registry);
+    expect(captured.content.types.schedule_entries[0].isFree).toBe(false);
+    expect(captured.content.types.schedule_entries[0].price).toBe(0);
+    expect(captured.fingerprint).toBe(contentFingerprint(captured.content));
+    const withoutRegistry = structuredClone(captured.content);
+    delete withoutRegistry.historicalExceptions;
+    expect(captured.fingerprint).not.toBe(contentFingerprint(withoutRegistry));
+  });
+
+  it('registry file with a mismatched external pin is rejected before writing a snapshot', async () => {
+    const cms = await stub();
+    const dir = outDir();
+    const path = join(dir, 'untrusted-exceptions.json');
+    writeFileSync(path, '[]');
+    const run = await runCapture({
+      CMS_URL: cms.url, CONTENT_SNAPSHOT_DIR: dir,
+      CONTENT_HISTORICAL_EXCEPTIONS_FILE: path,
+      CONTENT_HISTORICAL_EXCEPTIONS_SHA256: '0'.repeat(64),
+    });
+    expect(run.status, run.output).not.toBe(0);
+    expect(existsSync(join(dir, 'snapshot.json'))).toBe(false);
+  });
+});
+
+describe('семинар проведения: идентичность снимков', () => {
+  it('живой захват сохраняет documentId и определяет программу и институт связанного семинара', async () => {
+    const d = dataset();
+    const seminars = d.seminars!.records.map((r, i) => i === 1 ? { ...r, course_group: ref('cg', 2, 'Программа 2') } : r);
+    const groups = d['course-groups']!.records.map((r, i) => i === 1 ? { ...r, institute: ref('inst', 2, 'Институт 2') } : r);
+    const events = d['schedule-entries']!.records.map((r) => ({ ...r, seminar: ref('sem', 2, 'Семинар 2') }));
+    const cms = await stub({ seminars: { records: seminars }, 'course-groups': { records: groups }, 'schedule-entries': { records: events } });
+    const dir = outDir();
+    const run = await runCapture({ CMS_URL: cms.url, CONTENT_SNAPSHOT_DIR: dir });
+    expect(run.status, run.output).toBe(0);
+    const entry = typesOf(readSnapshot(dir)).schedule_entries![0]!;
+    expect(entry.seminar).toMatchObject({ documentId: 'sem-doc-2', slug: 'sem-002' });
+    expect(entry.program).toMatchObject({ slug: 'cg-002' });
+    expect(entry.institute).toMatchObject({ name: 'Институт 2' });
+  });
+
+  it('живой захват отклоняет неизвестный documentId, даже если slug совпадает', async () => {
+    const d = dataset();
+    const events = d['schedule-entries']!.records.map((r) => ({ ...r, seminar: { ...ref('sem', 1, 'Семинар 1'), documentId: 'unknown' } }));
+    const cms = await stub({ 'schedule-entries': { records: events } });
+    const dir = outDir();
+    const run = await runCapture({ CMS_URL: cms.url, CONTENT_SNAPSHOT_DIR: dir });
+    expect(run.status).not.toBe(0);
+    expect(run.output).toMatch(/не разрешает связь семинара по documentId/);
+    expect(existsSync(join(dir, 'snapshot.json'))).toBe(false);
+  });
+
+  it('контракт старого снимка допускает только однозначную связь по slug и защищает плоский маршрут', async () => {
+    const contract = await contractModule();
+    const snapshot = structuredClone(pinnedSnapshot());
+    const types = (snapshot.content as { types: Record<string, Record<string, unknown>[]> }).types;
+    const event = types.schedule_entries![0]!;
+    const relation = event.seminar as { slug: string };
+    expect(contract.validateSnapshotContract(snapshot as never).violations.filter((v) => v.type === 'schedule' && v.recordId === String(event.legacy_id ?? event.slug ?? event.documentId ?? event.id) && v.rule === 'broken-relation')).toHaveLength(0);
+    const original = types.seminars!.find((row) => row.slug === relation.slug)!;
+    types.seminars!.push({ ...original, legacy_id: 'duplicate-seminar', course_group_legacy_id: 'other-program' });
+    const violations = contract.validateSnapshotContract(snapshot as never).violations;
+    expect(violations.some((v) => v.type === 'schedule' && v.rule === 'broken-relation')).toBe(true);
+    expect(violations.some((v) => v.type === 'seminars' && v.rule === 'duplicate-identifier')).toBe(true);
   });
 });

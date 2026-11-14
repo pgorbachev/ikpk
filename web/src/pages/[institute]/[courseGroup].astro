@@ -1,4 +1,5 @@
 ---
+import { scheduleBelongsToSeminar } from '../../lib/data';
 import BaseLayout from '../../layouts/BaseLayout.astro';
 import Breadcrumbs from '../../components/Breadcrumbs.astro';
 import CourseGroupSeminarItem from '../../components/course-groups/CourseGroupSeminarItem.astro';
@@ -39,7 +40,7 @@ const datesBySeminar = new Map<string, { startAt: string; additionalText: string
 const currentYear = new Intl.DateTimeFormat('en', { timeZone: 'Europe/Moscow', year: 'numeric' }).format(today);
 for (const seminar of seminars) {
   datesBySeminar.set(seminar.slug, activeEntries
-    .filter((entry) => entry.seminar?.slug === seminar.slug && isBeforeStart(entry, today))
+    .filter((entry) => scheduleBelongsToSeminar(entry, seminar) && isBeforeStart(entry, today))
     .sort(compareNearest)
     .map((entry) => {
       const year = calendarDay(entry.endAt || entry.startAt).slice(0, 4);

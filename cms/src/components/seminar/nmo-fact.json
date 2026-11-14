@@ -1,0 +1,33 @@
+{
+  "collectionName": "components_seminar_nmo_facts",
+  "info": {
+    "displayName": "Баллы НМО",
+    "icon": "star"
+  },
+  "attributes": {
+    "status": {
+      "type": "enumeration",
+      "enum": [
+        "unspecified",
+        "possible",
+        "awarded"
+      ]
+    },
+    "audience": {
+      "type": "string"
+    },
+    "awarded_for": {
+      "type": "string"
+    },
+    "url": {
+      "type": "string"
+    },
+    "completion_required": {
+      "type": "boolean",
+      "default": false
+    },
+    "purpose": {
+      "type": "string"
+    }
+  }
+}

@@ -210,7 +210,7 @@ describe('контракт данных проверяется до генера
       seminars: [{ slug: 'sem-1', title: 'Семинар', program: 'prog-1' }],
       teachers: [{ slug: 'teach-1', name: 'Преподаватель', institute: 'inst-1' }],
       articles: [wholeArticle('alpha'), wholeArticle('beta')],
-      schedule: [{ id: 'ev-1', seminar: 'sem-1', startAt: '2026-09-01' }],
+      schedule: [{ id: 'ev-1', seminar: 'sem-1', startAt: '2026-09-01', duration: '8 часов' }],
     });
 
   it('целый снимок нарушений не даёт — опора для одиночных мутаций', async () => {

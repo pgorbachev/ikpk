@@ -85,9 +85,9 @@ test('операция 194 строит demo из нового серверно�
     // Контролируемая граница процесса: имитируется свежий снимок с новой записью.
     put(join(ws, 'cms/scripts/capture-staging194.py'), 'import os,sys,pathlib\np=pathlib.Path(os.environ["IKPK_CAPTURE_ROOT"])/sys.argv[1]\np.mkdir(parents=True)\n(p/"database.sqlite").write_text("updated-published")\n');
     put(join(ws, 'scripts/lib/seal-staging193-capture.mjs'), 'import fs from "node:fs"; const p=process.argv[2]; if(fs.readFileSync(p+"/database.sqlite","utf8")!=="updated-published")process.exit(2); fs.writeFileSync(p+"/sealed","yes");');
-    put(join(web, 'node_modules/tsx/dist/cli.mjs'), 'import fs from "node:fs"; const a=process.argv.slice(2); const i=a.indexOf("--server-capture"); if(i<0||fs.readFileSync(a[i+1]+"/sealed","utf8")!=="yes") { console.error("sealed fresh capture required"); process.exit(41); } fs.mkdirSync(process.env.CONTENT_SNAPSHOT_DIR,{recursive:true}); fs.writeFileSync(process.env.CONTENT_SNAPSHOT_DIR+"/snapshot.json", JSON.stringify({snapshotId:"snap:new"}));');
-    put(join(bin, 'npm'), `#!/bin/sh\n[ "$1 $2" = "run build:demo193" ] || { echo "wrong build profile" >&2; exit 42; }\n[ "$CHAT_LOADER_SRC" = "none" ] || { echo "chat was not declared absent" >&2; exit 43; }\n[ -z "\${CHAT_LOADER_PROFILE+x}" ] || { echo "unexpected chat profile" >&2; exit 44; }\nmkdir -p dist-demo193\nprintf 'new published content' > dist-demo193/index.html\n`, 0o755);
-    const runner = `import {readFileSync} from 'node:fs'; import {join} from 'node:path'; globalThis.fetch=async()=>({status:200,json:async()=>JSON.parse(readFileSync(join(process.env.IKPK_WEB_ROOT,'current','release.json'),'utf8'))}); const {executeRefresh}=await import(${JSON.stringify(worker)}); const r=await executeRefresh(); console.log(JSON.stringify(r));`;
+    put(join(web, 'node_modules/tsx/dist/cli.mjs'), 'import fs from "node:fs"; const a=process.argv.slice(2); const i=a.indexOf("--server-capture"); if(i<0||fs.readFileSync(a[i+1]+"/sealed","utf8")!=="yes" || process.env.CONTENT_HISTORICAL_EXCEPTIONS_SHA256!=="'+ 'b'.repeat(64) +'") { console.error("sealed fresh capture and trusted registry required"); process.exit(41); } fs.mkdirSync(process.env.CONTENT_SNAPSHOT_DIR,{recursive:true}); fs.writeFileSync(process.env.CONTENT_SNAPSHOT_DIR+"/snapshot.json", JSON.stringify({snapshotId:"snap:new"}));');
+    put(join(bin, 'npm'), `#!/bin/sh\n[ "$1 $2" = "run build:demo193" ] || { echo "wrong build profile" >&2; exit 42; }\n[ "$CHAT_LOADER_SRC" = "none" ] || { echo "chat was not declared absent" >&2; exit 43; }\n[ "$CONTENT_HISTORICAL_EXCEPTIONS_SHA256" = "${'b'.repeat(64)}" ] || exit 45\n[ -z "\${CHAT_LOADER_PROFILE+x}" ] || { echo "unexpected chat profile" >&2; exit 44; }\nmkdir -p dist-demo193\nprintf 'new published content' > dist-demo193/index.html\n`, 0o755);
+    const runner = `import {readFileSync} from 'node:fs'; import {join} from 'node:path'; globalThis.fetch=async()=>({status:200,json:async()=>JSON.parse(readFileSync(join(process.env.IKPK_WEB_ROOT,'current','release.json'),'utf8'))}); const {executeRefresh}=await import(${JSON.stringify(worker)}); const r=await executeRefresh({registryReader:()=>({CONTENT_HISTORICAL_EXCEPTIONS_FILE:'/fixed/root-owned/registry.json',CONTENT_HISTORICAL_EXCEPTIONS_SHA256:'${'b'.repeat(64)}'})}); console.log(JSON.stringify(r));`;
     const env = { ...process.env, PATH: `${bin}:${process.env.PATH}`, IKPK_BUILD_WORKSPACE: ws, IKPK_WEB_ROOT: site, IKPK_REFRESH_STATE: state, IKPK_CAPTURE_PROFILE: 'staging194', IKPK_VERIFY_URL: 'https://194.226.99.10/release.json', IKPK_CAPTURE_DATABASE: join(root,'source.sqlite'), IKPK_CAPTURE_MEDIA: join(root,'uploads'), IKPK_CAPTURE_ROOT: captures, IKPK_MEDIA_CACHE: '/var/www/ikpk/current/media', IKPK_INSTALLED_COMMIT: 'a'.repeat(40) };
     delete env.CHAT_LOADER_SRC; delete env.CHAT_LOADER_PROFILE;
     env.IKPK_REFRESH_OWNER_PID = String(process.pid); env.IKPK_REFRESH_OPERATION_TOKEN = operationToken;
@@ -121,6 +121,28 @@ test('профиль публикации из CMS на 194 явно отклю�
     if (previousSrc === undefined) delete process.env.CHAT_LOADER_SRC; else process.env.CHAT_LOADER_SRC = previousSrc;
     if (previousProfile === undefined) delete process.env.CHAT_LOADER_PROFILE; else process.env.CHAT_LOADER_PROFILE = previousProfile;
   }
+});
+
+test('production CMS refresh передаёт доверенный реестр в capture и build', () => {
+  const root = mkdtempSync(join(tmpdir(), 'ikpk-prod-history-'));
+  try {
+    const ws=join(root,'workspace'), web=join(ws,'web'), site=join(root,'site'), bin=join(root,'bin'), state=join(root,'state.json');
+    const token='a'.repeat(32), digest='b'.repeat(64);
+    put(join(site,'releases/previous/release.json'),JSON.stringify({commit:'a'.repeat(40),snapshotId:'snap:old'}));
+    put(join(site,'.publication.lock'),'',0o600); chmodSync(join(site,'.publication.lock'),0o600);
+    spawnSync('ln',['-s','releases/previous',join(site,'current')]);
+    put(state,JSON.stringify({status:'running',phase:'starting',pid:process.pid,refreshOperationToken:token,startedAt:new Date().toISOString(),switched:false}));
+    put(join(web,'node_modules/astro/package.json'),'{}'); put(join(web,'node_modules/tsx/package.json'),'{}');
+    put(join(web,'node_modules/tsx/dist/cli.mjs'),`import fs from 'node:fs'; if(process.env.CONTENT_HISTORICAL_EXCEPTIONS_SHA256!=='${digest}')process.exit(41); fs.mkdirSync(process.env.CONTENT_SNAPSHOT_DIR,{recursive:true}); fs.writeFileSync(process.env.CONTENT_SNAPSHOT_DIR+'/snapshot.json',JSON.stringify({snapshotId:'snap:new'}));`);
+    put(join(bin,'npm'),`#!/bin/sh\n[ "$1 $2" = "run build" ] || exit 42\n[ "$CONTENT_HISTORICAL_EXCEPTIONS_SHA256" = "${digest}" ] || exit 43\nmkdir -p dist\nprintf ok > dist/index.html\n`,0o755);
+    const runner=`import {readFileSync} from 'node:fs'; import {join} from 'node:path'; globalThis.fetch=async()=>({status:200,json:async()=>JSON.parse(readFileSync(join(process.env.IKPK_WEB_ROOT,'current','release.json'),'utf8'))}); const {executeRefresh}=await import(${JSON.stringify(worker)}); const r=await executeRefresh({registryReader:()=>({CONTENT_HISTORICAL_EXCEPTIONS_FILE:'/fixed/registry.json',CONTENT_HISTORICAL_EXCEPTIONS_SHA256:'${digest}'})}); console.log(JSON.stringify(r));`;
+    const env={...process.env,PATH:`${bin}:${process.env.PATH}`,IKPK_BUILD_WORKSPACE:ws,IKPK_WEB_ROOT:site,IKPK_REFRESH_STATE:state,IKPK_VERIFY_URL:'https://ikpk.su/release.json',IKPK_INSTALLED_COMMIT:'a'.repeat(40),IKPK_REFRESH_OWNER_PID:String(process.pid),IKPK_REFRESH_OPERATION_TOKEN:token,INITIAL_PROD_PROFILE:'1',DEPLOY_MODE:'prod',PAYMENT_ROLE:'prod',PAYMENT_ENDPOINT_PROD:'https://ikpk.su/api',CHAT_LOADER_SRC:'https://example.test/loader.js'};
+    delete env.IKPK_CAPTURE_PROFILE;
+    const run=spawnSync(process.execPath,['--input-type=module','-e',runner],{env,encoding:'utf8',timeout:30000});
+    assert.equal(run.status,0,run.stderr); const result=JSON.parse(run.stdout.trim());
+    assert.equal(result.status,'succeeded',JSON.stringify(result));
+    assert.equal(JSON.parse(readFileSync(join(site,'current/release.json'),'utf8')).snapshotId,'snap:new');
+  } finally { rmSync(root,{recursive:true,force:true}); }
 });
 
 test('отдельный static-main профиль сохраняет утверждённый Bitrix и не допускает неверный адрес', () => {

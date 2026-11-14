@@ -1242,6 +1242,7 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
 
             with patch.object(rehearsal_host, "_trusted_cms_artifact", return_value={}), \
                  patch.object(rehearsal_host, "_extract_ci_cms_artifact", return_value=artifact), \
+                 patch.object(rehearsal_host, "_admitted_cms_install_inputs", return_value={}), \
                  patch.object(rehearsal_host, "_prepare_cms_build_dependencies", return_value=dependencies), \
                  patch.object(rehearsal_host, "_validate_prepared_cms_candidate",
                               return_value=(source, artifact, dependencies)), \
@@ -1287,6 +1288,7 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
 
             with patch.object(rehearsal_host, "_trusted_cms_artifact", return_value={}), \
                  patch.object(rehearsal_host, "_extract_ci_cms_artifact", return_value=artifact), \
+                 patch.object(rehearsal_host, "_admitted_cms_install_inputs", return_value={}), \
                  patch.object(rehearsal_host, "_prepare_cms_build_dependencies", return_value=dependencies), \
                  patch.object(rehearsal_host, "_validate_prepared_cms_candidate") as validate, \
                  patch.object(rehearsal_host.pwd, "getpwnam", return_value=user), \
@@ -1597,6 +1599,7 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
 
             with patch.object(rehearsal_host, "_validate_prepared_cms_candidate",
                               return_value=(source, artifact, dependencies)), \
+                 patch.object(rehearsal_host, "_protected_cms_migration_artifact", return_value=artifact), \
                  patch.object(rehearsal_host.pwd, "getpwnam", return_value=user), \
                  patch.object(rehearsal_host, "_run_as_cms", side_effect=run_as_cms), \
                  patch.object(rehearsal_host.os, "chown", side_effect=AssertionError("do not chown by path")), \
@@ -1642,6 +1645,7 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
                       "mediaRoots": [{"prefix": "/uploads/", "path": str(root)}]}
             with patch.object(rehearsal_host, "_validate_prepared_cms_candidate",
                               return_value=(source, artifact, dependencies)), \
+                 patch.object(rehearsal_host, "_protected_cms_migration_artifact", return_value=artifact), \
                  patch.object(rehearsal_host, "_run_as_cms",
                               side_effect=AssertionError("retry guard must run before CMS commands")):
                 with self.assertRaisesRegex(rehearsal_host.HostFailure, "candidate already exists"):

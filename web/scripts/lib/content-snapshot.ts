@@ -23,6 +23,15 @@ export interface SnapshotOrigin {
 export interface SnapshotContent {
   types: Record<string, Record<string, unknown>[]>;
   media: SnapshotMedia[];
+  historicalExceptions?: HistoricalException[];
+}
+
+export interface HistoricalException {
+  documentId: string;
+  publishedAt: string;
+  updatedAt: string;
+  condition: 'paid-zero-price' | 'missing-duration';
+  recordFingerprint: string;
 }
 
 export interface DemoCaptureProof {
@@ -136,7 +145,10 @@ function canonicalContent(content: SnapshotContent): unknown {
       if (byId !== 0) return byId;
       return a.ref < b.ref ? -1 : a.ref > b.ref ? 1 : 0;
     });
-  return { types, media };
+  return { types, media, ...(content.historicalExceptions === undefined ? {} : {
+    historicalExceptions: [...content.historicalExceptions].map(sortValue)
+      .sort((a, b) => JSON.stringify(a) < JSON.stringify(b) ? -1 : JSON.stringify(a) > JSON.stringify(b) ? 1 : 0),
+  }) };
 }
 
 export function contentFingerprint(content: SnapshotContent): string {

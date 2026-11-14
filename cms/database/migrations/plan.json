@@ -62,17 +62,236 @@
       "preconditions": { "documents_state": "column exists after schema sync; null rows have no structured documents" },
       "postconditions": { "documents_state": "eligible null values become unconfirmed; all other values are unchanged" },
       "readback": { "kind": "helper-null-row-and-relation-readback" }
+    },
+    {
+      "id": "seminar-content-admin-permissions-v1",
+      "phase": "after-sync",
+      "kind": "data",
+      "handler": "content-admin-permissions",
+      "path": "data-steps/content-admin-permissions.mjs",
+      "sha256": "a1fe576c19c57442984bc52fd216f5271de32836d7f38d966e94a1b815b1d06b",
+      "source": {
+        "strapiVersion": "5.51.2",
+        "schema": {
+          "engine": "sqlite",
+          "requiredColumns": {
+            "admin_roles": [
+              "id",
+              "code"
+            ],
+            "admin_permissions": [
+              "id",
+              "action",
+              "subject",
+              "properties",
+              "conditions"
+            ],
+            "admin_permissions_role_lnk": [
+              "permission_id",
+              "role_id"
+            ]
+          }
+        }
+      },
+      "preconditions": {
+        "review": "Only full-baseline content-admin grants are extended; customized grants are preserved."
+      },
+      "postconditions": {
+        "data": "Permission changes and runner ledger are committed in the same Strapi transaction."
+      },
+      "readback": {
+        "kind": "independent-permission-graph-and-ledger"
+      }
+    },
+    {
+      "id": "seminar-occurrence-model-v1",
+      "phase": "after-sync",
+      "kind": "data",
+      "handler": "reviewed-schedule",
+      "path": "data-steps/reviewed-schedule.mjs",
+      "sha256": "44ad2d79307f1076d8f4f61b8108b405e8f223efdff0b632ed3392d795704033",
+      "source": {
+        "strapiVersion": "5.51.2",
+        "schema": {
+          "engine": "sqlite",
+          "requiredColumns": {
+            "seminars": [
+              "id",
+              "document_id",
+              "published_at"
+            ],
+            "schedule_entries": [
+              "id",
+              "document_id",
+              "published_at",
+              "duration",
+              "is_free",
+              "price",
+              "city",
+              "legacy_id"
+            ],
+            "schedule_entries_seminar_lnk": [
+              "seminar_id",
+              "schedule_entry_id"
+            ],
+            "files_related_mph": [
+              "id",
+              "related_id",
+              "related_type",
+              "field"
+            ]
+          }
+        }
+      },
+      "preconditions": {
+        "review": "Externally reviewed private plan matches all source versions and exceptions."
+      },
+      "postconditions": {
+        "data": "Apply only the reviewed price, online and unambiguous duration changes."
+      },
+      "readback": {
+        "kind": "independent-schedule-and-ledger-audit"
+      }
+    },
+    {
+      "id": "seminar-documents-structure-v1",
+      "phase": "after-sync",
+      "kind": "data",
+      "handler": "reviewed-documents",
+      "path": "data-steps/reviewed-documents.mjs",
+      "sha256": "488ee389297cfa3489e3b97e0c717b09cd57be0054c06240657fda2b30362772",
+      "source": {
+        "strapiVersion": "5.51.2",
+        "schema": {
+          "engine": "sqlite",
+          "requiredColumns": {
+            "seminars": [
+              "id",
+              "document_id",
+              "published_at",
+              "slug",
+              "legacy_id",
+              "documents_state"
+            ],
+            "seminars_cmps": [
+              "id",
+              "entity_id",
+              "cmp_id",
+              "field",
+              "component_type"
+            ],
+            "seminars_course_group_lnk": [
+              "seminar_id",
+              "course_group_id"
+            ],
+            "course_groups_institute_lnk": [
+              "course_group_id",
+              "institute_id"
+            ],
+            "course_groups": [
+              "id",
+              "slug"
+            ],
+            "institutes": [
+              "id",
+              "slug"
+            ]
+          }
+        }
+      },
+      "preconditions": {
+        "review": "Reviewed proposal, route and preimage match every physical version."
+      },
+      "postconditions": {
+        "data": "Apply structured documents and provenance with atomic receipt."
+      },
+      "readback": {
+        "kind": "independent-document-graph-and-ledger-audit"
+      }
+    },
+    {
+      "id": "seminar-content-structure-v1",
+      "phase": "after-sync",
+      "kind": "data",
+      "handler": "reviewed-content",
+      "path": "data-steps/reviewed-content.mjs",
+      "sha256": "5666aa635a0cbb3d4c6568aedb9415629fed42dea30b9977646ddf534b1bb9af",
+      "source": {
+        "strapiVersion": "5.51.2",
+        "schema": {
+          "engine": "sqlite",
+          "requiredColumns": {
+            "seminars": [
+              "id",
+              "document_id",
+              "published_at",
+              "locale",
+              "slug",
+              "legacy_id",
+              "description",
+              "full_text",
+              "learning_plan",
+              "learning_mode",
+              "recommendations"
+            ],
+            "seminars_cmps": [
+              "id",
+              "entity_id",
+              "cmp_id",
+              "field",
+              "component_type"
+            ],
+            "seminars_course_group_lnk": [
+              "seminar_id",
+              "course_group_id"
+            ],
+            "course_groups_institute_lnk": [
+              "course_group_id",
+              "institute_id"
+            ],
+            "course_groups": [
+              "id",
+              "slug"
+            ],
+            "institutes": [
+              "id",
+              "slug"
+            ]
+          }
+        }
+      },
+      "preconditions": {
+        "review": "Published renderer proof, paired versions and documents receipt match the reviewed plan."
+      },
+      "postconditions": {
+        "data": "Apply semantic fields and anchors with atomic receipt."
+      },
+      "readback": {
+        "kind": "independent-content-and-ledger-audit"
+      }
     }
   ],
   "integrity": {
     "files": [
-      { "path": "scripts/run-data-migrations.mjs", "sha256": "50629fde166c76131834a6b4fec1f81a212af4367380be7cf7225426637f97d8" },
-      { "path": "database/migrations/target-schema/seminar.json", "sha256": "b8b92af156d27ccaf96d816e9b18f79b1ce9c1ee568a95145c6457d073202df8" },
-      { "path": "src/lib/demo193-source-empty-fields.json", "sha256": "b6a46a6138157cb77be55ecfbe8b05e962e827be6fc807fc8a34ded92e3916f5" },
-      { "path": "scripts/audit-data-migration.mjs", "sha256": "602c708093fcb110dbec704badb98899d672cffdee5074f16c1f1854195dd7bb" },
-      { "path": "scripts/audit-schema-snapshot.mjs", "sha256": "953145610fcb03814a7d29ce6c476af201266924ae3e12220b71d1ab903129ea" },
-      { "path": "scripts/institute-method-author-classification.mjs", "sha256": "7eb4dcabbf28f9fd556360653e00a2fd08e144debee6877dd1058621d5f79a5d" },
-      { "path": "scripts/normalize-null-documents-state.mjs", "sha256": "b316c88986bf08585abb4107b77d1a6bfd6b4dcb15cfdda06796cb5d8f5ca875" }
+      {"path": "scripts/run-data-migrations.mjs", "sha256": "afe50f5b33183e5950678d11db7515c83602115c7f2ebb72e9fda7e740439062"},
+      {"path": "scripts/seminar-migration-snapshot.mjs", "sha256": "21bd1f42a09e3be591a4b39914992cac26474b15bd774eccf2308c815a251e44"},
+      {"path": "scripts/audit-seminar-migration-composition.mjs", "sha256": "47011f15b8f919128ceb642fb9eac4f065cc92491111c4036803136e8938c4a5"},
+      {"path": "scripts/audit-migration-stage-ledger.mjs", "sha256": "da45c499ad2e987cd94656bac85d62264a69825f947835a706885de3597357a1"},
+      {"path": "scripts/audit-seminar-schema-sync.mjs", "sha256": "15f2ea58d6b7f3e4dab8c4e906f829e5f0479136168a31ec47ede3479bd3c65a"},
+      {"path": "scripts/audit-schedule-migration.mjs", "sha256": "3ba6ca1bb2ebd465cf89278d0d4f444bd744dfa5e94299f6d8742986fa21a79f"},
+      {"path": "scripts/audit-documents-migration.mjs", "sha256": "70e2c3876bc9b7255fb2087f26a2ba56c16754077199276c39883c19e31f4c50"},
+      {"path": "scripts/migrate-schedule-data.mjs", "sha256": "1fc803cdef3b2ce336d5769a02321504d08a328205d22cf2b084ab377eb13b63"},
+      {"path": "scripts/audit-schedule-business-rules.mjs", "sha256": "068e1fcd28f8341dc9321a2a9e531ba9b71055c2c94db90e9315d1452cf635bd"},
+      {"path": "scripts/documents-migration-writer.mjs", "sha256": "6cfa10094b5213adbbbd23f17a95b96bb41e9769e6073f4e022c0072348f84ce"},
+      {"path": "scripts/content-migration-writer.mjs", "sha256": "5965219178cd94e2c5826e267b4a73a2c378fb2b6e41e5263e1f7d1c5095552a"},
+      {"path": "scripts/audit-content-migration.mjs", "sha256": "0eb42866c9dba128a6554da63740906becde1b743be3850d540e5b79c6af8ea6"},
+      {"path": "database/migrations/target-schema/seminar.json", "sha256": "34aa09e7ede1643b1514408f1306b245aca0f75a75aec680b664b88032b29b25"},
+      {"path": "src/lib/demo193-source-empty-fields.json", "sha256": "b6a46a6138157cb77be55ecfbe8b05e962e827be6fc807fc8a34ded92e3916f5"},
+      {"path": "scripts/audit-data-migration.mjs", "sha256": "4ed4eea1d020639ff9fff098973553eb629fa0877d7bbfa9aaf3062cd1b98f2a"},
+      {"path": "scripts/audit-schema-snapshot.mjs", "sha256": "953145610fcb03814a7d29ce6c476af201266924ae3e12220b71d1ab903129ea"},
+      {"path": "scripts/institute-method-author-classification.mjs", "sha256": "7eb4dcabbf28f9fd556360653e00a2fd08e144debee6877dd1058621d5f79a5d"},
+      {"path": "scripts/normalize-null-documents-state.mjs", "sha256": "b316c88986bf08585abb4107b77d1a6bfd6b4dcb15cfdda06796cb5d8f5ca875"},
+      {"path": "scripts/verify-seminar-proof-artifact.py", "sha256": "80f0d034c1a82d6f6503070d7774fda4ae8840c599479f6fa15691b902962088"}
     ]
   }
 }

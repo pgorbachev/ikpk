@@ -127,3 +127,4 @@ openspec/specs/static-serving/spec.md :: application/xml
 openspec/specs/static-serving/spec.md :: text/html
 openspec/specs/static-serving/spec.md :: text/javascript
 openspec/specs/static-serving/spec.md :: text/xml
+openspec/changes/seminar-content-and-occurrence-model/design.md :: origin/main@9fad640520a90518a89d2751701acd2faa10ab21

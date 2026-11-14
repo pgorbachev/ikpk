@@ -1,5 +1,6 @@
 import type { ComponentType } from 'react';
 import type { StrapiApp } from '@strapi/strapi/admin';
+import { OccurrenceRelations } from './components/OccurrenceRelations';
 import { SITE_REFRESH_ICON_PATH, siteRefreshIconProps, type SiteRefreshIconProps } from './site-refresh-icon';
 
 function SiteRefreshIcon(props: SiteRefreshIconProps) {
@@ -15,6 +16,7 @@ export default {
     locales: ['ru'],
   },
   register(app: StrapiApp) {
+    app.addFields({ type: 'relation', Component: OccurrenceRelations });
     app.customFields.register({
       name: 'wall-clock-datetime',
       type: 'datetime',
@@ -25,6 +27,33 @@ export default {
       },
       components: {
         Input: () => import('./components/WallClockDateTime') as Promise<{ default: ComponentType }>,
+      },
+    });
+    app.customFields.register({
+      name: 'occurrence-city',
+      type: 'string',
+      intlLabel: { id: 'occurrence-city.label', defaultMessage: 'Город проведения' },
+      intlDescription: { id: 'occurrence-city.description', defaultMessage: 'Отключается для онлайн-проведения' },
+      components: {
+        Input: () => import('./components/OccurrenceCity') as Promise<{ default: ComponentType }>,
+      },
+    });
+    app.customFields.register({
+      name: 'occurrence-price',
+      type: 'decimal',
+      intlLabel: { id: 'occurrence-price.label', defaultMessage: 'Цена проведения' },
+      intlDescription: { id: 'occurrence-price.description', defaultMessage: 'Пустая цена означает, что она уточняется' },
+      components: {
+        Input: () => import('./components/OccurrencePrice') as Promise<{ default: ComponentType }>,
+      },
+    });
+    app.customFields.register({
+      name: 'occurrence-duration',
+      type: 'string',
+      intlLabel: { id: 'occurrence-duration.label', defaultMessage: 'Продолжительность проведения' },
+      intlDescription: { id: 'occurrence-duration.description', defaultMessage: 'Наследуется из опубликованного семинара, если не переопределена' },
+      components: {
+        Input: () => import('./components/OccurrenceDuration') as Promise<{ default: ComponentType }>,
       },
     });
   },

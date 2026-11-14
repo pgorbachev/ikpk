@@ -243,6 +243,7 @@ function buildPublicationRecord(type: PublicationType, entity: Record<string, un
         startAt: entity.startAt,
         endAt: entity.endAt,
         city: entity.city,
+        isOnline: entity.isOnline,
         // `status` — имя в независимом публикационном контракте. В Strapi поле
         // называется иначе, потому что status занят Document Service / REST API.
         status: entity.entry_status,
@@ -257,6 +258,9 @@ function mapDocumentRecord(raw: Record<string, unknown>): DocumentRecord {
   return {
     document: raw.document as string,
     issuer: raw.issuer as string,
+    issuerUnknown: raw.issuer_unknown === true,
+    completionScope: raw.completion_scope as DocumentRecord['completionScope'],
+    otherSeminarHref: raw.other_seminar_href as string | undefined,
     priorEducation: raw.prior_education as DocumentRecord['priorEducation'],
     priorEducationNote: raw.prior_education_note as string | undefined,
     outcome: raw.outcome as DocumentRecord['outcome'],
