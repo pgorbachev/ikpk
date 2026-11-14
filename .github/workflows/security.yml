@@ -124,6 +124,7 @@ jobs:
           name: cms-runtime-audit-report
           path: cms/audit-report.json
           if-no-files-found: warn
+          retention-days: 14
 
       - name: Visibility note
         if: always()
