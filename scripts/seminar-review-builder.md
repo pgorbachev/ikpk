@@ -27,7 +27,6 @@ Create config JSON with absolute canonical paths and independently recorded inpu
   "registrySha256": "<sha256>",
   "proofPath": "/private/review/proof.tar.gz",
   "remoteProofPath": "<exact-proofArtifactPath-reported-by-host>",
-  "remoteProofPath": "<exact-proofArtifactPath-reported-by-host>",
   "candidatePath": "/private/review/candidate.db",
   "remoteReceipt": "<exact-receiptPath-reported-by-host>",
   "paths": {"source": "/private/review/source.db", "schema": "/private/review/permissions.db", "schedule": "/private/review/schedule.db", "documents": "/private/review/documents.db", "content": "/private/review/content.db"}
