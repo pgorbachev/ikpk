@@ -8,6 +8,9 @@ import { CANARY_HOSTILE_TOKEN } from './helpers/rich-content-safety/closed-matri
 import { cleanBodyHtml, contextForSafeRichHtml } from '../src/lib/html-cleaner.js';
 import { parse } from 'parse5';
 import SeminarPage from '../src/pages/[institute]/[courseGroup]/[seminar].astro';
+import { projectSnapshotMarkers } from './helpers/rich-content-safety/snapshot-marker-projection.js';
+import { collectMarkerInventoryErrors } from './helpers/rich-content-safety/marker-inventory.js';
+import { loadFixture } from './helpers/rich-content-safety/load-fixture.js';
 import { htmlOf } from './helpers/rich-content-safety/html-of.js';
 
 const RICH_CONTENT = join(WEB_SRC, 'components', 'RichContent.astro');
@@ -135,4 +138,20 @@ it('structured seminar audience preserves prose and links but rejects executable
   expect(audience.some(n => ['script', 'iframe', 'object', 'embed'].includes(n.tagName ?? ''))).toBe(false);
   expect(audience.flatMap(n => n.attrs ?? []).some(a => /^on/i.test(a.name) || /javascript:|forged-audience/i.test(a.value))).toBe(false);
   expect(audience.map(n => n.value ?? '').join('')).not.toContain('audience_attack');
+});
+
+it.each(['structured', 'legacy'] as const)('source marker projection matches actual %s seminar output', async (content_format) => {
+  const seminar = { name: 'Семинар', slug: 'projection', course_group_legacy_id: 'cg', content_format,
+    description_html: ' ', audience: '<p>Audience</p>', learning_plan: ' ', learning_mode: '<p>Mode</p>', recommendations: '<p>Advice</p>', full_text_html: '<p>Legacy</p>' };
+  const route = '/test/program/projection';
+  const html = await (await AstroContainer.create({ astroConfig: { site: 'https://ikpk.su' } })).renderToString(SeminarPage, {
+    request: new Request('https://ikpk.su' + route),
+    props: { institute: { name: 'Институт', slug: 'test' }, courseGroup: { name: 'Программа', slug: 'program' }, seminar },
+  });
+  const registry = loadFixture<{ sinks: Parameters<typeof projectSnapshotMarkers>[0] }>('rendered-registry.json');
+  const projected = projectSnapshotMarkers(registry.sinks, {
+    institutes: [{ legacy_id: 'inst', slug: 'test' }],
+    course_groups: [{ legacy_id: 'cg', slug: 'program', institute_legacy_id: 'test' }], seminars: [seminar], teachers: [],
+  }).filter(sink => sink.id.startsWith('seminar-'));
+  expect(collectMarkerInventoryErrors(projected, 'production', [{ route, html }])).toEqual([]);
 });
