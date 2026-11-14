@@ -28,6 +28,7 @@ from typing import Optional
 ROOT = Path(__file__).resolve().parents[2]
 SHA = re.compile(r"[a-f0-9]{40}\Z")
 OP = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}\Z")
+MIGRATION_REVIEW_TRANSPORT_LIMIT = 64 * 1024 * 1024
 TARGET_HOST = "194.226.99.10"
 TARGET_USER = "root"
 TARGET_OPERATOR_DIR = Path.home() / ".local/share/ikpk-rehearsal/staging194/ssh"
@@ -716,7 +717,10 @@ def migration_review_payload(path: Optional[str], digest: Optional[str], sha: st
                 raise Refusal("registry bytes differ from the approved binding")
             binding["registryBase64"] = base64.b64encode(registry).decode("ascii")
         binding["fileBase64"] = base64.b64encode(content).decode("ascii")
-    return json.dumps(control, sort_keys=True, separators=(",", ":")).encode()
+    payload = json.dumps(control, sort_keys=True, separators=(",", ":")).encode()
+    if len(payload) > MIGRATION_REVIEW_TRANSPORT_LIMIT:
+        raise Refusal("migration review transport exceeds the 64 MiB limit")
+    return payload
 
 
 def make_archive(sha: str, provenance: dict, *, cms_artifact: Optional[bytes] = None, seminar_proof: Optional[bytes] = None) -> tuple[bytes, str]:
@@ -1402,6 +1406,10 @@ def invoke(args: argparse.Namespace, *, admission: Optional[dict] = None) -> Opt
         raise Refusal("initial-prod permits only its fixed operation ID and has no DB restore command")
     if not OP.fullmatch(args.operation_id):
         raise Refusal("operation ID has invalid characters")
+    review_payload = None
+    if args.command == "cms-update":
+        review_payload = migration_review_payload(getattr(args, "migration_review", None),
+            getattr(args, "migration_review_sha256", None), args.source_sha, args.operation_id)
     automatic_static_capacity = profile == "production-static" and args.command == "static-main"
     helper_install_capacity = install_host_helper and profile == "staging194"
     if args.command == "space-preflight" or automatic_static_capacity or helper_install_capacity:
@@ -1450,8 +1458,6 @@ def invoke(args: argparse.Namespace, *, admission: Optional[dict] = None) -> Opt
             if not proof_path or not proof_digest:
                 raise Refusal("seminar proof requires both archive and independent SHA-256")
             seminar_proof = admit_seminar_proof(proof_path, proof_digest, args.source_sha, provenance)
-        review_payload = migration_review_payload(getattr(args, "migration_review", None),
-            getattr(args, "migration_review_sha256", None), args.source_sha, args.operation_id)
         if review_payload is not None and seminar_proof is None:
             raise Refusal("reviewed migration requires the admitted seminar proof archive")
         cms_artifact = (fetch_cms_candidate_artifact(provenance, args.source_sha)
@@ -1798,6 +1804,8 @@ def main(argv: Optional[list[str]] = None) -> int:
             print(json.dumps({"directory": str(output), "sha256": hashlib.sha256(data).hexdigest()}))
             return 0
         if args.command == "cms-update" and args.source_sha is None:
+            if args.migration_review is not None or args.migration_review_sha256 is not None:
+                raise Refusal("--source-sha is required when submitting a migration review")
             if args.profile != "staging194":
                 raise Refusal("--source-sha is required outside the staging194 profile")
             try:
