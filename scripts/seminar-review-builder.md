@@ -2,7 +2,16 @@
 
 This tool creates candidates, **not approvals**. It does not obtain data, inspect SQLite ledger rows, decide exceptions, run the composition audit, or validate HTML/render preservation. Independently review every step result, schema contract, plan, exception and registry entry against this operation's source and stage snapshots. Do not submit either output until that review and the composition audit are complete. It requires a sealed export that also contains the exact original source database and WAL when present; a SQLite backup with equivalent logical data is not necessarily the same bytes.
 
-Extract the authenticated pause archive into a new private directory using a safe extractor that rejects links, duplicate or unexpected names, validates its root-sealed manifest and every SHA-256, and compares the archive SHA-256 to an independently recorded value. Retain receipt, candidate, four stage snapshots (the permissions stage is the schema input), source database and its WAL if present. Ensure the candidate has no nonempty WAL. The snapshots and candidate must correspond to the same latest pause; rerun the export and review if anything advances.
+Verify and extract the pause archive with the command below. Obtain and independently record the archive SHA-256 outside the archive; the adjacent automatically created sidecar alone is not independent evidence. This checks the exported manifest and member hashes; it does not independently query the remote root journal or approve its contents.
+
+```sh
+mkdir -m 700 /private/review/extract-parent
+python3 scripts/extract-migration-pause.py --archive /absolute/pause.tar \
+  --archive-sha256 <independently-recorded-sha256> --operation-id <id> \
+  --source-sha <full-sha> --output-parent /private/review/extract-parent
+```
+
+The command creates and reports a new private directory; the default archive and total content limit is 1 GiB, adjustable with `--max-bytes` up to 2 GiB. Retain receipt, candidate, four stage snapshots (the permissions stage is the schema input), source database and its WAL if present. Ensure the candidate has no nonempty WAL. The snapshots and candidate must correspond to the same latest pause; rerun the export and review if anything advances.
 
 Create a private template JSON containing version 1, the independently checked `ledger.lineageId`, full `steps` objects (permissions, schedule, documents, content, each with `id`, `sha256`, `result`), `schemaContract` and `schemaContractDigest`, `schedule` with `plan`, `decisions`, `expectedPlanDigest`, `documents` and `content` with `plan`, `expectedPlanDigest`, `rendererSha256`, and `proofArtifact` with the **remote** reported path and independently admitted SHA-256. Preserve the exact reviewed plan and result JSON; do not fill them from a synthetic example or mark decisions approved automatically. Supply a separately reviewed registry JSON array (empty only when justified by actual candidate). Use a verified copy of the proof archive.
 
