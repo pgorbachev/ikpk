@@ -117,9 +117,9 @@ test('a changed existing component graph is also an editor conflict', async () =
 
 test('repeat is a no-op or refusal and never overwrites a later edit', async () => {
   const { capturePlan, applyPlan } = await handler(); const db=database(); const plan=capturePlan(db,[proposal()]);
-  applyPlan(db,plan); let state=snapshot(db); try { applyPlan(db,plan); } catch {} assert.deepEqual(snapshot(db),state);
+  applyPlan(db,plan); let state=snapshot(db); try { applyPlan(db,plan); } catch { /* Refusal is also safe. */ } assert.deepEqual(snapshot(db),state);
   db.exec("UPDATE seminars SET name='поздняя правка' WHERE id=11"); state=snapshot(db);
-  try { applyPlan(db,plan); } catch {} assert.deepEqual(snapshot(db),state); db.close();
+  try { applyPlan(db,plan); } catch { /* Refusal is also safe. */ } assert.deepEqual(snapshot(db),state); db.close();
 });
 
 test('rollback restores captured pre-image and refuses if post-image has changed', async () => {
@@ -150,7 +150,7 @@ test('captured source hash must match exact source HTML and cannot be swapped af
 
 
 test('existing structured graph is never overwritten', async () => {
-  const { capturePlan, applyPlan, rollbackPlan } = await handler(); const db=database();
+  const { capturePlan, applyPlan } = await handler(); const db=database();
   db.exec("INSERT INTO components_seminar_document_records (id,document) VALUES (50,'до переноса'); INSERT INTO seminars_cmps VALUES (50,12,50,'seminar.document-record','documents',1); INSERT INTO components_seminar_registry_facts (id,name,url) VALUES (51,'старый реестр','https://example.test/old'); INSERT INTO components_seminar_document_records_cmps VALUES (51,50,51,'seminar.registry-fact','registry',1)");
   const before=snapshot(db); assert.throws(() => applyPlan(db,capturePlan(db,[proposal()]))); assert.deepEqual(snapshot(db),before); db.close();
 });
