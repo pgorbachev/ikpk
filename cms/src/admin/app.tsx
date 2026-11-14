@@ -2,6 +2,7 @@ import type { ComponentType } from 'react';
 import type { StrapiApp } from '@strapi/strapi/admin';
 import { contentManagerHomeRoute } from './content-home';
 import { OccurrenceRelations } from './components/OccurrenceRelations';
+import OccurrencePrice from './components/OccurrencePrice';
 import { SITE_REFRESH_ICON_PATH, siteRefreshIconProps, type SiteRefreshIconProps } from './site-refresh-icon';
 
 function SiteRefreshIcon(props: SiteRefreshIconProps) {
@@ -46,7 +47,7 @@ export default {
       intlLabel: { id: 'occurrence-price.label', defaultMessage: 'Цена проведения' },
       intlDescription: { id: 'occurrence-price.description', defaultMessage: 'Пустая цена означает, что она уточняется' },
       components: {
-        Input: () => import('./components/OccurrencePrice') as Promise<{ default: ComponentType }>,
+        Input: async () => ({ default: OccurrencePrice }),
       },
     });
     app.customFields.register({

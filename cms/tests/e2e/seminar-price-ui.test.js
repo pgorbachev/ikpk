@@ -70,6 +70,23 @@ describe('цена проведения в админке', { timeout: 360000 },
     await page.locator('input[name="city"]').waitFor();
     return entry;
   }
+  test('в окне семинара цена доступна без ожидания отдельного файла поля', async () => {
+    const pattern = '**/OccurrencePrice-*.js';
+    await page.route(pattern, async route => {
+      await new Promise(resolve => setTimeout(resolve, 3000));
+      await route.continue();
+    });
+    try {
+      await page.goto(`${base}/admin/content-manager/collection-types/api::seminar.seminar/${seminarId}`);
+      await page.locator('input[name="schedule_entries"]').click();
+      await page.getByRole('option', { name: 'Create a relation' }).click();
+      const dialog = page.getByRole('dialog');
+      await dialog.locator('input[name="price"][type="number"]').waitFor({ timeout: 1500 });
+      assert.equal(await dialog.locator('input[name="price"][type="number"]').isEnabled(), true);
+    } finally {
+      await page.unroute(pattern);
+    }
+  });
   test('в окне создания проведения цена видна и сохраняется для платного формата', async () => {
     await page.goto(`${base}/admin/content-manager/collection-types/api::seminar.seminar/${seminarId}`);
     await page.getByText('Проведения', { exact: true }).first().waitFor();
@@ -83,7 +100,7 @@ describe('цена проведения в админке', { timeout: 360000 },
     assert.equal(await price.isEnabled(), true);
     await price.pressSequentially('1500');
     assert.equal(await price.inputValue(), '1500');
-    const style = await price.evaluate(input => ({ color: getComputedStyle(input).color, background: getComputedStyle(input).backgroundColor }));
+    const style = await price.evaluate(input => ({ color: input.ownerDocument.defaultView.getComputedStyle(input).color, background: input.ownerDocument.defaultView.getComputedStyle(input).backgroundColor }));
     assert.notEqual(style.color, style.background);
     await free.check();
     assert.equal(await price.inputValue(), '0');
@@ -112,7 +129,7 @@ describe('цена проведения в админке', { timeout: 360000 },
     await price.pressSequentially('1500');
     assert.equal(await price.inputValue(), '1500');
     const style = await price.evaluate((input) => {
-      const css = getComputedStyle(input);
+      const css = input.ownerDocument.defaultView.getComputedStyle(input);
       return { color: css.color, background: css.backgroundColor, opacity: css.opacity };
     });
     assert.notEqual(style.color, style.background, 'цифры должны отличаться от фона');
