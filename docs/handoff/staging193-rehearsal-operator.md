@@ -129,7 +129,13 @@ one of the following bindings (absolute paths below are local review files):
 Resume with both `--migration-review /absolute/manifest.json` and
 `--migration-review-sha256 <manifest-file-sha256>` in addition to the previous
 command's arguments. Review bytes travel on stdin after off-host backup confirmation,
-not in a shell argument. Host paths are derived from the operation; review files
+not in a shell argument. The complete base64-encoded transport is limited to 64 MiB;
+this includes all bindings and JSON overhead, not just the review file. The runner
+also limits individual composition and registry review files to 50,000,000 bytes;
+other per-step limits remain in force. A large or combined submission can still
+exceed the transport limit, so measure the encoded payload and available host
+memory before fencing. Host journal reads and replay may hold multiple copies of
+the control; account for concurrent CMS/Node processes and cgroup limits. Host paths are derived from the operation; review files
 are private and immutable by digest. Prior bindings are checked against the root
 journal, rather than accepted from the writable runner receipt. To stop after a
 specific snapshot, optionally add `"stopAfterStage": "<stage-id>"`; this applies

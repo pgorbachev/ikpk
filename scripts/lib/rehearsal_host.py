@@ -66,6 +66,8 @@ REQUIRED_CONFIG = {
 }
 SHA_RE = re.compile(r"[a-f0-9]{40}\Z")
 SHA256_RE = re.compile(r"[a-f0-9]{64}\Z")
+# Covers one 50,000,000-byte review after base64 plus its bounded control envelope.
+MIGRATION_REVIEW_TRANSPORT_LIMIT = 64 * 1024 * 1024
 STAGING194_PAIRED_HELPER_IDENTITY_CAPABILITY = "paired-helper-identity-v1"
 HOST_HELPER_RUNTIME_MODULES = ("rehearsal_host.py", "rehearsal_state.py", "housekeeping_journal.py")
 DESTINATION_LOCKED_ACTIONS = frozenset({
@@ -5691,8 +5693,8 @@ def _cms_update(config: dict[str, Any], state: RehearsalState, args: argparse.Na
     if review_digest is not None:
         if not SHA256_RE.fullmatch(review_digest):
             raise HostFailure("migration review transport digest is invalid")
-        raw = sys.stdin.buffer.read(16 * 1024 * 1024 + 1)
-        if len(raw) > 16 * 1024 * 1024 or hashlib.sha256(raw).hexdigest() != review_digest:
+        raw = sys.stdin.buffer.read(MIGRATION_REVIEW_TRANSPORT_LIMIT + 1)
+        if len(raw) > MIGRATION_REVIEW_TRANSPORT_LIMIT or hashlib.sha256(raw).hexdigest() != review_digest:
             raise HostFailure("migration review transport digest mismatch")
         try:
             control = json.loads(raw)
