@@ -363,8 +363,8 @@ test('reviewed step waits for external hashes and durably binds them on resume',
   writeFileSync(reviewedStep.reviewFilePath,'changed again');await assert.rejects(runner.prepareMigration(args),/review file changed/);
 });
 
-test('real reviewed schedule and documents steps execute and snapshot in the runner', async (t) => {
-  const f=fixture(t,{operationId:'op-real-reviewed-schedule'}),runner=await loadRunner();
+test('CLI pauses at documents after committing schedule and rejects future review', async (t) => {
+  const f=fixture(t,{operationId:'op-real-reviewed-schedule'});
   const source=new Database(f.sourceDbPath);source.exec(`
     ALTER TABLE seminars ADD COLUMN document_id TEXT;ALTER TABLE seminars ADD COLUMN published_at TEXT;ALTER TABLE seminars ADD COLUMN duration TEXT;
     UPDATE seminars SET document_id='s';INSERT INTO seminars(id,status,document_id,published_at) VALUES(2,'active','s','2026-01-01');
@@ -384,18 +384,33 @@ test('real reviewed schedule and documents steps execute and snapshot in the run
   const helper=join(f.artifactDir,'database/migrations/data-steps/reviewed-schedule.mjs');copyFileSync(join(repoRoot,'cms/database/migrations/data-steps/reviewed-schedule.mjs'),helper);
   const base=f.plan.steps.find(step=>step.kind==='data');f.plan.steps.push({...structuredClone(base),id:'reviewed-schedule-real',handler:'reviewed-schedule',path:'data-steps/reviewed-schedule.mjs',sha256:hash(readFileSync(helper))});
   const docHelper=join(f.artifactDir,'database/migrations/data-steps/reviewed-documents.mjs');copyFileSync(join(repoRoot,'cms/database/migrations/data-steps/reviewed-documents.mjs'),docHelper);f.plan.steps.push({...structuredClone(base),id:'reviewed-documents-real',handler:'reviewed-documents',path:'data-steps/reviewed-documents.mjs',sha256:hash(readFileSync(docHelper))});
-  writeFileSync(join(f.artifactDir,'database/migrations/plan.json'),JSON.stringify(f.plan));delete f.lifecycleAdapter.runDataStep;
-  const args={...prepareArgs(f),stageSnapshotDir:realpathSync(dir),sourceCommitSha:'a'.repeat(40)};const initial=await runner.prepareMigration(args);assert.equal(initial.waitingForReview,'reviewed-schedule-real');
+  const contentHelper=join(f.artifactDir,'database/migrations/data-steps/test-reviewed-content.mjs');writeFileSync(contentHelper,'export const apply = () => {};\n');f.plan.steps.push({...structuredClone(base),id:'reviewed-content-next',handler:'reviewed-content',path:'data-steps/test-reviewed-content.mjs',sha256:hash(readFileSync(contentHelper))});
+  writeFileSync(join(f.artifactDir,'database/migrations/plan.json'),JSON.stringify(f.plan));
+  installFakeStrapi(f); unlinkSync(join(f.artifactDir, 'node_modules'));
+  const cliArgs=[runnerPath,'prepare','--operation-id',f.operationId,'--source-db',f.sourceDbPath,
+    '--source-cms-root',f.sourceCmsRoot,'--candidate-db',f.candidateDbPath,'--artifact-dir',f.artifactDir,
+    '--receipt',f.receiptPath,'--stage-snapshot-dir',realpathSync(dir),'--source-commit-sha','a'.repeat(40)];
+  const cli=(extra=[])=>spawnSync(process.execPath,[...cliArgs,...extra],{encoding:'utf8',timeout:120000,
+    env:{...process.env,NODE_PATH:join(f.root,'immutable-deps','node_modules')}});
+  const initial=cli(); assert.equal(initial.status,0,initial.stderr); assert.equal(JSON.parse(initial.stdout).waitingForReview,'reviewed-schedule-real');
   const {planScheduleDataMigration}=await import('../scripts/migrate-schedule-data.mjs');const db=new Database(f.candidateDbPath,{readonly:true});const decisions={paid:[],free:[],online:[],acceptedExceptions:[]},plan=planScheduleDataMigration(db,{decisions});db.close();
   const reviewed=Buffer.from(JSON.stringify({decisions,plan})),reviewFilePath=join(realpathSync(f.root),'schedule-review.json');writeFileSync(reviewFilePath,reviewed,{mode:0o600});
   const reviewedStep={id:'reviewed-schedule-real',reviewFilePath,expectedReviewFileSha256:hash(reviewed),expectedPlanDigest:plan.planDigest};
-  const result=await runner.prepareMigration({...args,reviewedStep,stopAfterStage:reviewedStep.id});assert.equal(result.pausedAfterStage,reviewedStep.id);
+  const reviewArgs=['--review-step',reviewedStep.id,'--review-file',reviewedStep.reviewFilePath,
+    '--review-file-sha256',reviewedStep.expectedReviewFileSha256,'--review-plan-digest',reviewedStep.expectedPlanDigest];
+  const future=cli(['--review-step','reviewed-documents-real',...reviewArgs.slice(2)]);
+  assert.notEqual(future.status,0); assert.match(future.stderr,/review is required for earlier step: reviewed-schedule-real/);
+  const result=cli(reviewArgs); assert.equal(result.status,0,result.stderr); assert.equal(JSON.parse(result.stdout).waitingForReview,'reviewed-documents-real');
+  const replay=cli(reviewArgs);assert.equal(replay.status,0,replay.stderr);assert.equal(JSON.parse(replay.stdout).waitingForReview,'reviewed-documents-real');
+  writeFileSync(reviewFilePath,'altered');const changed=cli(reviewArgs);assert.notEqual(changed.status,0);assert.match(changed.stderr,/review file changed/);writeFileSync(reviewFilePath,reviewed);
+  unlinkSync(reviewFilePath);const missing=cli(reviewArgs);assert.notEqual(missing.status,0);assert.match(missing.stderr,/review|ENOENT/i);writeFileSync(reviewFilePath,reviewed,{mode:0o600});
   const candidate=new Database(f.candidateDbPath,{readonly:true});try{assert.deepEqual(candidate.prepare('SELECT duration FROM seminars ORDER BY id').all().map(x=>x.duration),['24 часа','24 часа']);assert.deepEqual(candidate.prepare('SELECT duration FROM schedule_entries ORDER BY id').all().map(x=>x.duration),[null,null]);assert.equal(candidate.prepare('SELECT count(*) n FROM ikpk_data_migration_history WHERE step_id=?').get(reviewedStep.id).n,1);}finally{candidate.close();}
-  const waiting=await runner.prepareMigration(args);assert.equal(waiting.waitingForReview,'reviewed-documents-real');
+  const waiting=cli(); assert.equal(waiting.status,0,waiting.stderr); assert.equal(JSON.parse(waiting.stdout).waitingForReview,'reviewed-documents-real');
   const {inspectVersions,capturePlan}=await import('../scripts/documents-migration-writer.mjs');const read=new Database(f.candidateDbPath,{readonly:true});const html='<p>certificate</p>';const item={documentId:'s',route:'/institut-klinicheskoy-prikladnoy-kineziologii/group/example',sourceHtml:html,sourceSha256:hash(html),snapshotSha256:'a'.repeat(64),sourceLinks:[],rulesVersion:'v1',approved:true,eligibleForAutomaticWrite:true,readyForReviewOnly:false,migrationDate:'2026-11-14',migrationAuthor:'editor',proposal:{documents_state:'issued',documents:[{document:'Certificate'}],training_registries:[],nmo:null}};item.reviewedPreimages=inspectVersions(read,'s');const documentPlan=capturePlan(read,[item]);read.close();
   const documentBytes=Buffer.from(JSON.stringify(documentPlan)),documentFile=join(realpathSync(f.root),'documents-review.json');writeFileSync(documentFile,documentBytes,{mode:0o600});
   const documentBinding={id:'reviewed-documents-real',reviewFilePath:documentFile,expectedReviewFileSha256:hash(documentBytes),expectedPlanDigest:documentPlan.digest};
-  const done=await runner.prepareMigration({...args,reviewedStep:documentBinding,stopAfterStage:documentBinding.id});assert.equal(done.pausedAfterStage,documentBinding.id);
+  const done=cli(['--review-step',documentBinding.id,'--review-file',documentBinding.reviewFilePath,'--review-file-sha256',documentBinding.expectedReviewFileSha256,'--review-plan-digest',documentBinding.expectedPlanDigest]);
+  assert.equal(done.status,0,done.stderr);assert.equal(JSON.parse(done.stdout).waitingForReview,'reviewed-content-next');
   const afterDocs=new Database(f.candidateDbPath,{readonly:true});try{assert.deepEqual(afterDocs.prepare('SELECT documents_state FROM seminars ORDER BY id').all().map(x=>x.documents_state),['issued','issued']);assert.equal(afterDocs.prepare('SELECT count(*) n FROM ikpk_data_migration_history WHERE step_id=?').get(documentBinding.id).n,1);}finally{afterDocs.close();}
 });
 

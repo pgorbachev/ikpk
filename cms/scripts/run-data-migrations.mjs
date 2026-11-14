@@ -1108,6 +1108,10 @@ export async function prepareMigration({ sourceDbPath: rawSourceDbPath, candidat
     if (stopAfterStage === 'schema') return { ...publicStatus(receipt, readCandidateState(candidateDbPath)), pausedAfterStage: 'schema' };
 
     const dataSteps = release.steps.filter(({ kind }) => kind === 'data');
+    if (reviewedStep && !dataSteps.some(step => step.id === reviewedStep.id && reviewedHandlers.has(step.handler))) {
+      fail(`review step was not found: ${reviewedStep.id}`);
+    }
+    let reviewedStepConsumed = false;
     for (const step of dataSteps) {
       const candidate = openDatabase(candidateDbPath);
       let existing;
@@ -1130,11 +1134,12 @@ export async function prepareMigration({ sourceDbPath: rawSourceDbPath, candidat
           }
         }
         if (!binding) {
-          if (reviewedStep && reviewedStep.id !== step.id) fail(`review is required for earlier step: ${step.id}`);
+          if (reviewedStep && !reviewedStepConsumed) fail(`review is required for earlier step: ${step.id}`);
           return { ...publicStatus(receipt, readCandidateState(candidateDbPath)), waitingForReview: step.id };
         }
         assertDistinctPaths([...databasePathSet('source database', sourceDbPath), ...databasePathSet('candidate database', candidateDbPath), ['operation receipt', receiptPath], [`review file ${step.id}`, binding.reviewFilePath]]);
         verifyReviewedStepBinding(step, binding);
+        if (reviewedStep?.id === step.id) reviewedStepConsumed = true;
       }
       if (stageSnapshotDir && !receipt.stageSnapshots?.[step.id]) {
         if (receipt.pendingSnapshotStep && receipt.pendingSnapshotStep !== step.id) fail(`stage snapshot is pending for another step: ${receipt.pendingSnapshotStep}`);
@@ -1193,6 +1198,7 @@ export async function prepareMigration({ sourceDbPath: rawSourceDbPath, candidat
       atomicJson(receiptPath, receipt);
       if (stopAfterStage === step.id) return { ...publicStatus(receipt, readCandidateState(candidateDbPath)), pausedAfterStage: step.id };
     }
+    if (reviewedStep && !reviewedStepConsumed) fail(`review step was not found: ${reviewedStep.id}`);
     if (stageSnapshotDir && receipt.pendingSnapshotStep) fail(`stage snapshot remains pending: ${receipt.pendingSnapshotStep}`);
     verifyCompletedStageSnapshots(receipt, release);
     const finalState = readCandidateState(candidateDbPath);
