@@ -10,9 +10,9 @@ const dependencies = join(webRoot, 'node_modules');
 // a read-only release. Any cache that defaults under `node_modules` fails there
 // with EROFS (Astro 7.4 sync writes `<cacheDir>/vite-sync/`), so every cache
 // directory must resolve inside the writable workspace.
-const writableCache = (label: string, value: string | URL | undefined) => {
+const writableCache = (label: string, value: string | undefined) => {
   expect(value, `${label} must be set explicitly`).toBeDefined();
-  const path = resolve(webRoot, value instanceof URL ? fileURLToPath(value) : value!);
+  const path = resolve(webRoot, value!);
   expect(path.startsWith(webRoot + sep), `${label} = ${path}`).toBe(true);
   expect(path === dependencies || path.startsWith(dependencies + sep), `${label} = ${path}`).toBe(false);
 };
