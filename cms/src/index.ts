@@ -1,6 +1,7 @@
 import type { Core } from '@strapi/strapi';
-import { UPLOAD_ALLOWED_MIME_TYPES, UPLOAD_SIZE_LIMIT_BYTES } from '../config/plugins';
+import { UPLOAD_ALLOWED_EXTENSIONS, UPLOAD_ALLOWED_MIME_TYPES, UPLOAD_SIZE_LIMIT_BYTES } from '../config/plugins';
 import { syncEditorRolePermissions, type EditorRoleStrapi } from './lib/editor-role';
+import { assertStoredUploadExtension, registerUploadExtensionGuard } from './lib/upload-extension';
 import { registerContentAddressLifecycle } from './lifecycles/content-address';
 import { registerPublicationLifecycle } from './lifecycles/publication';
 import { registerUnlinkedEntryList } from './seminar-management/available-entries';
@@ -31,18 +32,30 @@ export default {
    * `provider.upload()` раньше, чем `add()`/`create()`) — он не останавливает саму запись
    * файла, а ловит запись в БД в обход контроллеров (например, прямой `db.query(...).create()`
    * из скрипта или другого плагина).
+   *
+   * Расширение имени — отдельный список `UPLOAD_ALLOWED_EXTENSIONS`.
+   * `registerUploadExtensionGuard` оборачивает `upload` и `replace` (admin `/upload`,
+   * `/api/upload` и замена `?id=`) и отклоняет имя до `uploadFileAndPersist`. Этот хук —
+   * вторая линия для того же списка: прямая запись в БД происходит уже после провайдера.
    */
   async bootstrap({ strapi }: { strapi: Core.Strapi }) {
+    registerUploadExtensionGuard(strapi, UPLOAD_ALLOWED_EXTENSIONS);
     strapi.db.lifecycles.subscribe({
       models: ['plugin::upload.file'],
       beforeCreate(event) {
-        const { mime, size } = (event.params.data ?? {}) as { mime?: string; size?: number };
+        const { mime, size, name, ext } = (event.params.data ?? {}) as {
+          mime?: string;
+          size?: number;
+          name?: unknown;
+          ext?: unknown;
+        };
         if (mime && !(UPLOAD_ALLOWED_MIME_TYPES as readonly string[]).includes(mime)) {
           throw new Error(`недопустимый формат файла: ${mime}`);
         }
         if (typeof size === 'number' && size * 1024 > UPLOAD_SIZE_LIMIT_BYTES) {
           throw new Error(`файл превышает предел размера загрузки: ${size} КБ`);
         }
+        assertStoredUploadExtension({ mime, name, ext }, UPLOAD_ALLOWED_EXTENSIONS);
       },
     });
 

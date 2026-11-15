@@ -629,7 +629,7 @@ describe('доверенный перенос в собранном Strapi', { t
   async function prepareReimport() {
     const seminars = app.documents(SEMINAR);
     const entries = app.documents(ENTRY);
-    const dates = { startAt: '2026-12-01T07:00:00.000Z', endAt: '2026-12-02T15:00:00.000Z' };
+    const dates = { startAt: '2026-12-01T07:00:00.000Z', endAt: '2026-12-02T15:00:00.000Z', registrationFormLink: 'https://example.org/register' };
 
     // Семинар без опубликованной версии: ни разу не опубликованный и снятый с публикации.
     await seminars.create({

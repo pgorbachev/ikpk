@@ -37,6 +37,17 @@ function digest(root) {
   return hash.digest('hex');
 }
 
+function completeJsonLines(contents) {
+  const lines = contents.split('\n');
+  lines.pop(); // A concurrent writer may not have completed its last record yet.
+  return lines.filter(Boolean).map((line) => JSON.parse(line));
+}
+
+test('connection log reader ignores only an incomplete trailing record', () => {
+  assert.deepEqual(completeJsonLines('{"pid":1}\n{"pid":'), [{ pid: 1 }]);
+  assert.throws(() => completeJsonLines('{bad}\n'), SyntaxError);
+});
+
 function setup(t, fault = {}) {
   const temp = mkdtempSync(join(tmpdir(), 'ikpk-transport-'));
   const root = join(temp, 'remote releases with spaces');
@@ -67,7 +78,7 @@ function setup(t, fault = {}) {
   config.authorize = createTestAuthorizer(operation);
   const transport = createSshTransport(config);
   const pendingPath = join(root, '.publication-pending.json');
-  const connections = () => readFileSync(logPath, 'utf8').trim().split('\n').filter(Boolean).map((line) => JSON.parse(line));
+  const connections = () => completeJsonLines(readFileSync(logPath, 'utf8'));
   t.after(() => {
     for (const entry of connections().filter((entry) => entry.kind === 'connection')) {
       try { process.kill(entry.pid, 'SIGTERM'); } catch { /* The fake SSH already finished. */ }

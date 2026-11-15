@@ -152,7 +152,7 @@ describe('семинары в собранном Strapi', { timeout: 360000 }, (
     return { seminar, teacher, seminars, entries: app.documents('api::schedule-entry.schedule-entry') };
   }
   function fields(f, extra = {}) {
-    return { seminar: f.seminar.documentId, teachers: [f.teacher.documentId], city: 'Москва', startAt: '2026-12-01T00:00:00.000Z', endAt: '2026-12-02T00:00:00.000Z', entry_status: 'active', isFree: false, price: 500, ...extra };
+    return { seminar: f.seminar.documentId, teachers: [f.teacher.documentId], city: 'Москва', startAt: '2026-12-01T00:00:00.000Z', endAt: '2026-12-02T00:00:00.000Z', entry_status: 'active', isFree: false, price: 500, registrationFormLink: 'https://example.org/register', ...extra };
   }
   test('семинар сохраняет и публикует текстовую продолжительность', async () => {
     const f = await fixture('24 часа');
