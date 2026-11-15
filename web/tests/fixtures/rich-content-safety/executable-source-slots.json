@@ -904,11 +904,11 @@
     "identity": "style|body:6d6250d59d66bb81"
   },
   {
-    "slotId": "src:pages/aktsii-i-skidki.astro:L50:C1:style",
+    "slotId": "src:pages/aktsii-i-skidki.astro:L53:C1:style",
     "file": "pages/aktsii-i-skidki.astro",
     "nodeKind": "element",
-    "locator": "pages/aktsii-i-skidki.astro:L50:C1:style",
-    "fingerprint": "321055098ed96588c8c6ee25fd730948e119d8d526fcd9337ef7b2fed6795bf2",
+    "locator": "pages/aktsii-i-skidki.astro:L53:C1:style",
+    "fingerprint": "b7fe194715e297570db9c8cf725a2c7cadf9c169ce4908f9ae3643514b12f2c9",
     "identity": "style|body:898ecc7065ed3541"
   },
   {
