@@ -26,6 +26,7 @@ import {
 } from './lib/content-field-map.ts';
 import { contentFingerprint, snapshotId, type DemoCaptureProof, type InitialProductionCaptureProof, type ProductionStaticCaptureProof, type Snapshot, type SnapshotContent } from './lib/content-snapshot.ts';
 import { contentIdOf, readFromStore } from './lib/content-media-store.ts';
+import { isPublishableMedia } from './lib/publishable-media.ts';
 import { activeHistoricalExceptions, historicalExceptionsFromEnvironment, proposeHistoricalExceptions } from './lib/historical-exceptions.ts';
 
 const webRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -399,14 +400,23 @@ function uploadRefsIn(value: unknown, includeStatic = false): string[] {
   return [...found];
 }
 
-async function captureMedia(types: Record<string, Record<string, unknown>[]>): Promise<SnapshotContent['media']> {
+async function captureMedia(types: Record<string, Record<string, unknown>[]>): Promise<{
+  media: SnapshotContent['media'];
+  skippedUploads: string[];
+}> {
   const refs = uploadRefsIn(types, Boolean(serverCapture));
   const storeDir = join(outDir, 'media');
   const media: SnapshotContent['media'] = [];
+  const skippedUploads: string[] = [];
   const captureMedia = serverCapture?.media ?? [];
   const mediaByUrl = new Map(captureMedia.map((item) => [item.url, item]));
 
   for (const sourceRef of refs) {
+    if (!isPublishableMedia(sourceRef)) {
+      skippedUploads.push(sourceRef);
+      console.warn(`пропущен файл загрузки: ${sourceRef}`);
+      continue;
+    }
     assertWithinBudget(`медиа ${sourceRef}`);
     let bytes: Uint8Array;
     if (serverCapture) {
@@ -457,7 +467,8 @@ async function captureMedia(types: Record<string, Record<string, unknown>[]>): P
     const ref = serverCapture && sourceRef.startsWith('/media/') ? sourceRef : `/media${sourceRef}`;
     if (!media.some((item) => item.ref === ref)) media.push({ ref, contentId });
   }
-  return media;
+  skippedUploads.sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+  return { media, skippedUploads };
 }
 
 async function liveCapture(): Promise<void> {
@@ -616,7 +627,7 @@ async function liveCapture(): Promise<void> {
     }
   }
 
-  const media = await captureMedia(types);
+  const { media, skippedUploads } = await captureMedia(types);
   const history = historicalExceptionsFromEnvironment();
   const content: SnapshotContent = { types, media };
   if (historyAuditOutput) {
@@ -647,6 +658,7 @@ async function liveCapture(): Promise<void> {
       ? { ...snapshotBase, origin: { kind: 'server-db', sourceId: 'demo193-cms', capturedAt: serverCapture.manifest.capturedAt },
           sourcePolicy: 'demo-publication-only', sourceAge: 'untracked', captureProof: serverCapture.proof as DemoCaptureProof }
     : { ...snapshotBase, origin: { kind: 'live', url: cmsUrl, capturedAt: new Date().toISOString() } };
+  if (skippedUploads.length > 0) snap.skippedUploads = skippedUploads;
 
   // ПУСТОЙ съём — это «не смог измерить», а не «нарушений нет». Контракт на пустоте проходит
   // по определению: он перебирает записи, а перебирать нечего. Замерено 06.09.2026 — снятие

@@ -87,7 +87,7 @@ describe('cms-media-pipeline: оригинал загруженного изоб
       .map((line) => line.replace(/(^|\s)\/\/.*$/, ''))
       .join('\n');
 
-    const originalsSymbol = /const\s+(\w+)\s*=\s*join\([^)]*['"]media-originals['"]/.exec(code);
+    const originalsSymbol = /const\s+(\w+)\s*=\s*(?:process\.env\.MEDIA_DERIVATIVES_ORIGINALS\s*\?\?\s*)?join\([^)]*['"]media-originals['"]/.exec(code);
     expect(
       originalsSymbol,
       'ПРОВЕРИТЬ НЕ УДАЛОСЬ: в конвейере не найдено объявление каталога оригиналов',
