@@ -147,6 +147,7 @@ test('ошибочные даты блокируют публикацию, не�
     entryPublicationErrors({
       seminarId: 'sem-1',
       seminarName: 'НПК-1',
+      registrationFormLink: 'https://example.org/register',
       startAt: '2026-05-10T00:00:00.000Z',
       endAt: '2026-05-09T00:00:00.000Z',
     }),
@@ -156,6 +157,7 @@ test('ошибочные даты блокируют публикацию, не�
     entryPublicationErrors({
       seminarId: 'sem-1',
       seminarName: 'НПК-1',
+      registrationFormLink: 'https://example.org/register',
       startAt: '2026-05-10T00:00:00.000Z',
       endAt: null,
     }),
@@ -165,6 +167,7 @@ test('ошибочные даты блокируют публикацию, не�
     entryPublicationErrors({
       seminarId: null,
       seminarName: null,
+      registrationFormLink: 'https://example.org/register',
       startAt: null,
       endAt: null,
     }),
@@ -175,7 +178,7 @@ test('ошибочные даты блокируют публикацию, не�
 });
 
 test('при публикации бесплатного проведения требуется явная нулевая цена', () => {
-  const valid = { seminarId: 'sem-1', seminarName: 'Семинар', startAt: null, endAt: null, isFree: true };
+  const valid = { seminarId: 'sem-1', seminarName: 'Семинар', startAt: null, endAt: null, isFree: true, registrationFormLink: 'https://example.org/register' };
   for (const price of [null, '', 100]) {
     assert.match(entryPublicationErrors({ ...valid, price }).join(' '), /бесплатн.*цен/i);
   }
@@ -326,4 +329,12 @@ test('идентификаторы связи читаются из всех ф�
     }),
     'Семинар Б',
   );
+});
+
+test('публикация проведения требует заполненную ссылку на регистрацию', () => {
+  const entry = { seminarId: 'sem-1', seminarName: 'Семинар', isFree: false, price: null };
+  for (const registrationFormLink of [undefined, null, '', '  ']) {
+    assert.match(entryPublicationErrors({ ...entry, registrationFormLink }).join(' '), /ссылку на регистрацию/i);
+  }
+  assert.deepEqual(entryPublicationErrors({ ...entry, registrationFormLink: 'https://example.org/register' }), []);
 });

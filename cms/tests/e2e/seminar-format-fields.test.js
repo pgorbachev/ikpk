@@ -66,7 +66,7 @@ describe('формат проведения в админке', { timeout: 36000
     fs.rmSync(work, { recursive: true, force: true });
   });
   async function openDraft(city = 'Казань') {
-    const entry = await app.documents(uid).create({ data: { seminar: seminarId, city, startAt: '2027-04-01T09:00:00.000Z', endAt: '2027-04-02T15:00:00.000Z', entry_status: 'active' } });
+    const entry = await app.documents(uid).create({ data: { seminar: seminarId, city, startAt: '2027-04-01T09:00:00.000Z', endAt: '2027-04-02T15:00:00.000Z', entry_status: 'active', registrationFormLink: 'https://example.org/register' } });
     await page.goto(`${base}/admin/content-manager/collection-types/${uid}/${entry.documentId}`);
     await page.locator('input[name="city"]').waitFor();
     await page.waitForFunction(value => globalThis.document.querySelector('input[name="city"]')?.value === value, city);

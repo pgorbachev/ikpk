@@ -463,6 +463,19 @@ describe('семинары в собранном Strapi', { timeout: 360000 }, (
       status: 'published',
       data: { name: 'Опубликованный', ...validSeminarPublicationFields, course_group: publishedProgram.documentId, teachers: [teacher.documentId] },
     });
+    const registrationData = {
+      seminar: publishedSeminar.documentId, city: 'Москва', duration: '24 часа',
+      startAt: '2026-07-01T00:00:00.000Z', endAt: '2026-07-02T00:00:00.000Z',
+      price: 500, teachers: [teacher.documentId],
+    };
+    const withoutLink = await entries.create({ data: registrationData });
+    await assert.rejects(() => entries.publish({ documentId: withoutLink.documentId }), /ссылку на регистрацию/i);
+    await assert.rejects(() => entries.create({ status: 'published', data: registrationData }), /ссылку на регистрацию/i);
+    await entries.update({ documentId: withoutLink.documentId, data: { registrationFormLink: 'https://example.org/register' } });
+    await entries.publish({ documentId: withoutLink.documentId });
+    await assert.rejects(() => entries.update({
+      documentId: withoutLink.documentId, status: 'published', data: { registrationFormLink: ' ' },
+    }), /ссылку на регистрацию/i);
     const published = await entries.create({
       status: 'published',
       data: {
@@ -471,7 +484,7 @@ describe('семинары в собранном Strapi', { timeout: 360000 }, (
         endAt: '2026-07-02T00:00:00.000Z',
         city: 'Москва',
         entry_status: 'active',
-        duration: '24 часа', price: 500, teachers: [teacher.documentId],
+        duration: '24 часа', price: 500, teachers: [teacher.documentId], registrationFormLink: 'https://example.org/register',
       },
     });
     const beforeRemoval = await entries.findOne({
@@ -528,7 +541,7 @@ describe('семинары в собранном Strapi', { timeout: 360000 }, (
           endAt: '2026-08-02T00:00:00.000Z',
           city: 'Москва',
           entry_status: 'active',
-          duration: '24 часа', price: 500, teachers: [teacher.documentId],
+          duration: '24 часа', price: 500, teachers: [teacher.documentId], registrationFormLink: 'https://example.org/register',
         },
       });
       assert.equal(row.name, 'Семинар А');
@@ -554,7 +567,7 @@ describe('семинары в собранном Strapi', { timeout: 360000 }, (
         endAt: '2026-08-04T00:00:00.000Z',
         city: 'Москва',
         entry_status: 'active',
-        duration: '24 часа', price: 500, teachers: [teacher.documentId],
+        duration: '24 часа', price: 500, teachers: [teacher.documentId], registrationFormLink: 'https://example.org/register',
       },
     });
     await assert.rejects(

@@ -744,7 +744,7 @@ export async function runRefresh(deps) {
   deps.write({
     status: 'running',
     phase: 'build',
-    message: 'Собирается сайт. Зависимости заново не ставятся.',
+    message: 'Собирается и публикуется обновление сайта ...',
     startedAt,
     pid: deps.pid,
     derivatives,
