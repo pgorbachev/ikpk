@@ -91,6 +91,7 @@ export default defineConfig({
       'tests/seminar-snapshot-occurrence.render.test.ts',
       'tests/seminar-duration-migration.render.test.ts',
       'tests/seminar-registration.render.test.ts',
+      'tests/safe-href.render.test.ts',
       'tests/rich-content-render.test.ts',
       'tests/seminar-snapshot-fields.render.test.ts',
       'tests/footer-snapshot-clock.render.test.ts',

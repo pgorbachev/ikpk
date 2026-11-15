@@ -2,8 +2,8 @@
 import BaseLayout from '../layouts/BaseLayout.astro';
 import Breadcrumbs from '../components/Breadcrumbs.astro';
 import { getPromotions, cleanBodyHtml } from '../lib/data';
+import { safeHref } from '../lib/safe-href';
 import RichContent from '../components/RichContent.astro';
-
 const promotions = getPromotions();
 const title = 'Акции и скидки — ИКПК';
 const description = 'Актуальные акции и скидки на обучение в ИКПК.';
@@ -31,8 +31,8 @@ const description = 'Актуальные акции и скидки на обу
                 <div class="text-small">
                   <RichContent html={cleanBodyHtml(promo.description, { type: 'promotion', id: String(promo.id) })} sinkId="promo-description" />
                 </div>
-                {promo.link && (
-                  <a href={promo.link} class="btn btn-outline promo-link" target="_blank" rel="noopener">
+                {safeHref(promo.link) && (
+                  <a href={safeHref(promo.link)} class="btn btn-outline promo-link" target="_blank" rel="noopener">
                     Подробнее
                   </a>
                 )}
