@@ -1,3 +1,5 @@
+import { safeHref } from './safe-href.js';
+
 // Ссылки на формы заявки (CRM-формы облачного Bitrix24 заказчика).
 //
 // ЗАЧЕМ ЭТОТ СЛОЙ: на демо/превью-стенде кнопка «Записаться» не должна писать
@@ -52,16 +54,19 @@ export const isDemoStub = mode === 'stub';
 
 /**
  * Ссылка на форму заявки с учётом режима сборки.
- * Пустое значение на входе отдаём как есть — вызывающий код сам решает
- * (обычно ведёт на /raspisanie-i-tseny).
+ * Пустое значение и адрес с недопустимой схемой отдаём пустой строкой —
+ * вызывающий код сам решает (обычно ведёт на /raspisanie-i-tseny).
+ * Подмена хоста в демо-режиме применяется только к адресу, который уже прошёл проверку.
  */
 export function registrationHref(url: string | undefined | null): string {
   if (!url) return '';
-  if (!isDemoForms) return url;
+  const safe = safeHref(url);
+  if (!safe) return '';
+  if (!isDemoForms) return safe;
   if (mode === 'stub') return DEMO_STUB_PATH;
   // подмена хоста: свой тестовый портал Bitrix24
   try {
-    const parsed = new URL(url);
+    const parsed = new URL(safe);
     parsed.hostname = mode;
     return parsed.href;
   } catch {

@@ -33,6 +33,7 @@ export default await getViteConfig({
       'tests/seminar-event-schema.render.test.ts',
       'tests/seminar-documents.render.test.ts',
       'tests/seminar-registration.render.test.ts',
+      'tests/safe-href.render.test.ts',
       'tests/seminar-snapshot-occurrence.render.test.ts',
       'tests/seminar-duration-migration.render.test.ts',
       'tests/rich-content-render.test.ts',

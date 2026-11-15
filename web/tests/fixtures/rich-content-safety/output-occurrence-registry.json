@@ -121,7 +121,7 @@
     "src:pages/[institute]/prepodavatel/[id].astro:L72:C1:style",
     "src:pages/[slug].astro:L74:C1:style",
     "src:pages/404.astro:L19:C1:style",
-    "src:pages/aktsii-i-skidki.astro:L50:C1:style",
+    "src:pages/aktsii-i-skidki.astro:L53:C1:style",
     "src:pages/demo-zayavka/[...rest].astro:L48:C1:style",
     "src:pages/instituty/[slug].astro:L66:C1:style",
     "src:pages/instituty/index.astro:L37:C1:style",
