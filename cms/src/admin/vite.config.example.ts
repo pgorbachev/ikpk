@@ -7,6 +7,7 @@ import { createAdminLoginRedirectPlugin } from './admin-login-redirect-plugin';
 // Opening the occurrence on its own page must keep the seminar it was created from.
 function occurrenceCreateUrl(): Plugin {
   let transformed = false;
+  const modalBack = 'disabled: state.documentHistory.length < 2,\n                                                onClick: ()=>{\n                                                    dispatch({\n                                                        type: \'GO_BACK\',';
   const marker = 'const generateCreateUrl = (currentDocumentMeta)=>{\n    return `/content-manager/${currentDocumentMeta.collectionType}/${currentDocumentMeta.model}/create${currentDocumentMeta.params?.locale ? `?plugins[i18n][locale]=${currentDocumentMeta.params.locale}` : \'\'}`;\n};';
   return {
     name: 'ikpk-occurrence-create-url',
@@ -14,8 +15,13 @@ function occurrenceCreateUrl(): Plugin {
     transform(code, id) {
       if (!id.endsWith('/FormInputs/Relations/RelationModal.mjs')) return;
       if (!code.includes(marker)) throw new Error('Strapi relation create URL changed; update the occurrence navigation integration');
+      if (!code.includes(modalBack)) throw new Error('Strapi relation modal back button changed; update the occurrence navigation integration');
       transformed = true;
-      return code.replace(marker, `const generateCreateUrl = (currentDocumentMeta)=>{
+      return code.replace(modalBack, `disabled: state.documentHistory.length < 2 && !(currentDocumentMeta.model === 'api::schedule-entry.schedule-entry' && /\\/api::seminar\\.seminar\\/[a-z0-9]+(?:\\/|$)/.test(window.location.pathname)),
+                                                onClick: ()=>{
+                                                    dispatch({
+                                                        type: state.documentHistory.length < 2 ? 'CLOSE_MODAL' : 'GO_BACK',`)
+        .replace(marker, `const generateCreateUrl = (currentDocumentMeta)=>{
     const base = \`/content-manager/\${currentDocumentMeta.collectionType}/\${currentDocumentMeta.model}/create\${currentDocumentMeta.params?.locale ? \`?plugins[i18n][locale]=\${currentDocumentMeta.params.locale}\` : ''}\`;
     if (currentDocumentMeta.model !== 'api::schedule-entry.schedule-entry') return base;
     const source = window.location.pathname.match(/\\/api::seminar\\.seminar\\/([a-z0-9]+)(?:\\/|$)/);

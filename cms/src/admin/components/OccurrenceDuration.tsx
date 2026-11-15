@@ -2,6 +2,9 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Field, TextInput } from '@strapi/design-system';
 import { useFetchClient, useField, useForm } from '@strapi/strapi/admin';
 import { unstable_useContentManagerContext } from '@strapi/content-manager/strapi-admin';
+import { occurrenceEntryId } from '../occurrence-relation-kind';
+// @ts-expect-error internal, version-pinned Strapi module
+import { useDocumentContext } from '@ikpk/document-context';
 
 type Relation = { documentId?: string; apiData?: { documentId?: string } };
 type Props = { name: string; required?: boolean; label?: string; hint?: string; labelAction?: ReactNode; disabled?: boolean };
@@ -11,14 +14,15 @@ const ENTRY = 'api::schedule-entry.schedule-entry';
 /** An empty override inherits only the published seminar, never its draft. */
 export default function OccurrenceDuration({ name, required, label, hint, labelAction, disabled }: Props) {
   const duration = useField(name);
-  const { id, isCreatingEntry } = unstable_useContentManagerContext();
+  const { id, model } = unstable_useContentManagerContext();
+  const viewed = useDocumentContext('OccurrenceDuration') as { currentDocumentMeta?: { documentId?: string } };
+  const entryId = occurrenceEntryId(model, id, viewed.currentDocumentMeta?.documentId);
   const selected = useForm('OccurrenceDuration', (state) => {
     const relation = (state.values as { seminar?: { connect?: Relation[] } }).seminar?.connect?.[0];
     return relation?.documentId ?? relation?.apiData?.documentId;
   });
   const { get } = useFetchClient();
   const getter = useRef(get); getter.current = get;
-  const creating = isCreatingEntry || !id || id === 'create';
   const [savedSeminar, setSavedSeminar] = useState<string | null>(null);
   const [relationError, setRelationError] = useState(false);
   const [message, setMessage] = useState('Сначала выберите семинар.');
@@ -26,13 +30,13 @@ export default function OccurrenceDuration({ name, required, label, hint, labelA
   useEffect(() => {
     setSavedSeminar(null);
     setRelationError(false);
-    if (creating || !id) return;
+    if (!entryId) return;
     let active = true;
-    getter.current(`/content-manager/relations/${ENTRY}/${encodeURIComponent(id)}/seminar?pageSize=2&page=1`)
+    getter.current(`/content-manager/relations/${ENTRY}/${encodeURIComponent(entryId)}/seminar?pageSize=2&page=1`)
       .then(({ data }) => { if (active) setSavedSeminar(data.results?.[0]?.documentId ?? null); })
       .catch(() => { if (active) setRelationError(true); });
     return () => { active = false; };
-  }, [creating, id]);
+  }, [entryId]);
 
   const seminarId = selected ?? savedSeminar;
   useEffect(() => {
