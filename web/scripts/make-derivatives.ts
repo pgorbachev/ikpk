@@ -44,19 +44,23 @@ import {
   mkdirSync,
   writeFileSync,
   renameSync,
+  copyFileSync,
+  rmSync,
 } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import sharp, { type Sharp } from 'sharp';
-import { copyIfPublishable, isPublishableMedia } from './lib/publishable-media.ts';
+import { isPublishableMedia } from './lib/publishable-media.ts';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
-const ORIGINALS = join(ROOT, 'media-originals');
-const SNAPSHOT_ORIGINALS = join(ROOT, 'web', '.snapshot', 'media-originals');
+const ORIGINALS = process.env.MEDIA_DERIVATIVES_ORIGINALS ?? join(ROOT, 'media-originals');
+const SNAPSHOT_ORIGINALS = process.env.MEDIA_DERIVATIVES_SNAPSHOT_ORIGINALS
+  ?? join(ROOT, 'web', '.snapshot', 'media-originals');
 const ORIGINAL_ROOTS = [ORIGINALS, SNAPSHOT_ORIGINALS];
-const SHIPPED = join(ROOT, 'web', 'public', 'media');
+const SHIPPED = process.env.MEDIA_DERIVATIVES_SHIPPED ?? join(ROOT, 'web', 'public', 'media');
 const VARIANTS_DIR = join(SHIPPED, '_w');
-const MANIFEST_PATH = join(ROOT, 'web', 'src', 'lib', 'media-manifest.json');
+const MANIFEST_PATH = process.env.MEDIA_DERIVATIVES_MANIFEST
+  ?? join(ROOT, 'web', 'src', 'lib', 'media-manifest.json');
 
 /** Ширина базовой версии — того файла, на который ссылаются данные. */
 const BASE_WIDTH = 1200;
@@ -117,19 +121,21 @@ for (const originalsRoot of ORIGINAL_ROOTS) {
     const rel = relative(originalsRoot, src);
     const out = join(SHIPPED, rel);
 
-    // Raster files are encoded below. Other publishable files (PDF, GIF) are copied
-    // unchanged. The allowlist lives in copyIfPublishable, which is the write.
+    // Raster files are encoded below. Other publishable files (PDF) are copied
+    // unchanged. The allowlist is isPublishableMedia; this branch is the write.
     if (!RASTER.test(src)) {
       if (!isPublishableMedia(src)) {
+        console.warn(`пропущен файл: ${rel}`);
         skipped.push(rel);
+        if (existsSync(out)) rmSync(out);
         continue;
       }
       if (isFresh(out, src)) {
         upToDate++;
-      } else if (copyIfPublishable(src, out) === 'copied') {
-        copied++;
       } else {
-        skipped.push(rel);
+        mkdirSync(dirname(out), { recursive: true });
+        copyFileSync(src, out);
+        copied++;
       }
       continue;
     }
@@ -169,6 +175,17 @@ for (const originalsRoot of ORIGINAL_ROOTS) {
   }
 }
 
+if (existsSync(SHIPPED)) {
+  for (const shipped of [...walk(SHIPPED)]) {
+    const rel = relative(SHIPPED, shipped);
+    if (rel.split(/[\\/]/)[0] === '_w') continue;
+    if (isPublishableMedia(shipped)) continue;
+    console.warn(`пропущен файл: ${rel}`);
+    rmSync(shipped);
+    if (!skipped.includes(rel)) skipped.push(rel);
+  }
+}
+
 // ── Манифест
 //
 // Размеры берутся от БАЗОВОЙ версии: она подставляется в src, и именно её
@@ -182,7 +199,7 @@ for (const shipped of walk(SHIPPED)) {
   if (rel.split(/[\\/]/)[0] === '_w') continue; // варианты перечислены в widths
 
   const key = `/media/${rel.split(/[\\/]/).join('/')}`;
-  if (!RASTER.test(shipped) && !/\.gif$/i.test(shipped)) {
+  if (!RASTER.test(shipped)) {
     manifest[key] = {};
     continue;
   }

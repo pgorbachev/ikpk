@@ -64,10 +64,6 @@ export interface ProductionStaticCaptureProof extends Omit<InitialProductionCapt
   captureId: string;
 }
 
-export interface SkippedUpload {
-  ref: string;
-}
-
 interface SnapshotFields {
   content: SnapshotContent;
   referenceDate: string;
@@ -75,7 +71,7 @@ interface SnapshotFields {
   fingerprint?: string;
   snapshotId?: string;
   /** Upload references left out of the published media set. */
-  skippedUploads?: SkippedUpload[];
+  skippedUploads?: string[];
 }
 
 export interface JournalSnapshot extends SnapshotFields {

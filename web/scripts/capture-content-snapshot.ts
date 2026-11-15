@@ -24,7 +24,7 @@ import {
   type CmsSchema,
   type FieldMapEntry,
 } from './lib/content-field-map.ts';
-import { contentFingerprint, snapshotId, type DemoCaptureProof, type InitialProductionCaptureProof, type ProductionStaticCaptureProof, type SkippedUpload, type Snapshot, type SnapshotContent } from './lib/content-snapshot.ts';
+import { contentFingerprint, snapshotId, type DemoCaptureProof, type InitialProductionCaptureProof, type ProductionStaticCaptureProof, type Snapshot, type SnapshotContent } from './lib/content-snapshot.ts';
 import { contentIdOf, readFromStore } from './lib/content-media-store.ts';
 import { isPublishableMedia } from './lib/publishable-media.ts';
 import { activeHistoricalExceptions, historicalExceptionsFromEnvironment, proposeHistoricalExceptions } from './lib/historical-exceptions.ts';
@@ -402,18 +402,19 @@ function uploadRefsIn(value: unknown, includeStatic = false): string[] {
 
 async function captureMedia(types: Record<string, Record<string, unknown>[]>): Promise<{
   media: SnapshotContent['media'];
-  skippedUploads: SkippedUpload[];
+  skippedUploads: string[];
 }> {
   const refs = uploadRefsIn(types, Boolean(serverCapture));
   const storeDir = join(outDir, 'media');
   const media: SnapshotContent['media'] = [];
-  const skippedUploads: SkippedUpload[] = [];
+  const skippedUploads: string[] = [];
   const captureMedia = serverCapture?.media ?? [];
   const mediaByUrl = new Map(captureMedia.map((item) => [item.url, item]));
 
   for (const sourceRef of refs) {
     if (!isPublishableMedia(sourceRef)) {
-      skippedUploads.push({ ref: sourceRef });
+      skippedUploads.push(sourceRef);
+      console.warn(`пропущен файл загрузки: ${sourceRef}`);
       continue;
     }
     assertWithinBudget(`медиа ${sourceRef}`);
@@ -466,7 +467,7 @@ async function captureMedia(types: Record<string, Record<string, unknown>[]>): P
     const ref = serverCapture && sourceRef.startsWith('/media/') ? sourceRef : `/media${sourceRef}`;
     if (!media.some((item) => item.ref === ref)) media.push({ ref, contentId });
   }
-  skippedUploads.sort((a, b) => (a.ref < b.ref ? -1 : a.ref > b.ref ? 1 : 0));
+  skippedUploads.sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
   return { media, skippedUploads };
 }
 
