@@ -64,12 +64,18 @@ export interface ProductionStaticCaptureProof extends Omit<InitialProductionCapt
   captureId: string;
 }
 
+export interface SkippedUpload {
+  ref: string;
+}
+
 interface SnapshotFields {
   content: SnapshotContent;
   referenceDate: string;
   pinned?: boolean;
   fingerprint?: string;
   snapshotId?: string;
+  /** Upload references left out of the published media set. */
+  skippedUploads?: SkippedUpload[];
 }
 
 export interface JournalSnapshot extends SnapshotFields {

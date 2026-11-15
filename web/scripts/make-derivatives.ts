@@ -42,13 +42,13 @@ import {
   statSync,
   existsSync,
   mkdirSync,
-  copyFileSync,
   writeFileSync,
   renameSync,
 } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import sharp, { type Sharp } from 'sharp';
+import { copyIfPublishable, isPublishableMedia } from './lib/publishable-media.ts';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const ORIGINALS = join(ROOT, 'media-originals');
@@ -109,6 +109,7 @@ let copied = 0;
 let variants = 0;
 let upToDate = 0;
 let failed = 0;
+const skipped: string[] = [];
 
 for (const originalsRoot of ORIGINAL_ROOTS) {
   if (!existsSync(originalsRoot)) continue;
@@ -116,14 +117,19 @@ for (const originalsRoot of ORIGINAL_ROOTS) {
     const rel = relative(originalsRoot, src);
     const out = join(SHIPPED, rel);
 
-    // PDF, SVG и прочее переносим как есть: уменьшать нечего
+    // Raster files are encoded below. Other publishable files (PDF, GIF) are copied
+    // unchanged. The allowlist lives in copyIfPublishable, which is the write.
     if (!RASTER.test(src)) {
+      if (!isPublishableMedia(src)) {
+        skipped.push(rel);
+        continue;
+      }
       if (isFresh(out, src)) {
         upToDate++;
-      } else {
-        mkdirSync(dirname(out), { recursive: true });
-        copyFileSync(src, out);
+      } else if (copyIfPublishable(src, out) === 'copied') {
         copied++;
+      } else {
+        skipped.push(rel);
       }
       continue;
     }
@@ -202,6 +208,9 @@ console.log(
   `базовых собрано: ${base}, адаптивных вариантов: ${variants}, ` +
     `скопировано как есть: ${copied}, актуальны: ${upToDate}, ошибок: ${failed}`,
 );
+if (skipped.length > 0) {
+  console.log(`пропущены: ${skipped.join(', ')}`);
+}
 console.log(`манифест: ${Object.keys(manifest).length} записей, ширины ${TARGET_WIDTHS.join('/')}`);
 
 // Ошибки генерации — это отсутствующие на сайте изображения, а не примечание.
