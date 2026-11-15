@@ -18,7 +18,9 @@ const description = 'Актуальные акции и скидки на обу
 
       {promotions.length > 0 ? (
         <div class="grid grid-3">
-          {promotions.map((promo) => (
+          {promotions.map((promo) => {
+            const promoHref = safeHref(promo.link);
+            return (
             <div class="card promo-card">
               {promo.image?.url && (
                 <div class="promo-image">
@@ -31,14 +33,15 @@ const description = 'Актуальные акции и скидки на обу
                 <div class="text-small">
                   <RichContent html={cleanBodyHtml(promo.description, { type: 'promotion', id: String(promo.id) })} sinkId="promo-description" />
                 </div>
-                {safeHref(promo.link) && (
-                  <a href={safeHref(promo.link)} class="btn btn-outline promo-link" target="_blank" rel="noopener">
+                {promoHref && (
+                  <a href={promoHref} class="btn btn-outline promo-link" target="_blank" rel="noopener">
                     Подробнее
                   </a>
                 )}
               </div>
             </div>
-          ))}
+            );
+          })}
         </div>
       ) : (
         <p class="text-muted">Акций пока нет.</p>

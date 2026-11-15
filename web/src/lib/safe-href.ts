@@ -78,6 +78,7 @@ export function isAllowedHref(value: string): boolean {
 }
 
 /** Исходное значение, если схема допустима, иначе пустая строка. */
-export function safeHref(value: string): string {
+export function safeHref(value: string | null | undefined): string {
+  if (!value) return '';
   return isAllowedHref(value) ? value : '';
 }

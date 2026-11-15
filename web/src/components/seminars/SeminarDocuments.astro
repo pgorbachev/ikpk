@@ -1,5 +1,6 @@
 ---
 import type { Seminar, SeminarDocument } from '../../lib/data';
+import { safeHref } from '../../lib/safe-href';
 
 const { seminar, id, aliases = [] } = Astro.props as { seminar: Seminar; id?: string; aliases?: string[] };
 const docs = seminar.documents ?? [];
@@ -7,12 +8,6 @@ const registries = (seminar.training_registries ?? []).filter((registry) => regi
 const nmo = seminar.nmo;
 const visible = seminar.documents_state === 'not-issued' ||
   (seminar.documents_state === 'issued' && (docs.length > 0 || registries.length > 0 || Boolean(nmo)));
-function safeHref(value?: string | null): string | undefined {
-  const href = value?.trim();
-  if (!href) return undefined;
-  if (/^\/(?!\/)/.test(href) || /^#[a-z0-9_-]+$/i.test(href) || /^https?:\/\//i.test(href)) return href;
-  return undefined;
-}
 function education(doc: SeminarDocument): string {
   switch (doc.prior_education) {
     case 'none': return 'Требования к исходному образованию отсутствуют.';

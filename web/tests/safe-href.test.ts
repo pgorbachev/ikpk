@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { registrationHref } from '../src/lib/forms';
 
@@ -34,6 +35,12 @@ describe('reject disallowed URL schemes in registration and promo links', () => 
 
   it.each(rejected)('registrationHref rejects a %s', (_label, value) => {
     expect(registrationHref(value)).toBe('');
+  });
+
+  it('seminar documents use the shared href check', () => {
+    const source = readFileSync(new URL('../src/components/seminars/SeminarDocuments.astro', import.meta.url), 'utf8');
+    expect(source).toContain("from '../../lib/safe-href'");
+    expect(source).not.toMatch(/function safeHref/);
   });
 
   it.each(kept)('registrationHref keeps %s', (_label, value) => {
