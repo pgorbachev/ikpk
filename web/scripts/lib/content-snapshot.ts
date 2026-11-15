@@ -70,6 +70,8 @@ interface SnapshotFields {
   pinned?: boolean;
   fingerprint?: string;
   snapshotId?: string;
+  /** Upload references left out of the published media set. */
+  skippedUploads?: string[];
 }
 
 export interface JournalSnapshot extends SnapshotFields {

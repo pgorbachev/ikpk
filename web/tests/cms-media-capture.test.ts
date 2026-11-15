@@ -15,7 +15,8 @@
 //
 // Соответствие «сценарий спеки → проверка» — в отчёте сессии и в комментариях ниже.
 
-import { existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -316,5 +317,108 @@ describe('содержимое снимка не зависит от систе�
       store.readFromStore({ storeDir: join(dir, 'media'), contentId: victim.contentId }).ok,
       'повреждённый файл не восстановлен',
     ).toBe(true);
+  });
+});
+
+describe('do not publish non-document upload types', () => {
+  it('reports a skipped upload reference and does not copy it', async () => {
+    const store = await mediaStoreModule();
+    const baseDataset = mediaDataset();
+    const current = baseDataset.articles.records[0]!;
+    const rejected = ['page.HTML?cache=1', 'mark.Svg', 'client.JS'];
+    const kept = ['cover.JPG', 'cover.JPEG', 'cover.PNG', 'cover.WEBP', 'brief.PDF?download=1'];
+    const hrefs = [...rejected, ...kept]
+      .map((name) => `<a href="${CMS_UPLOADS_PREFIX}${name}">${name}</a>`)
+      .join('');
+    const uploads: Record<string, StubUpload> = {};
+    for (const name of [...rejected, ...kept]) {
+      const path = `${CMS_UPLOADS_PREFIX}${name.split('?')[0]}`;
+      uploads[path] = { bytes: Buffer.from(`bytes-for-${path}`) };
+    }
+    const cms = await stub({
+      articles: { records: [{ ...current, body: `${current.body}${hrefs}` }] },
+    }, uploads);
+    const dir = outDir();
+
+    const run = await runCapture({ CMS_URL: cms.url, CONTENT_SNAPSHOT_DIR: dir });
+    expect(run.status, `capture failed:\n${run.output}`).toBe(0);
+
+    const snap = JSON.parse(readFileSync(join(dir, 'snapshot.json'), 'utf-8')) as CapturedSnapshot & {
+      skippedUploads?: string[];
+    };
+    const publishedNames = snap.content.media.map((item) => fileNameOf(item.ref));
+    const report = JSON.stringify(snap.skippedUploads ?? []);
+    const problems: string[] = [];
+    if (!run.output.includes('пропущен файл загрузки:')) {
+      problems.push('capture did not warn about a skipped upload');
+    }
+    if (!Array.isArray(snap.skippedUploads) || snap.skippedUploads.length === 0) {
+      problems.push('rejection report is missing');
+    }
+    for (const name of ['page.HTML', 'mark.Svg', 'client.JS']) {
+      if (!report.includes(name)) problems.push(`rejection report does not name ${name}`);
+      if (publishedNames.includes(name)) problems.push(`published media includes ${name}`);
+      const storedId = store.contentIdOf(Buffer.from(`bytes-for-${CMS_UPLOADS_PREFIX}${name}`));
+      if (existsSync(join(dir, SNAPSHOT_MEDIA_DIRNAME, storedId))) {
+        problems.push(`snapshot media store contains ${name}`);
+      }
+    }
+    for (const name of ['cover.JPG', 'cover.JPEG', 'cover.PNG', 'cover.WEBP', 'brief.PDF']) {
+      if (!publishedNames.includes(name)) problems.push(`published media is missing ${name}`);
+    }
+
+    const materialized = join(mkdtempSync(join(tmpdir(), 'ikpk-published-media-')), 'media');
+    mkdirSync(materialized, { recursive: true });
+    const laidOut = store.materializeInto({
+      storeDir: join(dir, SNAPSHOT_MEDIA_DIRNAME),
+      destDir: materialized,
+      media: snap.content.media,
+    });
+    if (!laidOut.ok) problems.push(`materialize failed: ${laidOut.reason} ${laidOut.ref}`);
+    const copiedNames = laidOut.ok
+      ? readdirSync(materialized, { recursive: true }).map((entry) => fileNameOf(String(entry)))
+      : [];
+    for (const name of ['page.HTML', 'mark.Svg', 'client.JS']) {
+      if (copiedNames.includes(name)) problems.push(`copied output includes ${name}`);
+    }
+    for (const name of ['cover.JPG', 'cover.JPEG', 'cover.PNG', 'cover.WEBP', 'brief.PDF']) {
+      if (!copiedNames.includes(name)) problems.push(`copied output is missing ${name}`);
+    }
+
+    const siteDir = mkdtempSync(join(tmpdir(), 'ikpk-site-media-'));
+    const originals = mkdtempSync(join(tmpdir(), 'ikpk-originals-'));
+    const manifest = join(mkdtempSync(join(tmpdir(), 'ikpk-manifest-')), 'media-manifest.json');
+    writeFileSync(join(siteDir, 'already.html'), 'stale');
+    for (const name of ['page.HTML', 'mark.Svg', 'client.JS', 'brief.PDF']) {
+      writeFileSync(join(originals, name), `disk-${name}`);
+    }
+    const webRoot = join(import.meta.dirname, '..');
+    const derivatives = spawnSync(join(webRoot, 'node_modules/.bin/tsx'), ['scripts/make-derivatives.ts'], {
+      cwd: webRoot,
+      env: {
+        ...process.env,
+        MEDIA_DERIVATIVES_ORIGINALS: originals,
+        MEDIA_DERIVATIVES_SNAPSHOT_ORIGINALS: join(originals, 'no-snapshot'),
+        MEDIA_DERIVATIVES_SHIPPED: siteDir,
+        MEDIA_DERIVATIVES_MANIFEST: manifest,
+      },
+      encoding: 'utf8',
+    });
+    if (derivatives.status !== 0) {
+      problems.push(`make-derivatives failed:\n${derivatives.stdout}\n${derivatives.stderr}`);
+    }
+    const derivativeOutput = `${derivatives.stdout}\n${derivatives.stderr}`;
+    if (!derivativeOutput.includes('пропущен файл:')) {
+      problems.push('make-derivatives did not warn about a skipped file');
+    }
+    const siteNames = existsSync(siteDir) ? readdirSync(siteDir) : [];
+    for (const name of ['page.HTML', 'mark.Svg', 'client.JS', 'already.html']) {
+      if (siteNames.includes(name)) problems.push(`site copy includes ${name}`);
+    }
+    for (const name of ['brief.PDF']) {
+      if (!siteNames.includes(name)) problems.push(`site copy is missing ${name}`);
+    }
+
+    expect(problems, problems.join('\n')).toEqual([]);
   });
 });
