@@ -62,11 +62,10 @@ test('allows only the configured site origin when CMS_CORS_ORIGINS is unset', ()
   });
 });
 
-test('reads the site origin list from CMS_CORS_ORIGINS', () => {
-  withCorsOrigins(`${DEFAULT_ORIGIN},https://staging.ikpk.su`, () => {
+test('ignores CMS_CORS_ORIGINS, including a wildcard', () => {
+  withCorsOrigins('*', () => {
     const origin = configuredOrigin(loadMiddlewares());
-    assert.deepEqual(origin, [DEFAULT_ORIGIN, 'https://staging.ikpk.su']);
-    assert.ok(Array.isArray(origin));
+    assert.deepEqual(origin, [DEFAULT_ORIGIN]);
     assert.equal(origin.includes('*'), false);
   });
 });
