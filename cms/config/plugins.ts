@@ -19,6 +19,12 @@ import type { Core } from '@strapi/strapi';
  */
 export const UPLOAD_SIZE_LIMIT_BYTES = 10 * 1024 * 1024;
 export const UPLOAD_ALLOWED_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp'] as const;
+/**
+ * Сохраняемые расширения имени. Проверяются вместе с определённым MIME
+ * (jpg/jpeg — image/jpeg, png — image/png, webp — image/webp) до записи
+ * провайдером и ещё раз в lifecycle `plugin::upload.file`.
+ */
+export const UPLOAD_ALLOWED_EXTENSIONS = ['jpg', 'jpeg', 'png', 'webp'] as const;
 
 const config = (): Core.Config.Plugin => ({
   upload: {
