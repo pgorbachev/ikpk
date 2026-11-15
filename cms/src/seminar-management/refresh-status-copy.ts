@@ -8,7 +8,6 @@
 
 const PHASE: Record<string, string> = {
   capture: 'Снимается опубликованный снимок',
-  build: 'Собирается сайт',
   switching: 'Сайт переключается',
   verifying: 'Проверяется выложенный релиз',
   'host-publication': 'Публикация на хосте ещё идёт',
@@ -67,6 +66,7 @@ export function refreshStatusLines(view: RefreshStatusView): RefreshStatusLines 
   const running = view.status === 'running';
   const message = view.message || 'Состояние ещё не загружено.';
   if (running) {
+    if (view.phase === 'build') return { message: 'Собирается и публикуется обновление сайта ...', phase: null, attempt: null };
     let phase = view.phase ? PHASE[view.phase] ?? null : null;
     if (phase && view.releaseId) phase = `${phase}: ${view.releaseId}`;
     return { message, phase, attempt: null };

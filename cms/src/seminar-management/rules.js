@@ -104,8 +104,9 @@ export function dateOrderError(startAt, endAt) {
   return null;
 }
 
-export function entryPublicationErrors({ seminarId, seminarName, startAt, endAt, isFree, price }) {
+export function entryPublicationErrors({ seminarId, seminarName, startAt, endAt, isFree, price, registrationFormLink }) {
   const errors = [];
+  if (!text(registrationFormLink)) errors.push('Укажите ссылку на регистрацию на семинар перед публикацией проведения.');
   if (!text(seminarId)) errors.push('Укажите семинар перед публикацией проведения.');
   else if (!text(seminarName)) {
     errors.push('Заполните название семинара перед публикацией проведения.');
