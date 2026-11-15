@@ -5,6 +5,12 @@ import { refreshStatusLines } from './refresh-status-copy.ts';
 const COMMIT = 'a'.repeat(40);
 const FAILED = 'Новый релиз не прошёл проверку после переключения. Это не успех и не автоматический откат.';
 
+test('во время сборки показывается одно понятное сообщение', () => {
+  const lines = refreshStatusLines({ status: 'running', phase: 'build', message: 'Собирается сайт. Зависимости заново не ставятся.' });
+  assert.equal(lines.message, 'Собирается и публикуется обновление сайта ...');
+  assert.equal(lines.phase, null);
+});
+
 test('успех называет время, релиз и коммит этой попытки', () => {
   const lines = refreshStatusLines({
     status: 'succeeded',

@@ -24,6 +24,7 @@ test('панель Content Manager включает русские действ�
   // транслируется так же и наружу не отдаётся.
   const require = (id) => {
     if (id === './components/OccurrenceRelations') return { OccurrenceRelations: () => null };
+    if (id === './components/OccurrencePrice') return { default: () => null };
     const imported = path.join(path.dirname(sourcePath), id);
     const importedPath = fs.existsSync(imported) ? imported : `${imported}.ts`;
     const importedModule = { exports: {} };
@@ -57,7 +58,7 @@ test('панель Content Manager включает русские действ�
   assert.equal(typeof managerRu, 'object');
   assert.ok(Object.keys(managerRu).length > 0);
   const fields = [];
-  module.exports.default.register({ addFields: (field) => fields.push(field), customFields: { register() {} } });
+  module.exports.default.register({ router: { addRoute() {} }, addFields: (field) => fields.push(field), customFields: { register() {} } });
   assert.equal(fields.length, 1);
   assert.equal(fields[0].type, 'relation');
   assert.equal(typeof fields[0].Component, 'function');
