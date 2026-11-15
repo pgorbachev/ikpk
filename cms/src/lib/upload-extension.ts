@@ -17,7 +17,9 @@ const EXTENSION_MIME = {
   (typeof UPLOAD_ALLOWED_MIME_TYPES)[number]
 >;
 
-const REJECTION = 'имя файла не проходит проверку разрешённых расширений';
+function rejection(filename: string, allowedExtensions: readonly string[]): string {
+  return `файл «${filename}» не проходит проверку разрешённых расширений (${allowedExtensions.join(', ')})`;
+}
 
 type UploadFile = {
   originalFilename?: unknown;
@@ -67,14 +69,24 @@ function assertExtension(
   const extension = extensionOf(filename);
   const expected = EXTENSION_MIME[extension as keyof typeof EXTENSION_MIME];
   if (!allowedExtensions.includes(extension) || expected !== sniffedMime) {
-    throw new ApplicationError(REJECTION);
+    throw new ApplicationError(rejection(filename, allowedExtensions));
+  }
+}
+
+/** Display name is not the stored extension. Check it only when it has one. */
+function assertDisplayName(filename: string, allowedExtensions: readonly string[]): void {
+  const extension = extensionOf(filename);
+  if (!extension) return;
+  if (!allowedExtensions.includes(extension)) {
+    throw new ApplicationError(rejection(filename, allowedExtensions));
   }
 }
 
 function sniffedMimeOf(file: UploadFile): string {
-  if (typeof file.detectedMimeType !== 'string') throw new ApplicationError(REJECTION);
+  const filename = typeof file.originalFilename === 'string' ? file.originalFilename : '';
+  if (typeof file.detectedMimeType !== 'string') throw new ApplicationError(rejection(filename, UPLOAD_ALLOWED_EXTENSIONS));
   const sniffed = file.detectedMimeType.split(';', 1)[0]?.trim().toLowerCase() ?? '';
-  if (!sniffed) throw new ApplicationError(REJECTION);
+  if (!sniffed) throw new ApplicationError(rejection(filename, UPLOAD_ALLOWED_EXTENSIONS));
   return sniffed;
 }
 
@@ -91,9 +103,7 @@ function assertFile(file: UploadFile, info: FileInfo, allowedExtensions: readonl
   const sniffed = sniffedMimeOf(file);
   const original = typeof file.originalFilename === 'string' ? file.originalFilename : '';
   assertExtension(original, sniffed, allowedExtensions);
-  if (typeof info.name === 'string' && info.name.length > 0) {
-    assertExtension(info.name, sniffed, allowedExtensions);
-  }
+  if (typeof info.name === 'string') assertDisplayName(info.name, allowedExtensions);
 }
 
 function assertUploadPayload(payload: UploadPayload | undefined, allowedExtensions: readonly string[]): void {
@@ -115,7 +125,7 @@ export function assertStoredUploadExtension(
   if (typeof data.mime !== 'string') return;
   const mime = data.mime.toLowerCase();
   if (!(UPLOAD_ALLOWED_MIME_TYPES as readonly string[]).includes(mime)) return;
-  if (typeof data.name === 'string') assertExtension(data.name, mime, allowedExtensions);
+  if (typeof data.name === 'string') assertDisplayName(data.name, allowedExtensions);
   if (typeof data.ext === 'string') assertExtension(data.ext, mime, allowedExtensions);
 }
 

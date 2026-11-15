@@ -128,6 +128,21 @@ test('rejects when either the original name or the fileInfo.name override is out
   assert.deepEqual(writes, []);
 });
 
+test('accepts a display name without an extension and a jpeg label on a png replacement', async () => {
+  const { service, writes } = makeUploadService();
+  const titled = await service.upload({
+    data: { fileInfo: { name: 'Фото обложки' } },
+    files: { originalFilename: 'cover.png', detectedMimeType: 'image/png' },
+  });
+  assert.equal(titled[0]?.originalFilename, 'cover.png');
+  const replaced = await service.replace('9', {
+    data: { fileInfo: { name: 'photo.jpg' } },
+    file: { originalFilename: 'cover.png', detectedMimeType: 'image/png' },
+  });
+  assert.equal(replaced.originalFilename, 'cover.png');
+  assert.deepEqual(writes, ['upload:cover.png', 'replace:9:cover.png']);
+});
+
 test('rejects an extension that does not match the sniffed MIME', async () => {
   const { service, writes } = makeUploadService();
   await assert.rejects(
@@ -181,10 +196,16 @@ test('lifecycle rejects a stored name outside the image extension allowlist', ()
     () => assertStoredUploadExtension({ mime: 'image/webp', name: 'page.html', ext: '.html' }, UPLOAD_ALLOWED_EXTENSIONS),
     /разрешённых расширений/,
   );
-  assert.throws(
-    () => assertStoredUploadExtension({ mime: 'image/png', name: 'photo', ext: '.png' }, UPLOAD_ALLOWED_EXTENSIONS),
-    /разрешённых расширений/,
-  );
+  assert.doesNotThrow(() => assertStoredUploadExtension({
+    mime: 'image/png',
+    name: 'Фото обложки',
+    ext: '.png',
+  }, UPLOAD_ALLOWED_EXTENSIONS));
+  assert.doesNotThrow(() => assertStoredUploadExtension({
+    mime: 'image/png',
+    name: 'photo.jpg',
+    ext: '.png',
+  }, UPLOAD_ALLOWED_EXTENSIONS));
   assert.throws(
     () => assertStoredUploadExtension({ mime: 'image/png', name: 'b.png', ext: '.jpg' }, UPLOAD_ALLOWED_EXTENSIONS),
     /разрешённых расширений/,
