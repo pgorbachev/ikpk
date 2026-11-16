@@ -1,9 +1,9 @@
 import { test, expect, candidate } from './helpers/publication-candidate';
+import { firstSelectableCandidateCity } from './helpers/publication-schedule-city';
 import { calendarDay, isBeforeStart, type ScheduleWindowEntry } from '../src/lib/schedule-window';
 import { monthKeys, monthOptions } from '../src/lib/schedule-months';
 
 type Entry = ScheduleWindowEntry & { status: string; seminar: { slug: string }; city?: { name: string }; name?: string };
-const slug = (text: string) => text.toLowerCase().replace(/ё/g, 'е').replace(/[^a-zа-я0-9]+/gi, '-').replace(/^-+|-+$/g, '');
 const cityName = (entry: Entry) => typeof entry.city === 'string' ? entry.city : entry.city?.name ?? '';
 function entries() {
   const { snapshot } = candidate();
@@ -48,12 +48,20 @@ test('@month-city @month-empty-state @month-page-reset candidate schedule combin
   const city = page.locator('[data-schedule-filter="city"]');
   const search = page.locator('[data-schedule-search]');
   if (rows.length) {
-    const key = monthKeys(rows[0], today)[0];
+    const cityOptions = await city.locator('option').evaluateAll((nodes) => nodes
+      .map((node) => (node as HTMLOptionElement).value).filter(Boolean));
+    const choice = firstSelectableCandidateCity(rows, cityOptions);
+    expect(choice, 'candidate schedule has no real city represented in the city filter').toBeDefined();
+    if (!choice) throw new Error('candidate schedule has no real city represented in the city filter');
+
+    const key = monthKeys(choice.row, today)[0];
+    const monthRows = rows.filter((row) => monthKeys(row, today).includes(key));
+    expect(monthRows).toContain(choice.row);
     await month.selectOption(key);
-    await expect(page.locator(`${item}:visible`)).toHaveCount(Math.min(25, rows.filter((row) => monthKeys(row, today).includes(key)).length));
-    const chosenCity = cityName(rows[0]) || 'unknown';
-    await city.selectOption(slug(chosenCity));
-    const expected = rows.filter((row) => monthKeys(row, today).includes(key) && (cityName(row) || 'unknown') === chosenCity);
+    await expect(page.locator(`${item}:visible`)).toHaveCount(Math.min(25, monthRows.length));
+    await city.selectOption(choice.value);
+    const expected = monthRows.filter((row) => cityName(row) === choice.name);
+    expect(expected, 'selected city must belong to the selected month').toContain(choice.row);
     await expect(page.locator(`${item}:visible`)).toHaveCount(Math.min(25, expected.length));
     const title = (await page.locator(`${item}:visible [data-testid="schedule-card-title"]`).first().innerText()).trim();
     await search.fill(title.toLowerCase().slice(0, 18));
