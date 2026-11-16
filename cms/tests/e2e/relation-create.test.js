@@ -48,7 +48,7 @@ describe('связь проведения с семинаром: content-admin',
     const create = (type, data) => app.documents(type).create({ status: 'published', data });
     const institute = await create('api::institute.institute', { name: 'Институт', slug: 'test-institute', legacy_id: 'test-institute', description: 'Описание', order: 1, seo: { seo_title: 'Институт', seo_description: 'Описание института' } });
     const group = await create('api::course-group.course-group', { name: 'Программа', slug: 'test-program', legacy_id: 'test-program', description: 'Описание', institute: institute.documentId, seo: { seo_title: 'Программа', seo_description: 'Описание программы' } });
-    const seminar = await create('api::seminar.seminar', { name: 'Семинар', slug: 'test-seminar', legacy_id: 'test-seminar', course_group: group.documentId, description: 'Описание', documents_state: 'not-issued' });
+    const seminar = await create('api::seminar.seminar', { name: 'Семинар', slug: 'test-seminar', legacy_id: 'test-seminar', course_group: group.documentId, description: 'Описание', duration: '24 часа', documents_state: 'not-issued' });
     seminarId = seminar.documentId;
     const teacher = await create('api::teacher.teacher', { name: 'Единственный преподаватель', slug: 'teacher', legacy_id: 'teacher', trait: 'teacher' });
     await app.documents('api::seminar.seminar').update({ documentId: seminarId, data: { teachers: [teacher.documentId] } });
@@ -208,6 +208,35 @@ describe('связь проведения с семинаром: content-admin',
     await dialog.getByRole('button', { name: /отмен|cancel/i }).click();
     assert.equal(await name.inputValue(), 'Несохранённое изменение');
     assert.ok(page.url().includes(seminarId));
+  });
+
+  test('Content Manager creates and links a relation from the seminar form', async () => {
+    let entryDocumentId;
+    try {
+      await openSeminar();
+      const relation = page.locator('input[name="schedule_entries"]');
+      await relation.click();
+      await relation.press('ArrowDown');
+      await page.getByRole('option', { name: 'Create a relation' }).click();
+      await page.locator('input[name="seminar"]').waitFor({ timeout: 10000 });
+      const created = page.waitForResponse(r => r.request().method() === 'POST' && r.url().includes(`/content-manager/collection-types/${uid}`), { timeout: 10000 });
+      const linked = page.waitForResponse(r => r.request().method() === 'PUT' && r.url().includes(`/content-manager/collection-types/api::seminar.seminar/${seminarId}`), { timeout: 10000 });
+      await page.getByRole('button', { name: 'Сохранить', exact: true }).click();
+      const createResponse = await created;
+      assert.ok(createResponse.ok(), `создание проведения: ${createResponse.status()} ${await createResponse.text()}`);
+      const linkedResponse = await linked;
+      assert.ok(linkedResponse.ok(), `связь с семинаром: ${linkedResponse.status()} ${await linkedResponse.text()}`);
+      entryDocumentId = (await createResponse.json()).data.documentId;
+      const parentRequest = linkedResponse.request().postDataJSON();
+      const relationPayload = parentRequest.data?.schedule_entries ?? parentRequest.schedule_entries;
+      const connected = relationPayload.connect.find(item => item.documentId === entryDocumentId);
+      assert.ok(connected, 'PUT родительского семинара содержит новое проведение');
+      assert.deepEqual(connected, { id: entryDocumentId, documentId: entryDocumentId, locale: null });
+      const entry = await app.documents(uid).findOne({ documentId: entryDocumentId, populate: ['seminar'] });
+      assert.equal(entry.seminar.documentId, seminarId);
+    } finally {
+      if (entryDocumentId) await app.documents(uid).delete({ documentId: entryDocumentId });
+    }
   });
 
 });

@@ -39,6 +39,13 @@ function canonicalizeRelation(value) {
   if (Array.isArray(value)) return value.map(canonicalizeRelation);
   if (!value || typeof value !== 'object') return value;
   const result = { ...value };
+  // The Content Manager relation picker serializes a new document as both
+  // `id` and `documentId`, with the document ID repeated in both fields.
+  // Keep the document identity and drop only that duplicate string alias;
+  // numeric database IDs and conflicting IDs remain subject to validation.
+  if (typeof result.id === 'string' && result.id === result.documentId && documentIdOf(result.documentId)) {
+    delete result.id;
+  }
   for (const key of ['set', 'connect', 'disconnect']) {
     if (Object.prototype.hasOwnProperty.call(result, key)) result[key] = canonicalizeRelation(result[key]);
   }
