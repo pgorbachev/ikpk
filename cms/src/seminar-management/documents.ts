@@ -1,4 +1,5 @@
 import { errors } from '@strapi/utils';
+import { isDeepStrictEqual } from 'node:util';
 import {
   SCHEDULE_ENTRY_UID,
   SEMINAR_MODEL_NAME,
@@ -503,9 +504,23 @@ export function registerSeminarDocuments(strapi) {
       }
     }
     if (context.uid === SEMINAR_UID && (context.action === 'create' || context.action === 'update')) {
-      if (context.action === 'update' && !isTrustedImport(strapi) &&
-          ['content_format', 'content_section_anchors'].some((field) => Object.prototype.hasOwnProperty.call(context.params?.data ?? {}, field))) {
-        throw new ValidationError('Формат содержимого меняется только при переносе данных.');
+      if (context.action === 'update' && !isTrustedImport(strapi)) {
+        const data = context.params?.data ?? {};
+        const fields = ['content_format', 'content_section_anchors'];
+        if (fields.some((field) => Object.prototype.hasOwnProperty.call(data, field))) {
+          const existing = context.params.documentId
+            ? await findDraft(strapi, SEMINAR_UID, context.params.documentId)
+            : null;
+          for (const field of fields) {
+            if (!Object.prototype.hasOwnProperty.call(data, field)) continue;
+            if (!isDeepStrictEqual(data[field], existing?.[field])) {
+              throw new ValidationError('Формат содержимого меняется только при переносе данных.');
+            }
+            // Do not rewrite an unchanged value: this also prevents a concurrent trusted
+            // migration from being overwritten after the comparison above.
+            delete data[field];
+          }
+        }
       }
       if (context.action === 'create' && !isTrustedImport(strapi)) {
         context.params.data = { ...context.params.data, content_format: 'structured' };
