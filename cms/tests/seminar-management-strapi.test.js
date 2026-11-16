@@ -263,6 +263,85 @@ describe('семинары в собранном Strapi', { timeout: 360000 }, (
     assert.equal(stillDraft, null);
   });
 
+  test('полный payload публикации сохраняет неизменные поля формата, но блокирует их изменение', async () => {
+    const superAdminRole = await app.service('admin::role').findOne({ code: 'strapi-super-admin' });
+    const email = `format-fields-${process.pid}@example.invalid`;
+    const password = 'Format-fields-test-password-2026';
+    await app.service('admin::user').create({
+      email,
+      firstname: 'Format',
+      lastname: 'Fields',
+      password,
+      isActive: true,
+      preferedLanguage: 'ru',
+      roles: [superAdminRole.id],
+    });
+    const login = await fetch(`${base}/admin/login`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ email, password }),
+    });
+    const loginBody = await login.json();
+    assert.equal(login.status, 200, JSON.stringify(loginBody));
+    const superAdminToken = loginBody.data.accessToken;
+    const request = async (method, url, data) => {
+      const response = await fetch(`${base}${url}`, {
+        method,
+        headers: { authorization: `Bearer ${superAdminToken}`, 'content-type': 'application/json' },
+        body: data === undefined ? undefined : JSON.stringify(data),
+      });
+      const text = await response.text();
+      return { response, body: text ? JSON.parse(text) : null };
+    };
+    const uid = 'api::seminar.seminar';
+    const created = await request('POST', `/content-manager/collection-types/${uid}`, {
+      name: 'Полный payload неизменного формата',
+      description: 'Исходное описание',
+      content_format: 'structured',
+      content_section_anchors: null,
+      course_group: { connect: [{ documentId: publishedProgram.documentId }] },
+      documents_state: 'not-issued',
+      duration: '24 часа',
+    });
+    assert.equal(created.response.status, 201, JSON.stringify(created.body));
+    const documentId = created.body.data.documentId;
+    const seminars = app.documents(uid);
+    const draft = await seminars.findOne({ documentId, status: 'draft' });
+    assert.equal(draft.content_format, 'structured', 'новый семинар получает структурированный формат');
+    assert.equal(draft.content_section_anchors ?? null, null, 'у нового семинара anchors хранятся как null');
+
+    // Content Manager's publish endpoint updates the draft from the form body, then publishes it.
+    const publishPath = `/content-manager/collection-types/${uid}/${documentId}/actions/publish`;
+    const published = await request('POST', publishPath, {
+      name: draft.name,
+      description: 'Новое описание из полного payload админки',
+      content_format: 'structured',
+      content_section_anchors: null,
+      course_group: { connect: [{ documentId: publishedProgram.documentId }] },
+      documents_state: 'not-issued',
+      duration: '24 часа',
+    });
+    assert.equal(published.response.status, 200, JSON.stringify(published.body));
+    assert.equal(published.body.data.description, 'Новое описание из полного payload админки');
+    assert.equal(published.body.data.content_format, 'structured');
+    assert.equal(published.body.data.content_section_anchors ?? null, null);
+
+    for (const data of [
+      { content_format: 'legacy' },
+      { content_section_anchors: {} },
+    ]) {
+      const result = await request('PUT', `/content-manager/collection-types/${uid}/${documentId}`, data);
+      assert.equal(result.response.status, 400, JSON.stringify(result.body));
+      assert.match(JSON.stringify(result.body), /Формат содержимого меняется только при переносе данных/);
+    }
+
+    const finalDraft = await seminars.findOne({ documentId, status: 'draft' });
+    assert.equal(finalDraft.content_format, 'structured', 'отклонённая смена формата не записалась');
+    assert.equal(finalDraft.content_section_anchors ?? null, null, 'отклонённые anchors не записались');
+    const finalPublished = await seminars.findOne({ documentId, status: 'published' });
+    assert.ok(finalPublished?.publishedAt, 'опубликованный seminar должен сохраниться после отказа в изменении формата');
+  });
+
   test('семинар публикуется только со связанной опубликованной программой сайта', async () => {
     const seminars = app.documents('api::seminar.seminar');
     const programs = app.documents('api::course-group.course-group');
