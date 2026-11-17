@@ -390,6 +390,22 @@ describe('целостность источника каталога', () => {
     expect(() => assertCaptureSnapshotContract(snapshot, '0'.repeat(64))).toThrow(/SQL source pin/);
   });
 
+  it('demo193 helper aligns missing SEO aliases with the strict validator field names', async () => {
+    const mod = await contractModule();
+    const snapshot = demo193EmptySeoSnapshot();
+    for (const article of snapshot.content.types.articles ?? []) {
+      delete article.page_title;
+      delete article.page_description;
+      delete article.seo_title;
+      delete article.seo_description;
+    }
+    expect(mod.validateSnapshotContract(snapshot).violations).toHaveLength(132);
+    expect(() => mod.assertPrototypeDemo193SnapshotContract(
+      snapshot,
+      'b7b056d6a226b9caed224c737dad18dc366d47a0ec397e0ef0f1c66f61762be2',
+    )).not.toThrow();
+  });
+
   it('demo193 exception rejects changed identities, newly empty required content, and wrong SQL pins', async () => {
     const mod = await contractModule();
     const sqlPin = 'b7b056d6a226b9caed224c737dad18dc366d47a0ec397e0ef0f1c66f61762be2';
@@ -406,13 +422,19 @@ describe('целостность источника каталога', () => {
   it('demo193 normalized fallback mode rejects modified cohort fallback values and new SEO holes', async () => {
     const mod = await contractModule();
     const sqlPin = 'b7b056d6a226b9caed224c737dad18dc366d47a0ec397e0ef0f1c66f61762be2';
+    const mixedAliases = demo193NormalizedSeoSnapshot();
+    mixedAliases.content.types.articles![0]!.page_title = null;
+    expect(() => mod.assertPrototypeDemo193SnapshotContract(mixedAliases, sqlPin)).toThrow(/conflicting SEO aliases/);
+
     const changedTitle = demo193NormalizedSeoSnapshot();
     changedTitle.content.types.articles![0]!.seo_title = 'Not the title fallback';
     expect(() => mod.assertPrototypeDemo193SnapshotContract(changedTitle, sqlPin)).toThrow(/SEO title fallback mismatch/);
 
-    const longDescription = demo193NormalizedSeoSnapshot();
-    longDescription.content.types.articles![0]!.seo_description = 'Evil';
-    expect(() => mod.assertPrototypeDemo193SnapshotContract(longDescription, sqlPin)).toThrow(/SEO description fallback mismatch/);
+    const forgedDescription = demo193NormalizedSeoSnapshot();
+    const forgedValue = 'Evil';
+    expect(forgedValue).toHaveLength(String(forgedDescription.content.types.articles![0]!.seo_description).length);
+    forgedDescription.content.types.articles![0]!.seo_description = forgedValue;
+    expect(() => mod.assertPrototypeDemo193SnapshotContract(forgedDescription, sqlPin)).toThrow(/SEO description fallback mismatch/);
 
     const extraHole = demo193NormalizedSeoSnapshot();
     extraHole.content.types.articles!.push({

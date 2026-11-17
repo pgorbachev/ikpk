@@ -359,8 +359,14 @@ export function assertPrototypeDemo193SnapshotContract(snapshot: Snapshot, sourc
       );
       if (!record) throw new Error(`demo193 approved Article identity missing for ${entry.slug}`);
       const [legacyOutputField, normalizedOutputField] = outputFields[sourceField]!;
-      const outputField = Object.prototype.hasOwnProperty.call(record, legacyOutputField)
-        ? legacyOutputField : normalizedOutputField;
+      const hasLegacyField = Object.prototype.hasOwnProperty.call(record, legacyOutputField);
+      const hasNormalizedField = Object.prototype.hasOwnProperty.call(record, normalizedOutputField);
+      if (hasLegacyField && hasNormalizedField && record[legacyOutputField] !== record[normalizedOutputField]) {
+        throw new Error(`demo193 conflicting SEO aliases for ${entry.slug}.${sourceField}`);
+      }
+      // Match validateSnapshotContract.firstPresent exactly: it prefers the legacy alias and
+      // reports that field when neither alias is present.
+      const outputField = hasLegacyField || !hasNormalizedField ? legacyOutputField : normalizedOutputField;
       const value = record[outputField];
       const key = `articles|${entry.slug}|${outputField}|required-field-empty`;
       expected.add(key);
