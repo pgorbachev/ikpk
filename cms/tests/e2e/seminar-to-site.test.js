@@ -434,7 +434,8 @@ describe('семинар из админки доходит до опублик�
           (response) => response.url().includes('/actions/publish') && response.request().method() === 'POST',
         );
         await pageUi.getByRole('button', { name: 'Опубликовать' }).click();
-        assert.ok((await published).ok(), 'публикация из формы не прошла');
+        const response = await published;
+        assert.ok(response.ok(), `публикация из формы не прошла: ${response.status()} ${await response.text()}`);
       };
       const pick = async (label, query, option) => {
         await pageUi.getByRole('combobox', { name: label }).click();
@@ -484,26 +485,47 @@ describe('семинар из админки доходит до опублик�
       await setMoment('Начало', uiStart, '10:00');
       await setMoment('Окончание', new Date(uiStart.getTime() + day), '18:00');
       await pageUi.getByRole('textbox', { name: 'Город' }).fill('Казань');
-      await pageUi.getByRole('textbox', { name: 'Цена', exact: true }).fill('36600');
+      const priceField = pageUi.getByRole('spinbutton', { name: 'Цена', exact: true });
+      assert.ok(await priceField.isVisible(), 'поле цены не видно');
+      assert.ok(await priceField.isEnabled(), 'поле цены платного проведения недоступно для ввода');
+      await priceField.fill('36600');
+      assert.equal(await priceField.inputValue(), '36600', 'поле цены не приняло введённое значение');
+      await pageUi.getByRole('textbox', { name: 'Продолжительность' }).fill('1 день');
+      await pageUi.getByRole('textbox', { name: 'Ссылка на регистрацию на семинар' })
+        .fill('https://example.invalid/zapis');
       await pageUi.getByRole('button', { name: 'Сохранить' }).click();
       await publishForm();
 
       // Кнопка «Обновить сайт» — на её собственной странице админки.
       await pageUi.getByRole('link', { name: 'Обновить сайт' }).click();
-      // На странице может висеть итог прошлого нажатия, поэтому ждём сначала «идёт» (кнопка
-      // заблокирована), и только потом — её разблокировки.
+      // Проверяем ответ именно нажатия этой кнопки, а затем ждём сохранённый успешный исход.
+      // Одного перехода кнопки disabled → enabled недостаточно: оно может завершиться неуспехом.
       const refreshButton = pageUi.getByRole('button', { name: 'Обновить сайт' });
+      const started = pageUi.waitForResponse((response) =>
+        response.url().endsWith('/admin/site-refresh') && response.request().method() === 'POST');
       await refreshButton.click();
-      await pageUi.locator('button:disabled', { hasText: 'Обновить сайт' }).waitFor();
-      await pageUi.locator('button:enabled', { hasText: 'Обновить сайт' }).waitFor({ timeout: 15 * 60_000 });
+      const startResponse = await started;
+      const startBody = await startResponse.json();
+      assert.equal(startResponse.status(), 200, `запрос обновления отклонён: ${JSON.stringify(startBody)}`);
+      assert.equal(startBody.status, 'running', `кнопка не запустила обновление: ${JSON.stringify(startBody)}`);
+      assert.ok(typeof startBody.message === 'string' && startBody.message.length > 0,
+        'запрос обновления не вернул сообщение о запуске');
+      await pageUi.getByText(startBody.message, { exact: true }).waitFor();
+      await pageUi.getByText('Сайт обновлён.', { exact: false }).waitFor({ timeout: 15 * 60_000 });
       await shot('ui-07-refreshed');
-      assert.ok(await pageUi.getByText('Сайт обновлён.', { exact: false }).isVisible(), 'кнопка не обновила сайт');
 
       // Посетитель: опубликованный сайт в том же браузере, видимость — а не только наличие в HTML.
       const [created] = await app.documents('api::seminar.seminar').findMany({
         filters: { name: uiSeminar.name },
         status: 'published',
       });
+      const [publishedOccurrence] = await app.documents('api::schedule-entry.schedule-entry').findMany({
+        filters: { city: 'Казань' },
+        status: 'published',
+      });
+      assert.ok(publishedOccurrence, 'созданное проведение не опубликовано в CMS');
+      assert.equal(publishedOccurrence.price, 36600, 'в CMS не сохранилась введённая цена');
+      assert.equal(publishedOccurrence.isFree, false, 'проведение с ценой опубликовано как бесплатное');
       const visitor = await context.newPage();
       const open = async (url) => {
         const response = await visitor.goto(`${site}${url}`);
