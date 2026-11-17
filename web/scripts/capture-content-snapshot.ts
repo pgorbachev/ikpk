@@ -374,7 +374,9 @@ function normalizeArticleSeo(source: Record<string, unknown>, article: Record<st
   }
   if (!usable(article.seo_description)) {
     const body = typeof source.body === 'string' ? source.body : '';
-    const excerpt = sanitizedArticleText(body, String(article.slug ?? recordKey(source))).slice(0, 200);
+    const excerpt = Array.from(sanitizedArticleText(body, String(article.slug ?? recordKey(source))))
+      .slice(0, 200)
+      .join('');
     if (excerpt) article.seo_description = excerpt;
     else {
       throw new Error(

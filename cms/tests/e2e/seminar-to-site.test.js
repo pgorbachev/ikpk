@@ -156,7 +156,6 @@ describe('семинар из админки доходит до опублик�
   const uiGroup = { name: 'Курсы из браузера', slug: 'kursy-iz-brauzera' };
   let seminarDocumentId;
   let articleImageId;
-  let articleCategoryDocumentId;
   const editor = { email: `e2e-${Date.now()}@example.invalid`, password: 'E2e-only-test-password-2026' };
   let uploadedName;
 
@@ -263,7 +262,6 @@ describe('семинар из админки доходит до опублик�
       is_article_category: true,
       institute: inst.documentId,
     });
-    articleCategoryDocumentId = program.documentId;
     await publish('api::course-group.course-group', {
       ...uiGroup,
       legacy_id: `${institute.slug}/${uiGroup.slug}`,

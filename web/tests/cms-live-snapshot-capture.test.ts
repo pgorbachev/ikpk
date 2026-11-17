@@ -12,6 +12,7 @@ import { tmpdir } from 'node:os';
 import { createHash } from 'node:crypto';
 import { contentFingerprint, type SnapshotContent } from '../scripts/lib/content-snapshot';
 import { join } from 'node:path';
+import { execFileSync } from 'node:child_process';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { parseFragment } from 'parse5';
 import { cleanBodyHtml } from '../src/lib/data';
@@ -30,6 +31,7 @@ import {
   readSchema,
   runCapture,
   startCmsStub,
+  WEB_ROOT,
 } from './helpers/cms-live-snapshot-capture-contract';
 
 // ─────────────────────────────────────────────────────── данные заглушки
@@ -502,6 +504,7 @@ describe('Article SEO fallbacks through live snapshot capture', () => {
     const longVisible = 'Видимый &amp; текст для SEO. '.repeat(12);
     const sourceBody = `<script>script-marker()</script><style>style-marker{color:red}</style><p hidden>Скрытое &amp; видимое</p><p aria-hidden="true">ARIA текст виден</p><p>${longVisible}</p>`;
     const records = dataset().articles.records.map((record, index) => {
+      if (index === 5) return { ...record, body: `<p>${'a'.repeat(199)}😀z</p>`, seo: null };
       if (index === 0) return { ...record, body: sourceBody, seo: null };
       if (index === 1) return { ...record, body: '<p>Только описание</p>', seo: { seo_title: 'Авторский заголовок', seo_description: '' } };
       if (index === 2) return { ...record, body: '<p>Только заголовок</p>', seo: { seo_title: '   ', seo_description: 'Авторское описание' } };
@@ -522,11 +525,13 @@ describe('Article SEO fallbacks through live snapshot capture', () => {
       })(parseFragment(renderedTree) as unknown as ParsedNode).replace(/\s+/g, ' ').trim();
       expect(captured[0]).toMatchObject({ title: 'Статья 1', seo_title: 'Статья 1', seo_description: expect.any(String) });
       expect(String(captured[0]!.seo_description)).toHaveLength(200);
-      expect(captured[0]!.seo_description).toBe(renderedText.slice(0, 200));
+      expect(captured[0]!.seo_description).toBe(Array.from(renderedText).slice(0, 200).join(''));
       expect(String(captured[0]!.seo_description)).not.toContain('script-marker');
       expect(String(captured[0]!.seo_description)).not.toContain('style-marker');
       expect(String(captured[0]!.seo_description)).toContain('Скрытое & видимое');
       expect(String(captured[0]!.seo_description)).toContain('&');
+      expect(Array.from(String(captured[5]!.seo_description))).toHaveLength(200);
+      expect(captured[5]!.seo_description).toBe(`${'a'.repeat(199)}😀`);
       expect(captured[1]).toMatchObject({ seo_title: 'Авторский заголовок', seo_description: 'Только описание' });
       expect(captured[2]).toMatchObject({ seo_title: 'Статья 3', seo_description: 'Авторское описание' });
       expect(captured[3]).toMatchObject({ seo_title: 'Статья 4', seo_description: 'Пробелы' });
@@ -536,6 +541,44 @@ describe('Article SEO fallbacks through live snapshot capture', () => {
       rmSync(dir, { recursive: true, force: true });
     }
   });
+
+  it('passes the actual capture-normalized SEO description through Article metadata and JSON-LD', async () => {
+    const body = '<p>Нормализованное описание из снимка.</p>';
+    const records = dataset().articles.records.map((record, index) => index === 0
+      ? { ...record, body, seo: null }
+      : record);
+    const cms = await stub({ articles: { records } });
+    const dir = outDir();
+    const dist = join(dir, 'dist');
+    try {
+      const capture = await runCapture({ CMS_URL: cms.url, CONTENT_SNAPSHOT_DIR: dir });
+      expect(capture.status, `capture failed:\n${capture.output}`).toBe(0);
+      const data = JSON.parse(readFileSync(join(dir, 'snapshot.json'), 'utf8')) as {
+        content: { types: { articles: Record<string, unknown>[] } };
+      };
+      const capturedArticle = data.content.types.articles[0]!;
+      const normalizedDescription = capturedArticle.seo_description;
+      expect(normalizedDescription).toBe('Нормализованное описание из снимка.');
+      capturedArticle.body_text = 'Отличающийся текст тела из снимка.';
+      writeFileSync(join(dir, 'snapshot.json'), JSON.stringify(data));
+
+      execFileSync(join(WEB_ROOT, 'node_modules', '.bin', 'astro'), ['build', '--outDir', dist], {
+        cwd: WEB_ROOT,
+        env: { ...process.env, CONTENT_SNAPSHOT_DIR: dir },
+        timeout: 120_000,
+        stdio: 'pipe',
+      });
+      const html = readFileSync(join(dist, 'statyi', String(capturedArticle.slug), 'index.html'), 'utf8');
+      expect(html).toContain(`<title>${capturedArticle.title}</title>`);
+      expect(html).toContain(`name="description" content="${normalizedDescription}"`);
+      expect(html).toContain(`property="og:description" content="${normalizedDescription}"`);
+      const jsonLd = html.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/)?.[1];
+      expect(jsonLd ? JSON.parse(jsonLd).description : undefined).toBe(normalizedDescription);
+      expect(html).not.toContain('Отличающийся текст тела из снимка.');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }, 180_000);
 
   it('refuses a snapshot when sanitization leaves no body text and no explicit SEO description', async () => {
     const records = dataset().articles.records.map((record, index) => index === 0

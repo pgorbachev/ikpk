@@ -103,10 +103,11 @@ test('подписи и подсказки статьи синхронизиру
   assert.equal(config.metadatas.published_date?.edit?.label, 'Дата публикации');
   assert.equal(config.metadatas.legacy_id?.edit?.label, 'Старый идентификатор');
   assert.equal(config.metadatas.seo?.edit?.label, 'SEO');
-  assert.match(config.metadatas.seo?.edit?.description ?? '', /Для публикации обязательны заголовок и описание страницы/i);
-  assert.match(config.metadatas.seo?.edit?.description ?? '', /заголовок статьи/i);
-  assert.match(config.metadatas.seo?.edit?.description ?? '', /начало текста/i);
-  assert.match(config.metadatas.seo?.edit?.description ?? '', /CMS публикацию не разрешит/i);
+  assert.match(config.metadatas.seo?.edit?.description ?? '', /Можно не заполнять/i);
+  assert.match(config.metadatas.seo?.edit?.description ?? '', /заголовок из названия статьи/i);
+  assert.match(config.metadatas.seo?.edit?.description ?? '', /описание — из её текста после очистки/i);
+  assert.match(config.metadatas.seo?.edit?.description ?? '', /обновление сайта не состоится/i);
+  assert.match(config.metadatas.seo?.edit?.description ?? '', /CMS останется опубликованной/i);
   assert.equal(config.metadatas.categories?.edit?.label, 'Категории');
   assert.equal(config.metadatas.title?.list?.label, 'Заголовок');
   assert.equal(config.metadatas.seo?.list?.label, 'SEO');

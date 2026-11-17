@@ -3,7 +3,7 @@ import { validateSnapshotContract } from '../scripts/lib/content-contract';
 import { cleanBodyHtml } from '../src/lib/data';
 import type { Snapshot } from '../scripts/lib/content-snapshot';
 import { parseFragment } from 'parse5';
-import { cpSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { execFileSync } from 'node:child_process';
 import { join } from 'node:path';
