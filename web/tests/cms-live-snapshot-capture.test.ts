@@ -482,6 +482,22 @@ ${run.output}`).not.toBe(0);
 
 // OpenSpec article-seo-publication-fallbacks: exercise the real CMS-to-site capture entry point.
 describe('Article SEO fallbacks through live snapshot capture', () => {
+  it('preserves inline text adjacency and punctuation in the generated description', async () => {
+    const records = dataset().articles.records.map((record, index) => index === 0
+      ? { ...record, body: '<p>психо<strong>логия</strong>, мир<br>и речь</p>', seo: null }
+      : record);
+    const cms = await stub({ articles: { records } });
+    const dir = outDir();
+    try {
+      const run = await runCapture({ CMS_URL: cms.url, CONTENT_SNAPSHOT_DIR: dir });
+      expect(run.status, `capture failed:\n${run.output}`).toBe(0);
+      const captured = typesOf(readSnapshot(dir)).articles!;
+      expect(captured[0]!.seo_description).toBe('психология, мир и речь');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it('normalizes each field independently and derives a 200-character visible-text excerpt', async () => {
     const longVisible = 'Видимый &amp; текст для SEO. '.repeat(12);
     const sourceBody = `<script>script-marker()</script><style>style-marker{color:red}</style><p hidden>Скрытое &amp; видимое</p><p aria-hidden="true">ARIA текст виден</p><p>${longVisible}</p>`;
