@@ -183,7 +183,7 @@ export function mediaDataset(over: Record<string, StubCollection> = {}): Record<
           additionalText: '<p>addendum</p>',
           duration: '2 days',
           seminar: relRef('sem', 'Seminar'),
-          teachers: [{ id: 1, fullName: 'Teacher' }],
+          teachers: [relRef('teach', 'Teacher')],
         },
       ],
     },

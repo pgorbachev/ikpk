@@ -121,7 +121,7 @@ function dataset(over: Record<string, StubCollection> = {}): Record<string, Stub
     image: media(i + 1),
     isEventCollection: false,
     seminar: ref('sem', 1, 'Семинар 1'),
-    teachers: [{ id: 1, fullName: 'Преподаватель 1' }],
+    teachers: [ref('teach', 1, 'Преподаватель 1')],
   }));
 
   return {
@@ -692,7 +692,7 @@ describe('снимок несёт происхождение', () => {
 // ═══════════════════ DEMO193 projection into the existing renderers ═══════════════════════
 
 describe('синтетическая CMS проекция сохраняет принятые публичные поля', () => {
-  it('сохраняет legacy-формы медиа и преподавателя при полном feature-контракте CMS', async () => {
+  it('сохраняет media и teacher relation fields при полном feature-контракте CMS', async () => {
     const cms = await stub();
     const dir = outDir();
 
@@ -704,7 +704,9 @@ describe('синтетическая CMS проекция сохраняет п�
       expect(types.news?.[0]?.createdAt).toBe('2026-01-01T00:00:00.000Z');
       expect(types.promotions?.[0]?.createdAt).toBe('2026-01-01T00:00:00.000Z');
       expect(types.institutes?.[0]?.images).toEqual(['/uploads/img-1.webp']);
-      expect(types.schedule_entries?.[0]?.teachers).toEqual([{ id: 1, fullName: 'Преподаватель 1' }]);
+      expect(types.schedule_entries?.[0]?.teachers).toEqual([
+        { id: 'teach-001', documentId: 'teach-doc-1', fullName: 'Преподаватель 1' },
+      ]);
       expect(types.seminars?.[0]).toHaveProperty('learning_mode', null);
       expect(types.seminars?.[0]).toHaveProperty('learning_plan', null);
       expect(types.seminars?.[0]).toHaveProperty('recommendations', null);
@@ -917,9 +919,102 @@ describe('съём понимает формы данных установлен
 
     expect(run.status, run.output).toBe(0);
     const entries = typesOf(readSnapshot(dir)).schedule_entries!;
-    expect(entries[0]!.teachers).toEqual([{ id: 'teach-002', fullName: 'Преподаватель 2' }]);
-    // Прежняя JSON-форма `{id, fullName}` остаётся как есть.
-    expect(entries[1]!.teachers).toEqual([{ id: 1, fullName: 'Преподаватель 1' }]);
+    expect(entries[0]!.teachers).toEqual([
+      { id: 'teach-002', documentId: 'teach-doc-2', fullName: 'Преподаватель 2' },
+    ]);
+    expect(entries[1]!.teachers).toEqual([
+      { id: 'teach-001', documentId: 'teach-doc-1', fullName: 'Преподаватель 1' },
+    ]);
+    expect(typesOf(readSnapshot(dir)).teachers![0]!.legacy_url).toBe('/teach-001');
+  });
+
+  it('CMS native teacher resolves by documentId in schedule and seminar fallback, including same-name teachers', async () => {
+    const nativeTeachers = d.teachers!.records.slice(0, 2).map((teacher, index) => ({
+      ...teacher,
+      name: 'Одинаковое имя',
+      legacy_id: null,
+      slug: `same-name-${index + 1}`,
+    }));
+    const schedule = d['schedule-entries']!.records.slice(0, 2).map((entry, index) => ({
+      ...entry,
+      teachers: [{ ...nativeTeachers[index] }],
+    }));
+    const seminars = d.seminars!.records.slice(0, 2).map((seminar, index) => ({
+      ...seminar,
+      teachers: [nativeTeachers[index]],
+    }));
+    const cms = await stub({
+      teachers: { records: nativeTeachers },
+      'schedule-entries': { records: schedule },
+      seminars: { records: seminars },
+    });
+    const dir = outDir();
+
+    const run = await runCapture({ CMS_URL: cms.url, CONTENT_SNAPSHOT_DIR: dir });
+
+    expect(run.status, run.output).toBe(0);
+    const types = typesOf(readSnapshot(dir));
+    expect(types.schedule_entries!.map((entry) => entry.teachers)).toEqual([
+      [{ id: 'teach-doc-1', documentId: 'teach-doc-1', fullName: 'Одинаковое имя' }],
+      [{ id: 'teach-doc-2', documentId: 'teach-doc-2', fullName: 'Одинаковое имя' }],
+    ]);
+    expect(types.seminars!.map((seminar) => seminar.teachers)).toEqual([
+      [{ documentId: 'teach-doc-1', name: 'Одинаковое имя', order: 0 }],
+      [{ documentId: 'teach-doc-2', name: 'Одинаковое имя', order: 1 }],
+    ]);
+    expect(types.teachers!.map((teacher) => teacher.legacy_id)).toEqual([null, null]);
+    expect(types.teachers!.map((teacher) => teacher.documentId)).toEqual(['teach-doc-1', 'teach-doc-2']);
+    const secondDir = outDir();
+    const secondRun = await runCapture({ CMS_URL: cms.url, CONTENT_SNAPSHOT_DIR: secondDir });
+    expect(secondRun.status, secondRun.output).toBe(0);
+    expect(typesOf(readSnapshot(secondDir)).schedule_entries!.map((entry) => entry.teachers))
+      .toEqual(types.schedule_entries!.map((entry) => entry.teachers));
+    expect(typesOf(readSnapshot(secondDir)).seminars!.map((seminar) => seminar.teachers))
+      .toEqual(types.seminars!.map((seminar) => seminar.teachers));
+  });
+
+  it('live teacher relations require documentId and name even when legacy_id exists', async () => {
+    for (const [label, teacher] of [
+      ['legacy teacher without documentId', { ...ref('teach', 1, 'Legacy'), documentId: undefined }],
+      ['new teacher without documentId', { ...ref('teach', 1, 'New'), legacy_id: null, documentId: undefined }],
+      ['new teacher with empty documentId', { ...ref('teach', 1, 'New'), legacy_id: null, documentId: ' ' }],
+      ['teacher without name', { ...ref('teach', 1, 'Legacy'), name: null }],
+      ['new teacher without name', { ...ref('teach', 1, 'New'), legacy_id: null, name: null }],
+    ] as const) {
+      const cms = await stub({
+        'schedule-entries': {
+          records: d['schedule-entries']!.records.map((entry) => ({ ...entry, teachers: [teacher] })),
+        },
+      });
+      const dir = outDir();
+
+      const run = await runCapture({ CMS_URL: cms.url, CONTENT_SNAPSHOT_DIR: dir });
+
+      expect(run.status, `${label}: ${run.output}`).not.toBe(0);
+      expect(run.output).toMatch(/schedule_entries\.teachers/);
+      expect(existsSync(join(dir, 'snapshot.json'))).toBe(false);
+      await cms.close();
+    }
+  });
+
+  it('live teacher references reject an unknown documentId despite matching legacy_id or name', async () => {
+    const broken = {
+      ...ref('teach', 1, 'Преподаватель 1'),
+      documentId: 'unknown-document',
+    };
+    const cms = await stub({
+      'schedule-entries': {
+        records: d['schedule-entries']!.records.map((entry) => ({ ...entry, teachers: [broken] })),
+      },
+    });
+    const dir = outDir();
+
+    const run = await runCapture({ CMS_URL: cms.url, CONTENT_SNAPSHOT_DIR: dir });
+
+    expect(run.status, run.output).not.toBe(0);
+    expect(run.output).toMatch(/documentId.*unknown-document/);
+    expect(existsSync(join(dir, 'snapshot.json'))).toBe(false);
+    await cms.close();
   });
 
   it('поле записи без решения о нём — отказ с названием поля, снимок не пишется', async () => {

@@ -10,6 +10,7 @@ import {
   formatPrice,
   shortDuration,
   teacherPageHref,
+  resolveTeacherReference,
   type ScheduleEntry,
   type SeminarTeacherRef,
   type Teacher,
@@ -98,14 +99,11 @@ export function formatScheduleDateRange(startAt: string, endAt: string): string 
 }
 
 export function findTeacherForScheduleLead(
-  lead: { id: number | string; fullName: string } | undefined,
+  lead: { id: number | string; documentId?: string; fullName: string } | undefined,
   teachers: Teacher[] = getTeachers()
 ): Teacher | undefined {
   if (!lead) return undefined;
-  // Только стабильные ключи: матчинг по префиксу имени давал ложную атрибуцию.
-  return teachers.find(
-    (t) => t.legacy_id === String(lead.id) || t.slug === String(lead.id)
-  );
+  return resolveTeacherReference(lead, teachers);
 }
 
 /** Первый преподаватель семинара из каталога (по order), сопоставленный с Teacher. */
@@ -116,9 +114,7 @@ export function findTeacherForSeminar(
   if (!refs?.length) return undefined;
   const ordered = [...refs].sort((a, b) => (a.order ?? 999) - (b.order ?? 999));
   for (const ref of ordered) {
-    const hit = teachers.find(
-      (t) => t.legacy_id === String(ref.legacy_id) || t.name === ref.name
-    );
+    const hit = resolveTeacherReference(ref, teachers);
     if (hit) return hit;
   }
   return undefined;

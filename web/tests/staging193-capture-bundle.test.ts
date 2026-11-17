@@ -173,6 +173,36 @@ describe('staging193 sealed SQLite capture', () => {
       ]);
   });
 
+  it('resolves seminar draft teacher relations to published versions and excludes draft-only teachers', () => {
+    const root = mkdtempSync(join(tmpdir(), 'seminar-teacher-capture-'));
+    temporaryRoots.push(root);
+    const database = join(root, 'database.sqlite');
+    fixtureDatabase(database);
+    const db = new DatabaseSync(database);
+    db.exec(`DELETE FROM seminars_teachers_lnk;
+      INSERT INTO seminars_teachers_lnk (id, seminar_id, teacher_id, teacher_ord, seminar_ord)
+        VALUES (3,5,4,1,1);
+      INSERT INTO teachers (id, document_id, name, slug, trait, published_at)
+        VALUES (5,'draft-only','Draft only','draft-only','teacher',NULL);
+      INSERT INTO seminars (id, document_id, name, slug, description, published_at)
+        VALUES (8,'seminar-draft-teacher','Draft-only teacher','seminar-draft-teacher','<p>Published seminar</p>','2026-10-01');
+      INSERT INTO seminars_course_group_lnk VALUES (2,8,2,1);
+      INSERT INTO seminars_teachers_lnk (id, seminar_id, teacher_id, teacher_ord, seminar_ord)
+        VALUES (4,8,5,1,1);`);
+    db.close();
+
+    const captured = readPublishedSqlite(database, schemaRoot) as unknown as {
+      collections: Record<string, unknown[]>;
+    };
+    const seminars = captured.collections.seminars as
+      { documentId: string; teachers: { documentId: string; name: string }[] }[];
+    expect(seminars.map((seminar) => [seminar.documentId, seminar.teachers.map((teacher) => [teacher.documentId, teacher.name])]))
+      .toEqual([
+        ['seminar', [['teacher', 'Teacher']]],
+        ['seminar-draft-teacher', []],
+      ]);
+  });
+
   it('rejects a capture manifest from a different host or stale site URL', () => {
     for (const change of [{ host: '193.124.115.99' }, { siteUrl: 'https://193.124.115.99' }]) {
       const bundle = sealedBundle();

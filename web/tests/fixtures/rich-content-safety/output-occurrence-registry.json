@@ -117,7 +117,7 @@
     "src:layouts/TopNavLayout.astro:L81:C1:style",
     "src:pages/[institute].astro:L223:C1:style",
     "src:pages/[institute]/[courseGroup].astro:L216:C1:style",
-    "src:pages/[institute]/[courseGroup]/[seminar].astro:L236:C1:style",
+    "src:pages/[institute]/[courseGroup]/[seminar].astro:L232:C1:style",
     "src:pages/[institute]/prepodavatel/[id].astro:L72:C1:style",
     "src:pages/[slug].astro:L74:C1:style",
     "src:pages/404.astro:L19:C1:style",

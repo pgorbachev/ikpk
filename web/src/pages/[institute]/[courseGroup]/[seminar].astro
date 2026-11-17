@@ -12,6 +12,7 @@ import {
   getScheduleEntries,
   getTeachers,
   cleanBodyHtml,
+  resolveTeacherReference,
   stripLegacySeminarTail, getSeminarBuildNow,
   teacherPageHref,
 } from '../../../lib/data';
@@ -58,12 +59,7 @@ const seminarUrl = `https://ikpk.su/${institute.slug}/${courseGroup.slug}/${semi
 const scheduleRows = sortedSchedule.map((entry) => ({
   entry,
   teachers: (entry.teachers || []).map((teacher) => {
-    const full = allTeachers.find(
-      (candidate) =>
-        candidate.slug === String(teacher.id) ||
-        candidate.legacy_id === String(teacher.id) ||
-        candidate.name === teacher.fullName
-    );
+    const full = resolveTeacherReference(teacher, allTeachers);
 
     return {
       fullName: teacher.fullName,

@@ -100,15 +100,21 @@ export function readPublishedSqlite(database, schemaRoot) {
         if (attr.type === 'relation') {
           const r = relationSpec(uid, name, attr);
           const links = db.prepare(`SELECT ${quote(r.to)} AS target FROM ${quote(r.table)} WHERE ${quote(r.from)}=? ORDER BY ${r.order ? `${quote(r.order)},` : ''}${quote(r.to)}`).all(row.id);
+          const teacherRelation = (uid === 'api::schedule-entry.schedule-entry' || uid === 'api::seminar.seminar') &&
+            name === 'teachers' && attr.target === 'api::teacher.teacher';
+          const seenTeacherDocumentIds = new Set();
           const related = links.flatMap((link) => {
             const target = rows.get(attr.target).get(link.target);
             if (!target) throw new Error(`broken relation: ${uid}.${name}#${link.target}`);
             // A draft relation is not published content. Do not silently substitute its draft fields.
             let resolved = published(attr.target, target) ? target : null;
-            if (uid === 'api::schedule-entry.schedule-entry' && name === 'teachers' &&
-                attr.target === 'api::teacher.teacher') {
+            if (teacherRelation) {
               const documentId = target.document_id;
               resolved = documentId ? publishedTeachersByDocument.get(documentId) ?? null : null;
+            }
+            if (resolved && teacherRelation) {
+              if (seenTeacherDocumentIds.has(resolved.document_id)) return [];
+              seenTeacherDocumentIds.add(resolved.document_id);
             }
             return resolved ? [scalarRecord(attr.target, resolved)] : [];
           });
