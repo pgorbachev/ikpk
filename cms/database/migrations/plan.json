@@ -287,7 +287,7 @@
       {"path": "scripts/audit-content-migration.mjs", "sha256": "0eb42866c9dba128a6554da63740906becde1b743be3850d540e5b79c6af8ea6"},
       {"path": "database/migrations/target-schema/seminar.json", "sha256": "34aa09e7ede1643b1514408f1306b245aca0f75a75aec680b664b88032b29b25"},
       {"path": "src/lib/demo193-source-empty-fields.json", "sha256": "b6a46a6138157cb77be55ecfbe8b05e962e827be6fc807fc8a34ded92e3916f5"},
-      {"path": "scripts/audit-data-migration.mjs", "sha256": "4ed4eea1d020639ff9fff098973553eb629fa0877d7bbfa9aaf3062cd1b98f2a"},
+      {"path": "scripts/audit-data-migration.mjs", "sha256": "fe505accf6efa661cdf71df02734c63c7502ea7ce40d6e08b0b78461d95bb939"},
       {"path": "scripts/audit-schema-snapshot.mjs", "sha256": "953145610fcb03814a7d29ce6c476af201266924ae3e12220b71d1ab903129ea"},
       {"path": "scripts/institute-method-author-classification.mjs", "sha256": "7eb4dcabbf28f9fd556360653e00a2fd08e144debee6877dd1058621d5f79a5d"},
       {"path": "scripts/normalize-null-documents-state.mjs", "sha256": "b316c88986bf08585abb4107b77d1a6bfd6b4dcb15cfdda06796cb5d8f5ca875"},
