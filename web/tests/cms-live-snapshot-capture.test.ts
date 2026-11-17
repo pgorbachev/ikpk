@@ -13,6 +13,8 @@ import { createHash } from 'node:crypto';
 import { contentFingerprint, type SnapshotContent } from '../scripts/lib/content-snapshot';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { parseFragment } from 'parse5';
+import { cleanBodyHtml } from '../src/lib/data';
 import {
   SNAPSHOT_ORIGIN_FIELD,
   STUB_DEFAULT_PAGE_SIZE,
@@ -475,6 +477,66 @@ ${run.output}`).not.toBe(0);
     expect(run.status, run.output).toBe(0);
     expect(readSnapshot(dir).fingerprint, 'снимок не совпал с фикстурой').toBe(pinnedSnapshot().fingerprint);
     expect(run.output.toLowerCase(), 'вывод не называет взятый путь').toMatch(/фикстур|закреплённ/);
+  });
+});
+
+// OpenSpec article-seo-publication-fallbacks: exercise the real CMS-to-site capture entry point.
+describe('Article SEO fallbacks through live snapshot capture', () => {
+  it('normalizes each field independently and derives a 200-character visible-text excerpt', async () => {
+    const longVisible = 'Видимый &amp; текст для SEO. '.repeat(12);
+    const sourceBody = `<script>script-marker()</script><style>style-marker{color:red}</style><p hidden>Скрытое &amp; видимое</p><p aria-hidden="true">ARIA текст виден</p><p>${longVisible}</p>`;
+    const records = dataset().articles.records.map((record, index) => {
+      if (index === 0) return { ...record, body: sourceBody, seo: null };
+      if (index === 1) return { ...record, body: '<p>Только описание</p>', seo: { seo_title: 'Авторский заголовок', seo_description: '' } };
+      if (index === 2) return { ...record, body: '<p>Только заголовок</p>', seo: { seo_title: '   ', seo_description: 'Авторское описание' } };
+      if (index === 3) return { ...record, body: '<p>Пробелы</p>', seo: { seo_title: '  ', seo_description: '\t ' } };
+      if (index === 4) return { ...record, seo: { seo_title: 'Сохранённый заголовок', seo_description: 'Д'.repeat(250) } };
+      return record;
+    });
+    const cms = await stub({ articles: { records } });
+    const dir = outDir();
+    try {
+      const run = await runCapture({ CMS_URL: cms.url, CONTENT_SNAPSHOT_DIR: dir });
+      expect(run.status, `capture failed:\n${run.output}`).toBe(0);
+      const captured = typesOf(readSnapshot(dir)).articles!;
+      const renderedTree = cleanBodyHtml(sourceBody, { type: 'article', id: 'art-001' }).html;
+      interface ParsedNode { nodeName: string; value?: string; childNodes?: ParsedNode[] }
+      const renderedText = (function text(node: ParsedNode): string {
+        return (node.nodeName === '#text' ? node.value ?? '' : '') + (node.childNodes ?? []).map(text).join(' ');
+      })(parseFragment(renderedTree) as unknown as ParsedNode).replace(/\s+/g, ' ').trim();
+      expect(captured[0]).toMatchObject({ title: 'Статья 1', seo_title: 'Статья 1', seo_description: expect.any(String) });
+      expect(String(captured[0]!.seo_description)).toHaveLength(200);
+      expect(captured[0]!.seo_description).toBe(renderedText.slice(0, 200));
+      expect(String(captured[0]!.seo_description)).not.toContain('script-marker');
+      expect(String(captured[0]!.seo_description)).not.toContain('style-marker');
+      expect(String(captured[0]!.seo_description)).toContain('Скрытое & видимое');
+      expect(String(captured[0]!.seo_description)).toContain('&');
+      expect(captured[1]).toMatchObject({ seo_title: 'Авторский заголовок', seo_description: 'Только описание' });
+      expect(captured[2]).toMatchObject({ seo_title: 'Статья 3', seo_description: 'Авторское описание' });
+      expect(captured[3]).toMatchObject({ seo_title: 'Статья 4', seo_description: 'Пробелы' });
+      expect(captured[4]!.seo_title).toBe('Сохранённый заголовок');
+      expect(captured[4]!.seo_description).toBe('Д'.repeat(250));
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('refuses a snapshot when sanitization leaves no body text and no explicit SEO description', async () => {
+    const records = dataset().articles.records.map((record, index) => index === 0
+      ? { ...record, body: '<script>discard()</script><style>.discard{display:none}</style>', seo: { seo_title: 'Explicit title', seo_description: '' } }
+      : record);
+    const cms = await stub({ articles: { records } });
+    const dir = outDir();
+    try {
+      const run = await runCapture({ CMS_URL: cms.url, CONTENT_SNAPSHOT_DIR: dir });
+      expect(run.status, `empty sanitized body must fail capture:\n${run.output}`).not.toBe(0);
+      expect(run.output).toContain('art-001');
+      expect(run.output.toLowerCase()).toMatch(/description|описан/);
+      expect(run.output.toLowerCase()).toMatch(/fallback|резерв/);
+      expect(existsSync(join(dir, 'snapshot.json'))).toBe(false);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });
 

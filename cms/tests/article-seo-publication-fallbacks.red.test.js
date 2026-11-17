@@ -68,3 +68,17 @@ test('CMS lifecycle does not require the web sanitizer to leave a description fa
   const article = { ...completeArticle, seo: null };
   assert.equal(await lifecycle(article)({}), 'published');
 });
+
+test('publication validates the persisted nested SEO component after a partial update payload', async () => {
+  const persisted = {
+    ...completeArticle,
+    seo: { seo_title: 'Старый заголовок', seo_description: 'Сохраняемое описание' },
+  };
+  const result = await lifecycle(persisted)({
+    data: { seo: { seo_title: 'Новый заголовок' } },
+  });
+  assert.equal(result, 'published');
+  assert.deepEqual(persisted.seo, {
+    seo_title: 'Старый заголовок', seo_description: 'Сохраняемое описание',
+  }, 'lifecycle must not replace the persisted component with a partial request payload');
+});
