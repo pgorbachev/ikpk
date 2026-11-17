@@ -47,6 +47,17 @@ const ENTRY_FIELDS = [
   ['additionalText', 'Примечание', 12, true, 'Текст на карточке расписания. Фраза «Начало в ЧЧ:ММ» показывается как время начала.'],
 ];
 
+const ARTICLE_FIELD_LABELS = [
+  ['title', 'Заголовок', 'Заголовок статьи.'],
+  ['slug', 'Адрес страницы', 'Часть адреса статьи после /statyi/.'],
+  ['body', 'Текст статьи', 'Основной текст статьи на странице.'],
+  ['image', 'Изображение', 'Показывается в шапке статьи и карточках каталога.'],
+  ['published_date', 'Дата публикации', 'Показывается на странице статьи и задаёт порядок в каталоге: сначала новые.'],
+  ['legacy_id', 'Старый идентификатор', ''],
+  ['seo', 'SEO', 'Для публикации обязательны заголовок и описание страницы. Если они пусты, шаблон сайта подставит заголовок статьи и начало текста, но CMS публикацию не разрешит.'],
+  ['categories', 'Категории', ''],
+];
+
 // The approved migration carries this source flag as data without adding editor UI.
 const HIDDEN = new Set(['name', 'admin_label', 'legacy_id', 'isEventCollection']);
 
@@ -125,6 +136,26 @@ async function applyOne(strapi, uid, fields, settings, list, hidden) {
   await contentTypes.updateConfiguration(contentType, next);
 }
 
+async function applyArticleFieldLabels(strapi) {
+  const contentTypes = strapi.plugin('content-manager').service('content-types');
+  const contentType = strapi.contentType('api::article.article');
+  const current = await contentTypes.findConfiguration(contentType);
+  const metadatas = { ...current.metadatas };
+
+  for (const [name, label, description] of ARTICLE_FIELD_LABELS) {
+    const existing = metadatas[name] ?? { edit: {}, list: {} };
+    metadatas[name] = {
+      ...existing,
+      edit: { ...existing.edit, label, ...(description ? { description } : {}) },
+      list: { ...existing.list, label },
+    };
+  }
+
+  // Синхронизация подписей не должна менять сохранённый порядок, настройки
+  // или видимость/редактируемость полей статьи.
+  await contentTypes.updateConfiguration(contentType, { ...current, metadatas });
+}
+
 export async function applyEditorForms(strapi) {
   await applyOne(
     strapi,
@@ -150,4 +181,5 @@ export async function applyEditorForms(strapi) {
     ['admin_label', 'city', 'entry_status', 'startAt'],
     HIDDEN,
   );
+  await applyArticleFieldLabels(strapi);
 }

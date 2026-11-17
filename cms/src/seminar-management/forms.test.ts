@@ -9,9 +9,27 @@ import { applyEditorForms } from './forms.ts';
 // с main из формы семинара выпали учебный план, режим обучения, рекомендации и сведения о
 // документах — поля есть, заполнить их нельзя.
 const SCHEMAS = {
+  'api::article.article': 'article',
   'api::seminar.seminar': 'seminar',
   'api::schedule-entry.schedule-entry': 'schedule-entry',
 } as const;
+
+const ARTICLE_EXISTING_CONFIGURATION = {
+  settings: { mainField: 'title', defaultSortBy: 'published_date', defaultSortOrder: 'DESC' },
+  layouts: {
+    edit: [
+      [{ name: 'title', size: 12 }],
+      [{ name: 'slug', size: 6 }],
+      [{ name: 'body', size: 12 }],
+      [{ name: 'image', size: 6 }],
+      [{ name: 'published_date', size: 6 }],
+      [{ name: 'legacy_id', size: 6 }],
+      [{ name: 'seo', size: 12 }],
+      [{ name: 'categories', size: 12 }],
+    ],
+    list: [['title', 'published_date']],
+  },
+};
 
 function attributesOf(name: string): string[] {
   const file = join(import.meta.dirname, '..', 'api', name, 'content-types', name, 'schema.json');
@@ -19,8 +37,12 @@ function attributesOf(name: string): string[] {
 }
 
 interface Configuration {
-  metadatas: Record<string, { edit?: { visible?: boolean; editable?: boolean; label?: string; description?: string } }>;
-  layouts: { edit: { name: string; size?: number }[][] };
+  settings?: Record<string, unknown>;
+  metadatas: Record<string, {
+    edit?: { visible?: boolean; editable?: boolean; label?: string; description?: string };
+    list?: { label?: string };
+  }>;
+  layouts: { edit: { name: string; size?: number }[][]; [key: string]: unknown };
 }
 
 async function configurations() {
@@ -30,13 +52,19 @@ async function configurations() {
     plugin: () => ({
       service: () => ({
         // Как у настоящего Strapi: метаданные есть у каждого поля схемы, видимы по умолчанию.
-        findConfiguration: async (uid: keyof typeof SCHEMAS) => ({
-          settings: {},
-          metadatas: Object.fromEntries(
+        findConfiguration: async (uid: keyof typeof SCHEMAS) => {
+          const metadatas: Configuration['metadatas'] = Object.fromEntries(
             attributesOf(SCHEMAS[uid]).map((field) => [field, { edit: { visible: true }, list: {} }]),
-          ),
-          layouts: {},
-        }),
+          );
+          if (uid === 'api::article.article' && metadatas.slug) {
+            metadatas.slug.edit = { ...metadatas.slug.edit, editable: false };
+          }
+          return {
+            settings: uid === 'api::article.article' ? ARTICLE_EXISTING_CONFIGURATION.settings : {},
+            metadatas,
+            layouts: uid === 'api::article.article' ? ARTICLE_EXISTING_CONFIGURATION.layouts : {},
+          };
+        },
         updateConfiguration: async (uid: string, next: Configuration) => saved.set(uid, next),
       }),
     }),
@@ -59,6 +87,32 @@ test('каждое поле схемы семинара и проведения 
     const lost = attributesOf(name).filter((field) => !inForm.has(field) && !hidden.has(field));
     assert.deepEqual(lost, [], `${uid}: поля схемы, которых редактор не увидит`);
   }
+});
+
+test('подписи и подсказки статьи синхронизируются без изменения её расположения или настроек', async () => {
+  const config = await configurations().then((saved) => saved.get('api::article.article'));
+  assert.ok(config, 'метаданные статьи не настроены — проверять нечего');
+
+  assert.equal(config.metadatas.title?.edit?.label, 'Заголовок');
+  assert.equal(config.metadatas.slug?.edit?.label, 'Адрес страницы');
+  assert.match(config.metadatas.slug?.edit?.description ?? '', /часть адреса статьи после \/statyi\//i);
+  assert.doesNotMatch(config.metadatas.slug?.edit?.description ?? '', /автомат|созда[её]тся/i);
+  assert.equal(config.metadatas.slug?.edit?.editable, false);
+  assert.equal(config.metadatas.body?.edit?.label, 'Текст статьи');
+  assert.equal(config.metadatas.image?.edit?.label, 'Изображение');
+  assert.equal(config.metadatas.published_date?.edit?.label, 'Дата публикации');
+  assert.equal(config.metadatas.legacy_id?.edit?.label, 'Старый идентификатор');
+  assert.equal(config.metadatas.seo?.edit?.label, 'SEO');
+  assert.match(config.metadatas.seo?.edit?.description ?? '', /Для публикации обязательны заголовок и описание страницы/i);
+  assert.match(config.metadatas.seo?.edit?.description ?? '', /заголовок статьи/i);
+  assert.match(config.metadatas.seo?.edit?.description ?? '', /начало текста/i);
+  assert.match(config.metadatas.seo?.edit?.description ?? '', /CMS публикацию не разрешит/i);
+  assert.equal(config.metadatas.categories?.edit?.label, 'Категории');
+  assert.equal(config.metadatas.title?.list?.label, 'Заголовок');
+  assert.equal(config.metadatas.seo?.list?.label, 'SEO');
+
+  assert.deepEqual(config.layouts, ARTICLE_EXISTING_CONFIGURATION.layouts);
+  assert.deepEqual(config.settings, ARTICLE_EXISTING_CONFIGURATION.settings);
 });
 
 test('изображение проведения редактируется, а исходный флаг коллекции остаётся скрытой метаданной', async () => {
