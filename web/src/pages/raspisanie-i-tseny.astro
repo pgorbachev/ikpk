@@ -2,7 +2,7 @@
 import SchedulePage from '../components/schedule/SchedulePage.astro';
 import BaseLayout from '../layouts/BaseLayout.astro';
 import Breadcrumbs from '../components/Breadcrumbs.astro';
-import { formatPrice, getInstitutes, getPage, getScheduleEntries, getSeminarBuildNow, getTeachers, teacherPageHref } from '../lib/data';
+import { formatPrice, getInstitutes, getPage, getScheduleEntries, getSeminarBuildNow, getTeachers, resolveTeacherReference, teacherPageHref } from '../lib/data';
 import { calendarDay, calendarDayDate, isBeforeStart } from '../lib/schedule-window';
 import { monthKeys, monthOptions } from '../lib/schedule-months';
 import { registrationHref } from '../lib/forms';
@@ -111,12 +111,7 @@ const visiblePrograms = entries
 const items = entries.map((entry) => {
   const institute = instituteByName.get(entry.institute.name);
   const teacher = entry.teachers?.[0]
-    ? teachers.find(
-        (candidate) =>
-          candidate.slug === String(entry.teachers[0].id) ||
-          candidate.legacy_id === String(entry.teachers[0].id) ||
-          candidate.name === entry.teachers[0].fullName
-      )
+    ? resolveTeacherReference(entry.teachers[0], teachers)
     : undefined;
   const teacherName = entry.teachers?.[0]?.fullName || 'Преподаватель уточняется';
   const instituteSlug = institute?.slug || slugify(entry.institute.shortname || entry.institute.name);

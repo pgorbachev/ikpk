@@ -164,7 +164,8 @@ export interface CourseGroup {
 }
 
 export interface SeminarTeacherRef {
-  legacy_id: number | string;
+  documentId?: string;
+  legacy_id?: number | string;
   name: string;
   order?: number;
 }
@@ -238,8 +239,9 @@ export interface Seminar {
 }
 
 export interface Teacher {
-  legacy_id: string;
-  legacy_url: string;
+  documentId?: string;
+  legacy_id?: string | number;
+  legacy_url?: string;
   name: string;
   slug: string;
   trait?: PersonTrait;
@@ -299,7 +301,7 @@ export interface ScheduleEntry {
   institute: { id: number; name: string; shortname: string };
   startAt: string;
   endAt: string;
-  teachers: { id: number | string; fullName: string }[];
+  teachers: { id: number | string; documentId?: string; fullName: string }[];
   image: { url: string; id: string } | null;
   isFree: boolean;
   isEventCollection: boolean;
@@ -421,6 +423,25 @@ export function teacherPageHref(teacher: Pick<Teacher, 'slug' | 'institute_legac
   return teacher?.institute_legacy_id && teacher.slug
     ? `/${teacher.institute_legacy_id}/prepodavatel/${teacher.slug}`
     : null;
+}
+
+/** Resolve a teacher ref without guessing from a potentially shared display name. */
+export function resolveTeacherReference(
+  reference: { documentId?: string; id?: number | string; legacy_id?: number | string },
+  teachers: Teacher[],
+): Teacher | undefined {
+  if (reference.documentId !== undefined) {
+    if (typeof reference.documentId !== 'string') return undefined;
+    const documentId = reference.documentId.trim();
+    if (!documentId) return undefined;
+    const matches = teachers.filter((teacher) => teacher.documentId === documentId);
+    return matches.length === 1 ? matches[0] : undefined;
+  }
+
+  const legacyId = reference.legacy_id ?? reference.id;
+  if (legacyId === undefined || legacyId === null || String(legacyId).trim() === '') return undefined;
+  const matches = teachers.filter((teacher) => teacher.legacy_id !== undefined && String(teacher.legacy_id) === String(legacyId));
+  return matches.length === 1 ? matches[0] : undefined;
 }
 
 let _articles: Article[] | null = null;
@@ -602,7 +623,11 @@ function withSeminarTeachers(entry: ScheduleEntry): ScheduleEntry {
   if (!seminar?.teachers?.length) return entry;
   return {
     ...entry,
-    teachers: seminar.teachers.map((teacher) => ({ id: teacher.legacy_id, fullName: teacher.name })),
+    teachers: seminar.teachers.map((teacher) => ({
+      id: teacher.legacy_id ?? teacher.documentId ?? '',
+      ...(teacher.documentId ? { documentId: teacher.documentId } : {}),
+      fullName: teacher.name,
+    })),
   };
 }
 

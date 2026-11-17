@@ -221,12 +221,17 @@ function refList(value: unknown): unknown {
   return value.map((item) => {
     if (!item || typeof item !== 'object') return item;
     const r = item as Record<string, unknown>;
+    const documentId = typeof r.documentId === 'string' ? r.documentId.trim() : '';
+    if (!documentId || typeof r.name !== 'string' || !r.name.trim()) {
+      throw new Error('seminars.teachers: связь должна содержать documentId и имя преподавателя');
+    }
     // `order` входит в форму связи, а не только в саму запись: главная страница выбирает
     // преподавателя семинара по нему, и без него выбор становится произвольным.
     const ref: Record<string, unknown> = {
-      legacy_id: r.legacy_id ?? r.id,
-      name: r.name ?? r.fullName,
+      documentId,
+      name: r.name,
     };
+    if (typeof r.legacy_id === 'string' && r.legacy_id.trim()) ref.legacy_id = r.legacy_id;
     if (r.order !== undefined && r.order !== null) ref.order = r.order;
     return ref;
   });
@@ -252,13 +257,20 @@ function entryTeachers(value: unknown): unknown {
   if (!Array.isArray(value)) return value;
   return value.map((item) => {
     const t = item as Record<string, unknown> | null;
-    if (t && typeof t === 'object' && 'fullName' in t) return t;
-    const id = t?.legacy_id;
-    if (t && typeof t.name === 'string' && (typeof id === 'string' || typeof id === 'number') && id !== '') {
-      return { id, fullName: t.name };
+    const documentId = typeof t?.documentId === 'string' ? t.documentId.trim() : '';
+    const name = typeof t?.name === 'string' ? t.name.trim() : '';
+    const legacyId = t?.legacy_id;
+    const hasLegacyId = (typeof legacyId === 'string' && legacyId.trim() !== '') ||
+      (typeof legacyId === 'number' && Number.isFinite(legacyId));
+    if (t && typeof t === 'object' && documentId && name) {
+      return {
+        id: hasLegacyId ? legacyId : documentId,
+        documentId,
+        fullName: name,
+      };
     }
     throw new Error(
-      `schedule_entries.teachers: у преподавателя в связи нет legacy_id или имени — заполнить их у ` +
+      `schedule_entries.teachers: у преподавателя в связи нет documentId или имени — заполнить их у ` +
         `преподавателя в CMS (${JSON.stringify(t)?.slice(0, 120)})`,
     );
   });
@@ -560,6 +572,33 @@ async function liveCapture(): Promise<void> {
   const types: Record<string, Record<string, unknown>[]> = {};
   for (const st of SOURCE_TYPES) {
     types[st.type] = rawByType[st.type]!.map((record) => mapRecord(st.type, record));
+  }
+
+  const teacherDocumentIdCounts = new Map<string, number>();
+  for (const teacher of types.teachers ?? []) {
+    const documentId = typeof teacher.documentId === 'string' ? teacher.documentId.trim() : '';
+    if (documentId) teacherDocumentIdCounts.set(documentId, (teacherDocumentIdCounts.get(documentId) ?? 0) + 1);
+  }
+  for (const [type, records] of [
+    ['schedule_entries', types.schedule_entries ?? []],
+    ['seminars', types.seminars ?? []],
+  ] as const) {
+    if ((types.teachers ?? []).length === 0) break; // The existing skeleton gate gives the more useful empty-type diagnostic.
+    for (const record of records) {
+      const refs = record.teachers;
+      if (!Array.isArray(refs)) continue;
+      for (const ref of refs) {
+        const documentId = ref && typeof ref === 'object' && typeof ref.documentId === 'string'
+          ? ref.documentId.trim()
+          : '';
+        if (!documentId || teacherDocumentIdCounts.get(documentId) !== 1) {
+          throw new Error(
+            `живой захват: ${type}.teachers содержит неразрешённый documentId ${documentId || '(пусто)'} ` +
+              `(запись ${recordKey(record)})`,
+          );
+        }
+      }
+    }
   }
 
   const unclassifiedPeople = (types.teachers ?? [])
