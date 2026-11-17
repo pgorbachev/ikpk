@@ -106,7 +106,7 @@ test('подписи и подсказки статьи синхронизиру
   assert.match(config.metadatas.seo?.edit?.description ?? '', /Можно не заполнять/i);
   assert.match(config.metadatas.seo?.edit?.description ?? '', /заголовок из названия статьи/i);
   assert.match(config.metadatas.seo?.edit?.description ?? '', /описание — из её текста после очистки/i);
-  assert.match(config.metadatas.seo?.edit?.description ?? '', /обновление сайта не состоится/i);
+  assert.match(config.metadatas.seo?.edit?.description ?? '', /если SEO-описание не заполнено и после очистки текста не останется, обновление сайта не состоится/i);
   assert.match(config.metadatas.seo?.edit?.description ?? '', /CMS останется опубликованной/i);
   assert.equal(config.metadatas.categories?.edit?.label, 'Категории');
   assert.equal(config.metadatas.title?.list?.label, 'Заголовок');
