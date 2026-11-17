@@ -1387,7 +1387,7 @@ describe('schedule duration fallback in the live CMS capture contract', () => {
       const run = await runCapture({ CMS_URL: cms.url, CONTENT_SNAPSHOT_DIR: dir });
 
       expect(run.status, run.output).toBe(0);
-      const snapshot = readSnapshot(dir) as Parameters<typeof validateSnapshotContract>[0];
+      const snapshot = readSnapshot(dir) as unknown as Parameters<typeof validateSnapshotContract>[0];
       const capturedSeminars = snapshot.content.types.seminars;
       const capturedEntries = snapshot.content.types.schedule_entries;
       expect(capturedSeminars.map((seminar) => seminar.duration)).toEqual(['16 часов', '36 часов', null]);
