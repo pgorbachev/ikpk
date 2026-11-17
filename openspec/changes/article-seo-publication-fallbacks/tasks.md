@@ -13,7 +13,7 @@
 - [x] 2.2 Implement lifecycle-compatible validation for nested SEO component values without resolving or writing generated defaults into CMS; make lifecycle tests green for both absent and partial overrides.
 - [x] 2.3 Implement snapshot normalization using the current Article title and text derived from the existing sanitized rendered body; preserve the nonempty normalized snapshot contract and make capture/contract tests green.
 - [x] 2.4 Make actual static Article output use the normalized independent values for `<title>`, description/OG text metadata, and JSON-LD; keep the empty-sanitized-body case from activating a new site publication, and return a clear failure identifying the Article while preserving the CMS state and prior active site state.
-- [ ] 2.5 Add URL/slug, existing explicit SEO value, robots/noindex, and OG image regression assertions; verify none changes. Existing coverage verifies URL lookup by slug and explicit SEO preservation; the red suite does not assert robots/noindex or OG image invariance, and implementation did not change those paths.
+- [x] 2.5 Add URL/slug, existing explicit SEO value, robots/noindex, and OG image regression assertions; verify none changes. Existing coverage verifies URL lookup by slug and explicit SEO preservation; added output assertions verify canonical URL, absence of robots directives, and unchanged generic OG image for fallback and explicit SEO cases.
 - [x] 2.6 Re-run the captured red suite and record green results for every test first shown failing.
 
 ## 3. Verify staged release and rollback readiness

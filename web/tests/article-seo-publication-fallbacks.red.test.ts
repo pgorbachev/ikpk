@@ -110,11 +110,17 @@ describe('built Article metadata uses normalized snapshot values', () => {
       expect(metadata(fallbackHtml, 'og:title')).toContain(String(fallbackArticle.title));
       expect(metadata(fallbackHtml, 'og:description')).toContain('Санитизированный текст &amp; сущности');
       expect(schema(fallbackHtml)).toMatchObject({ headline: fallbackArticle.title, description: fallbackDescription });
+      expect(schema(fallbackHtml).url).toBe(`https://ikpk.su/statyi/${fallbackArticle.slug}`);
+      expect(metadata(fallbackHtml, 'robots')).toBe('');
+      expect(metadata(fallbackHtml, 'og:image')).toBe('https://ikpk.su/og-image.png');
       expect(explicitHtml).toContain('<title>Сохранённый SEO title</title>');
       expect(metadata(explicitHtml, 'description')).toBe('Сохранённое редакторское описание');
       expect(metadata(explicitHtml, 'og:title')).toBe('Сохранённый SEO title');
       expect(metadata(explicitHtml, 'og:description')).toBe('Сохранённое редакторское описание');
       expect(schema(explicitHtml)).toMatchObject({ headline: 'Сохранённый SEO title', description: 'Сохранённое редакторское описание' });
+      expect(schema(explicitHtml).url).toBe(`https://ikpk.su/statyi/${explicitArticle.slug}`);
+      expect(metadata(explicitHtml, 'robots')).toBe('');
+      expect(metadata(explicitHtml, 'og:image')).toBe('https://ikpk.su/og-image.png');
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

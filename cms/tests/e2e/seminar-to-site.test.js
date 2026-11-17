@@ -93,13 +93,14 @@ const visible = (html) => {
   return main[0].replace(/<script[\s\S]*?<\/script>/g, ' ').replace(/<[^>]+>/g, ' ').replace(/&nbsp;|\s+/g, ' ');
 };
 
-describe('семинар из админки доходит до опубликованного сайта', { timeout: 40 * 60_000 }, () => {
+describe('семинар из админки доходит до опубликованного сайта', { timeout: 40 * 60_000, concurrency: false }, () => {
   /** @type {import('@strapi/strapi').Core.Strapi} */
   let app;
   let base;
   let site;
   let siteServer;
   let token;
+  let articleDocumentId;
   const dbFile = path.join(work, 'data.db');
 
   const admin = async (method, url, body) => {
@@ -141,7 +142,6 @@ describe('семинар из админки доходит до опублик�
       return state;
     }
   };
-
   const institute = { name: 'Институт Сквозной Проверки', slug: 'institut-skvoznoj-proverki' };
   const group = { name: 'Курсы сквозной проверки', slug: 'kursy-skvoznoj-proverki' };
   const teacherName = 'Проверкина Анна Петровна';
@@ -155,6 +155,8 @@ describe('семинар из админки доходит до опублик�
   // Своя группа: обложка группы — первая картинка её семинаров, и чужой семинар её бы занял.
   const uiGroup = { name: 'Курсы из браузера', slug: 'kursy-iz-brauzera' };
   let seminarDocumentId;
+  let articleImageId;
+  let articleCategoryDocumentId;
   const editor = { email: `e2e-${Date.now()}@example.invalid`, password: 'E2e-only-test-password-2026' };
   let uploadedName;
 
@@ -261,6 +263,7 @@ describe('семинар из админки доходит до опублик�
       is_article_category: true,
       institute: inst.documentId,
     });
+    articleCategoryDocumentId = program.documentId;
     await publish('api::course-group.course-group', {
       ...uiGroup,
       legacy_id: `${institute.slug}/${uiGroup.slug}`,
@@ -275,15 +278,17 @@ describe('семинар из админки доходит до опублик�
       trait: 'teacher',
       institute: inst.documentId,
     });
-    await publish('api::article.article', {
+    articleImageId = (await uploadImage('e2e-article.jpg', '#7a8f3c')).id;
+    const article = await publish('api::article.article', {
       title: 'Статья сквозной проверки',
       slug: 'statya-skvoznoj-proverki',
       body: '<p>Текст.</p>',
-      image: (await uploadImage('e2e-article.jpg', '#7a8f3c')).id,
+      image: articleImageId,
       published_date: '2026-01-01T00:00:00.000Z',
       categories: [program.documentId],
       seo: { seo_title: 'Статья сквозной проверки', seo_description: 'Описание статьи сквозной проверки.' },
     });
+    articleDocumentId = article.documentId;
   });
 
   after(async () => {
@@ -351,6 +356,40 @@ describe('семинар из админки доходит до опублик�
     const cover = institutePage.match(new RegExp(`["'(](/media/uploads/${uploadedName}[^"') ,]*)`));
     assert.ok(cover, 'картинка семинара не стала обложкой карточки группы');
     await page(cover[1]);
+  });
+
+  test('partial nested Article SEO update preserves the other persisted component field', async () => {
+    const uid = 'api::article.article';
+    const before = await app.documents(uid).findOne({
+      documentId: articleDocumentId,
+      status: 'published',
+      populate: { seo: true },
+    });
+    assert.equal(before.seo?.seo_title, 'Статья сквозной проверки');
+    assert.equal(before.seo?.seo_description, 'Описание статьи сквозной проверки.');
+
+    await app.documents(uid).update({
+      documentId: articleDocumentId,
+      data: { seo: { seo_title: 'Обновлённый SEO заголовок статьи' } },
+    });
+
+    const draft = await app.documents(uid).findOne({
+      documentId: articleDocumentId,
+      status: 'draft',
+      populate: { seo: true },
+    });
+    assert.equal(draft.seo?.seo_title, 'Обновлённый SEO заголовок статьи');
+    assert.equal(draft.seo?.seo_description, 'Описание статьи сквозной проверки.',
+      'Strapi component merge must retain the omitted SEO description');
+
+    await app.documents(uid).publish({ documentId: articleDocumentId });
+    const published = await app.documents(uid).findOne({
+      documentId: articleDocumentId,
+      status: 'published',
+      populate: { seo: true },
+    });
+    assert.equal(published.seo?.seo_title, draft.seo?.seo_title);
+    assert.equal(published.seo?.seo_description, draft.seo?.seo_description);
   });
 
   test('правка семинара после публикации и кнопки видна на сайте', async () => {
@@ -534,4 +573,5 @@ describe('семинар из админки доходит до опублик�
       await browser.close();
     }
   });
+
 });
