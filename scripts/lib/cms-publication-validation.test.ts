@@ -179,8 +179,8 @@ describe('cms-content-authoring: обязательная категория с�
 });
 
 describe('cms-content-authoring: обязательные поля публикации', () => {
-  // Scenario: публикация без описания страницы отклонена
-  it('статья с пустым описанием страницы не публикуется', async () => {
+  // Article SEO may be empty: the site derives safe metadata from visible content.
+  it('статья с пустыми SEO-полями допускается к публикации', async () => {
     const { checkPublication } = await loadContentValidation();
     const verdict = checkPublication({
       type: 'article',
@@ -195,8 +195,9 @@ describe('cms-content-authoring: обязательные поля публик�
         categories: ['dolgoletie'],
       },
     });
-    expect(verdict.ok).toBe(false);
-    expect(verdict.missing).toContain('seo_description');
+    expect(verdict.ok, verdict.message).toBe(true);
+    expect(verdict.missing).not.toContain('seo_title');
+    expect(verdict.missing).not.toContain('seo_description');
   });
 
   // Scenario: публикация семинара без заголовка и описания страницы принимается
@@ -238,7 +239,7 @@ describe('cms-content-authoring: обязательные поля публик�
   // Состав обязательных полей задан по типам, а не одним общим списком: без этого
   // «отказ обещан для любой записи» нечем проверить.
   it.each([
-    ['article', ['title', 'identifier', 'body', 'seo_title', 'seo_description', 'image', 'published_at', 'categories']],
+    ['article', ['title', 'identifier', 'body', 'image', 'published_at', 'categories']],
     ['seminar', ['name', 'identifier', 'course_group', 'description', 'documentsState']],
     ['course-group', ['name', 'identifier', 'institute', 'description', 'seo_title', 'seo_description']],
     ['institute', ['name', 'identifier', 'description', 'seo_title', 'seo_description', 'order']],
@@ -257,6 +258,15 @@ describe('cms-content-authoring: обязательные поля публик�
     const { requiredFields } = await loadContentValidation();
     const actual = requiredFields(type);
     for (const field of ['title', 'date', 'body']) expect(actual, `${type}: нет ${field}`).toContain(field);
+  });
+
+  it('SEO-поля остаются обязательными там, где fallback не определён', async () => {
+    const { requiredFields } = await loadContentValidation();
+    for (const type of ['course-group', 'institute', 'static-page']) {
+      const actual = requiredFields(type);
+      expect(actual, `${type}: SEO title больше не обязателен`).toContain('seo_title');
+      expect(actual, `${type}: SEO description больше не обязательна`).toContain('seo_description');
+    }
   });
 });
 
