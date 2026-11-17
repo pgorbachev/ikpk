@@ -1,4 +1,6 @@
 import { resolveSeminar } from '../src/lib/seminar-identity.ts';
+import { parseFragment } from 'parse5';
+import { cleanBodyHtml as sanitizeBodyHtml } from '../src/lib/html-cleaner.ts';
 /**
  * Снятие снимка контента. Живой путь читает CMS по REST, когда `CMS_URL`/`STRAPI_URL` задан;
  * без адреса — закреплённая фикстура. Неудача живого захвата при заданном адресе — ОТКАЗ, а
@@ -340,7 +342,37 @@ function mapRecord(type: string, record: Record<string, unknown>): Record<string
   for (const entry of FIELD_MAP) {
     if (entry.type === type) applyEntry(record, entry, out);
   }
+  if (type === 'articles') normalizeArticleSeo(record, out);
   return out;
+}
+
+interface TextNode { nodeName: string; value?: string; childNodes?: TextNode[] }
+
+function sanitizedArticleText(body: string, id: string): string {
+  const rendered = sanitizeBodyHtml(body, { sourceType: 'article', sourceId: id }).html;
+  const tree = parseFragment(rendered) as unknown as TextNode;
+  const collect = (node: TextNode): string =>
+    (node.nodeName === '#text' ? node.value ?? '' : '') + (node.childNodes ?? []).map(collect).join(' ');
+  return collect(tree).replace(/\s+/g, ' ').trim();
+}
+
+function normalizeArticleSeo(source: Record<string, unknown>, article: Record<string, unknown>): void {
+  const usable = (value: unknown): value is string => typeof value === 'string' && value.trim().length > 0;
+  if (!usable(article.seo_title)) {
+    const title = article.title;
+    if (usable(title)) article.seo_title = title;
+  }
+  if (!usable(article.seo_description)) {
+    const body = typeof source.body === 'string' ? source.body : '';
+    const excerpt = sanitizedArticleText(body, String(article.slug ?? recordKey(source))).slice(0, 200);
+    if (excerpt) article.seo_description = excerpt;
+    else {
+      throw new Error(
+        `Article ${String(article.slug ?? recordKey(source))}: SEO description fallback недоступен — ` +
+        'после существующего sanitizer в теле нет текста; снимок не записан',
+      );
+    }
+  }
 }
 
 interface StrapiPage {
