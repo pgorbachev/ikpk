@@ -16,13 +16,13 @@
  *  9. Clean up orphaned closing tags and excess whitespace
  */
 
-import { injectImgDimensions } from './media.js';
-import { registrationHref, isDemoForms } from './forms.js';
+import { injectImgDimensions } from './media.ts';
+import { registrationHref, isDemoForms } from './forms.ts';
 import {
   sanitizeUntrustedTree,
   terminalSanitize,
   type SanitizeContext,
-} from './rich-html-sanitize.js';
+} from './rich-html-sanitize.ts';
 
 export { terminalSanitize };
 

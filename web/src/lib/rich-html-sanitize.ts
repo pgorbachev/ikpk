@@ -12,7 +12,7 @@ import { fileURLToPath } from 'node:url';
 import { parseFragment, serialize, defaultTreeAdapter as T } from 'parse5';
 import { html as parse5Html } from 'parse5';
 import type { DefaultTreeAdapterMap } from 'parse5';
-import manifestJson from './media-manifest.json';
+import manifestJson from './media-manifest.json' with { type: 'json' };
 import {
   ORACLE_BASE,
   forbiddenUrl,
@@ -20,7 +20,7 @@ import {
   parseBrowserUrl,
   rawCanonical,
   specialUrl,
-} from './safe-href.js';
+} from './safe-href.ts';
 
 type Element = DefaultTreeAdapterMap['element'];
 type ChildNode = DefaultTreeAdapterMap['childNode'];

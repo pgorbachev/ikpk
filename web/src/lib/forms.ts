@@ -1,4 +1,4 @@
-import { safeHref } from './safe-href.js';
+import { safeHref } from './safe-href.ts';
 
 // Ссылки на формы заявки (CRM-формы облачного Bitrix24 заказчика).
 //

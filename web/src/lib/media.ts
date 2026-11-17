@@ -5,7 +5,7 @@
  * Производные и манифест размеров создаёт web/scripts/make-derivatives.ts;
  * манифест задаёт width/height у <img> (защита от CLS).
  */
-import manifest from './media-manifest.json';
+import manifest from './media-manifest.json' with { type: 'json' };
 
 // Продублирован в scripts/download-media.ts (разные npm-пакеты) —
 // при изменении бакета править ОБА места.
