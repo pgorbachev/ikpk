@@ -12,16 +12,29 @@ const RUNNER_TABLES = new Set(['ikpk_migration_lineage', 'ikpk_migration_operati
 const PERMISSION_CHANGE_TABLES = new Set(['admin_permissions', 'admin_permissions_role_lnk']);
 const PERMISSION_TIMESTAMP_COLUMNS = ['created_at', 'updated_at', 'published_at'];
 const CORE_STORE_TABLE = 'strapi_core_store_settings';
+const ARTICLE_CONFIG_KEY = 'plugin_content_manager_configuration_content_types::api::article.article';
 const CORE_STORE_KEYS = new Set([
   'plugin_content_manager_configuration_content_types::api::promotion.promotion',
   'plugin_content_manager_configuration_content_types::api::schedule-entry.schedule-entry',
   'plugin_content_manager_configuration_content_types::api::seminar.seminar',
+  ARTICLE_CONFIG_KEY,
   'plugin_upload_metrics',
   'strapi_content_types_schema',
 ]);
 const SEMINAR_CONFIG_KEY = 'plugin_content_manager_configuration_content_types::api::seminar.seminar';
 // Та же фраза, что `forms.ts` записывает в конфигурацию редактора при старте.
 const SEMINAR_SEO_DESCRIPTION = 'Можно не заполнять: сайт сам соберёт заголовок и описание из названия семинара, программы и института.';
+// Точный набор подписей и описаний из applyArticleFieldLabels в forms.ts.
+const ARTICLE_FIELD_LABELS = [
+  ['title', 'Заголовок', 'Заголовок статьи.'],
+  ['slug', 'Адрес страницы', 'Часть адреса статьи после /statyi/.'],
+  ['body', 'Текст статьи', 'Основной текст статьи на странице.'],
+  ['image', 'Изображение', 'Показывается в шапке статьи и карточках каталога.'],
+  ['published_date', 'Дата публикации', 'Показывается на странице статьи и задаёт порядок в каталоге: сначала новые.'],
+  ['legacy_id', 'Старый идентификатор', ''],
+  ['seo', 'SEO', 'Для публикации обязательны заголовок и описание страницы. Если они пусты, шаблон сайта подставит заголовок статьи и начало текста, но CMS публикацию не разрешит.'],
+  ['categories', 'Категории', ''],
+];
 const UPLOAD_METRICS_KEY = 'plugin_upload_metrics';
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 const KNOWN_RENAMES = new Map([
@@ -505,6 +518,22 @@ function expectedCoreStoreValue(key, sourceValue) {
   let expected;
   try { expected = JSON.parse(sourceValue); } catch { return null; }
   if (!expected || typeof expected !== 'object' || Array.isArray(expected)) return null;
+  if (key === ARTICLE_CONFIG_KEY) {
+    if (!expected.metadatas || typeof expected.metadatas !== 'object' || Array.isArray(expected.metadatas)) return null;
+    const metadatas = { ...expected.metadatas };
+    for (const [name, label, description] of ARTICLE_FIELD_LABELS) {
+      const existing = metadatas[name] ?? { edit: {}, list: {} };
+      if (!existing || typeof existing !== 'object' || Array.isArray(existing)) return null;
+      if ((existing.edit != null && (typeof existing.edit !== 'object' || Array.isArray(existing.edit)))
+        || (existing.list != null && (typeof existing.list !== 'object' || Array.isArray(existing.list)))) return null;
+      metadatas[name] = {
+        ...existing,
+        edit: { ...existing.edit, label, ...(description ? { description } : {}) },
+        list: { ...existing.list, label },
+      };
+    }
+    return { ...expected, metadatas };
+  }
   if (key === 'plugin_content_manager_configuration_content_types::api::promotion.promotion') {
     if (!Array.isArray(expected.layouts?.edit) || !expected.metadatas || typeof expected.metadatas !== 'object'
       || Object.hasOwn(expected.metadatas, 'type')) return null;

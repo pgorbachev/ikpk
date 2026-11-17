@@ -63,7 +63,7 @@ function createScheduleEntryCoreStore(path, value) {
   db.close();
 }
 
-function addEmptyMigrationLineage(path) {
+function addEmptyMigrationLineage(path, operationId = 'teachers-layout-test') {
   const lineageId = 'a'.repeat(64);
   const sourceSnapshotSha256 = 'b'.repeat(64);
   const sourceSchemaSha256 = 'c'.repeat(64);
@@ -75,9 +75,9 @@ function addEmptyMigrationLineage(path) {
   `);
   db.prepare('INSERT INTO ikpk_migration_lineage VALUES (1, ?, ?, ?, ?)').run(lineageId, sourceSnapshotSha256, sourceSchemaSha256, 1);
   db.prepare('INSERT INTO ikpk_migration_operations VALUES (?, ?, ?, ?, ?)')
-    .run('teachers-layout-test', lineageId, sourceSnapshotSha256, sourceSchemaSha256, 1);
+    .run(operationId, lineageId, sourceSnapshotSha256, sourceSchemaSha256, 1);
   db.close();
-  return { lineageId, sourceSnapshotSha256, sourceSchemaSha256 };
+  return { lineageId, sourceSnapshotSha256, sourceSchemaSha256, operationId };
 }
 
 function scheduleEntryEditorConfiguration() {
@@ -496,12 +496,136 @@ test('permission graph rejects unapproved fields, changed conditions, role reass
 const PROMOTION_CONFIG_KEY = 'plugin_content_manager_configuration_content_types::api::promotion.promotion';
 const SCHEDULE_CONFIG_KEY = 'plugin_content_manager_configuration_content_types::api::schedule-entry.schedule-entry';
 const SEMINAR_CONFIG_KEY = 'plugin_content_manager_configuration_content_types::api::seminar.seminar';
+const ARTICLE_CONFIG_KEY = 'plugin_content_manager_configuration_content_types::api::article.article';
+const ARTICLE_FIELD_LABELS = [
+  ['title', 'Заголовок', 'Заголовок статьи.'],
+  ['slug', 'Адрес страницы', 'Часть адреса статьи после /statyi/.'],
+  ['body', 'Текст статьи', 'Основной текст статьи на странице.'],
+  ['image', 'Изображение', 'Показывается в шапке статьи и карточках каталога.'],
+  ['published_date', 'Дата публикации', 'Показывается на странице статьи и задаёт порядок в каталоге: сначала новые.'],
+  ['legacy_id', 'Старый идентификатор', ''],
+  ['seo', 'SEO', 'Для публикации обязательны заголовок и описание страницы. Если они пусты, шаблон сайта подставит заголовок статьи и начало текста, но CMS публикацию не разрешит.'],
+  ['categories', 'Категории', ''],
+];
 const SEMINAR_SEO_DESCRIPTION = 'Можно не заполнять: сайт сам соберёт заголовок и описание из названия семинара, программы и института.';
 const CONTENT_SCHEMA_KEY = 'strapi_content_types_schema';
 const UPLOAD_METRICS_KEY = 'plugin_upload_metrics';
 const METRICS_LOAD_START = 1792101825410;
 const METRICS_LOAD_COMPLETE = 1792101926810;
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+
+function articleEditorConfiguration() {
+  const metadatas = Object.fromEntries(ARTICLE_FIELD_LABELS.map(([name]) => [name, {
+    edit: { label: `old-${name}`, description: `Сохранённое описание ${name}.`, placeholder: `placeholder-${name}`, visible: false, editable: false },
+    list: { label: `old-${name}`, searchable: false, sortable: true },
+  }]));
+  metadatas.customField = {
+    edit: { label: 'Пользовательское поле', description: 'Оставить как есть.', visible: false, editable: false },
+    list: { label: 'Пользовательское поле', searchable: false, sortable: false },
+  };
+  return {
+    settings: { defaultSortBy: 'published_date', defaultSortOrder: 'DESC', retainedSetting: 'keep-me' },
+    layouts: { edit: [[{ name: 'title', size: 12 }], [{ name: 'body', size: 12 }]], list: ['title', 'published_date'] },
+    metadatas,
+    unrelated: { keep: true },
+  };
+}
+
+function articleLabelsSynced(source) {
+  const candidate = structuredClone(source);
+  for (const [name, label, description] of ARTICLE_FIELD_LABELS) {
+    const existing = candidate.metadatas[name] ?? { edit: {}, list: {} };
+    candidate.metadatas[name] = {
+      ...existing,
+      edit: { ...existing.edit, label, ...(description ? { description } : {}) },
+      list: { ...existing.list, label },
+    };
+  }
+  return candidate;
+}
+
+function createArticleCoreStore(path, value, extraRows = []) {
+  const db = new Database(path);
+  db.exec('CREATE TABLE strapi_core_store_settings (id INTEGER PRIMARY KEY, key TEXT NOT NULL, value TEXT, type TEXT, environment TEXT, tag TEXT)');
+  const insert = db.prepare('INSERT INTO strapi_core_store_settings VALUES (?, ?, ?, ?, ?, ?)');
+  insert.run(1, ARTICLE_CONFIG_KEY, typeof value === 'string' ? value : JSON.stringify(value), 'object', null, null);
+  extraRows.forEach(([key, rowValue], index) => insert.run(index + 2, key, rowValue, 'object', null, null));
+  db.close();
+}
+
+function articleFormReceipt(sourceDbPath, candidateDbPath, plan) {
+  const lineage = addEmptyMigrationLineage(candidateDbPath, 'article-form-test');
+  const receipt = boundReceipt(sourceDbPath, candidateDbPath, plan);
+  Object.assign(receipt, { operationId: lineage.operationId });
+  Object.assign(receipt.source, { snapshotSha256: lineage.sourceSnapshotSha256, schemaFingerprint: lineage.sourceSchemaSha256 });
+  return receipt;
+}
+
+test('preservation audit accepts only the exact article editor label and description synchronization', () => {
+  const sourceDbPath = join(directory, 'article-form-source.db');
+  const candidateDbPath = join(directory, 'article-form-candidate.db');
+  const source = articleEditorConfiguration();
+  createArticleCoreStore(sourceDbPath, source);
+  createArticleCoreStore(candidateDbPath, articleLabelsSynced(source));
+  const plan = emptyBoundPlan();
+
+  const report = auditMigration({ sourceDbPath, candidateDbPath, plan, receipt: articleFormReceipt(sourceDbPath, candidateDbPath, plan) });
+
+  assert.equal(report.passed, true, JSON.stringify(report.differences));
+});
+
+test('article label synchronization creates missing edit and list metadata while preserving existing descriptions', () => {
+  const sourceDbPath = join(directory, 'article-form-partial-source.db');
+  const candidateDbPath = join(directory, 'article-form-partial-candidate.db');
+  const source = articleEditorConfiguration();
+  delete source.metadatas.legacy_id;
+  delete source.metadatas.categories.list;
+  createArticleCoreStore(sourceDbPath, source);
+  createArticleCoreStore(candidateDbPath, articleLabelsSynced(source));
+  const plan = emptyBoundPlan();
+
+  const report = auditMigration({ sourceDbPath, candidateDbPath, plan, receipt: articleFormReceipt(sourceDbPath, candidateDbPath, plan) });
+
+  assert.equal(report.passed, true, JSON.stringify(report.differences));
+});
+
+test('article label synchronization rejects layout, settings, visibility, editability, unrelated metadata, other keys, and malformed JSON changes', () => {
+  const mutateArticle = (mutate) => (values) => {
+    const value = articleLabelsSynced(JSON.parse(values.get(ARTICLE_CONFIG_KEY)));
+    mutate(value);
+    values.set(ARTICLE_CONFIG_KEY, JSON.stringify(value));
+  };
+  const mutations = [
+    ['settings', mutateArticle((value) => { value.settings.defaultSortBy = 'title'; })],
+    ['layouts', mutateArticle((value) => { value.layouts.edit[0][0].size = 6; })],
+    ['visible', mutateArticle((value) => { value.metadatas.title.edit.visible = true; })],
+    ['editable', mutateArticle((value) => { value.metadatas.title.edit.editable = true; })],
+    ['unrelated-label', mutateArticle((value) => { value.metadatas.body.edit.label = 'Другое поле'; })],
+    ['empty-approved-description-changed', mutateArticle((value) => { value.metadatas.legacy_id.edit.description = 'Изменённое сохранённое описание.'; })],
+    ['existing-placeholder-changed', mutateArticle((value) => { value.metadatas.title.edit.placeholder = 'Не согласовано'; })],
+    ['unrelated-property-changed', mutateArticle((value) => { value.metadatas.title.edit.customProperty = 'Не согласовано'; })],
+    ['custom-field-label', mutateArticle((value) => { value.metadatas.customField.edit.label = 'Не согласовано'; })],
+    ['missing-edit-metadata', mutateArticle((value) => { delete value.metadatas.title.edit; })],
+    ['missing-list-metadata', mutateArticle((value) => { delete value.metadatas.title.list; })],
+    ['other-key', (values) => values.set('unrelated-key', JSON.stringify({ preserved: false }))],
+    ['malformed-json', (values) => values.set(ARTICLE_CONFIG_KEY, '{not-json')],
+  ];
+  for (const [name, mutate] of mutations) {
+    const sourceDbPath = join(directory, `article-form-negative-${name}-source.db`);
+    const candidateDbPath = join(directory, `article-form-negative-${name}-candidate.db`);
+    const source = articleEditorConfiguration();
+    const candidate = new Map([[ARTICLE_CONFIG_KEY, JSON.stringify(articleLabelsSynced(source))], ['unrelated-key', JSON.stringify({ preserved: true })]]);
+    mutate(candidate);
+    createArticleCoreStore(sourceDbPath, source, [['unrelated-key', JSON.stringify({ preserved: true })]]);
+    createArticleCoreStore(candidateDbPath, candidate.get(ARTICLE_CONFIG_KEY), [['unrelated-key', candidate.get('unrelated-key')]]);
+    const plan = emptyBoundPlan();
+    const report = auditMigration({ sourceDbPath, candidateDbPath, plan, receipt: articleFormReceipt(sourceDbPath, candidateDbPath, plan) });
+    assert.equal(report.passed, false, `${name} must block preservation acceptance`);
+    assert.ok(report.differences.some(({ table, kind }) => table === 'strapi_core_store_settings' && kind.startsWith('core-store-')),
+      `${name} must be reported as a core-store preservation difference`);
+  }
+});
+
 function weeklyCronAt(value) {
   const date = new Date(value);
   return `${date.getUTCSeconds()} ${date.getUTCMinutes()} ${date.getUTCHours()} * * ${date.getUTCDay()}`;
