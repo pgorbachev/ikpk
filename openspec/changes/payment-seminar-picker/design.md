@@ -11,7 +11,7 @@
 
 В текущем дереве `getScheduleEntries` загружает тип расписания из снимка
 (`web/src/lib/data.ts:130`, `const records = loadSnapshot().content.types[type];`), нормализует
-записи и добавляет имена преподавателей (`web/src/lib/data.ts:438`, `if (!_schedule) _schedule = loadJson<ScheduleEntry[]>('schedule_entries.json').map(normalizeScheduleEntry).map(withSeminarDefaults).map(withSeminarTeachers);`).
+записи и добавляет имена преподавателей (`web/src/lib/data.ts:459`, `if (!_schedule) _schedule = loadJson<ScheduleEntry[]>('schedule_entries.json').map(normalizeScheduleEntry).map(withSeminarDefaults).map(withSeminarTeachers);`).
 Страница расписания получает этот набор и фильтрует его по состоянию и актуальности
 (`web/src/pages/raspisanie-i-tseny.astro:73`, `.filter((entry) => entry.status === 'active' && isBeforeStart(entry, todayDate))`).
 Текущая реализация не объединяет основной список с отдельным списком дополнений. Исторический
