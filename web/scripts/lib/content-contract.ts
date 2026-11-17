@@ -5,7 +5,6 @@ import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { trustForHistoricalSnapshot } from './historical-exceptions.ts';
-import { articleSeoDescriptionFallback } from './article-seo-fallback.ts';
 
 /** Группа обязательных полей: достаточно любого имени из группы (design.md, change
  *  `cms-live-snapshot-capture`). Перечислена явно, а не выведена из кода ниже: полнота
@@ -314,7 +313,11 @@ export function assertProductionStaticCaptureContract(snapshot: Snapshot, trust?
  * The ordinary snapshot/publication contract remains strict; callers must provide the
  * source SQL digest, while this helper pins both that digest and the allowlist bytes.
  */
-export function assertPrototypeDemo193SnapshotContract(snapshot: Snapshot, sourceSqlSha256: string): void {
+export function assertPrototypeDemo193SnapshotContract(
+  snapshot: Snapshot,
+  sourceSqlSha256: string,
+  descriptionFallback?: (body: string, id: string) => string,
+): void {
   const expectedSqlSha256 = 'b7b056d6a226b9caed224c737dad18dc366d47a0ec397e0ef0f1c66f61762be2';
   const expectedAllowlistSha256 = 'b6a46a6138157cb77be55ecfbe8b05e962e827be6fc807fc8a34ded92e3916f5';
   if (sourceSqlSha256 !== expectedSqlSha256) throw new Error('demo193 SQL source pin mismatch');
@@ -379,7 +382,8 @@ export function assertPrototypeDemo193SnapshotContract(snapshot: Snapshot, sourc
       }
       if (sourceField === 'seo_description' &&
           (typeof value !== 'string' || !value.trim() ||
-           value !== articleSeoDescriptionFallback(String(record.body_html ?? record.body ?? ''), entry.slug))) {
+           !descriptionFallback ||
+           value !== descriptionFallback(String(record.body_html ?? record.body ?? ''), entry.slug))) {
         throw new Error(`demo193 SEO description fallback mismatch for ${entry.slug}`);
       }
     }

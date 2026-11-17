@@ -179,7 +179,11 @@ export interface ContractModule {
    */
   assertSnapshotContract(snapshot: Snapshot): void;
   /** Explicitly pinned demo193-only acceptance; never used by ordinary publication gates. */
-  assertPrototypeDemo193SnapshotContract(snapshot: Snapshot, sourceSqlSha256: string): void;
+  assertPrototypeDemo193SnapshotContract(
+    snapshot: Snapshot,
+    sourceSqlSha256: string,
+    descriptionFallback?: (body: string, id: string) => string,
+  ): void;
 }
 
 // ------------------------------------------------------- журнал происхождения

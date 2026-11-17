@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { assertCaptureSnapshotContract } from '../scripts/lib/capture-snapshot-contract.ts';
+import { articleSeoDescriptionFallback } from '../scripts/lib/article-seo-fallback.ts';
 import {
   MODULES,
   loadModule,
@@ -377,6 +378,11 @@ describe('целостность источника каталога', () => {
     expect(() => mod.assertPrototypeDemo193SnapshotContract(
       normalized,
       'b7b056d6a226b9caed224c737dad18dc366d47a0ec397e0ef0f1c66f61762be2',
+    )).toThrow(/SEO description fallback mismatch/);
+    expect(() => mod.assertPrototypeDemo193SnapshotContract(
+      normalized,
+      'b7b056d6a226b9caed224c737dad18dc366d47a0ec397e0ef0f1c66f61762be2',
+      articleSeoDescriptionFallback,
     )).not.toThrow();
   });
 
@@ -424,17 +430,17 @@ describe('целостность источника каталога', () => {
     const sqlPin = 'b7b056d6a226b9caed224c737dad18dc366d47a0ec397e0ef0f1c66f61762be2';
     const mixedAliases = demo193NormalizedSeoSnapshot();
     mixedAliases.content.types.articles![0]!.page_title = null;
-    expect(() => mod.assertPrototypeDemo193SnapshotContract(mixedAliases, sqlPin)).toThrow(/conflicting SEO aliases/);
+    expect(() => mod.assertPrototypeDemo193SnapshotContract(mixedAliases, sqlPin, articleSeoDescriptionFallback)).toThrow(/conflicting SEO aliases/);
 
     const changedTitle = demo193NormalizedSeoSnapshot();
     changedTitle.content.types.articles![0]!.seo_title = 'Not the title fallback';
-    expect(() => mod.assertPrototypeDemo193SnapshotContract(changedTitle, sqlPin)).toThrow(/SEO title fallback mismatch/);
+    expect(() => mod.assertPrototypeDemo193SnapshotContract(changedTitle, sqlPin, articleSeoDescriptionFallback)).toThrow(/SEO title fallback mismatch/);
 
     const forgedDescription = demo193NormalizedSeoSnapshot();
     const forgedValue = 'Evil';
     expect(forgedValue).toHaveLength(String(forgedDescription.content.types.articles![0]!.seo_description).length);
     forgedDescription.content.types.articles![0]!.seo_description = forgedValue;
-    expect(() => mod.assertPrototypeDemo193SnapshotContract(forgedDescription, sqlPin)).toThrow(/SEO description fallback mismatch/);
+    expect(() => mod.assertPrototypeDemo193SnapshotContract(forgedDescription, sqlPin, articleSeoDescriptionFallback)).toThrow(/SEO description fallback mismatch/);
 
     const extraHole = demo193NormalizedSeoSnapshot();
     extraHole.content.types.articles!.push({
@@ -446,7 +452,7 @@ describe('целостность источника каталога', () => {
       page_description: null,
       image: '/media/outside.jpg',
     });
-    expect(() => mod.assertPrototypeDemo193SnapshotContract(extraHole, sqlPin)).toThrow(/unexpected 2/);
+    expect(() => mod.assertPrototypeDemo193SnapshotContract(extraHole, sqlPin, articleSeoDescriptionFallback)).toThrow(/unexpected 2/);
   });
 
   // Сценарий: нарушение контракта останавливает сборку
