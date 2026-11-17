@@ -2,6 +2,8 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { runNewPublication } from '../scripts/lib/publication-runner.ts';
+import { validateSnapshotContract } from '../scripts/lib/content-contract.ts';
+import { cleanBodyHtml } from '../src/lib/data';
 import { runnerFixture, OTHER_SHA, SHA } from './helpers/publication-runner-fixture.ts';
 
 const fixtures: ReturnType<typeof runnerFixture>[] = [];
@@ -68,6 +70,45 @@ describe('new publication authorizes full evidence before connecting', () => {
   it('local capture or checks failure cannot create a transport or publication record', async () => {
     const f = fixture(); f.ports.runChecks = async () => { throw new Error('snapshot group failed'); };
     await rejectsBeforeConnection(f);
+  });
+
+  it('an Article with no sanitized description fallback leaves the prior active release in place', async () => {
+    const f = fixture();
+    const slug = 'article-without-safe-description';
+    const body = '<script>discard()</script><style>.discard{display:none}</style>';
+    expect(cleanBodyHtml(body, { type: 'article', id: slug }).html).toBe('');
+    const invalidSnapshot = {
+      ...f.state.snapshot,
+      content: {
+        types: {
+          articles: [{
+            slug,
+            title: 'Статья без текста',
+            body_html: body,
+            image: '/media/article.jpg',
+            seo_title: 'Статья без текста',
+          }],
+        },
+        media: [],
+      },
+    };
+    const validation = validateSnapshotContract(invalidSnapshot);
+    expect(validation.ok).toBe(false);
+    expect(validation.violations).toEqual(expect.arrayContaining([
+      expect.objectContaining({ type: 'articles', recordId: slug, field: 'page_description', rule: 'required-field-empty' }),
+    ]));
+    f.ports.runChecks = async () => {
+      const result = validateSnapshotContract(invalidSnapshot);
+      if (!result.ok) {
+        const issue = result.violations.find((violation) => violation.type === 'articles' && violation.recordId === slug);
+        throw new Error(`Article ${slug}: ${issue?.field} ${issue?.rule}`);
+      }
+      throw new Error('expected the invalid Article snapshot to fail validation');
+    };
+    await expect(runNewPublication(f.input, f.ports)).rejects.toThrow(
+      `Article ${slug}: page_description required-field-empty`,
+    );
+    unconnected(f);
   });
 
   it('requires live capture derived identity actual content fingerprint and complete provenance', async () => {

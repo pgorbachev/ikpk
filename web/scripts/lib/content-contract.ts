@@ -307,12 +307,17 @@ export function assertProductionStaticCaptureContract(snapshot: Snapshot, trust?
 }
 
 /**
- * Prototype-only acceptance for the exact article SEO holes approved for demo193.
- * The ordinary snapshot/publication contract remains strict; callers must provide
- * the source SQL digest, while this helper pins both that digest and the allowlist
- * bytes. Empty CMS values are preserved in the snapshot, never filled here.
+ * Prototype-only validation for the exact article SEO source holes approved for demo193.
+ * Accepts both the historical unnormalized snapshot (the exact allowlisted holes remain
+ * visible) and the current capture output (those holes are filled by the normalizer).
+ * The ordinary snapshot/publication contract remains strict; callers must provide the
+ * source SQL digest, while this helper pins both that digest and the allowlist bytes.
  */
-export function assertPrototypeDemo193SnapshotContract(snapshot: Snapshot, sourceSqlSha256: string): void {
+export function assertPrototypeDemo193SnapshotContract(
+  snapshot: Snapshot,
+  sourceSqlSha256: string,
+  descriptionFallback?: (body: string, id: string) => string,
+): void {
   const expectedSqlSha256 = 'b7b056d6a226b9caed224c737dad18dc366d47a0ec397e0ef0f1c66f61762be2';
   const expectedAllowlistSha256 = 'b6a46a6138157cb77be55ecfbe8b05e962e827be6fc807fc8a34ded92e3916f5';
   if (sourceSqlSha256 !== expectedSqlSha256) throw new Error('demo193 SQL source pin mismatch');
@@ -337,6 +342,11 @@ export function assertPrototypeDemo193SnapshotContract(snapshot: Snapshot, sourc
     seo_description: 'page_description',
   };
   const expected = new Set<string>();
+  const expectedEmpty = new Set<string>();
+  const outputFields: Record<string, [string, string]> = {
+    seo_title: ['page_title', 'seo_title'],
+    seo_description: ['page_description', 'seo_description'],
+  };
   for (const entry of articleEntries) {
     if (typeof entry.legacyId !== 'string' || typeof entry.slug !== 'string' || !Array.isArray(entry.fields)) {
       throw new Error('demo193 article SEO allowlist entry is malformed');
@@ -350,8 +360,32 @@ export function assertPrototypeDemo193SnapshotContract(snapshot: Snapshot, sourc
       const record = (snapshot.content.types.articles ?? []).find(
         (article) => article.legacy_id === entry.legacyId && article.slug === entry.slug,
       );
-      if (!record || !isEmpty(record[field])) throw new Error(`demo193 approved empty SEO source changed for ${entry.slug}.${field}`);
-      expected.add(`articles|${entry.slug}|${field}|required-field-empty`);
+      if (!record) throw new Error(`demo193 approved Article identity missing for ${entry.slug}`);
+      const [legacyOutputField, normalizedOutputField] = outputFields[sourceField]!;
+      const hasLegacyField = Object.prototype.hasOwnProperty.call(record, legacyOutputField);
+      const hasNormalizedField = Object.prototype.hasOwnProperty.call(record, normalizedOutputField);
+      if (hasLegacyField && hasNormalizedField && record[legacyOutputField] !== record[normalizedOutputField]) {
+        throw new Error(`demo193 conflicting SEO aliases for ${entry.slug}.${sourceField}`);
+      }
+      // Match validateSnapshotContract.firstPresent exactly: it prefers the legacy alias and
+      // reports that field when neither alias is present.
+      const outputField = hasLegacyField || !hasNormalizedField ? legacyOutputField : normalizedOutputField;
+      const value = record[outputField];
+      const key = `articles|${entry.slug}|${outputField}|required-field-empty`;
+      expected.add(key);
+      if (isEmpty(value)) {
+        expectedEmpty.add(key);
+        continue;
+      }
+      if (sourceField === 'seo_title' && value !== record.title) {
+        throw new Error(`demo193 SEO title fallback mismatch for ${entry.slug}`);
+      }
+      if (sourceField === 'seo_description' &&
+          (typeof value !== 'string' || !value.trim() ||
+           !descriptionFallback ||
+           value !== descriptionFallback(String(record.body_html ?? record.body ?? ''), entry.slug))) {
+        throw new Error(`demo193 SEO description fallback mismatch for ${entry.slug}`);
+      }
     }
   }
   if (expected.size !== 132) throw new Error('demo193 article SEO allowlist tuple count mismatch');
@@ -360,16 +394,16 @@ export function assertPrototypeDemo193SnapshotContract(snapshot: Snapshot, sourc
   const observedAllowed = new Set<string>();
   const unexpected = violations.filter((violation) => {
     const key = `${violation.type}|${violation.recordId}|${violation.field ?? ''}|${violation.rule}`;
-    if (expected.has(key) && !observedAllowed.has(key)) {
+    if (expectedEmpty.has(key) && !observedAllowed.has(key)) {
       observedAllowed.add(key);
       return false;
     }
     return true;
   });
-  if (unexpected.length > 0 || observedAllowed.size !== expected.size) {
-    const missing = [...expected].filter((key) => !observedAllowed.has(key));
+  if (unexpected.length > 0 || observedAllowed.size !== expectedEmpty.size) {
+    const missing = [...expectedEmpty].filter((key) => !observedAllowed.has(key));
     throw new Error(
-      `demo193 snapshot contract mismatch: unexpected ${unexpected.length}, approved holes ${observedAllowed.size}/${expected.size}` +
+      `demo193 snapshot contract mismatch: unexpected ${unexpected.length}, approved holes ${observedAllowed.size}/${expectedEmpty.size} (cohort ${expected.size})` +
         (missing.length ? `; missing approved holes: ${missing.slice(0, 3).join(', ')}` : ''),
     );
   }

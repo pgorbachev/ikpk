@@ -338,6 +338,28 @@ export function registerPublicationLifecycle(strapi: Core.Strapi): void {
     }
 
     const params = context.params as { documentId?: string; status?: string; data?: Record<string, unknown> };
+    if (
+      type === 'article' && context.action === 'update' && params.documentId &&
+      params.data && Object.prototype.hasOwnProperty.call(params.data, 'seo') && params.data.seo !== null &&
+      typeof params.data.seo === 'object' && !Array.isArray(params.data.seo)
+    ) {
+      const existing = (await strapi.documents(context.uid as never).findOne({
+        documentId: params.documentId,
+        status: 'draft',
+        populate: POPULATE_BY_TYPE.article,
+      })) as Record<string, unknown> | null ?? (await strapi.documents(context.uid as never).findOne({
+        documentId: params.documentId,
+        status: 'published',
+        populate: POPULATE_BY_TYPE.article,
+      })) as Record<string, unknown> | null;
+      const currentSeo = existing?.seo;
+      if (currentSeo && typeof currentSeo === 'object' && !Array.isArray(currentSeo)) {
+        // Strapi treats an object component in an update payload as a full replacement.
+        // Keep omitted Article SEO fields intact; explicit null/blank values still clear them.
+        params.data.seo = { ...(currentSeo as Record<string, unknown>), ...(params.data.seo as Record<string, unknown>) };
+      }
+    }
+
     const publishedWrite =
       context.action === 'publish' ||
       ((context.action === 'create' || context.action === 'update') && params.status === 'published');

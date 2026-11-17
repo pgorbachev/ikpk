@@ -37,7 +37,7 @@ export interface Verdict {
 }
 
 const REQUIRED_FIELDS: Record<string, string[]> = {
-  article: ['title', 'identifier', 'body', 'seo_title', 'seo_description', 'image', 'published_at', 'categories'],
+  article: ['title', 'identifier', 'body', 'image', 'published_at', 'categories'],
   seminar: ['name', 'identifier', 'course_group', 'description', 'documentsState'],
   'course-group': ['name', 'identifier', 'institute', 'description', 'seo_title', 'seo_description'],
   institute: ['name', 'identifier', 'description', 'seo_title', 'seo_description', 'order'],

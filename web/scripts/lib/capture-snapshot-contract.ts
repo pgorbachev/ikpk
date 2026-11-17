@@ -4,6 +4,7 @@ import {
   assertPrototypeDemo193SnapshotContract,
   assertSnapshotContract,
 } from './content-contract.ts';
+import { articleSeoDescriptionFallback } from './article-seo-fallback.ts';
 import type { Snapshot } from './content-snapshot.ts';
 
 /** The demo exception is available only to an explicitly pinned prototype capture. */
@@ -24,5 +25,9 @@ export function assertCaptureSnapshotContract(
     assertSnapshotContract(snapshot);
     return;
   }
-  assertPrototypeDemo193SnapshotContract(snapshot, demo193SourceSqlSha256);
+  assertPrototypeDemo193SnapshotContract(
+    snapshot,
+    demo193SourceSqlSha256,
+    articleSeoDescriptionFallback,
+  );
 }

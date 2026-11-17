@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { assertCaptureSnapshotContract } from '../scripts/lib/capture-snapshot-contract.ts';
+import { articleSeoDescriptionFallback } from '../scripts/lib/article-seo-fallback.ts';
 import {
   MODULES,
   loadModule,
@@ -43,6 +44,17 @@ const demo193EmptySeoSnapshot = (): Snapshot => {
       },
     },
   };
+};
+
+const demo193NormalizedSeoSnapshot = (): Snapshot => {
+  const snapshot = demo193EmptySeoSnapshot();
+  for (const article of snapshot.content.types.articles ?? []) {
+    delete article.page_title;
+    delete article.page_description;
+    article.seo_title = article.title;
+    article.seo_description = 'Body';
+  }
+  return snapshot;
 };
 
 const records = (n: number, prefix = 'r'): Record<string, unknown>[] =>
@@ -352,7 +364,7 @@ describe('целостность источника каталога', () => {
     expect(result.violations).toEqual([]);
   });
 
-  it('строгий production-контракт остаётся красным, а demo193 принимает только 132 закреплённых SEO-пустоты', async () => {
+  it('строгий production-контракт остаётся красным, а demo193 helper принимает только точную legacy-когорту до или после fallback', async () => {
     const mod = await contractModule();
     const snapshot = demo193EmptySeoSnapshot();
     expect(mod.validateSnapshotContract(snapshot).violations).toHaveLength(132);
@@ -360,6 +372,17 @@ describe('целостность источника каталога', () => {
     expect(() => mod.assertPrototypeDemo193SnapshotContract(
       snapshot,
       'b7b056d6a226b9caed224c737dad18dc366d47a0ec397e0ef0f1c66f61762be2',
+    )).not.toThrow();
+    const normalized = demo193NormalizedSeoSnapshot();
+    expect(mod.validateSnapshotContract(normalized).violations).toEqual([]);
+    expect(() => mod.assertPrototypeDemo193SnapshotContract(
+      normalized,
+      'b7b056d6a226b9caed224c737dad18dc366d47a0ec397e0ef0f1c66f61762be2',
+    )).toThrow(/SEO description fallback mismatch/);
+    expect(() => mod.assertPrototypeDemo193SnapshotContract(
+      normalized,
+      'b7b056d6a226b9caed224c737dad18dc366d47a0ec397e0ef0f1c66f61762be2',
+      articleSeoDescriptionFallback,
     )).not.toThrow();
   });
 
@@ -373,17 +396,63 @@ describe('целостность источника каталога', () => {
     expect(() => assertCaptureSnapshotContract(snapshot, '0'.repeat(64))).toThrow(/SQL source pin/);
   });
 
+  it('demo193 helper aligns missing SEO aliases with the strict validator field names', async () => {
+    const mod = await contractModule();
+    const snapshot = demo193EmptySeoSnapshot();
+    for (const article of snapshot.content.types.articles ?? []) {
+      delete article.page_title;
+      delete article.page_description;
+      delete article.seo_title;
+      delete article.seo_description;
+    }
+    expect(mod.validateSnapshotContract(snapshot).violations).toHaveLength(132);
+    expect(() => mod.assertPrototypeDemo193SnapshotContract(
+      snapshot,
+      'b7b056d6a226b9caed224c737dad18dc366d47a0ec397e0ef0f1c66f61762be2',
+    )).not.toThrow();
+  });
+
   it('demo193 exception rejects changed identities, newly empty required content, and wrong SQL pins', async () => {
     const mod = await contractModule();
     const sqlPin = 'b7b056d6a226b9caed224c737dad18dc366d47a0ec397e0ef0f1c66f61762be2';
     const wrongIdentity = demo193EmptySeoSnapshot();
     wrongIdentity.content.types.articles![0]!.legacy_id = 'other';
-    expect(() => mod.assertPrototypeDemo193SnapshotContract(wrongIdentity, sqlPin)).toThrow(/unexpected|changed/);
+    expect(() => mod.assertPrototypeDemo193SnapshotContract(wrongIdentity, sqlPin)).toThrow(/unexpected|changed|identity missing/);
 
     const extraEmpty = demo193EmptySeoSnapshot();
     extraEmpty.content.types.articles![0]!.title = '';
     expect(() => mod.assertPrototypeDemo193SnapshotContract(extraEmpty, sqlPin)).toThrow(/unexpected/);
     expect(() => mod.assertPrototypeDemo193SnapshotContract(demo193EmptySeoSnapshot(), '0'.repeat(64))).toThrow(/SQL source pin/);
+  });
+
+  it('demo193 normalized fallback mode rejects modified cohort fallback values and new SEO holes', async () => {
+    const mod = await contractModule();
+    const sqlPin = 'b7b056d6a226b9caed224c737dad18dc366d47a0ec397e0ef0f1c66f61762be2';
+    const mixedAliases = demo193NormalizedSeoSnapshot();
+    mixedAliases.content.types.articles![0]!.page_title = null;
+    expect(() => mod.assertPrototypeDemo193SnapshotContract(mixedAliases, sqlPin, articleSeoDescriptionFallback)).toThrow(/conflicting SEO aliases/);
+
+    const changedTitle = demo193NormalizedSeoSnapshot();
+    changedTitle.content.types.articles![0]!.seo_title = 'Not the title fallback';
+    expect(() => mod.assertPrototypeDemo193SnapshotContract(changedTitle, sqlPin, articleSeoDescriptionFallback)).toThrow(/SEO title fallback mismatch/);
+
+    const forgedDescription = demo193NormalizedSeoSnapshot();
+    const forgedValue = 'Evil';
+    expect(forgedValue).toHaveLength(String(forgedDescription.content.types.articles![0]!.seo_description).length);
+    forgedDescription.content.types.articles![0]!.seo_description = forgedValue;
+    expect(() => mod.assertPrototypeDemo193SnapshotContract(forgedDescription, sqlPin, articleSeoDescriptionFallback)).toThrow(/SEO description fallback mismatch/);
+
+    const extraHole = demo193NormalizedSeoSnapshot();
+    extraHole.content.types.articles!.push({
+      legacy_id: 'outside-demo193-cohort',
+      slug: 'outside-demo193-cohort',
+      title: 'Outside cohort',
+      body_html: '<p>Body</p>',
+      page_title: null,
+      page_description: null,
+      image: '/media/outside.jpg',
+    });
+    expect(() => mod.assertPrototypeDemo193SnapshotContract(extraHole, sqlPin, articleSeoDescriptionFallback)).toThrow(/unexpected 2/);
   });
 
   // Сценарий: нарушение контракта останавливает сборку

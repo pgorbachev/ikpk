@@ -1,4 +1,5 @@
 import { resolveSeminar } from '../src/lib/seminar-identity.ts';
+import { articleSeoDescriptionFallback } from './lib/article-seo-fallback.ts';
 /**
  * Снятие снимка контента. Живой путь читает CMS по REST, когда `CMS_URL`/`STRAPI_URL` задан;
  * без адреса — закреплённая фикстура. Неудача живого захвата при заданном адресе — ОТКАЗ, а
@@ -340,7 +341,27 @@ function mapRecord(type: string, record: Record<string, unknown>): Record<string
   for (const entry of FIELD_MAP) {
     if (entry.type === type) applyEntry(record, entry, out);
   }
+  if (type === 'articles') normalizeArticleSeo(record, out);
   return out;
+}
+
+function normalizeArticleSeo(source: Record<string, unknown>, article: Record<string, unknown>): void {
+  const usable = (value: unknown): value is string => typeof value === 'string' && value.trim().length > 0;
+  if (!usable(article.seo_title)) {
+    const title = article.title;
+    if (usable(title)) article.seo_title = title;
+  }
+  if (!usable(article.seo_description)) {
+    const body = typeof source.body === 'string' ? source.body : '';
+    const excerpt = articleSeoDescriptionFallback(body, String(article.slug ?? recordKey(source)));
+    if (excerpt) article.seo_description = excerpt;
+    else {
+      throw new Error(
+        `Article ${String(article.slug ?? recordKey(source))}: SEO description fallback недоступен — ` +
+        'после существующего sanitizer в теле нет текста; снимок не записан',
+      );
+    }
+  }
 }
 
 interface StrapiPage {
