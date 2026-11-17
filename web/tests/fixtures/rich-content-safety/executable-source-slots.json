@@ -872,11 +872,11 @@
     "identity": "style|body:8370d74f6937862f"
   },
   {
-    "slotId": "src:pages/[institute]/[courseGroup]/[seminar].astro:L236:C1:style",
+    "slotId": "src:pages/[institute]/[courseGroup]/[seminar].astro:L232:C1:style",
     "file": "pages/[institute]/[courseGroup]/[seminar].astro",
     "nodeKind": "element",
-    "locator": "pages/[institute]/[courseGroup]/[seminar].astro:L236:C1:style",
-    "fingerprint": "342a48a86db3111fc4d8dbe856a45a21766cd060d41e6281596613ae93aee63f",
+    "locator": "pages/[institute]/[courseGroup]/[seminar].astro:L232:C1:style",
+    "fingerprint": "4d8bebdfabd19f69ca7bc63827e7d8d90e7262071c583f290d843c31a585b799",
     "identity": "style|body:a476247d401743c9"
   },
   {
