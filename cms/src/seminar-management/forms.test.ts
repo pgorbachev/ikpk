@@ -1,8 +1,17 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { createRequire } from 'node:module';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import test from 'node:test';
+import test, { after } from 'node:test';
 import { applyEditorForms } from './forms.ts';
+import { auditMigration } from '../../scripts/audit-data-migration.mjs';
+
+const require = createRequire(new URL('../../package.json', import.meta.url));
+const Database = require('better-sqlite3');
+const auditDirectory = mkdtempSync(join(tmpdir(), 'ikpk-article-forms-audit-'));
+after(() => rmSync(auditDirectory, { recursive: true, force: true }));
 
 // Форма редактора показывает ТОЛЬКО поля из своего списка (`layouts.edit`). Поле схемы, не
 // попавшее ни в список, ни в явно скрытые, редактор не видит вовсе: так при сведении PR #186
@@ -45,7 +54,7 @@ interface Configuration {
   layouts: { edit: { name: string; size?: number }[][]; [key: string]: unknown };
 }
 
-async function configurations() {
+async function configurations(onInitialConfiguration?: (uid: string, configuration: unknown) => void) {
   const saved = new Map<string, Configuration>();
   const strapi = {
     contentType: (uid: string) => uid,
@@ -59,11 +68,13 @@ async function configurations() {
           if (uid === 'api::article.article' && metadatas.slug) {
             metadatas.slug.edit = { ...metadatas.slug.edit, editable: false };
           }
-          return {
+          const configuration = {
             settings: uid === 'api::article.article' ? ARTICLE_EXISTING_CONFIGURATION.settings : {},
             metadatas,
             layouts: uid === 'api::article.article' ? ARTICLE_EXISTING_CONFIGURATION.layouts : {},
           };
+          onInitialConfiguration?.(uid, structuredClone(configuration));
+          return configuration;
         },
         updateConfiguration: async (uid: string, next: Configuration) => saved.set(uid, next),
       }),
@@ -71,6 +82,70 @@ async function configurations() {
   };
   await applyEditorForms(strapi);
   return saved;
+}
+
+function auditSha256(bytes: Buffer | string): string {
+  return createHash('sha256').update(bytes).digest('hex');
+}
+
+function auditFileFingerprint(path: string): string {
+  const parts = [path, `${path}-wal`].map((file) => {
+    try { return { file: file.split('/').at(-1), sha256: auditSha256(readFileSync(file)) }; }
+    catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT' && file !== path) {
+        return { file: file.split('/').at(-1), absent: true };
+      }
+      throw error;
+    }
+  });
+  return auditSha256(JSON.stringify(parts));
+}
+
+function createArticleAuditDatabase(path: string, configuration: Configuration) {
+  const db = new Database(path);
+  db.exec('CREATE TABLE strapi_core_store_settings (id INTEGER PRIMARY KEY, key TEXT NOT NULL, value TEXT, type TEXT, environment TEXT, tag TEXT)');
+  db.prepare('INSERT INTO strapi_core_store_settings VALUES (1, ?, ?, ?, ?, ?)')
+    .run('plugin_content_manager_configuration_content_types::api::article.article', JSON.stringify(configuration), 'object', null, null);
+  db.close();
+}
+
+function addArticleAuditLineage(path: string) {
+  const db = new Database(path);
+  db.exec(`
+    CREATE TABLE ikpk_migration_lineage (singleton, lineage_id, source_snapshot_sha256, source_schema_sha256, created_at);
+    CREATE TABLE ikpk_migration_operations (operation_id, lineage_id, source_snapshot_sha256, source_schema_sha256, created_at);
+    CREATE TABLE ikpk_data_migration_history (lineage_id, operation_id, step_id, payload_sha256, result_json, completed_at);
+  `);
+  db.prepare('INSERT INTO ikpk_migration_lineage VALUES (1, ?, ?, ?, ?)').run('a'.repeat(64), 'b'.repeat(64), 'c'.repeat(64), 1);
+  db.prepare('INSERT INTO ikpk_migration_operations VALUES (?, ?, ?, ?, ?)').run('article-forms-contract', 'a'.repeat(64), 'b'.repeat(64), 'c'.repeat(64), 1);
+  db.close();
+}
+
+function auditArticleConfiguration(sourcePath: string, candidatePath: string) {
+  const manifestPath = join(auditDirectory, 'article-forms-plan.json');
+  const manifestBytes = Buffer.from('{"version":1,"steps":[]}\n');
+  writeFileSync(manifestPath, manifestBytes);
+  const planSha256 = auditSha256(manifestBytes);
+  const receipt = {
+    sourceDbPath: sourcePath,
+    candidateDbPath: candidatePath,
+    operationId: 'article-forms-contract',
+    planSha256,
+    steps: [],
+    source: {
+      snapshotSha256: 'b'.repeat(64),
+      schemaFingerprint: 'c'.repeat(64),
+      sourceFileFingerprint: auditFileFingerprint(sourcePath),
+    },
+    candidatePostMigrationSha256: auditSha256(readFileSync(candidatePath)),
+    candidatePostMigrationFileFingerprint: auditFileFingerprint(candidatePath),
+  };
+  return auditMigration({
+    sourceDbPath: sourcePath,
+    candidateDbPath: candidatePath,
+    plan: { manifestPath, planSha256, steps: [] },
+    receipt,
+  });
 }
 
 test('каждое поле схемы семинара и проведения либо в форме редактора, либо скрыто явно', async () => {
@@ -114,6 +189,34 @@ test('подписи и подсказки статьи синхронизиру
 
   assert.deepEqual(config.layouts, ARTICLE_EXISTING_CONFIGURATION.layouts);
   assert.deepEqual(config.settings, ARTICLE_EXISTING_CONFIGURATION.settings);
+});
+
+test('preservation audit accepts the exact article configuration written by applyEditorForms and rejects a changed SEO description', async () => {
+  const initial = new Map<string, Configuration>();
+  const saved = await configurations((uid, configuration) => {
+    if (uid === 'api::article.article') initial.set(uid, configuration as Configuration);
+  });
+  const source = initial.get('api::article.article');
+  const actual = saved.get('api::article.article');
+  assert.ok(source && actual, 'article editor configuration must be available before and after applyEditorForms');
+
+  const sourcePath = join(auditDirectory, 'article-forms-contract-source.db');
+  const candidatePath = join(auditDirectory, 'article-forms-contract-candidate.db');
+  createArticleAuditDatabase(sourcePath, source);
+  createArticleAuditDatabase(candidatePath, actual);
+  addArticleAuditLineage(candidatePath);
+
+  const report = auditArticleConfiguration(sourcePath, candidatePath);
+  assert.equal(report.passed, true, JSON.stringify(report.differences));
+
+  const changedPath = join(auditDirectory, 'article-forms-contract-changed.db');
+  const changed = structuredClone(actual);
+  changed.metadatas.seo!.edit!.description = 'Unreviewed description';
+  createArticleAuditDatabase(changedPath, changed);
+  addArticleAuditLineage(changedPath);
+  const rejected = auditArticleConfiguration(sourcePath, changedPath);
+  assert.equal(rejected.passed, false, 'auditor must reject an SEO description outside the actual forms output');
+  assert.ok(rejected.differences.some(({ table, kind }) => table === 'strapi_core_store_settings' && kind === 'core-store-structure-mismatch'));
 });
 
 test('изображение проведения редактируется, а исходный флаг коллекции остаётся скрытой метаданной', async () => {
