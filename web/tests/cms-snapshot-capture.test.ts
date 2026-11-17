@@ -51,7 +51,7 @@ const demo193NormalizedSeoSnapshot = (): Snapshot => {
     delete article.page_title;
     delete article.page_description;
     article.seo_title = article.title;
-    article.seo_description = 'Sanitized Article text excerpt.';
+    article.seo_description = 'Body';
   }
   return snapshot;
 };
@@ -411,7 +411,7 @@ describe('целостность источника каталога', () => {
     expect(() => mod.assertPrototypeDemo193SnapshotContract(changedTitle, sqlPin)).toThrow(/SEO title fallback mismatch/);
 
     const longDescription = demo193NormalizedSeoSnapshot();
-    longDescription.content.types.articles![0]!.seo_description = '😀'.repeat(201);
+    longDescription.content.types.articles![0]!.seo_description = 'Evil';
     expect(() => mod.assertPrototypeDemo193SnapshotContract(longDescription, sqlPin)).toThrow(/SEO description fallback mismatch/);
 
     const extraHole = demo193NormalizedSeoSnapshot();

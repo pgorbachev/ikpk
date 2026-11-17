@@ -5,6 +5,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { trustForHistoricalSnapshot } from './historical-exceptions.ts';
+import { articleSeoDescriptionFallback } from './article-seo-fallback.ts';
 
 /** Группа обязательных полей: достаточно любого имени из группы (design.md, change
  *  `cms-live-snapshot-capture`). Перечислена явно, а не выведена из кода ниже: полнота
@@ -371,7 +372,8 @@ export function assertPrototypeDemo193SnapshotContract(snapshot: Snapshot, sourc
         throw new Error(`demo193 SEO title fallback mismatch for ${entry.slug}`);
       }
       if (sourceField === 'seo_description' &&
-          (typeof value !== 'string' || !value.trim() || Array.from(value).length > 200)) {
+          (typeof value !== 'string' || !value.trim() ||
+           value !== articleSeoDescriptionFallback(String(record.body_html ?? record.body ?? ''), entry.slug))) {
         throw new Error(`demo193 SEO description fallback mismatch for ${entry.slug}`);
       }
     }
