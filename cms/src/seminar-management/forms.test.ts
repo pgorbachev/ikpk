@@ -272,7 +272,8 @@ test('подсказки говорят, где поле видно на сай�
   assert.equal(entry.metadatas.registrationFormLink?.edit?.label, 'Ссылка на регистрацию на семинар');
   assert.match(hint(entry, 'registrationFormLink'), /в расписании скрыта/);
   assert.match(hint(entry, 'registrationFormLink'), /Обязательна для публикации/);
-  assert.match(hint(entry, 'city'), /Для публикации не требуется/);
+  assert.match(hint(entry, 'city'), /Для публикации очного проведения укажите город/);
+  assert.match(hint(entry, 'city'), /В черновике поле можно оставить пустым/);
   assert.doesNotMatch(hint(entry, 'city'), /обязателен при публикации/);
   assert.match(hint(entry, 'startAt'), /Порядок/);
   assert.match(hint(entry, 'entry_status'), /active/);
