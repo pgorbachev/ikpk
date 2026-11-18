@@ -632,11 +632,11 @@
     "identity": "style|body:d137e5eeb8a156c0"
   },
   {
-    "slotId": "src:components/seminars/SeminarSchedulePanel.astro:L163:C1:style",
+    "slotId": "src:components/seminars/SeminarSchedulePanel.astro:L136:C1:style",
     "file": "components/seminars/SeminarSchedulePanel.astro",
     "nodeKind": "element",
-    "locator": "components/seminars/SeminarSchedulePanel.astro:L163:C1:style",
-    "fingerprint": "c2d1c4f8c88f9bc7add74cebb5c540e8af642096e3825ae8553b80c46fb1b6be",
+    "locator": "components/seminars/SeminarSchedulePanel.astro:L136:C1:style",
+    "fingerprint": "f7740a4db2861f04f4559813e3e55fa58a42c072182035c38d11f9b5e9c62442",
     "identity": "style|body:6d08ab9809844292"
   },
   {
