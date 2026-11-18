@@ -119,12 +119,13 @@ const snap = JSON.parse(readFileSync(join(webRoot, 'dist-snapshot', 'snapshot.js
   fingerprint?: string;
   snapshotId?: string;
   referenceDate: string;
+  contractVersion?: 1 | 2;
 };
 if (!snap.fingerprint || !snap.snapshotId) {
   const { contentFingerprint, snapshotId } = await import('./lib/content-snapshot.ts');
   const full = JSON.parse(readFileSync(join(webRoot, 'dist-snapshot', 'snapshot.json'), 'utf-8'));
   full.fingerprint = contentFingerprint(full.content);
-  full.snapshotId = snapshotId({ fingerprint: full.fingerprint, referenceDate: full.referenceDate });
+  full.snapshotId = snapshotId({ fingerprint: full.fingerprint, referenceDate: full.referenceDate, contractVersion: full.contractVersion });
   writeFileSync(join(webRoot, 'dist-snapshot', 'snapshot.json'), JSON.stringify(full));
   writeFileSync(join(webRoot, '.snapshot', 'snapshot.json'), JSON.stringify(full));
 }

@@ -1,7 +1,7 @@
 {
   "status": "dist-reviewed",
   "generatedFrom": "source AST + built output; CI must not regenerate",
-  "generatedFromSha": "1ebd22a2be649a305f775212eeb209ec09e06b88",
+  "generatedFromSha": "ddba28ec768dab66ede386244ed109c6d223d4eb",
   "distRoots": [
     "web/dist",
     "web/dist-demo"
@@ -87,7 +87,7 @@
     "src:components/schedule/SchedulePage.astro:L64:C1:style",
     "src:components/schedule/SchedulePageHeader.astro:L17:C1:style",
     "src:components/seminars/SeminarArchitectureHeader.astro:L211:C1:style",
-    "src:components/seminars/SeminarSchedulePanel.astro:L163:C1:style",
+    "src:components/seminars/SeminarSchedulePanel.astro:L136:C1:style",
     "src:components/social-marks/RutubeMark.astro:L4:C1:svg",
     "src:components/social-marks/RutubeOnDarkMark.astro:L4:C1:svg",
     "src:components/social-marks/TelegramMark.astro:L4:C1:svg",

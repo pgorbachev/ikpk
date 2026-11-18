@@ -249,7 +249,7 @@ describe('staging193 sealed SQLite capture', () => {
     expect(verified.media.map((item) => item.url).sort()).toEqual(['/uploads/form.pdf', '/uploads/photo.jpg']);
   });
 
-  it('verifies a previous-day snapshot against the real sealed bundle and preserves its identity and media', () => {
+  it.each([1, 2] as const)('verifies a previous-day contract-v%s snapshot against the real sealed bundle', (contractVersion) => {
     const bundle = sealedBundle(false);
     const verified = verifyStaging193Bundle(bundle, schemaRoot);
     const snapshotRoot = mkdtempSync(join(tmpdir(), 'staging193-reused-snapshot-'));
@@ -262,9 +262,10 @@ describe('staging193 sealed SQLite capture', () => {
 
     const snapshotPath = join(snapshotRoot, 'snapshot.json');
     const snapshot = JSON.parse(readFileSync(snapshotPath, 'utf8'));
+    snapshot.contractVersion = contractVersion;
     snapshot.referenceDate = '2026-10-17';
     snapshot.fingerprint = contentFingerprint(snapshot.content);
-    snapshot.snapshotId = snapshotId({ fingerprint: snapshot.fingerprint, referenceDate: snapshot.referenceDate });
+    snapshot.snapshotId = snapshotId({ fingerprint: snapshot.fingerprint, referenceDate: snapshot.referenceDate, contractVersion });
     writeFileSync(snapshotPath, JSON.stringify(snapshot, null, 2));
     const beforeSnapshot = readFileSync(snapshotPath);
     const beforeMedia = snapshot.content.media.map((item: { contentId: string }) => {

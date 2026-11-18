@@ -96,6 +96,7 @@ openspec/changes/education-trust-and-admission-clarity/tasks.md :: main@cff82de7
 openspec/changes/education-trust-and-admission-clarity/tasks.md :: web/dist
 openspec/changes/education-trust-and-admission-clarity/tasks.md :: web/src/pages/[institute].astro:61-72
 openspec/changes/education-trust-and-admission-clarity/tasks.md :: web/tests/content-quality.test.ts:474
+openspec/changes/seminar-content-and-occurrence-model/design.md :: origin/main@0aa48b4f3001c02193678c33da261abfba3babbd
 openspec/changes/server-hardening/proposal.md :: origin/main
 openspec/changes/server-hardening/specs/static-serving/spec.md :: text/html
 openspec/changes/server-hardening/tasks.md :: origin/main
@@ -127,4 +128,3 @@ openspec/specs/static-serving/spec.md :: application/xml
 openspec/specs/static-serving/spec.md :: text/html
 openspec/specs/static-serving/spec.md :: text/javascript
 openspec/specs/static-serving/spec.md :: text/xml
-openspec/changes/seminar-content-and-occurrence-model/design.md :: origin/main@9fad640520a90518a89d2751701acd2faa10ab21

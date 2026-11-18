@@ -65,6 +65,8 @@ export interface ProductionStaticCaptureProof extends Omit<InitialProductionCapt
 }
 
 interface SnapshotFields {
+  /** Contract used by this snapshot producer; absent means a frozen legacy snapshot. */
+  contractVersion?: 1 | 2;
   content: SnapshotContent;
   referenceDate: string;
   pinned?: boolean;
@@ -158,9 +160,13 @@ export function contentFingerprint(content: SnapshotContent): string {
   return `sha256:${digest}`;
 }
 
-export function snapshotId(input: { fingerprint: string; referenceDate: string }): string {
+export function snapshotId(input: { fingerprint: string; referenceDate: string; contractVersion?: 1 | 2 }): string {
+  // Keep legacy IDs byte-for-byte stable. Contract v2 changes validation semantics,
+  // so it must be part of the identity even when content and reference date match.
   const digest = createHash('sha256')
-    .update(`${input.fingerprint}\n${input.referenceDate}`)
+    .update(input.contractVersion === 2
+      ? `${input.fingerprint}\n${input.referenceDate}\ncontractVersion=2`
+      : `${input.fingerprint}\n${input.referenceDate}`)
     .digest('hex');
   return `snap:${digest}`;
 }

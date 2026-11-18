@@ -10,7 +10,7 @@ export function readPublicationSnapshot(dir: string): Snapshot {
       snapshot.origin?.kind !== 'live' || snapshot.pinned || !snapshot.origin.url ||
       !snapshot.origin.capturedAt || !Number.isFinite(Date.parse(snapshot.origin.capturedAt))) throw new Error('invalid live snapshot');
   const fingerprint = contentFingerprint(snapshot.content);
-  if (snapshot.fingerprint !== fingerprint || snapshot.snapshotId !== snapshotId({ fingerprint, referenceDate: snapshot.referenceDate })) {
+  if (snapshot.fingerprint !== fingerprint || snapshot.snapshotId !== snapshotId({ fingerprint, referenceDate: snapshot.referenceDate, contractVersion: snapshot.contractVersion })) {
     throw new Error('snapshot identity mismatch');
   }
   return snapshot;

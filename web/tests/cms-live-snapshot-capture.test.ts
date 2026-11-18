@@ -1301,6 +1301,21 @@ describe('historical exceptions survive actual live snapshot capture', () => {
     expect(captured.updatedAt).toBe('2026-02-01T00:00:00.000Z');
   });
 
+  it.each([null, ''])('live capture emits snapshot v2 and preserves duration %j without an exception', async (duration) => {
+    const source = dataset();
+    source['schedule-entries']!.records[0]!.duration = duration;
+    source.seminars!.records[0]!.duration = null;
+    const cms = await stub(source);
+    const dir = outDir();
+    const run = await runCapture({ CMS_URL: cms.url, CONTENT_SNAPSHOT_DIR: dir });
+    expect(run.status, run.output).toBe(0);
+    const captured = readSnapshot(dir) as { content: SnapshotContent; contractVersion?: number };
+    expect(captured.contractVersion).toBe(2);
+    expect(captured.content.types.schedule_entries[0].duration).toBe(duration);
+    expect(captured.content.types.seminars[0].duration).toBeNull();
+    expect(captured.content.historicalExceptions ?? []).toEqual([]);
+  });
+
   it('new paid zero stops capture and does not leave an accepted artifact', async () => {
     const source = dataset();
     source['schedule-entries']!.records[0]!.price = 0;

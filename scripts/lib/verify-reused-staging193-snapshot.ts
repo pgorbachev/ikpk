@@ -38,10 +38,11 @@ if (manifest.operationId !== operationId || manifest.sourceSha !== sourceSha
     || snapshot.sourcePolicy !== 'demo-publication-only' || snapshot.sourceAge !== 'untracked'
     || snapshot.origin?.kind !== 'server-db' || snapshot.origin?.sourceId !== 'demo193-cms'
     || snapshot.origin?.capturedAt !== manifest.capturedAt || snapshot.pinned
+    || (snapshot.contractVersion !== undefined && snapshot.contractVersion !== 1 && snapshot.contractVersion !== 2)
     || typeof snapshot.referenceDate !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(snapshot.referenceDate)
     || !Array.isArray(media) || media.length === 0
     || snapshot.fingerprint !== contentFingerprint(snapshot.content)
-    || snapshot.snapshotId !== snapshotId({ fingerprint: snapshot.fingerprint, referenceDate: snapshot.referenceDate })
+    || snapshot.snapshotId !== snapshotId({ fingerprint: snapshot.fingerprint, referenceDate: snapshot.referenceDate, contractVersion: snapshot.contractVersion })
     || snapshot.snapshotId !== expectedSnapshotId
     || !proofMatches) {
   throw new Error('reused snapshot identity or capture proof differs from its verified sealed capture');

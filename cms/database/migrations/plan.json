@@ -11,13 +11,45 @@
         "strapiVersion": "5.51.2",
         "schema": {
           "engine": "sqlite",
-          "requiredColumns": { "seminars": ["id"], "schedule_entries": ["id"] },
-          "requiredAnyColumns": { "seminars": [["status", "seminar_status"]], "schedule_entries": [["status", "entry_status"]] }
+          "requiredColumns": {
+            "seminars": [
+              "id"
+            ],
+            "schedule_entries": [
+              "id"
+            ]
+          },
+          "requiredAnyColumns": {
+            "seminars": [
+              [
+                "status",
+                "seminar_status"
+              ]
+            ],
+            "schedule_entries": [
+              [
+                "status",
+                "entry_status"
+              ]
+            ]
+          }
         }
       },
-      "preconditions": { "columns": ["seminars.status", "schedule_entries.status"] },
-      "postconditions": { "columns": ["seminars.seminar_status", "schedule_entries.entry_status"] },
-      "readback": { "kind": "strapi-native-history-and-target-columns" }
+      "preconditions": {
+        "columns": [
+          "seminars.status",
+          "schedule_entries.status"
+        ]
+      },
+      "postconditions": {
+        "columns": [
+          "seminars.seminar_status",
+          "schedule_entries.entry_status"
+        ]
+      },
+      "readback": {
+        "kind": "strapi-native-history-and-target-columns"
+      }
     },
     {
       "id": "institute-method-author-classification-v1",
@@ -31,16 +63,40 @@
         "schema": {
           "engine": "sqlite",
           "requiredColumns": {
-            "strapi_database_schema": ["schema"],
-            "teachers": ["id", "document_id", "legacy_id", "name", "trait", "published_at"],
-            "institutes": ["id", "document_id", "legacy_id", "name", "slug"],
-            "teachers_institute_lnk": ["teacher_id", "institute_id"]
+            "strapi_database_schema": [
+              "schema"
+            ],
+            "teachers": [
+              "id",
+              "document_id",
+              "legacy_id",
+              "name",
+              "trait",
+              "published_at"
+            ],
+            "institutes": [
+              "id",
+              "document_id",
+              "legacy_id",
+              "name",
+              "slug"
+            ],
+            "teachers_institute_lnk": [
+              "teacher_id",
+              "institute_id"
+            ]
           }
         }
       },
-      "preconditions": { "classification": "all 12 pinned legacy identities match the reviewed mapping" },
-      "postconditions": { "trait": "method-author for every physical version of the pinned identities" },
-      "readback": { "kind": "helper-identity-and-physical-version-readback" }
+      "preconditions": {
+        "classification": "all 12 pinned legacy identities match the reviewed mapping"
+      },
+      "postconditions": {
+        "trait": "method-author for every physical version of the pinned identities"
+      },
+      "readback": {
+        "kind": "helper-identity-and-physical-version-readback"
+      }
     },
     {
       "id": "normalize-null-documents-state-v1",
@@ -54,14 +110,27 @@
         "schema": {
           "engine": "sqlite",
           "requiredColumns": {
-            "seminars": ["id", "document_id", "published_at"],
-            "seminars_cmps": ["entity_id", "field"]
+            "seminars": [
+              "id",
+              "document_id",
+              "published_at"
+            ],
+            "seminars_cmps": [
+              "entity_id",
+              "field"
+            ]
           }
         }
       },
-      "preconditions": { "documents_state": "column exists after schema sync; null rows have no structured documents" },
-      "postconditions": { "documents_state": "eligible null values become unconfirmed; all other values are unchanged" },
-      "readback": { "kind": "helper-null-row-and-relation-readback" }
+      "preconditions": {
+        "documents_state": "column exists after schema sync; null rows have no structured documents"
+      },
+      "postconditions": {
+        "documents_state": "eligible null values become unconfirmed; all other values are unchanged"
+      },
+      "readback": {
+        "kind": "helper-null-row-and-relation-readback"
+      }
     },
     {
       "id": "seminar-content-admin-permissions-v1",
@@ -110,6 +179,56 @@
       "handler": "reviewed-schedule",
       "path": "data-steps/reviewed-schedule.mjs",
       "sha256": "5ccd43ae6d479add7331a37cb84d2b93f9bc253b391ac8c02bb2c76df884adcf",
+      "source": {
+        "strapiVersion": "5.51.2",
+        "schema": {
+          "engine": "sqlite",
+          "requiredColumns": {
+            "seminars": [
+              "id",
+              "document_id",
+              "published_at"
+            ],
+            "schedule_entries": [
+              "id",
+              "document_id",
+              "published_at",
+              "duration",
+              "is_free",
+              "price",
+              "city",
+              "legacy_id"
+            ],
+            "schedule_entries_seminar_lnk": [
+              "seminar_id",
+              "schedule_entry_id"
+            ],
+            "files_related_mph": [
+              "id",
+              "related_id",
+              "related_type",
+              "field"
+            ]
+          }
+        }
+      },
+      "preconditions": {
+        "review": "Externally reviewed private plan matches all source versions and exceptions."
+      },
+      "postconditions": {
+        "data": "Apply only the reviewed price, online and unambiguous duration changes."
+      },
+      "readback": {
+        "kind": "independent-schedule-and-ledger-audit"
+      }
+    },
+    {
+      "id": "seminar-occurrence-model-v2",
+      "phase": "after-sync",
+      "kind": "data",
+      "handler": "reviewed-schedule",
+      "path": "data-steps/reviewed-schedule-v2.mjs",
+      "sha256": "f12b5297fe54dc5e35faab4a082bda35e0367992f5307cb0ac42269af073c55b",
       "source": {
         "strapiVersion": "5.51.2",
         "schema": {
@@ -273,25 +392,102 @@
   ],
   "integrity": {
     "files": [
-      {"path": "scripts/run-data-migrations.mjs", "sha256": "ed093d5390af766c0fdfd9df599b8fc6d5af9b638a101732a0d44f0f3f1e0ec1"},
-      {"path": "scripts/seminar-migration-snapshot.mjs", "sha256": "21bd1f42a09e3be591a4b39914992cac26474b15bd774eccf2308c815a251e44"},
-      {"path": "scripts/audit-seminar-migration-composition.mjs", "sha256": "47011f15b8f919128ceb642fb9eac4f065cc92491111c4036803136e8938c4a5"},
-      {"path": "scripts/audit-migration-stage-ledger.mjs", "sha256": "da45c499ad2e987cd94656bac85d62264a69825f947835a706885de3597357a1"},
-      {"path": "scripts/audit-seminar-schema-sync.mjs", "sha256": "15f2ea58d6b7f3e4dab8c4e906f829e5f0479136168a31ec47ede3479bd3c65a"},
-      {"path": "scripts/audit-schedule-migration.mjs", "sha256": "3ba6ca1bb2ebd465cf89278d0d4f444bd744dfa5e94299f6d8742986fa21a79f"},
-      {"path": "scripts/audit-documents-migration.mjs", "sha256": "70e2c3876bc9b7255fb2087f26a2ba56c16754077199276c39883c19e31f4c50"},
-      {"path": "scripts/migrate-schedule-data.mjs", "sha256": "eee26d5890938a065f6c58aba3cdd3bd99d57532e48ce248455640ae31317821"},
-      {"path": "scripts/audit-schedule-business-rules.mjs", "sha256": "ae6f02d355a4e372f67e507e82915688a301a237f3cca3e1416a18acf1d65c8a"},
-      {"path": "scripts/documents-migration-writer.mjs", "sha256": "6cfa10094b5213adbbbd23f17a95b96bb41e9769e6073f4e022c0072348f84ce"},
-      {"path": "scripts/content-migration-writer.mjs", "sha256": "5965219178cd94e2c5826e267b4a73a2c378fb2b6e41e5263e1f7d1c5095552a"},
-      {"path": "scripts/audit-content-migration.mjs", "sha256": "0eb42866c9dba128a6554da63740906becde1b743be3850d540e5b79c6af8ea6"},
-      {"path": "database/migrations/target-schema/seminar.json", "sha256": "34aa09e7ede1643b1514408f1306b245aca0f75a75aec680b664b88032b29b25"},
-      {"path": "src/lib/demo193-source-empty-fields.json", "sha256": "b6a46a6138157cb77be55ecfbe8b05e962e827be6fc807fc8a34ded92e3916f5"},
-      {"path": "scripts/audit-data-migration.mjs", "sha256": "9f44e3fafc4e6493a919564e032cbcefabf735714b8dc5aeb6019eab834e6712"},
-      {"path": "scripts/audit-schema-snapshot.mjs", "sha256": "953145610fcb03814a7d29ce6c476af201266924ae3e12220b71d1ab903129ea"},
-      {"path": "scripts/institute-method-author-classification.mjs", "sha256": "7eb4dcabbf28f9fd556360653e00a2fd08e144debee6877dd1058621d5f79a5d"},
-      {"path": "scripts/normalize-null-documents-state.mjs", "sha256": "b316c88986bf08585abb4107b77d1a6bfd6b4dcb15cfdda06796cb5d8f5ca875"},
-      {"path": "scripts/verify-seminar-proof-artifact.py", "sha256": "80f0d034c1a82d6f6503070d7774fda4ae8840c599479f6fa15691b902962088"}
+      {
+        "path": "scripts/run-data-migrations.mjs",
+        "sha256": "a37886599cbda1f3bf5f3b6026dc81bddd4ef55e78208c5515f7ec89014d103a"
+      },
+      {
+        "path": "scripts/seminar-migration-snapshot.mjs",
+        "sha256": "21bd1f42a09e3be591a4b39914992cac26474b15bd774eccf2308c815a251e44"
+      },
+      {
+        "path": "scripts/audit-seminar-migration-composition.mjs",
+        "sha256": "ab2bf0e27e7e2b3753f1293bd9e341c7cc639788e9d02cddb44c9568cbf4e18b"
+      },
+      {
+        "path": "scripts/migrate-schedule-data-v2.mjs",
+        "sha256": "0471167863d54e929067683757c058e65b24a4775a003632e0ff3903c903cdd8"
+      },
+      {
+        "path": "scripts/audit-schedule-business-rules-v2.mjs",
+        "sha256": "8d124c880a5ca5f352389460c8887c33efb77fb2fdb7201e46520ee2e2213945"
+      },
+      {
+        "path": "scripts/audit-schedule-migration-v2.mjs",
+        "sha256": "620690e0b8d4e36e16e91213ba5bbf53463ab4e066911376048931aa4794bfff"
+      },
+      {
+        "path": "scripts/migration-review-cli.mjs",
+        "sha256": "5d7feb5c20e4812720e53f745293be38bdfe6a599df174c0f3d37dfae74ec864"
+      },
+      {
+        "path": "scripts/audit-migration-stage-ledger.mjs",
+        "sha256": "da45c499ad2e987cd94656bac85d62264a69825f947835a706885de3597357a1"
+      },
+      {
+        "path": "scripts/audit-seminar-schema-sync.mjs",
+        "sha256": "15f2ea58d6b7f3e4dab8c4e906f829e5f0479136168a31ec47ede3479bd3c65a"
+      },
+      {
+        "path": "scripts/audit-schedule-migration.mjs",
+        "sha256": "3ba6ca1bb2ebd465cf89278d0d4f444bd744dfa5e94299f6d8742986fa21a79f"
+      },
+      {
+        "path": "scripts/audit-documents-migration.mjs",
+        "sha256": "70e2c3876bc9b7255fb2087f26a2ba56c16754077199276c39883c19e31f4c50"
+      },
+      {
+        "path": "scripts/migrate-schedule-data.mjs",
+        "sha256": "eee26d5890938a065f6c58aba3cdd3bd99d57532e48ce248455640ae31317821"
+      },
+      {
+        "path": "scripts/audit-schedule-business-rules.mjs",
+        "sha256": "ae6f02d355a4e372f67e507e82915688a301a237f3cca3e1416a18acf1d65c8a"
+      },
+      {
+        "path": "scripts/documents-migration-writer.mjs",
+        "sha256": "6cfa10094b5213adbbbd23f17a95b96bb41e9769e6073f4e022c0072348f84ce"
+      },
+      {
+        "path": "scripts/content-migration-writer.mjs",
+        "sha256": "5965219178cd94e2c5826e267b4a73a2c378fb2b6e41e5263e1f7d1c5095552a"
+      },
+      {
+        "path": "scripts/audit-content-migration.mjs",
+        "sha256": "0eb42866c9dba128a6554da63740906becde1b743be3850d540e5b79c6af8ea6"
+      },
+      {
+        "path": "database/migrations/target-schema/seminar.json",
+        "sha256": "34aa09e7ede1643b1514408f1306b245aca0f75a75aec680b664b88032b29b25"
+      },
+      {
+        "path": "src/lib/demo193-source-empty-fields.json",
+        "sha256": "b6a46a6138157cb77be55ecfbe8b05e962e827be6fc807fc8a34ded92e3916f5"
+      },
+      {
+        "path": "scripts/audit-data-migration.mjs",
+        "sha256": "73749191bbc6e475a3d9dc7c733abf499696c7f1c96398cbe7e61cb96a0e61dc"
+      },
+      {
+        "path": "scripts/audit-schema-snapshot.mjs",
+        "sha256": "953145610fcb03814a7d29ce6c476af201266924ae3e12220b71d1ab903129ea"
+      },
+      {
+        "path": "scripts/institute-method-author-classification.mjs",
+        "sha256": "7eb4dcabbf28f9fd556360653e00a2fd08e144debee6877dd1058621d5f79a5d"
+      },
+      {
+        "path": "scripts/normalize-null-documents-state.mjs",
+        "sha256": "b316c88986bf08585abb4107b77d1a6bfd6b4dcb15cfdda06796cb5d8f5ca875"
+      },
+      {
+        "path": "database/migrations/data-steps/reviewed-schedule-v2.mjs",
+        "sha256": "f12b5297fe54dc5e35faab4a082bda35e0367992f5307cb0ac42269af073c55b"
+      },
+      {
+        "path": "scripts/verify-seminar-proof-artifact.py",
+        "sha256": "80f0d034c1a82d6f6503070d7774fda4ae8840c599479f6fa15691b902962088"
+      }
     ]
   }
 }

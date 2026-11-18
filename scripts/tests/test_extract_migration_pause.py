@@ -25,12 +25,12 @@ class ExtractionTests(unittest.TestCase):
  def test_export_extract_builder_and_refusals(self):
   with tempfile.TemporaryDirectory() as t:
    root=Path(t).resolve(); os.chmod(root,0o700)
-   op='op'; ids={'schema':'permission','schedule':'schedule','documents':'documents','content':'content'}
+   op='op'; ids={'schema':'permission','schedule':'seminar-occurrence-model-v1','documents':'documents','content':'content'}
    values={k:k.encode() for k in ids}; source=b'source';candidate=b'candidate';sha='a'*64
    stages={v:{'path':f'/remote/stage-snapshots/op.{v}.db','snapshotFingerprint':fp(values[k])} for k,v in ids.items()};stages['content']['candidateFingerprint']=fp(candidate)
    decisions={'acceptedExceptions':[]};schedule={'sourceDigest':'a','decisionDigest':h(js(decisions)),'entries':[],'seminars':[],'exceptions':[]};sp=h(js(schedule));schedule['planDigest']=sp
    dp={'version':1}; dd=h(js(dp));cp={'documentsPlanDigest':dd,'rendererSha256':'5'*64};cd=h(js(cp))
-   receipt={'operationId':op,'sourceCommitSha':'a'*40,'candidateDbPath':'/remote/candidate.db','sourceDbPath':'/live/source.db','planSha256':'b'*64,'artifactSha256':'c'*64,'source':{'snapshotSha256':'d'*64,'schemaFingerprint':'e'*64,'sourceFileFingerprint':h(js([{'file':'source.db','sha256':h(source)},{'file':'source.db-wal','absent':True}]))},'stageSnapshots':stages,'steps':[{'id':x,'sha256':sha} for x in ids.values()],'reviewedSteps':{k:{'expectedPlanDigest':v} for k,v in [('schedule',sp),('documents',dd),('content',cd)]}}
+   receipt={'operationId':op,'sourceCommitSha':'a'*40,'candidateDbPath':'/remote/candidate.db','sourceDbPath':'/live/source.db','planSha256':'b'*64,'artifactSha256':'c'*64,'source':{'snapshotSha256':'d'*64,'schemaFingerprint':'e'*64,'sourceFileFingerprint':h(js([{'file':'source.db','sha256':h(source)},{'file':'source.db-wal','absent':True}]))},'stageSnapshots':stages,'steps':[{'id':x,'sha256':sha} for x in ids.values()],'reviewedSteps':{k:{'expectedPlanDigest':v} for k,v in [(ids['schedule'],sp),('documents',dd),('content',cd)]}}
    files={'source/source.db':source,'candidate.db':candidate,'receipt.json':js(receipt),**{f'stage-snapshots/op.{id}.db':values[k] for k,id in ids.items()}};result=js({'phase':'fenced','migrationPaused':True})
    payload=archive(files,result);tar=root/'pause.tar';tar.write_bytes(payload);out=root/'output';out.mkdir(mode=0o700)
    cmd=['python3',str(SCRIPT),'--archive',str(tar),'--archive-sha256',h(payload),'--operation-id','op','--source-sha','a'*40,'--output-parent',str(out)]

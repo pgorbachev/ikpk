@@ -86,7 +86,7 @@ export function readProductionStaticSnapshot(snapshotDir: string, treeDir: strin
   }
   assertCaptureSnapshotContract(snapshot, undefined, 'production-static');
   const fingerprint = contentFingerprint(snapshot.content);
-  if (snapshot.fingerprint !== fingerprint || snapshot.snapshotId !== snapshotId({ fingerprint, referenceDate: snapshot.referenceDate })) {
+  if (snapshot.fingerprint !== fingerprint || snapshot.snapshotId !== snapshotId({ fingerprint, referenceDate: snapshot.referenceDate, contractVersion: snapshot.contractVersion })) {
     throw new Error('production-static snapshot identity mismatch');
   }
   for (const type of ['articles', 'seminars', 'schedule_entries', 'teachers']) {
@@ -130,7 +130,7 @@ export function readInitialProductionSnapshot(snapshotDir: string, treeDir: stri
   }
   assertCaptureSnapshotContract(snapshot, undefined, 'initial-prod');
   const fingerprint = contentFingerprint(snapshot.content);
-  if (snapshot.fingerprint !== fingerprint || snapshot.snapshotId !== snapshotId({ fingerprint, referenceDate: snapshot.referenceDate })) {
+  if (snapshot.fingerprint !== fingerprint || snapshot.snapshotId !== snapshotId({ fingerprint, referenceDate: snapshot.referenceDate, contractVersion: snapshot.contractVersion })) {
     throw new Error('initial production snapshot identity mismatch');
   }
   for (const type of ['articles', 'seminars', 'schedule_entries', 'teachers']) {
@@ -170,7 +170,7 @@ function readStagingSnapshot(snapshotDir: string, treeDir: string): DemoPublicat
     throw new Error('invalid sealed staging snapshot');
   }
   const fingerprint = contentFingerprint(snapshot.content);
-  if (snapshot.fingerprint !== fingerprint || snapshot.snapshotId !== snapshotId({ fingerprint, referenceDate: snapshot.referenceDate })) {
+  if (snapshot.fingerprint !== fingerprint || snapshot.snapshotId !== snapshotId({ fingerprint, referenceDate: snapshot.referenceDate, contractVersion: snapshot.contractVersion })) {
     throw new Error('staging snapshot identity mismatch');
   }
   for (const type of ['articles', 'seminars', 'schedule_entries', 'teachers']) {

@@ -60,6 +60,10 @@ cp scripts/run-data-migrations.mjs \
   scripts/audit-migration-stage-ledger.mjs \
   scripts/audit-seminar-schema-sync.mjs \
   scripts/audit-schedule-migration.mjs \
+  scripts/migration-review-cli.mjs \
+  scripts/migrate-schedule-data-v2.mjs \
+  scripts/audit-schedule-business-rules-v2.mjs \
+  scripts/audit-schedule-migration-v2.mjs \
   scripts/audit-documents-migration.mjs \
   scripts/audit-data-migration.mjs \
   scripts/audit-schema-snapshot.mjs \

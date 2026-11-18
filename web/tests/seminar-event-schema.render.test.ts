@@ -5,8 +5,8 @@ import SeminarPage from '../src/pages/[institute]/[courseGroup]/[seminar].astro'
 
 afterEach(() => vi.restoreAllMocks());
 
-async function renderEvent(overrides: Record<string, unknown>) {
-  const seminar = { ...data.getSeminars()[0], description_html: '' };
+async function renderEvent(overrides: Record<string, unknown>, seminarOverrides: Partial<data.Seminar> = {}) {
+  const seminar = { ...data.getSeminars()[0], description_html: '', ...seminarOverrides };
   const courseGroup = data.getCourseGroups().find((item) => item.legacy_id === seminar.course_group_legacy_id)!;
   const institute = data.getInstitutes().find((item) => item.slug === courseGroup.institute_legacy_id)!;
   const entry = {
@@ -51,6 +51,14 @@ describe('structured data reflects the seminar occurrence', () => {
   it('does not invent a zero-price offer when the paid price is unknown', async () => {
     const event = await renderEvent({ isOnline: false, city: { id: 20, name: 'Москва' }, newPrice: null });
     expect(event).not.toHaveProperty('offers');
+  });
+
+  it('does not synthesize structured duration from multi-day event dates', async () => {
+    const event = await renderEvent({ duration: null, isOnline: false, city: { id: 20, name: 'Москва' } }, { duration: null });
+    expect(event.startDate).toBeDefined();
+    expect(event.endDate).toBeDefined();
+    expect(event).not.toHaveProperty('duration');
+    expect(JSON.stringify(event)).not.toContain('Продолжительность не задана');
   });
 
   it('retains an explicit zero-price offer for a free event', async () => {

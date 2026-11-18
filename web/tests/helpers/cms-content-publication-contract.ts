@@ -97,7 +97,7 @@ export interface SnapshotModule {
    */
   contentFingerprint(content: SnapshotContent): string;
   /** Идентификатор снимка: отпечаток контента И опорная дата. */
-  snapshotId(input: { fingerprint: string; referenceDate: string }): string;
+  snapshotId(input: { fingerprint: string; referenceDate: string; contractVersion?: 1 | 2 }): string;
   /**
    * Опорная дата, которой собирают из этого снимка. У закреплённого — своя,
    * у живого — календарь прогона в заданном поясе.

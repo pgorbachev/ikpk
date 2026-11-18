@@ -28,6 +28,11 @@ function sha256(bytes) {
   return createHash('sha256').update(bytes).digest('hex');
 }
 
+function manifestHash(manifestPath, relativePath) {
+  const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
+  return manifest.integrity.files.find(({ path }) => path === relativePath)?.sha256;
+}
+
 function tempDirectory(t, prefix) {
   const directory = mkdtempSync(join(tmpdir(), prefix));
   t.after(() => rmSync(directory, { recursive: true, force: true }));
@@ -75,6 +80,8 @@ test('release plan gives every immutable step a phase, payload hash, provenance,
   const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
   assert.equal(manifest.version, 1);
   assert.ok(Array.isArray(manifest.steps) && manifest.steps.length > 0, 'an empty plan is not a verified migration');
+  assert.deepEqual(manifest.steps.filter(step => step.handler === 'reviewed-schedule').map(step => step.id),
+    ['seminar-occurrence-model-v1', 'seminar-occurrence-model-v2'], 'the versioned plan must retain both inherited v1 and eligible v2 choices');
 
   const ids = new Set();
   for (const step of manifest.steps) {
@@ -122,6 +129,11 @@ test('CMS release artifact contains the manifest and every packaged data-step he
   assert.ok(existsSync(join(artifact, 'scripts/institute-method-author-classification.mjs')), 'classification helper is not deployable');
   assert.ok(existsSync(join(artifact, 'scripts/normalize-null-documents-state.mjs')), 'normalization helper is not deployable');
   assert.ok(existsSync(join(artifact, 'scripts/audit-schema-snapshot.mjs')), 'serialized schema auditor is not deployable');
+  for (const helper of ['migrate-schedule-data-v2.mjs', 'audit-schedule-business-rules-v2.mjs', 'audit-schedule-migration-v2.mjs', 'migration-review-cli.mjs']) {
+    const relativePath = `scripts/${helper}`;
+    assert.ok(existsSync(join(artifact, relativePath)), `${relativePath} is not deployable`);
+    assert.equal(manifestHash(join(artifact, 'database/migrations/plan.json'), relativePath), sha256(readFileSync(join(artifact, relativePath))), `${relativePath} is not hash-bound by the migration plan`);
+  }
   const runtimeAsset = 'src/lib/demo193-source-empty-fields.json';
   assert.deepEqual(readFileSync(join(artifact, runtimeAsset)), readFileSync(join(repoRoot, 'cms', runtimeAsset)), 'runtime lifecycle data asset bytes differ from source');
   const manifest = JSON.parse(readFileSync(join(artifact, 'database/migrations/plan.json'), 'utf8'));

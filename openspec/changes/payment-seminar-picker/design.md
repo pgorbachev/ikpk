@@ -10,10 +10,10 @@
 идемпотентности на сервере.
 
 В текущем дереве `getScheduleEntries` загружает тип расписания из снимка
-(`web/src/lib/data.ts:130`, `const records = loadSnapshot().content.types[type];`), нормализует
-записи и добавляет имена преподавателей (`web/src/lib/data.ts:459`, `if (!_schedule) _schedule = loadJson<ScheduleEntry[]>('schedule_entries.json').map(normalizeScheduleEntry).map(withSeminarDefaults).map(withSeminarTeachers);`).
+(`web/src/lib/data.ts@0aa48b4f3001c02193678c33da261abfba3babbd:130`, `const records = loadSnapshot().content.types[type];`), нормализует
+записи и добавляет имена преподавателей (`web/src/lib/data.ts@0aa48b4f3001c02193678c33da261abfba3babbd:459`, `if (!_schedule) _schedule = loadJson<ScheduleEntry[]>('schedule_entries.json').map(normalizeScheduleEntry).map(withSeminarDefaults).map(withSeminarTeachers);`).
 Страница расписания получает этот набор и фильтрует его по состоянию и актуальности
-(`web/src/pages/raspisanie-i-tseny.astro:73`, `.filter((entry) => entry.status === 'active' && isBeforeStart(entry, todayDate))`).
+(`web/src/pages/raspisanie-i-tseny.astro@0aa48b4f3001c02193678c33da261abfba3babbd:73`, `.filter((entry) => entry.status === 'active' && isBeforeStart(entry, todayDate))`).
 Текущая реализация не объединяет основной список с отдельным списком дополнений. Исторический
 замер 23.08.2026 описан отдельно в proposal и относится к составу данных и коду на ту дату.
 

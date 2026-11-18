@@ -819,7 +819,17 @@ export function auditMigration({ sourceDbPath, candidateDbPath, plan, receipt })
   if (typeof plan.manifestPath !== 'string' || sha(readFileSync(plan.manifestPath)) !== plan.planSha256) throw new Error('migration plan bytes do not match the resolved plan hash');
   const manifest = JSON.parse(readFileSync(plan.manifestPath, 'utf8'));
   const identity = ({ id, phase, kind, handler, path, sha256 }) => [id, phase, kind, handler ?? null, path, sha256];
-  if (!Array.isArray(manifest.steps) || json(plan.steps.map(identity)) !== json(manifest.steps.map(identity))) throw new Error('resolved plan steps differ from the hash-bound manifest');
+  const exactSteps=json(plan.steps.map(identity))===json(manifest.steps?.map(identity));
+  const manifestVersions=(manifest.steps??[]).filter(step=>step.handler==='reviewed-schedule');
+  const resolvedVersions=plan.steps.filter(step=>step.handler==='reviewed-schedule');
+  const occurrencePair=manifestVersions.length===2 &&
+    new Set(manifestVersions.map(step=>step.id)).size===2 &&
+    manifestVersions.some(step=>step.id==='seminar-occurrence-model-v1') &&
+    manifestVersions.some(step=>step.id==='seminar-occurrence-model-v2');
+  const selectedOccurrence=resolvedVersions.length===1 && manifestVersions.some(step=>json(identity(step))===json(identity(resolvedVersions[0])));
+  const sameOtherSteps=json(plan.steps.filter(step=>step.handler!=='reviewed-schedule').map(identity))===
+    json(manifest.steps?.filter(step=>step.handler!=='reviewed-schedule').map(identity));
+  if (!exactSteps && !(occurrencePair && selectedOccurrence && sameOtherSteps)) throw new Error('resolved plan steps differ from the hash-bound manifest');
   if (json(receipt?.steps?.map(identity)) !== json(plan.steps.map(identity))) throw new Error('receipt steps differ from the hash-bound plan');
   if (!receipt || receipt.sourceDbPath !== sourceDbPath || receipt.candidateDbPath !== candidateDbPath) throw new Error('audit paths do not match the durable operation receipt');
   if (receipt.planSha256 !== plan.planSha256) throw new Error('audit plan hash does not match the durable operation receipt');

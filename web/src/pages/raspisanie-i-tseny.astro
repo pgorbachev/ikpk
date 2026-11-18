@@ -2,8 +2,8 @@
 import SchedulePage from '../components/schedule/SchedulePage.astro';
 import BaseLayout from '../layouts/BaseLayout.astro';
 import Breadcrumbs from '../components/Breadcrumbs.astro';
-import { formatPrice, getInstitutes, getPage, getScheduleEntries, getSeminarBuildNow, getTeachers, resolveTeacherReference, teacherPageHref } from '../lib/data';
-import { calendarDay, calendarDayDate, isBeforeStart } from '../lib/schedule-window';
+import { formatDurationDisplay, formatPrice, getInstitutes, getPage, getScheduleEntries, getSeminarBuildNow, getTeachers, resolveTeacherReference, teacherPageHref } from '../lib/data';
+import { calendarDay, isBeforeStart } from '../lib/schedule-window';
 import { monthKeys, monthOptions } from '../lib/schedule-months';
 import { registrationHref } from '../lib/forms';
 import { publicScheduleTitle } from '../lib/schedule-public-title';
@@ -21,49 +21,6 @@ function slugify(value: string): string {
     .replace(/ё/g, 'е')
     .replace(/[^a-zа-я0-9]+/gi, '-')
     .replace(/^-+|-+$/g, '');
-}
-
-function formatCalendarDate(dateStr: string): string {
-  const date = calendarDayDate(dateStr);
-  return date.toLocaleDateString('ru-RU', {
-    timeZone: 'UTC',
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-  });
-}
-
-function pluralizeRu(value: number, one: string, few: string, many: string): string {
-  const mod10 = value % 10;
-  const mod100 = value % 100;
-  if (mod10 === 1 && mod100 !== 11) return one;
-  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return few;
-  return many;
-}
-
-function formatDurationLabel(startAt: string, endAt: string, duration: string | number): string {
-  const startDay = calendarDay(startAt);
-  const endDay = calendarDay(endAt);
-  const rawDuration = String(duration ?? '').trim();
-  const hoursMatch = rawDuration.match(/^(\d+)(?:\s+час(?:а|ов)?)?$/u);
-  if (rawDuration && !hoursMatch) {
-    const dates = startDay === endDay
-      ? formatCalendarDate(startAt)
-      : `${formatCalendarDate(startAt)} - ${formatCalendarDate(endAt)}`;
-    return `${dates} - ${rawDuration}`;
-  }
-  const start = calendarDayDate(startAt);
-  const end = calendarDayDate(endAt);
-  const diffDays = Math.max(1, Math.round((end.getTime() - start.getTime()) / 86400000) + 1);
-  const dayLabel = `${diffDays} ${pluralizeRu(diffDays, 'день', 'дня', 'дней')}`;
-  const hoursValue = Number(hoursMatch?.[1]) || 0;
-  const hoursLabel = hoursValue > 0 ? `${hoursValue} ${pluralizeRu(hoursValue, 'час', 'часа', 'часов')}` : '-';
-
-  if (startDay === endDay) {
-    return `${formatCalendarDate(startAt)} - ${dayLabel} (${hoursLabel})`;
-  }
-
-  return `${formatCalendarDate(startAt)} - ${formatCalendarDate(endAt)} - ${dayLabel} (${hoursLabel})`;
 }
 
 const todayDate = getSeminarBuildNow();
@@ -134,7 +91,7 @@ const items = entries.map((entry) => {
     additionalText: entry.additionalText || '',
     cityName: entry.city?.name || 'Уточняется',
     citySlug: slugify(entry.city?.name || 'unknown'),
-    dateLabel: formatDurationLabel(entry.startAt, entry.endAt, entry.duration),
+    dateLabel: formatDurationDisplay(entry.duration, { mode: 'schedule-row', startAt: entry.startAt, endAt: entry.endAt }),
     id: entry.id,
     imageAlt: `Изображение для события «${eventTitle}»`,
     imageUrl: entry.image?.url || '',
