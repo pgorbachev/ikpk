@@ -8,6 +8,8 @@ import { auditMigrationStageLedger } from './audit-migration-stage-ledger.mjs';
 import { auditSeminarSchemaSync } from './audit-seminar-schema-sync.mjs';
 import { auditScheduleBusinessRules } from './audit-schedule-business-rules.mjs';
 import { auditScheduleMigration } from './audit-schedule-migration.mjs';
+import { auditScheduleBusinessRules as auditScheduleBusinessRulesV2 } from './audit-schedule-business-rules-v2.mjs';
+import { auditScheduleMigration as auditScheduleMigrationV2 } from './audit-schedule-migration-v2.mjs';
 import { auditDocumentsMigration } from './audit-documents-migration.mjs';
 import { auditContentMigration } from './audit-content-migration.mjs';
 
@@ -17,13 +19,23 @@ const jsonHash=value=>hash(JSON.stringify(value));
 function fail(message){throw new Error(`seminar migration composition: ${message}`);}
 function fingerprint(path){return jsonHash([path,`${path}-wal`].map((file,index)=>{try{return hash(readFileSync(file));}catch(error){if(index===1&&error.code==='ENOENT')return null;throw error;}}));}
 
+/** Select the versioned schedule auditors used by the full composition gate. */
+export function auditScheduleCompositionStage({version,sourceDb,sourceDbPath,candidateDbPath,schedule}){
+ if(![1,2].includes(version)||!schedule)fail('unsupported reviewed schedule contract');
+ const business=(version===2?auditScheduleBusinessRulesV2:auditScheduleBusinessRules)(sourceDb,{plan:schedule.plan,decisions:schedule.decisions,expectedPlanDigest:schedule.expectedPlanDigest});
+ const audit=(version===2?auditScheduleMigrationV2:auditScheduleMigration)({sourceDbPath,candidateDbPath,plan:schedule.plan,acceptedExceptions:schedule.decisions.acceptedExceptions??[],expectedPlanDigest:schedule.expectedPlanDigest,includeRunnerMetadata:true});
+ if(!audit.passed)fail('schedule preservation audit did not pass');
+ return {business,schedule:audit};
+}
+
 /** Fail-closed composition of independently approved, stable stage snapshots.
  * expectedContractDigest must be stored separately in the operation receipt;
  * a contract constructed from these inputs is not evidence of review.
  * This remains a rehearsal-only partial result until registry cohort binding exists.
  */
 export function auditSeminarMigrationComposition({paths,contract,expectedContractDigest}){
- if(!/^[a-f0-9]{64}$/.test(expectedContractDigest??'')||jsonHash(contract)!==expectedContractDigest||contract?.version!==1)fail('reviewed composition contract digest mismatch');
+ if(!/^[a-f0-9]{64}$/.test(expectedContractDigest??'')||jsonHash(contract)!==expectedContractDigest||![1,2].includes(contract?.version))fail('reviewed composition contract digest mismatch');
+ const v2=contract.version===2;
  const names=['source','schema','schedule','documents','content'];
  if(!paths||new Set(names.map(name=>paths[name])).size!==names.length||names.some(name=>typeof paths[name]!=='string'))fail('distinct snapshot paths are required');
  const inodes=new Set();
@@ -35,9 +47,8 @@ export function auditSeminarMigrationComposition({paths,contract,expectedContrac
   for(const name of names){dbs[name]=new Database(paths[name],{readonly:true,fileMustExist:true,timeout:5000});dbs[name].pragma('query_only=ON');dbs[name].exec('BEGIN');}
   const ledger=auditMigrationStageLedger(dbs.source,{...contract.ledger,stages:[{db:dbs.schema,newSteps:[contract.steps?.permissions]},{db:dbs.schedule,newSteps:[contract.steps?.schedule]},{db:dbs.documents,newSteps:[contract.steps?.documents]},{db:dbs.content,newSteps:[contract.steps?.content]}]});
   const schema=auditSeminarSchemaSync(dbs.source,dbs.schema,{contract:contract.schemaContract,expectedContractDigest:contract.schemaContractDigest,includeRunnerMetadata:true});
-  const business=auditScheduleBusinessRules(dbs.schema,{plan:contract.schedule.plan,decisions:contract.schedule.decisions,expectedPlanDigest:contract.schedule.expectedPlanDigest});
-  const schedule=auditScheduleMigration({sourceDbPath:paths.schema,candidateDbPath:paths.schedule,plan:contract.schedule.plan,acceptedExceptions:contract.schedule.decisions.acceptedExceptions,expectedPlanDigest:contract.schedule.expectedPlanDigest,includeRunnerMetadata:true});
-  if(!schedule.passed)fail('schedule preservation audit did not pass');
+  const scheduleStage=auditScheduleCompositionStage({version:contract.version,sourceDb:dbs.schema,sourceDbPath:paths.schema,candidateDbPath:paths.schedule,schedule:contract.schedule});
+  const {business,schedule}=scheduleStage;
   const documents=auditDocumentsMigration(dbs.schedule,dbs.documents,{plan:contract.documents.plan,expectedPlanDigest:contract.documents.expectedPlanDigest,includeRunnerMetadata:true});
   if(contract.content?.plan?.payload?.documentsPlanDigest!==contract.documents.expectedPlanDigest)fail('content is not bound to the reviewed documents plan');
   if(!/^[a-f0-9]{64}$/.test(contract.rendererSha256??'')||contract.content?.plan?.payload?.rendererSha256!==contract.rendererSha256)fail('content renderer does not match the independently reviewed fingerprint');

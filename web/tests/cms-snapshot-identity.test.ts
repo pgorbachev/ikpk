@@ -68,6 +68,15 @@ describe('снимок: два идентификатора', () => {
     expect(yesterday).not.toBe(today);
   });
 
+  it('версия контракта входит в v2 identity, сохраняя legacy identity byte-for-byte', async () => {
+    const mod = await snapshotModule();
+    const fingerprint = mod.contentFingerprint(baseContent());
+    const referenceDate = '2026-08-24';
+    const legacy = mod.snapshotId({ fingerprint, referenceDate });
+    expect(mod.snapshotId({ fingerprint, referenceDate, contractVersion: 1 })).toBe(legacy);
+    expect(mod.snapshotId({ fingerprint, referenceDate, contractVersion: 2 })).not.toBe(legacy);
+  });
+
   // Сценарий: отпечаток не зависит от порядка в ответе
   it('перестановка записей, страниц и ключей отпечаток не меняет', async () => {
     const mod = await snapshotModule();

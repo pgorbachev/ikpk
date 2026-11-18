@@ -193,14 +193,8 @@ async function validateEntryTeachers(strapi, data, seminarId, existing, isCreate
   }
 }
 
-async function assertEntryRequirements(strapi, seminarId, duration, teachers) {
-  const publishedSeminar = seminarId && await strapi.db.query(SEMINAR_UID).findOne({
-    where: { documentId: seminarId, publishedAt: { $notNull: true } },
-  });
-  const messages = [];
-  if (!text(duration) && !text(publishedSeminar?.duration)) messages.push('Укажите продолжительность проведения или опубликованного семинара.');
-  if (teachers.length === 0) messages.push('Выберите хотя бы одного преподавателя.');
-  if (messages.length) throw new ValidationError(messages.join(' '));
+async function assertEntryRequirements(teachers) {
+  if (teachers.length === 0) throw new ValidationError('Выберите хотя бы одного преподавателя.');
 }
 
 async function resultingTeachers(strapi, relation, existing) {
@@ -214,22 +208,6 @@ async function resultingTeachers(strapi, relation, existing) {
   for (const id of await teacherIds(strapi, relation.disconnect)) current.delete(id);
   for (const id of await teacherIds(strapi, relation.connect)) current.add(id);
   return [...current];
-}
-
-async function assertSeminarDurationRemoval(strapi, documentId, duration) {
-  if (!documentId || text(duration)) return;
-  const current = await strapi.db.query(SEMINAR_UID).findOne({
-    where: { documentId, publishedAt: { $notNull: true } },
-  });
-  // Existing historical gaps must not prevent unrelated seminar updates.
-  if (!text(current?.duration)) return;
-  const entries = await strapi.db.query(SCHEDULE_ENTRY_UID).findMany({
-    where: { publishedAt: { $notNull: true }, seminar: { documentId } },
-  });
-  const dependent = entries.filter((entry) => !text(entry.duration));
-  if (dependent.length) {
-    throw new ValidationError(`Нельзя убрать продолжительность: она нужна опубликованным проведениям: ${dependent.map((entry) => entry.admin_label || entry.name || entry.documentId).join(', ')}.`);
-  }
 }
 
 function entryShape(row, documentId) {
@@ -332,9 +310,7 @@ async function assertPublishedWrite(strapi, context) {
     registrationFormLink: Object.prototype.hasOwnProperty.call(data, 'registrationFormLink') ? data.registrationFormLink : existing?.registrationFormLink,
   });
   if (messages.length > 0) throw new ValidationError(messages.join(' '));
-  await assertEntryRequirements(strapi, seminarId,
-    Object.prototype.hasOwnProperty.call(data, 'duration') ? data.duration : existing?.duration,
-    await resultingTeachers(strapi, data.teachers, existing?.teachers));
+  await assertEntryRequirements(await resultingTeachers(strapi, data.teachers, existing?.teachers));
 }
 
 async function applyEntryWrite(strapi, context) {
@@ -415,7 +391,7 @@ async function assertEntryPublishable(strapi, context) {
     registrationFormLink: draft.registrationFormLink,
   });
   if (messages.length > 0) throw new ValidationError(messages.join(' '));
-  await assertEntryRequirements(strapi, seminarId, draft.duration, draft.teachers ?? []);
+  await assertEntryRequirements(draft.teachers ?? []);
   const name = decideEntryName({
     trustedImport: false,
     incomingName: null,
@@ -489,7 +465,6 @@ async function assertSeminarPublishable(strapi, context) {
     throw new ValidationError('Перенесите прежний полный текст в отдельные разделы и очистите его перед публикацией.');
   }
   await assertSeminarProgram(strapi, draft.course_group);
-  await assertSeminarDurationRemoval(strapi, draft.documentId, draft.duration);
   if (!text(draft.slug)) {
     const uid = strapi.plugin('content-manager').service('uid');
     const slug = await uid.generateUIDField({
@@ -548,8 +523,6 @@ export function registerSeminarDocuments(strapi) {
         }
         const program = requestedProgram(incoming, existing?.course_group);
         await assertSeminarProgram(strapi, program);
-        const duration = Object.prototype.hasOwnProperty.call(incoming, 'duration') ? incoming.duration : existing?.duration;
-        await assertSeminarDurationRemoval(strapi, context.params.documentId, duration);
       }
       const hostId = context.params.documentId || documentIdOf(context.params.data);
       await guardSeminarLinks(strapi, hostId, context.params.data);

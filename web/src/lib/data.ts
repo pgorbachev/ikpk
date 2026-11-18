@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { localizeAssetUrls } from './media.js';
 import { withPublicOfferDocument } from './public-offer.js';
 import { byExplicitOrder } from '../../scripts/lib/content-order';
+import { calendarDay, calendarDayDate } from './schedule-window';
 export { stripLegacySeminarTail, relForExternalUrl, isSafeRichHtml, terminalSanitize, rewriteSafeRichHtml } from './html-cleaner.js';
 export type { SafeRichHtml } from './html-cleaner.js';
 import { cleanBodyHtml as cleanHtml, type SafeRichHtml } from './html-cleaner.js';
@@ -311,7 +312,7 @@ export interface ScheduleEntry {
   city: { id: number; name: string };
   program: { id: number; slug: string; name: string };
   additionalText: string;
-  duration: string;
+  duration: string | null;
   registrationFormLink: string;
 }
 
@@ -605,9 +606,63 @@ export function normalizeScheduleEntry(raw: ScheduleEntry | Record<string, unkno
   };
 }
 
-export function shortDuration(value: string | null | undefined): string {
+export type DurationDisplayMode = 'short' | 'seminar-event' | 'schedule-row';
+
+export function formatDurationDisplay(
+  value: string | number | null | undefined,
+  options: { mode?: DurationDisplayMode; startAt?: string; endAt?: string } = {},
+): string {
+  const { mode = 'short', startAt, endAt } = options;
   const duration = String(value ?? '').trim();
-  return /^\d+$/.test(duration) ? `${duration} ч` : duration;
+  const startDay = startAt ? calendarDay(startAt) : '';
+  const endDay = endAt ? calendarDay(endAt) : '';
+  const hasDates = Boolean(startDay && endDay);
+  const formatDate = (dateValue: string) => calendarDayDate(dateValue).toLocaleDateString('ru-RU', {
+    timeZone: 'UTC', day: '2-digit', month: '2-digit', year: 'numeric',
+  });
+  const dateRange = hasDates
+    ? startDay === endDay ? formatDate(startAt!) : `${formatDate(startAt!)} - ${formatDate(endAt!)}`
+    : '';
+  if (!duration) {
+    const fallback = 'Продолжительность не задана';
+    return mode === 'schedule-row' && dateRange ? `${dateRange} - ${fallback}` : fallback;
+  }
+  const hoursMatch = duration.match(/^(\d+)(?:\s+час(?:а|ов)?)?$/u);
+
+  if (!hoursMatch) {
+    if (mode === 'schedule-row' && dateRange) return `${dateRange} - ${duration}`;
+    return duration;
+  }
+
+  const hours = Number(hoursMatch[1]);
+  const pluralize = (number: number, one: string, few: string, many: string): string => {
+    const mod10 = number % 10;
+    const mod100 = number % 100;
+    if (mod10 === 1 && mod100 !== 11) return one;
+    if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return few;
+    return many;
+  };
+  const hoursLabel = `${hours} ${pluralize(hours, 'час', 'часа', 'часов')}`;
+
+  if (mode === 'short') return /^\d+$/.test(duration) ? `${duration} ч` : duration;
+  if (!hasDates) return hoursLabel;
+
+  const start = calendarDayDate(startAt!);
+  const end = calendarDayDate(endAt!);
+  const daySpan = Math.round((end.getTime() - start.getTime()) / 86400000) + 1;
+  if (mode === 'seminar-event') {
+    return daySpan > 1 ? `${daySpan} ${pluralize(daySpan, 'день', 'дня', 'дней')} (${hoursLabel})` : hoursLabel;
+  }
+
+  const pricedDaySpan = Math.max(1, daySpan);
+  const dayLabel = `${pricedDaySpan} ${pluralize(pricedDaySpan, 'день', 'дня', 'дней')}`;
+  const pricedHoursLabel = hours > 0 ? hoursLabel : '-';
+  if (startDay === endDay) return `${dateRange} - ${dayLabel} (${pricedHoursLabel})`;
+  return `${dateRange} - ${dayLabel} (${pricedHoursLabel})`;
+}
+
+export function shortDuration(value: string | null | undefined): string {
+  return formatDurationDisplay(value);
 }
 
 function withSeminarDefaults(entry: ScheduleEntry): ScheduleEntry {

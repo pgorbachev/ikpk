@@ -8,6 +8,9 @@ import { fileURLToPath } from 'node:url';
 import { planScheduleDataMigration } from './migrate-schedule-data.mjs';
 import { auditScheduleBusinessRules } from './audit-schedule-business-rules.mjs';
 import { auditScheduleMigration } from './audit-schedule-migration.mjs';
+import { planScheduleDataMigration as planScheduleDataMigrationV2 } from './migrate-schedule-data-v2.mjs';
+import { auditScheduleBusinessRules as auditScheduleBusinessRulesV2 } from './audit-schedule-business-rules-v2.mjs';
+import { auditScheduleMigration as auditScheduleMigrationV2 } from './audit-schedule-migration-v2.mjs';
 import { capturePlan } from './documents-migration-writer.mjs';
 import { auditDocumentsMigration } from './audit-documents-migration.mjs';
 import { readReviewedScheduleFile } from '../database/migrations/data-steps/reviewed-schedule.mjs';
@@ -40,15 +43,15 @@ function checkVersion(commit) {
 }
 function parse(argv) {
  const [action, kind, ...rest]=argv; if (!['prepare','audit'].includes(action)||!['schedule','documents'].includes(kind)||rest.length%2) fail();
- const permitted=action==='prepare'?['source','source-sha256','input','input-sha256','source-commit','output-dir']:['source','source-sha256','candidate','candidate-sha256','review','review-sha256','plan-digest','source-commit'];
+ const permitted=action==='prepare'?['source','source-sha256','input','input-sha256','source-commit','output-dir','version']:['source','source-sha256','candidate','candidate-sha256','review','review-sha256','plan-digest','source-commit','version'];
  const o={}; for(let i=0;i<rest.length;i+=2) { const k=rest[i].startsWith('--')?rest[i].slice(2):''; if(!permitted.includes(k)||Object.hasOwn(o,k)||!rest[i+1]||rest[i+1].startsWith('--')) fail(); o[k]=rest[i+1]; }
- if(permitted.some(k=>!o[k])) fail(); return {action,kind,o};
+ if(permitted.filter(k=>k!=='version').some(k=>!o[k])|| (o.version!==undefined&&!['1','2'].includes(o.version)) || (o.version==='2'&&kind!=='schedule')) fail(); return {action,kind,o};
 }
 function main() {
- const {action,kind,o}=parse(process.argv.slice(2)); checkVersion(o['source-commit']); snapshot(o.source,o['source-sha256']);
+ const {action,kind,o}=parse(process.argv.slice(2)); const v2=kind==='schedule'&&o.version==='2'; checkVersion(o['source-commit']); snapshot(o.source,o['source-sha256']);
  if(action==='prepare') {
   const input=JSON.parse(bytes(o.input,o['input-sha256']).toString('utf8')); const db=open(o.source); let plan;
-  try { plan=kind==='schedule'?planScheduleDataMigration(db,{decisions:input}):capturePlan(db,input); } finally {db.close();}
+  try { plan=kind==='schedule'?(v2?planScheduleDataMigrationV2:planScheduleDataMigration)(db,{decisions:input}):capturePlan(db,input); } finally {db.close();}
   snapshot(o.source,o['source-sha256']); bytes(o.input,o['input-sha256']);
   const target=o['output-dir']; if(!isAbsolute(target)||target!==resolve(target)) fail(); const parent=dirname(target); canonical(parent); const p=lstatSync(parent); if(!p.isDirectory()) fail(); privateOwner(p);
   const review=kind==='schedule'?{decisions:input,plan}:plan; const content=Buffer.from(JSON.stringify(review)+'\n');
@@ -59,7 +62,7 @@ function main() {
   snapshot(o.candidate,o['candidate-sha256']);
   const review=kind==='schedule'?readReviewedScheduleFile(o.review,o['review-sha256'],o['plan-digest']):readReviewedDocumentsFile(o.review,o['review-sha256'],o['plan-digest']);
   let result;
-  if(kind==='schedule') { const source=open(o.source); try {auditScheduleBusinessRules(source,{...review,expectedPlanDigest:o['plan-digest']});} finally {source.close();} result=auditScheduleMigration({sourceDbPath:o.source,candidateDbPath:o.candidate,plan:review.plan,expectedPlanDigest:o['plan-digest'],acceptedExceptions:review.decisions.acceptedExceptions ?? [],includeRunnerMetadata:true}); }
+  if(kind==='schedule') { const source=open(o.source); try {(v2?auditScheduleBusinessRulesV2:auditScheduleBusinessRules)(source,{...review,expectedPlanDigest:o['plan-digest']});} finally {source.close();} result=(v2?auditScheduleMigrationV2:auditScheduleMigration)({sourceDbPath:o.source,candidateDbPath:o.candidate,plan:review.plan,expectedPlanDigest:o['plan-digest'],acceptedExceptions:review.decisions.acceptedExceptions ?? [],includeRunnerMetadata:true}); }
   else {const source=open(o.source), candidate=open(o.candidate); try {result=auditDocumentsMigration(source,candidate,{plan:review,expectedPlanDigest:o['plan-digest'],includeRunnerMetadata:true});} finally {source.close();candidate.close();}}
   if(!result.passed) fail(); snapshot(o.source,o['source-sha256']); snapshot(o.candidate,o['candidate-sha256']); bytes(o.review,o['review-sha256'],50_000_000);
   console.log(JSON.stringify({passed:true,partial:true,sourceSha256:o['source-sha256'],candidateSha256:o['candidate-sha256'],planDigest:o['plan-digest']}));

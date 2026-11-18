@@ -703,10 +703,11 @@ async function liveCapture(): Promise<void> {
   const fingerprint = contentFingerprint(content);
   const referenceDate = new Date().toISOString().slice(0, 10);
   const snapshotBase = {
+    contractVersion: 2 as const,
     content,
     referenceDate,
     fingerprint,
-    snapshotId: snapshotId({ fingerprint, referenceDate }),
+    snapshotId: snapshotId({ fingerprint, referenceDate, contractVersion: 2 }),
   };
   const snap: Snapshot = serverCapture?.profile === 'initial-prod'
     ? { ...snapshotBase, origin: { kind: 'server-db', sourceId: 'initial-prod-server-db', capturedAt: serverCapture.manifest.capturedAt },

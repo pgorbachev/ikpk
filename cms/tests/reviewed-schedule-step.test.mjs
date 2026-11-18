@@ -64,3 +64,125 @@ test('reviewed schedule refuses changed bytes in its imported planner dependency
   const reviewed=await import(`${pathToFileURL(helper).href}?test=${Date.now()}`);
   assert.throws(()=>reviewed.readReviewedScheduleFile(f.file,f.expectedReviewFileSha256,f.expectedPlanDigest),/implementation dependency hash mismatch: .*migrate-schedule-data/);
 }finally{f.cleanup();rmSync(artifact,{recursive:true,force:true});}});
+
+test('the deployed occurrence v1 payload and dependency bytes keep their existing digests', () => {
+  const files = [
+    ['../database/migrations/data-steps/reviewed-schedule.mjs', '5ccd43ae6d479add7331a37cb84d2b93f9bc253b391ac8c02bb2c76df884adcf'],
+    ['../scripts/audit-schedule-business-rules.mjs', 'ae6f02d355a4e372f67e507e82915688a301a237f3cca3e1416a18acf1d65c8a'],
+    ['../scripts/migrate-schedule-data.mjs', 'eee26d5890938a065f6c58aba3cdd3bd99d57532e48ce248455640ae31317821'],
+  ];
+  for (const [relative, expected] of files) {
+    assert.equal(sha(readFileSync(new URL(relative, import.meta.url))), expected, relative);
+  }
+});
+
+async function v2Migration(t, { siblingDuration = '12 часов', price = 500 } = {}) {
+  const f = fixture();
+  t.after(f.cleanup);
+  f.db.exec(`
+    UPDATE seminars SET duration='' WHERE id=1;
+    INSERT INTO seminars VALUES(2,'s','published',NULL);
+    UPDATE schedule_entries SET city='Москва',price=500,duration='24 часа' WHERE id=3;
+    INSERT INTO schedule_entries VALUES(4,'e','published','42',500,0,'Москва',NULL,'24 часа');
+    INSERT INTO schedule_entries VALUES(5,'sibling',NULL,'43',500,0,'Москва',NULL,'');
+    INSERT INTO schedule_entries VALUES(6,'sibling','published','43',500,0,'Москва',NULL,NULL);
+    INSERT INTO schedule_entries_seminar_lnk VALUES(2,4),(1,5),(2,6);
+  `);
+  if (siblingDuration !== null) f.db.prepare('UPDATE schedule_entries SET duration=? WHERE id IN (5,6)').run(siblingDuration);
+  f.db.prepare('UPDATE schedule_entries SET price=? WHERE id=5').run(price);
+  // V2 uses a separately versioned planner and verifier. The existing v1 modules above stay frozen.
+  const plannerUrl = new URL('../scripts/migrate-schedule-data-v2.mjs', import.meta.url);
+  const auditorUrl = new URL('../scripts/audit-schedule-business-rules-v2.mjs', import.meta.url);
+  const { planScheduleDataMigration, applyScheduleDataMigration } = await import(plannerUrl);
+  const { auditScheduleBusinessRules } = await import(auditorUrl);
+  const decisions = { paid: [], free: [], online: [], acceptedExceptions: [] };
+  const durationMapping = [
+    { table: 'seminars', rowId: 1, before: '', after: '24 часа', source: { table: 'schedule_entries', rowId: 3 } },
+    { table: 'seminars', rowId: 2, before: null, after: '24 часа', source: { table: 'schedule_entries', rowId: 4 } },
+    { table: 'schedule_entries', rowId: 3, before: '24 часа', after: null, source: { table: 'schedule_entries', rowId: 4 } },
+    { table: 'schedule_entries', rowId: 4, before: '24 часа', after: null, source: { table: 'schedule_entries', rowId: 3 } },
+  ];
+  function run(changes = []) {
+    const review = { ...decisions, durationMapping: changes };
+    const plan = planScheduleDataMigration(f.db, { decisions: review });
+    const options = { decisions: review, plan, expectedPlanDigest: plan.planDigest };
+    auditScheduleBusinessRules(f.db, options);
+    applyScheduleDataMigration(f.db, options);
+    return plan;
+  }
+  function durations() {
+    return ['seminars', 'schedule_entries'].map(table =>
+      f.db.prepare(`SELECT duration FROM ${table} ORDER BY id`).all().map(row => row.duration));
+  }
+  return { ...f, run, durationMapping, durations };
+}
+
+test('v2 preserves blank and SQL NULL verbatim across versions without duration exceptions', async t => {
+  const f = await v2Migration(t, { siblingDuration: null });
+  const plan = f.run();
+  assert.deepEqual(f.durations(), [['', null], ['24 часа', '24 часа', '', null]]);
+  assert.deepEqual(plan.exceptions, []);
+});
+
+test('v2 allows reviewed default migration with a sibling that retains its different explicit override', async t => {
+  const f = await v2Migration(t);
+  const plan = f.run(f.durationMapping);
+  assert.deepEqual(f.durations(), [['24 часа', '24 часа'], [null, null, '12 часов', '12 часов']]);
+  assert.deepEqual(plan.exceptions, []);
+});
+
+test('v2 mapping evidence always comes from original source rows, not earlier projected changes', async t => {
+  const f = await v2Migration(t);
+  f.db.exec("UPDATE schedule_entries SET duration='24 часа' WHERE id=5");
+  const defaultMapping = { table: 'seminars', rowId: 1, before: '', after: '24 часа', source: { table: 'schedule_entries', rowId: 3 } };
+  const overrideMapping = { table: 'schedule_entries', rowId: 5, before: '24 часа', after: null, source: { table: 'seminars', rowId: 1 } };
+  const before = f.durations();
+  // The first mapping would make seminar 1 appear to support the second mapping
+  // if evidence were read from the mutable projection.
+  assert.throws(() => f.run([defaultMapping, overrideMapping]), /source|mapping/i);
+  assert.deepEqual(f.durations(), before);
+
+  // The equivalent mapping is accepted when its evidence is the immutable original row.
+  const validOverride = { ...overrideMapping, source: { table: 'schedule_entries', rowId: 3 } };
+  f.run([defaultMapping, validOverride]);
+  assert.deepEqual(f.durations(), [['24 часа', null], ['24 часа', '24 часа', null, '12 часов']]);
+});
+
+test('v2 rejects a reviewed default if any sibling had unknown effective duration', async t => {
+  const f = await v2Migration(t, { siblingDuration: null });
+  const before = f.durations();
+  assert.throws(() => f.run(f.durationMapping), /duration|effective|unknown/i);
+  assert.deepEqual(f.durations(), before);
+});
+
+test('v2 rejects mappings with incorrect original values or unsupported hours', async t => {
+  const f = await v2Migration(t);
+  const before = f.durations();
+  const firstCell = f.durationMapping[0];
+  for (const patch of [{ before: null }, { after: '25 часов' }]) {
+    assert.throws(() => f.run([{ ...firstCell, ...patch }, ...f.durationMapping.slice(1)]), /duration|source|effective|mapping/i);
+    assert.deepEqual(f.durations(), before);
+  }
+});
+
+test('v2 still requires review of a historical paid-zero conflict', async t => {
+  const f = await v2Migration(t, { siblingDuration: null, price: 0 });
+  const before = f.durations();
+  assert.throws(() => f.run(), /price|unreviewed|exception/i);
+  assert.deepEqual(f.durations(), before);
+  assert.equal(f.db.prepare('SELECT price FROM schedule_entries WHERE id=5').get().price, 0);
+});
+
+test('packaged v2 step verifies its helper hashes and commits the ledger callback atomically', async t => {
+  const f = await v2Migration(t, { siblingDuration: null });
+  const { planScheduleDataMigration } = await import('../scripts/migrate-schedule-data-v2.mjs');
+  const { apply: applyV2 } = await import('../database/migrations/data-steps/reviewed-schedule-v2.mjs');
+  const decisions = { paid: [], free: [], online: [], acceptedExceptions: [] };
+  const plan = planScheduleDataMigration(f.db, { decisions });
+  const reviewBytes = Buffer.from(JSON.stringify({ decisions, plan }));
+  writeFileSync(f.file, reviewBytes, { mode: 0o600 });
+  const options = { reviewFilePath:f.file, expectedReviewFileSha256:sha(reviewBytes), expectedPlanDigest:plan.planDigest };
+  applyV2(f.db, { ...options, onApplied(db) { db.exec("INSERT INTO ledger VALUES('v2-applied')"); } });
+  assert.equal(f.db.prepare("SELECT count(*) n FROM ledger WHERE id='v2-applied'").get().n, 1);
+  assert.deepEqual(f.durations(), [['', null], ['24 часа', '24 часа', '', null]]);
+});

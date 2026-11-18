@@ -78,7 +78,7 @@ export async function runNewPublication(input: NewPublicationInput, ports: NewPu
     if (!snapshot || snapshot.origin?.kind !== 'live' || !snapshot.origin.url || !snapshot.origin.capturedAt ||
         !Number.isFinite(Date.parse(snapshot.origin.capturedAt)) || !snapshot.fingerprint ||
         contentFingerprint(snapshot.content) !== snapshot.fingerprint ||
-        snapshotId({ fingerprint: snapshot.fingerprint, referenceDate: snapshot.referenceDate }) !== snapshot.snapshotId) {
+        snapshotId({ fingerprint: snapshot.fingerprint, referenceDate: snapshot.referenceDate, contractVersion: snapshot.contractVersion }) !== snapshot.snapshotId) {
       throw new Error('unverified live snapshot identity');
     }
     const provenance = snapshot.provenance;

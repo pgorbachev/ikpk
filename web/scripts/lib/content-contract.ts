@@ -106,12 +106,42 @@ export function validateSnapshotContract(snapshot: Snapshot, trust: HistoricalTr
 
   const rawRegistry = snapshot.content.historicalExceptions;
   const registry = Array.isArray(rawRegistry) ? rawRegistry : [];
+  const contractVersion = snapshot.contractVersion;
+  if (contractVersion !== undefined && contractVersion !== 1 && contractVersion !== 2) {
+    violations.push({ type: 'snapshot', recordId: 'contractVersion', rule: 'invalid-value' });
+  }
   const registryFingerprint = contentFingerprint({ types: { historicalExceptions: registry as unknown as Record<string, unknown>[] }, media: [] });
   const trusted = trust.trustedHistoricalExceptionsFingerprint === registryFingerprint ||
     (snapshot.pinned === true && registryFingerprint === PINNED_LEGACY_EXCEPTIONS);
   const used = new Set<number>();
+  const legacyDurationTombstones = new Set<number>();
   if ((rawRegistry !== undefined && !Array.isArray(rawRegistry)) || (registry.length > 0 && !trusted)) {
     violations.push({ type: 'schedule', recordId: 'historicalExceptions', rule: 'historical-exception-invalid' });
+  }
+  if (trusted && contractVersion !== 2) {
+    const counts = new Map<string, number>();
+    registry.forEach((entry) => {
+      if (entry?.condition === 'missing-duration' && typeof entry.documentId === 'string') {
+        counts.set(entry.documentId, (counts.get(entry.documentId) ?? 0) + 1);
+      }
+    });
+    registry.forEach((entry, index) => {
+      if (entry?.condition !== 'missing-duration') return;
+      const valid = typeof entry.documentId === 'string' && entry.documentId.length > 0 &&
+        typeof entry.publishedAt === 'string' && entry.publishedAt.length > 0 &&
+        typeof entry.updatedAt === 'string' && entry.updatedAt.length > 0 &&
+        /^sha256:[a-f0-9]{64}$/.test(entry.recordFingerprint ?? '') &&
+        counts.get(entry.documentId) === 1;
+      if (valid) legacyDurationTombstones.add(index);
+      else violations.push({ type: 'schedule', recordId: String(entry.documentId ?? 'historicalExceptions'), rule: 'historical-exception-invalid' });
+    });
+  }
+  if (contractVersion === 2) {
+    registry.forEach((entry) => {
+      if (entry?.condition === 'missing-duration') {
+        violations.push({ type: 'schedule', recordId: String(entry.documentId ?? 'historicalExceptions'), rule: 'historical-exception-invalid' });
+      }
+    });
   }
   function approved(event: Record<string, unknown>, condition: HistoricalException['condition']): boolean {
     if (!trusted || !Array.isArray(registry)) return false;
@@ -198,14 +228,18 @@ export function validateSnapshotContract(snapshot: Snapshot, trust: HistoricalTr
         violations.push({ type: 'schedule', recordId: recordId(event), field: 'price', rule: 'invalid-value' });
       }
       const publishedSeminar = seminar?.publishedAt !== null ? seminar : undefined;
+      const eventFingerprint = contentFingerprint({ types: { schedule_entries: [event] }, media: [] });
+      const hasLegacyTombstone = registry.some((entry, index) => legacyDurationTombstones.has(index) &&
+        entry.documentId === event.documentId && entry.publishedAt === event.publishedAt &&
+        entry.updatedAt === event.updatedAt && entry.recordFingerprint === eventFingerprint);
       const nonempty = (value: unknown) => typeof value === 'string' ? value.trim().length > 0 : value != null;
-      if (!nonempty(event.duration) && !nonempty(publishedSeminar?.duration) && !approved(event, 'missing-duration')) {
+      if (contractVersion !== 2 && !hasLegacyTombstone && !nonempty(event.duration) && !nonempty(publishedSeminar?.duration) && !approved(event, 'missing-duration')) {
         violations.push({ type: 'schedule', recordId: recordId(event), field: 'duration', rule: 'required-field-empty' });
       }
     }
   }
   if (Array.isArray(registry)) for (const [index, entry] of registry.entries()) {
-    if (!entry || !used.has(index)) violations.push({ type: 'schedule', recordId: String(entry?.documentId ?? 'historicalExceptions'), rule: 'historical-exception-invalid' });
+    if (!entry || (!used.has(index) && !legacyDurationTombstones.has(index))) violations.push({ type: 'schedule', recordId: String(entry?.documentId ?? 'historicalExceptions'), rule: 'historical-exception-invalid' });
   }
 
   checkDuplicates(

@@ -18,8 +18,6 @@ export function historicalExceptionsFromEnvironment(): { entries: HistoricalExce
 /** Only unchanged rows with the specific remaining violation need an exception. */
 export function activeHistoricalExceptions(content: SnapshotContent, entries: HistoricalException[]): HistoricalException[] {
   const events = content.types.schedule_entries ?? content.types.schedule ?? [];
-  const seminars = content.types.seminars ?? [];
-  const nonempty = (value: unknown) => typeof value === 'string' ? value.trim().length > 0 : value != null;
   return entries.filter((entry) => events.some((event) => {
     if (event.documentId !== entry.documentId || event.publishedAt !== entry.publishedAt || event.updatedAt !== entry.updatedAt ||
         contentFingerprint({ types: { schedule_entries: [event] }, media: [] }) !== entry.recordFingerprint) return false;
@@ -27,10 +25,9 @@ export function activeHistoricalExceptions(content: SnapshotContent, entries: Hi
       const price = Object.hasOwn(event, 'price') ? event.price : event.newPrice;
       return event.isFree === false && price != null && price !== '' && Number(price) === 0;
     }
-    if (entry.condition !== 'missing-duration') return false;
-    const relation = typeof event.seminar === 'string' ? event.seminar : (event.seminar as { slug?: unknown } | null)?.slug;
-    const seminar = seminars.find((row) => row.slug === relation && row.publishedAt !== null);
-    return !nonempty(event.duration) && !nonempty(seminar?.duration);
+    // Missing duration is now a valid state. Keep old entries readable for frozen
+    // snapshots, but never activate or regenerate them in a current capture.
+    return false;
   }));
 }
 
@@ -46,7 +43,7 @@ export function proposeHistoricalExceptions(content: SnapshotContent): Historica
     if (seen.has(event.documentId)) throw new Error('historical audit found duplicate logical occurrences');
     seen.add(event.documentId);
     const recordFingerprint = contentFingerprint({ types: { schedule_entries: [event] }, media: [] });
-    for (const condition of ['paid-zero-price', 'missing-duration'] as const) {
+    for (const condition of ['paid-zero-price'] as const) {
       const item: HistoricalException = { documentId: event.documentId, publishedAt: event.publishedAt, updatedAt: event.updatedAt, condition, recordFingerprint };
       if (activeHistoricalExceptions(content, [item]).length) candidates.push(item);
     }

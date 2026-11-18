@@ -19,6 +19,12 @@ const LEDGER_TABLE = 'ikpk_data_migration_history';
 const LINEAGE_TABLE = 'ikpk_migration_lineage';
 const STEP_ID = /^[A-Za-z0-9][A-Za-z0-9._-]+$/;
 const HASH = /^[a-f0-9]{64}$/;
+const OCCURRENCE_V2_STEP = 'seminar-occurrence-model-v2';
+const OCCURRENCE_V2_LINEAGE = 'fed2d793a84b7ffe9425a4ec51a598687a4fed8283b06762ef4537a44c5d6e1c';
+const OCCURRENCE_V2_HISTORY = new Map([
+  ['institute-method-author-classification-v1', '5a824938c8075287c33925f00b4c22f168459031ed6336a4c75812790bcc2059'],
+  ['normalize-null-documents-state-v1', '4be74fe36c1117035344f35fb76d5426062e4a78ada0f3002740d70e214403d0'],
+]);
 const CLOSED_STRAPI_SECRET_KEYS = ['JWT_SECRET', 'APP_KEYS', 'ADMIN_JWT_SECRET', 'API_TOKEN_SALT', 'TRANSFER_TOKEN_SALT', 'ENCRYPTION_KEY'];
 const CLOSED_STRAPI_RUNTIME_KEYS = [
   ...CLOSED_STRAPI_SECRET_KEYS,
@@ -483,7 +489,9 @@ function resolvePlan(artifactDir, { fingerprint = true } = {}) {
   });
   const reviewedSchedule = steps.filter(step => step.handler === 'reviewed-schedule');
   const reviewedDocuments = steps.filter(step => step.handler === 'reviewed-documents');
-  if (reviewedSchedule.length > 1 || reviewedDocuments.length > 1 || (reviewedDocuments.length && (!reviewedSchedule.length || steps.indexOf(reviewedSchedule[0]) >= steps.indexOf(reviewedDocuments[0])))) fail('reviewed schedule must precede reviewed documents, with at most one of each');
+  const occurrenceIds = new Set(reviewedSchedule.map(step => step.id));
+  if ((reviewedSchedule.length > 1 && (reviewedSchedule.length !== 2 || !occurrenceIds.has('seminar-occurrence-model-v1') || !occurrenceIds.has(OCCURRENCE_V2_STEP))) ||
+      reviewedDocuments.length > 1 || (reviewedDocuments.length && (!reviewedSchedule.length || steps.indexOf(reviewedSchedule[0]) >= steps.indexOf(reviewedDocuments[0])))) fail('reviewed schedule must use one known occurrence version and precede reviewed documents');
   const reviewedContent = steps.filter(step => step.handler === 'reviewed-content');
   if (reviewedContent.length > 1 || (reviewedContent.length && (!reviewedDocuments.length || steps.indexOf(reviewedDocuments[0]) >= steps.indexOf(reviewedContent[0])))) fail('reviewed documents must precede reviewed content, with at most one content step');
   const permissionSteps = steps.filter(step => step.handler === 'content-admin-permissions');
@@ -564,6 +572,22 @@ function ensureLedger(db) {
 }
 function getLineage(db) {
   return db.prepare(`SELECT * FROM ${LINEAGE_TABLE} WHERE singleton = 1`).get();
+}
+function verifyOccurrenceV2Source(db, inherited) {
+  const hasTable = (name) => db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?").get(name);
+  if (!hasTable(LINEAGE_TABLE) || !hasTable(LEDGER_TABLE)) fail('occurrence v2 requires the exact admitted database lineage and migration history');
+  const lineage = getLineage(db);
+  if (!lineage || lineage.lineage_id !== OCCURRENCE_V2_LINEAGE) fail('occurrence v2 source lineage is not eligible');
+  // This ledger intentionally has no FK to the lineage table. Inspect every row so
+  // orphaned/foreign-lineage history cannot be hidden by filtering to the admitted ID.
+  const fullHistory = db.prepare(`SELECT lineage_id,step_id,payload_sha256 FROM ${LEDGER_TABLE} ORDER BY lineage_id,step_id`).all();
+  if (fullHistory.some((row) => row.lineage_id !== lineage.lineage_id)) fail('occurrence v2 source migration history contains a foreign lineage');
+  const history = fullHistory;
+  if (inherited && history.some((row) => row.step_id === OCCURRENCE_V2_STEP)) return;
+  if (history.length !== OCCURRENCE_V2_HISTORY.size || history.some((row, index) => {
+    const expected = [...OCCURRENCE_V2_HISTORY.entries()].sort(([a], [b]) => a.localeCompare(b))[index];
+    return !expected || row.step_id !== expected[0] || row.payload_sha256 !== expected[1];
+  })) fail('occurrence v2 source migration history is unknown, partial, changed, or already applied');
 }
 function initializeLineage(db, sourceSnapshotSha256, sourceSchemaSha256) {
   ensureLedger(db);
@@ -843,6 +867,28 @@ function verifyInheritedSeminarCohort(admission, sourceDbPath, plan) {
   return { manifest, history: inherited, lineageId: source.lineage.lineage_id };
 }
 
+/** Keep exact historical v1 cohorts on their recorded implementation; use v2 only
+ * for the one explicitly admitted source history or an already sealed v2 child. */
+function selectOccurrenceStep(release, sourceDbPath, inheritedAdmission) {
+  const candidates=release.steps.filter(step=>step.handler==='reviewed-schedule');
+  if(candidates.length<=1)return release;
+  if(candidates.length!==2)fail('release must contain the known v1 and v2 occurrence choices');
+  let selected;
+  if(inheritedAdmission!==undefined){
+    const prior=sealedJson(inheritedAdmission.receiptPath,inheritedAdmission.expectedReceiptSha256,'inherited cohort receipt');
+    const recorded=(prior.steps??[]).filter(step=>step.handler==='reviewed-schedule'&&['seminar-occurrence-model-v1',OCCURRENCE_V2_STEP].includes(step.id));
+    if(recorded.length!==1)fail('inherited receipt must identify exactly one occurrence version');
+    selected=candidates.find(step=>step.id===recorded[0].id&&step.sha256===recorded[0].sha256&&step.handler===recorded[0].handler);
+    if(!selected)fail('inherited occurrence step is not an exact packaged version');
+  }else{
+    const source=openDatabase(sourceDbPath,{readonly:true});
+    try{verifyOccurrenceV2Source(source,false);}finally{source.close();}
+    selected=candidates.find(step=>step.id===OCCURRENCE_V2_STEP);
+    if(!selected)fail('eligible source has no packaged v2 occurrence step');
+  }
+  return {...release,steps:release.steps.filter(step=>step.handler!=='reviewed-schedule'||step.id===selected.id)};
+}
+
 export function verifyRegistryBinding({ binding, receipt, candidateDbPath, contract }) {
   if (!binding || binding.version !== 1 || binding.operationId !== receipt.operationId
       || binding.sourceCommit !== receipt.sourceCommitSha || binding.migrationPlanDigest !== receipt.planSha256
@@ -891,7 +937,7 @@ export async function prepareMigration({ sourceDbPath: rawSourceDbPath, candidat
   if (isWithin(artifactReal, receiptPath) || isWithin(artifactReal, candidateDbPath)) fail('candidate database and operation receipt must be outside the CMS artifact/Git tree');
   if (stageSnapshotDir && (isWithin(artifactReal, stageSnapshotDir) || isWithin(stageSnapshotDir, sourceDbPath) || isWithin(stageSnapshotDir, candidateDbPath) || isWithin(stageSnapshotDir, receiptPath))) fail('stage snapshot directory must be private and separate from the artifact, source, candidate and receipt');
   if (candidateDbPath === sourceDbPath) fail('candidate database must not be the source database');
-  let release = resolvePlan(artifactReal, { fingerprint: false });
+  let release = selectOccurrenceStep(resolvePlan(artifactReal, { fingerprint: false }), sourceDbPath, inheritedCohort);
   const reviewedHandlers = new Set(['reviewed-schedule', 'reviewed-documents', 'reviewed-content']);
   if (release.steps.some(step => reviewedHandlers.has(step.handler)) && !/^[a-f0-9]{40}$/.test(sourceCommitSha ?? '')) fail('reviewed seminar steps require a full source commit SHA from the trusted release admission');
   if (sourceCommitSha !== undefined && !/^[a-f0-9]{40}$/.test(sourceCommitSha)) fail('source commit SHA is invalid');
@@ -919,6 +965,7 @@ export async function prepareMigration({ sourceDbPath: rawSourceDbPath, candidat
   try {
     preflightSource.pragma('query_only = ON');
     validateSourceSchema(sqliteSnapshot(preflightSource), release, preflightSource);
+    if (release.steps.some((step) => step.id === OCCURRENCE_V2_STEP)) verifyOccurrenceV2Source(preflightSource, inheritedCohort !== undefined);
   } finally { preflightSource.close(); }
   const actualSourceVersion = readSourceStrapiVersion(sourceCmsRoot, release, sourceStrapiVersion);
   if (actualSourceVersion !== strapiVersion) fail(`source version evidence differs: ${actualSourceVersion} vs ${strapiVersion}`);

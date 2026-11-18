@@ -240,7 +240,7 @@ function fixture(t, { operationId = 'op-fixture-1', statusShape = 'old' } = {}) 
   cpSync(sourceMigrations, join(artifactDir, 'database/migrations'), { recursive: true });
   mkdirSync(join(artifactDir, 'scripts'), { recursive: true });
   mkdirSync(join(artifactDir, 'database/migrations/data-steps'), { recursive: true });
-  const packagedScripts = ['run-data-migrations.mjs', 'seminar-migration-snapshot.mjs', 'audit-seminar-migration-composition.mjs', 'audit-migration-stage-ledger.mjs', 'audit-seminar-schema-sync.mjs', 'audit-schedule-business-rules.mjs', 'audit-schedule-migration.mjs', 'audit-documents-migration.mjs', 'audit-content-migration.mjs', 'verify-seminar-proof-artifact.py', 'audit-data-migration.mjs', 'audit-schema-snapshot.mjs', 'institute-method-author-classification.mjs', 'normalize-null-documents-state.mjs'];
+  const packagedScripts = ['run-data-migrations.mjs', 'seminar-migration-snapshot.mjs', 'audit-seminar-migration-composition.mjs', 'audit-migration-stage-ledger.mjs', 'audit-seminar-schema-sync.mjs', 'audit-schedule-business-rules.mjs', 'audit-schedule-migration.mjs', 'migrate-schedule-data-v2.mjs', 'audit-schedule-business-rules-v2.mjs', 'audit-schedule-migration-v2.mjs', 'migration-review-cli.mjs', 'audit-documents-migration.mjs', 'audit-content-migration.mjs', 'verify-seminar-proof-artifact.py', 'audit-data-migration.mjs', 'audit-schema-snapshot.mjs', 'institute-method-author-classification.mjs', 'normalize-null-documents-state.mjs'];
   for (const name of packagedScripts) {
     const source = join(repoRoot, 'cms/scripts', name);
     const destination = join(artifactScripts, name);
@@ -945,19 +945,38 @@ test('rejected unchanged reviewed transaction permits a corrected review while c
 async function inheritedFixture(t) {
   const first=await makePrepared(t,{operationId:'sealed-original'}),next=fixture(t,{operationId:'next-release'});
   const db=new Database(first.candidateDbPath),sealedLineage=db.prepare('SELECT * FROM ikpk_migration_lineage').get(),lineageId=sealedLineage.lineage_id;
+  db.exec(`ALTER TABLE seminars ADD COLUMN document_id TEXT;
+    ALTER TABLE seminars ADD COLUMN published_at TEXT;
+    ALTER TABLE seminars ADD COLUMN duration TEXT;
+    ALTER TABLE schedule_entries ADD COLUMN document_id TEXT;
+    ALTER TABLE schedule_entries ADD COLUMN published_at TEXT;
+    ALTER TABLE schedule_entries ADD COLUMN duration TEXT;
+    ALTER TABLE schedule_entries ADD COLUMN is_free INTEGER;
+    ALTER TABLE schedule_entries ADD COLUMN price REAL;
+    ALTER TABLE schedule_entries ADD COLUMN city TEXT;
+    ALTER TABLE schedule_entries ADD COLUMN legacy_id TEXT;
+    ALTER TABLE schedule_entries ADD COLUMN is_online INTEGER;
+    CREATE TABLE schedule_entries_seminar_lnk(seminar_id INTEGER, schedule_entry_id INTEGER);
+    CREATE TABLE files_related_mph(id INTEGER PRIMARY KEY, related_id INTEGER, related_type TEXT, field TEXT);`);
   const base=next.plan.steps.find(step=>step.kind==='data');
+  const sourcePlan=JSON.parse(readFileSync(migrationPlanPath,'utf8'));
+  const priorSchedule=sourcePlan.steps.find(step=>step.id==='seminar-occurrence-model-v1');
+  const nextSchedule=sourcePlan.steps.find(step=>step.id==='seminar-occurrence-model-v2');
   for(const handler of ['content-admin-permissions','reviewed-schedule','reviewed-documents','reviewed-content']) {
+    if(handler==='reviewed-schedule') { next.plan.steps.push(structuredClone(priorSchedule),structuredClone(nextSchedule)); continue; }
     const id=`sealed-${handler}`, path=`data-steps/${id}.mjs`, bytes='export const apply=()=>{throw Error("must never replay")};';writeFileSync(join(next.artifactDir,'database/migrations',path),bytes);
     const step={...structuredClone(base),id,handler,path,sha256:hash(bytes)};next.plan.steps.push(step);
     db.prepare('INSERT INTO ikpk_data_migration_history VALUES(?,?,?,?,?,?)').run(lineageId,first.operationId,id,step.sha256,'{"approved":true}','2026-11-14');
   }
-  const ids=new Set(next.plan.steps.filter(x=>x.id.startsWith('sealed-')).map(x=>x.id));
+  db.prepare('INSERT INTO ikpk_data_migration_history VALUES(?,?,?,?,?,?)').run(lineageId,first.operationId,priorSchedule.id,priorSchedule.sha256,'{"approved":true}','2026-11-14');
+  const inheritedSteps=next.plan.steps.filter(step=>step.id!==nextSchedule.id);
+  const ids=new Set(inheritedSteps.filter(step=>['content-admin-permissions','reviewed-schedule','reviewed-documents','reviewed-content'].includes(step.handler)).map(x=>x.id));
   const history=db.prepare('SELECT operation_id,step_id,payload_sha256,result_json,completed_at FROM ikpk_data_migration_history WHERE lineage_id=? ORDER BY completed_at,step_id').all(lineageId).filter(x=>ids.has(x.step_id));
   // A legitimate editor change after the sealed migration must survive the next deployment.
   db.prepare('UPDATE teachers SET bio=? WHERE id=1').run('editor update after migration');db.close();
   writeFileSync(join(next.artifactDir,'database/migrations/plan.json'),JSON.stringify(next.plan));
   const registryPath=join(realpathSync(first.root),'registry.json');writeFileSync(registryPath,'[]');
-  const old={...JSON.parse(readFileSync(first.receiptPath)),sourceCommitSha:'a'.repeat(40),steps:next.plan.steps,seminarLineageId:lineageId,seminarLineage:sealedLineage,seminarStepHistory:history,registryBinding:{registrySha256:hash('[]')}};
+  const old={...JSON.parse(readFileSync(first.receiptPath)),sourceCommitSha:'a'.repeat(40),steps:inheritedSteps,seminarLineageId:lineageId,seminarLineage:sealedLineage,seminarStepHistory:history,registryBinding:{registrySha256:hash('[]')}};
   writeFileSync(first.receiptPath,JSON.stringify(old));
   const manifest={version:2,operationId:first.operationId,sourceCommit:old.sourceCommitSha,receiptSha256:hash(readFileSync(first.receiptPath)),database:{path:realpathSync(first.candidateDbPath)},cmsArtifactSha256:old.artifactSha256,migrationPlanDigest:old.planSha256,registrySha256:hash('[]')};
   const manifestPath=join(realpathSync(first.root),'current.json');writeFileSync(manifestPath,JSON.stringify(manifest));
@@ -1010,4 +1029,129 @@ test('direct sandbox activation refuses a registry-bound seminar cohort', async 
     codeRelease: f.artifactDir, activePairPath: join(f.root, 'active'), sandboxRoot: f.root,
     receiptPath: f.receiptPath, operationId: f.operationId, lifecycleAdapter: f.lifecycleAdapter }),
     /host.*capture|capture.*host/i);
+});
+
+const occurrenceV2 = 'seminar-occurrence-model-v2';
+const admissionTestHelper = 'export const apply = () => { throw Error("admission test must stop before the writer"); };';
+const eligibleLineage = 'fed2d793a84b7ffe9425a4ec51a598687a4fed8283b06762ef4537a44c5d6e1c';
+const eligibleHistory = [
+  ['institute-method-author-classification-v1', '5a824938c8075287c33925f00b4c22f168459031ed6336a4c75812790bcc2059'],
+  ['normalize-null-documents-state-v1', '4be74fe36c1117035344f35fb76d5426062e4a78ada0f3002740d70e214403d0'],
+];
+
+function occurrenceV2Fixture(t, { lineage = eligibleLineage, steps = eligibleHistory, operationId } = {}) {
+  const f = fixture(t, { operationId });
+  const stageSnapshotDir = join(f.root, 'stage-snapshots');
+  mkdirSync(stageSnapshotDir, { mode: 0o700 });
+  const helperPath = 'data-steps/test-occurrence-v2.mjs';
+  writeFileSync(join(f.artifactDir, 'database/migrations', helperPath), admissionTestHelper);
+  const base = f.plan.steps.find(step => step.kind === 'data');
+  const frozenV1 = JSON.parse(readFileSync(migrationPlanPath, 'utf8')).steps.find(step => step.id === 'seminar-occurrence-model-v1');
+  f.plan.steps.push(structuredClone(frozenV1));
+  f.plan.steps.push({ ...structuredClone(base), id: occurrenceV2, handler: 'reviewed-schedule', path: helperPath, sha256: hash(admissionTestHelper) });
+  writeFileSync(join(f.artifactDir, 'database/migrations/plan.json'), JSON.stringify(f.plan));
+
+  const db = new Database(f.sourceDbPath);
+  try {
+    db.exec(`
+      CREATE TABLE ikpk_migration_lineage (singleton INTEGER PRIMARY KEY, lineage_id TEXT NOT NULL UNIQUE,
+        source_snapshot_sha256 TEXT NOT NULL, source_schema_sha256 TEXT NOT NULL, created_at TEXT NOT NULL);
+      CREATE TABLE ikpk_data_migration_history (lineage_id TEXT NOT NULL, operation_id TEXT NOT NULL,
+        step_id TEXT NOT NULL, payload_sha256 TEXT NOT NULL, result_json TEXT NOT NULL, completed_at TEXT NOT NULL,
+        PRIMARY KEY (lineage_id, step_id));
+    `);
+    db.prepare('INSERT INTO ikpk_migration_lineage VALUES (1, ?, ?, ?, ?)').run(lineage, hash('prior snapshot'), hash('prior schema'), '2026-10-19');
+    for (const [id, sha] of steps) {
+      db.prepare('INSERT INTO ikpk_data_migration_history VALUES (?, ?, ?, ?, ?, ?)').run(lineage, 'prior-op', id, sha, '{}', '2026-10-20');
+    }
+  } finally {
+    db.close();
+  }
+  return { f, args: { ...prepareArgs(f), stageSnapshotDir: realpathSync(stageSnapshotDir), sourceCommitSha: 'a'.repeat(40) } };
+}
+
+test('approved v2 lineage may use a later capture bound to a distinct operation and receipt', async t => {
+  const runner = await loadRunner();
+  const first = occurrenceV2Fixture(t, { operationId: 'eligible-capture-first' });
+  const later = occurrenceV2Fixture(t, { operationId: 'eligible-capture-later' });
+  const db = new Database(later.f.sourceDbPath);
+  try {
+    db.prepare('UPDATE teachers SET bio=? WHERE id=1').run('a later published edit');
+  } finally {
+    db.close();
+  }
+  const reviewedSnapshots = [];
+  for (const capture of [first, later]) {
+    const result = await runner.prepareMigration(capture.args);
+    assert.equal(result.waitingForReview, occurrenceV2);
+    const receipt = JSON.parse(readFileSync(capture.f.receiptPath, 'utf8'));
+    assert.equal(receipt.operationId, capture.f.operationId);
+    assert.match(receipt.source.snapshotSha256, /^[a-f0-9]{64}$/);
+    reviewedSnapshots.push(receipt.source.snapshotSha256);
+    const candidate = new Database(capture.f.candidateDbPath, { readonly: true });
+    try {
+      assert.equal(candidate.prepare('SELECT lineage_id FROM ikpk_migration_lineage').get().lineage_id, eligibleLineage);
+      const binding = candidate.prepare('SELECT source_snapshot_sha256 FROM ikpk_migration_operations WHERE operation_id=?').get(receipt.operationId);
+      assert.equal(binding.source_snapshot_sha256, receipt.source.snapshotSha256);
+      assert.deepEqual(candidate.prepare('SELECT step_id, payload_sha256 FROM ikpk_data_migration_history ORDER BY step_id').all()
+        .map(row => [row.step_id, row.payload_sha256]), eligibleHistory);
+    } finally {
+      candidate.close();
+    }
+  }
+  assert.notEqual(reviewedSnapshots[0], reviewedSnapshots[1]);
+});
+
+for (const [label, source] of [
+  ['another lineage', { lineage: 'f'.repeat(64) }],
+  ['a partial history', { steps: eligibleHistory.slice(0, 1) }],
+  ['a changed history hash', { steps: [eligibleHistory[0], [eligibleHistory[1][0], 'f'.repeat(64)]] }],
+  ['an unknown extra step', { steps: [...eligibleHistory, ['unexpected-v1', 'f'.repeat(64)]] }],
+  ['an inherited v1 occurrence step', { steps: [...eligibleHistory, ['seminar-occurrence-model-v1', '5ccd43ae6d479add7331a37cb84d2b93f9bc253b391ac8c02bb2c76df884adcf']] }],
+  ['an already applied v2 occurrence step', { steps: [...eligibleHistory, [occurrenceV2, hash(admissionTestHelper)]] }],
+]) {
+  test(`v2 admission rejects ${label} before the candidate is opened for migration`, async t => {
+    const runner = await loadRunner();
+    const { args, f } = occurrenceV2Fixture(t, source);
+    const before = databaseDigest(f.sourceDbPath);
+    await assert.rejects(() => runner.prepareMigration(args), /lineage|history|already applied|refusing replay/i);
+    assert.equal(existsSync(f.candidateDbPath), false);
+    assert.equal(existsSync(f.receiptPath), false);
+    assert.equal(databaseDigest(f.sourceDbPath), before);
+  });
+}
+
+for (const [label, stepId] of [
+  ['a foreign-lineage v1 step', 'seminar-occurrence-model-v1'],
+  ['a foreign-lineage unknown step', 'unexpected-foreign-step'],
+]) {
+  test(`v2 admission rejects ${label} even when SQLite integrity checks pass`, async t => {
+    const runner = await loadRunner();
+    const { args, f } = occurrenceV2Fixture(t);
+    const db = new Database(f.sourceDbPath);
+    try {
+      db.prepare('INSERT INTO ikpk_data_migration_history VALUES (?, ?, ?, ?, ?, ?)')
+        .run('e'.repeat(64), 'foreign-op', stepId, 'f'.repeat(64), '{}', '2026-10-21');
+      assert.equal(db.pragma('integrity_check', { simple: true }), 'ok');
+      assert.deepEqual(db.pragma('foreign_key_check'), []);
+    } finally {
+      db.close();
+    }
+    const before = databaseDigest(f.sourceDbPath);
+    await assert.rejects(() => runner.prepareMigration(args), /foreign lineage|history/i);
+    assert.equal(existsSync(f.candidateDbPath), false);
+    assert.equal(existsSync(f.receiptPath), false);
+    assert.equal(databaseDigest(f.sourceDbPath), before);
+  });
+}
+
+
+test('the migration manifest rejects a duplicate v2 step ID before candidate creation', async t => {
+  const runner = await loadRunner();
+  const { args, f } = occurrenceV2Fixture(t);
+  f.plan.steps.push(structuredClone(f.plan.steps.find(step => step.id === occurrenceV2)));
+  writeFileSync(join(f.artifactDir, 'database/migrations/plan.json'), JSON.stringify(f.plan));
+  await assert.rejects(() => runner.prepareMigration(args), /duplicate.*step|step.*duplicate/i);
+  assert.equal(existsSync(f.candidateDbPath), false);
+  assert.equal(existsSync(f.receiptPath), false);
 });

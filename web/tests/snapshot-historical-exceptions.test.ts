@@ -86,8 +86,12 @@ describe('historical occurrence exceptions: exact condition and published versio
     expectRejected(snapshot(event(patch)), undefined, 'price');
   });
 
-  it.each([undefined, null, '', '  '])('rejects absent effective duration %s', (duration) => {
-    expectRejected(snapshot(event({ duration }), { duration: null }), undefined, 'duration');
+  it.each([undefined, null, '', '  '])('accepts absent effective duration %s without an exception', (duration) => {
+    const snap = { ...snapshot(event({ duration }), { duration: null }), contractVersion: 2 as const };
+    const before = structuredClone(snap);
+    expect(validate(snap).violations).toEqual([]);
+    expect(() => assertContract(snap)).not.toThrow();
+    expect(snap).toEqual(before);
   });
 
   it('inherits the separately captured published seminar default', () => {
@@ -96,14 +100,6 @@ describe('historical occurrence exceptions: exact condition and published versio
 
   it('an override works without a seminar default', () => {
     expect(validate(snapshot(event(), { duration: null })).violations).toEqual([]);
-  });
-
-  it('embedded relation duration cannot replace a missing published default', () => {
-    expectRejected(snapshot(event({ duration: null, seminar: { slug: 'seminar-a', duration: 'draft 24 часа' } }), { duration: null }), undefined, 'duration');
-  });
-
-  it('an explicitly unpublished seminar cannot supply the default', () => {
-    expectRejected(snapshot(event({ duration: null }), { publishedAt: null }), undefined, 'duration');
   });
 
   it.each(['paid-zero-price', 'missing-duration'] as const)('accepts exact reviewed %s and preserves the record', (condition) => {
@@ -116,18 +112,30 @@ describe('historical occurrence exceptions: exact condition and published versio
     expect(snap.content.types.schedule_entries[0].isFree).toBe(false);
   });
 
-  it('a missing-duration exception becomes stale when the published default is filled', () => {
+  it('a pinned legacy duration tombstone remains inert after the default is filled', () => {
     const snap = snapshot(event({ duration: null }), { duration: null });
     const trust = approve(snap, 'missing-duration');
     snap.content.types.seminars[0].duration = '16 часов';
-    expectRejected(snap, trust);
+    expect(validate(snap, trust).violations).toEqual([]);
   });
 
-  it('each failing condition needs its own exception', () => {
-    const snap = snapshot(event({ price: 0, duration: null }), { duration: null });
+  it.each([
+    ['changed update timestamp', { updatedAt: '2026-11-11T08:00:00.000Z' }],
+    ['changed field with same identity', { name: 'Edited occurrence' }],
+  ])('does not reuse an inert legacy duration tombstone for a %s', (_label, patch) => {
+    const snap = snapshot(event({ duration: null }), { duration: null });
+    const trust = approve(snap, 'missing-duration');
+    Object.assign(snap.content.types.schedule_entries[0], patch);
+    expect(validate(snap, trust).violations).toContainEqual(expect.objectContaining({
+      type: 'schedule', field: 'duration', rule: 'required-field-empty',
+    }));
+  });
+
+  it('price retains its own exception when duration is absent', () => {
+    const snap = { ...snapshot(event({ price: 0, duration: null }), { duration: null }), contractVersion: 2 as const };
     const trust = approve(snap, 'paid-zero-price');
-    expectRejected(snap, trust, 'duration');
-    expect(validate(snap, approve(snap, 'missing-duration')).violations).toEqual([]);
+    expect(validate(snap, trust).violations).toEqual([]);
+    expectRejected(snap, undefined, 'price');
   });
 
   it.each([
@@ -165,7 +173,7 @@ describe('registry authority and identity', () => {
   it('offline audit identifies exact candidates without authorizing them', () => {
     const snap = snapshot(event({ price: 0, duration: null }), { duration: null });
     const candidates = proposeHistoricalExceptions(snap.content);
-    expect(candidates.map((entry) => entry.condition)).toEqual(['paid-zero-price', 'missing-duration']);
+    expect(candidates.map((entry) => entry.condition)).toEqual(['paid-zero-price']);
     expect(candidates.every((entry) => entry.documentId === 'occurrence-doc-a' && entry.recordFingerprint === recordFingerprint(snap.content.types.schedule_entries[0]))).toBe(true);
     (snap.content as HistoryContent).historicalExceptions = candidates;
     expectRejected(snap);
@@ -211,6 +219,45 @@ describe('registry authority and identity', () => {
       rmSync(dir, { recursive: true, force: true });
     }
   });
+  it('new snapshot v2 rejects even an exact externally approved duration entry', () => {
+    const snap = { ...snapshot(event({ duration: '' }), { duration: null }), contractVersion: 2 as const };
+    expectRejected(snap, approve(snap, 'missing-duration'));
+  });
+
+  it('legacy snapshot validates a full frozen file before accepting inert duration entries', () => {
+    const snap = snapshot(event({ duration: null }), { duration: null });
+    approve(snap, 'missing-duration');
+    const dir = mkdtempSync(join(tmpdir(), 'ikpk-legacy-history-'));
+    const oldPath = process.env.CONTENT_HISTORICAL_EXCEPTIONS_FILE;
+    const oldHash = process.env.CONTENT_HISTORICAL_EXCEPTIONS_SHA256;
+    try {
+      const path = join(dir, 'approved.json');
+      const bytes = Buffer.from(JSON.stringify(exceptions(snap), null, 2) + '\n');
+      writeFileSync(path, bytes);
+      process.env.CONTENT_HISTORICAL_EXCEPTIONS_FILE = path;
+      process.env.CONTENT_HISTORICAL_EXCEPTIONS_SHA256 = createHash('sha256').update(bytes).digest('hex');
+      const trust = trustForHistoricalSnapshot(snap.content);
+      snap.content.types.schedule_entries[0].price = 0;
+      expect(validate(snap, trust).violations).toEqual([
+        expect.objectContaining({ type: 'schedule', field: 'price', rule: 'invalid-value' }),
+        expect.objectContaining({ type: 'schedule', field: 'duration', rule: 'required-field-empty' }),
+      ]);
+      expect(readFileSync(path)).toEqual(bytes);
+
+      exceptions(snap).push({ ...exceptions(snap)[0] });
+      expectRejected(snap, trustForHistoricalSnapshot(snap.content));
+      exceptions(snap).pop();
+      exceptions(snap)[0].documentId = 'forged-occurrence';
+      expect(() => trustForHistoricalSnapshot(snap.content)).toThrow(/approved registry/);
+      writeFileSync(path, Buffer.concat([bytes, Buffer.from(' ')]));
+      expect(() => trustForHistoricalSnapshot(snap.content)).toThrow(/digest mismatch/);
+    } finally {
+      if (oldPath === undefined) delete process.env.CONTENT_HISTORICAL_EXCEPTIONS_FILE; else process.env.CONTENT_HISTORICAL_EXCEPTIONS_FILE = oldPath;
+      if (oldHash === undefined) delete process.env.CONTENT_HISTORICAL_EXCEPTIONS_SHA256; else process.env.CONTENT_HISTORICAL_EXCEPTIONS_SHA256 = oldHash;
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it('self-issued registry is not authority', () => {
     const snap = snapshot(event({ price: 0 }));
     approve(snap, 'paid-zero-price');

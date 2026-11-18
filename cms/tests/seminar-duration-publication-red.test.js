@@ -188,33 +188,51 @@ describe('семинары в собранном Strapi', { timeout: 360000 }, (
     assert.equal(published.duration, '12 часов');
     assert.equal(published.seminar.duration, '24 часа');
   });
-  test('без обеих продолжительностей черновик сохраняется, публикация отклоняется', async () => {
+  for (const duration of [null, '']) {
+    test(`пустая продолжительность (${JSON.stringify(duration)}) сохраняется при публикации через API`, async () => {
+      const f = await fixture(null);
+      const draft = await f.entries.create({ data: fields(f, { duration }) });
+      assert.equal(draft.duration, duration);
+      const response = await fetch(
+        `${base}/content-manager/collection-types/api::schedule-entry.schedule-entry/${draft.documentId}/actions/publish`,
+        { method: 'POST', headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' }, body: '{}' },
+      );
+      assert.equal(response.status, 200, await response.text());
+      const published = await f.entries.findOne({ documentId: draft.documentId, status: 'published', populate: ['seminar'] });
+      assert.ok(published?.publishedAt);
+      assert.equal(published.duration, duration);
+      assert.equal(published.seminar?.duration, null);
+    });
+  }
+
+  test('пустая продолжительность не разрешает платный ноль или отсутствие ссылки', async () => {
     const f = await fixture();
-    const draft = await f.entries.create({ data: fields(f) });
-    assert.ok(draft.documentId);
-    await assert.rejects(() => f.entries.publish({ documentId: draft.documentId }), /продолжительност|duration/i);
+    await assert.rejects(() => f.entries.create({ data: fields(f, { duration: null, price: 0 }) }), /цен|price/i);
+    const draft = await f.entries.create({ data: fields(f, { duration: null, registrationFormLink: null }) });
+    await assert.rejects(() => f.entries.publish({ documentId: draft.documentId }), /ссылку на регистрацию/i);
     assert.equal(await f.entries.findOne({ documentId: draft.documentId, status: 'published' }), null);
   });
+
   test('без преподавателей черновик сохраняется, публикация отклоняется', async () => {
     const f = await fixture();
-    const draft = await f.entries.create({ data: fields(f, { duration: '12 часов', teachers: [] }) });
+    const draft = await f.entries.create({ data: fields(f, { duration: null, teachers: [] }) });
     assert.ok(draft.documentId);
     await assert.rejects(() => f.entries.publish({ documentId: draft.documentId }), /преподавател|teacher/i);
     assert.equal(await f.entries.findOne({ documentId: draft.documentId, status: 'published' }), null);
   });
-  test('удаление default нельзя опубликовать при зависимом опубликованном проведении', async () => {
+  test('удаление default публикуется при существующем проведении без override', async () => {
     const f = await fixture('24 часа');
     assert.equal((await f.seminars.findOne({ documentId: f.seminar.documentId, status: 'published' })).duration, '24 часа', 'предусловие: опубликован default');
     const entry = await f.entries.create({ data: fields(f) });
     await f.entries.publish({ documentId: entry.documentId });
     await f.seminars.update({ documentId: f.seminar.documentId, data: { duration: null } });
-    await assert.rejects(() => f.seminars.publish({ documentId: f.seminar.documentId }), (error) => {
-      assert.match(error.message, /продолжительност|duration/i);
-      assert.ok(error.message.includes(entry.documentId) || error.message.includes(String(entry.id)) || error.message.includes('Москва'), 'ошибка должна указать затронутое проведение');
-      return true;
-    });
+    await f.seminars.publish({ documentId: f.seminar.documentId });
     const published = await f.seminars.findOne({ documentId: f.seminar.documentId, status: 'published' });
-    assert.equal(published.duration, '24 часа');
+    assert.equal(published.duration, null);
+    const occurrence = await f.entries.findOne({ documentId: entry.documentId, status: 'published', populate: ['seminar'] });
+    assert.ok(occurrence?.publishedAt);
+    assert.equal(occurrence.duration, null);
+    assert.equal(occurrence.seminar?.duration, null);
   });
   test('черновое изменение default не меняет опубликованную версию семинара', async () => {
     const f = await fixture('24 часа');
@@ -224,12 +242,15 @@ describe('семинары в собранном Strapi', { timeout: 360000 }, (
     assert.equal(draft.duration, '48 часов');
     assert.equal(published.duration, '24 часа');
   });
-  test('черновой default не позволяет публиковать проведение без override', async () => {
+  test('публикация проведения не заимствует default из черновика', async () => {
     const f = await fixture();
     await f.seminars.update({ documentId: f.seminar.documentId, data: { duration: '24 часа' } });
     assert.equal((await f.seminars.findOne({ documentId: f.seminar.documentId })).duration, '24 часа', 'предусловие: default в черновике');
     const draft = await f.entries.create({ data: fields(f) });
-    await assert.rejects(() => f.entries.publish({ documentId: draft.documentId }), /продолжительност|duration/i);
-    assert.equal(await f.entries.findOne({ documentId: draft.documentId, status: 'published' }), null);
+    await f.entries.publish({ documentId: draft.documentId });
+    const published = await f.entries.findOne({ documentId: draft.documentId, status: 'published', populate: ['seminar'] });
+    assert.ok(published?.publishedAt);
+    assert.equal(published.duration, null);
+    assert.equal(published.seminar?.duration, null);
   });
 });
