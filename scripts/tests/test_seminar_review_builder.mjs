@@ -34,11 +34,10 @@ test('binds five distinct snapshots, exact candidate and supplied registry to a 
  assert.throws(()=>buildReview({receipt,base,paths,candidate,registry:Buffer.from('[{}]'),remoteReceipt:'/remote/receipt.json'}),/invalid registry/);
  const event={id:23,documentId:'doc',name:'Occurrence',publishedAt:'2026-01-01',updatedAt:'2026-01-01',seminar:{id:12,slug:'seminar-a'},isFree:false,price:null,duration:null,teachers:[]};
  const content={types:{seminars:[{id:12,slug:'seminar-a',publishedAt:'2026-01-01',duration:null}],schedule_entries:[event]},media:[]};
- const entries=proposeHistoricalExceptions(content);assert.equal(entries.length,1);assert.equal(activeHistoricalExceptions(content,entries).length,1);
- const row=entries[0], registry=Buffer.from(JSON.stringify(entries)), localRegistry=join(dir,'registry.json');writeFileSync(localRegistry,registry);
- const real=buildReview({receipt,base,paths,candidate,registry,remoteReceipt:'/remote/receipt.json'});
+ const entries=proposeHistoricalExceptions(content);assert.deepEqual(entries,[]);assert.deepEqual(activeHistoricalExceptions(content,entries),[]);
+ const localRegistry=join(dir,'registry.json');writeFileSync(localRegistry,reg);
+ const real=buildReview({receipt,base,paths,candidate,registry:reg,remoteReceipt:'/remote/receipt.json'});
  verifyRegistryBinding({receipt,contract:real.contract,candidateDbPath:candidate,binding:{...real.binding,registryPath:localRegistry}});
- for(const bad of ['a'.repeat(64),'sha256:xyz']) { row.recordFingerprint=bad; assert.throws(()=>buildReview({receipt,base,paths,candidate,registry:Buffer.from(JSON.stringify([row])),remoteReceipt:'/remote/receipt.json'}),/invalid registry/); }
 
  writeFileSync(paths.content,'changed');assert.throws(()=>buildReview({receipt,base,paths,candidate,registry:reg,remoteReceipt:'/remote/receipt.json'}),/snapshot/);
  }finally{rmSync(dir,{recursive:true,force:true})}

@@ -35,7 +35,6 @@ export function auditScheduleCompositionStage({version,sourceDb,sourceDbPath,can
  */
 export function auditSeminarMigrationComposition({paths,contract,expectedContractDigest}){
  if(!/^[a-f0-9]{64}$/.test(expectedContractDigest??'')||jsonHash(contract)!==expectedContractDigest||![1,2].includes(contract?.version))fail('reviewed composition contract digest mismatch');
- const v2=contract.version===2;
  const names=['source','schema','schedule','documents','content'];
  if(!paths||new Set(names.map(name=>paths[name])).size!==names.length||names.some(name=>typeof paths[name]!=='string'))fail('distinct snapshot paths are required');
  const inodes=new Set();
