@@ -14,7 +14,11 @@ function file(path){
 }
 function snapshot(path){const db=file(path);const wal=path+'-wal';return jsonHash([hash(db),existsSync(wal)?hash(file(wal)):null]);}
 export function buildReview({receipt,base,paths,candidate,registry,remoteReceipt}){
- if(!receipt||!base||base.version!==1||typeof receipt.operationId!=='string'||!/^[a-f0-9]{40}$/.test(receipt.sourceCommitSha??'')||![receipt.planSha256,receipt.artifactSha256,receipt.source?.snapshotSha256,receipt.source?.schemaFingerprint,receipt.source?.sourceFileFingerprint,base.ledger?.lineageId,base.proofArtifact?.sha256].every(digest))fail('receipt or reviewed inputs are invalid');
+ if(!receipt||!base||![1,2].includes(base.version)||typeof receipt.operationId!=='string'||!/^[a-f0-9]{40}$/.test(receipt.sourceCommitSha??'')||![receipt.planSha256,receipt.artifactSha256,receipt.source?.snapshotSha256,receipt.source?.schemaFingerprint,receipt.source?.sourceFileFingerprint,base.ledger?.lineageId,base.proofArtifact?.sha256].every(digest))fail('receipt or reviewed inputs are invalid');
+ const expectedScheduleStep=`seminar-occurrence-model-v${base.version}`;
+ if(base.steps?.schedule?.id!==expectedScheduleStep)fail('schedule step does not match the composition version');
+ const receiptSchedules=receipt.steps?.filter(step=>['seminar-occurrence-model-v1','seminar-occurrence-model-v2'].includes(step.id));
+ if(receiptSchedules?.length!==1||receiptSchedules[0].id!==expectedScheduleStep)fail('schedule step does not match the selected receipt step');
  if(!isAbsolute(remoteReceipt??'')||resolve(remoteReceipt)!==remoteReceipt||remoteReceipt!==join(dirname(receipt.candidateDbPath??remoteReceipt),'receipt.json'))fail('remote receipt path mismatch');
  if(!isAbsolute(base.proofArtifact.path??'')||resolve(base.proofArtifact.path)!==base.proofArtifact.path)fail('invalid remote proof path');
  const labels=['source','schema','schedule','documents','content'];const identities=labels.map(n=>realpathSync(paths[n]));if(new Set(identities).size!==5)fail('distinct snapshots required');

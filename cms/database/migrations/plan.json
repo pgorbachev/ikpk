@@ -402,7 +402,7 @@
       },
       {
         "path": "scripts/audit-seminar-migration-composition.mjs",
-        "sha256": "24ae561226d026f011b80e9a98966b06d9885629da92784d0c947079bb31569a"
+        "sha256": "ab2bf0e27e7e2b3753f1293bd9e341c7cc639788e9d02cddb44c9568cbf4e18b"
       },
       {
         "path": "scripts/migrate-schedule-data-v2.mjs",
