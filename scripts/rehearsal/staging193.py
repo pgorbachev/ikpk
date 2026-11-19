@@ -1014,6 +1014,11 @@ def verify_backup_tar(payload: bytes, expected_sha256: str) -> None:
         raise Refusal("host backup database bytes do not match the captured manifest")
     if hashlib.sha256(media_bytes).hexdigest() != manifest.get("mediaManifestSha256"):
         raise Refusal("host backup media manifest bytes do not match the captured manifest")
+    registry = files.get("historical-registry.json")
+    registry_sha = manifest.get("historicalRegistrySha256")
+    if (registry is not None or registry_sha is not None) and (
+            registry is None or hashlib.sha256(registry).hexdigest() != registry_sha):
+        raise Refusal("host backup historical registry differs from the captured manifest")
     for item in media:
         if not isinstance(item, dict) or not isinstance(item.get("file"), str):
             raise Refusal("host backup media inventory is malformed")
@@ -1134,9 +1139,14 @@ def persist_offhost_backup(directory: Path, operation_id: str, source_sha: str, 
         if (type(admission.get("runId")) is not int or admission["runId"] <= 0 or
                 type(admission.get("attempt")) is not int or admission["attempt"] <= 0):
             raise Refusal("production backup admission is missing its exact run and attempt")
+        with tarfile.open(fileobj=io.BytesIO(payload), mode="r:") as archive:
+            registry_sha = json.load(archive.extractfile("manifest.json")).get("historicalRegistrySha256")
         fingerprint = production_paired_backup_fingerprint(payload, source_sha, operation_id,
-            admission["runId"], admission["attempt"], schema_sha, schema_digest)
+            admission["runId"], admission["attempt"], schema_sha, schema_digest, projector_sha=schema_sha)
         schema_metadata = {"oldCmsSourceSha": schema_sha, "oldCmsSchemaSha256": schema_digest,
+                           "oldProjectorSourceSha": schema_sha, "oldHistoricalRegistrySha256": registry_sha,
+                           "oldProjectorContractSha256": production_projector_contract(schema_sha, schema_sha),
+                           "oldProjectorNodeVersion": production_projector_node_version(),
                            "snapshotFingerprint": fingerprint}
     metadata_record = {"operationId": operation_id, "sourceSha": source_sha, "sha256": expected_sha256}
     if admission is not None:
@@ -1156,10 +1166,82 @@ def persist_offhost_backup(directory: Path, operation_id: str, source_sha: str, 
     return target
 
 
+def production_projector_node_version() -> str:
+    return subprocess.check_output(["node", "--version"], text=True).strip()
+
+
+def production_projector_contract(projector_sha: str, schema_sha: str) -> str:
+    if not SHA.fullmatch(projector_sha) or not SHA.fullmatch(schema_sha):
+        raise Refusal("production projector or schema revision is invalid")
+    projector_tree = capture_bytes(["git", "ls-tree", "--full-tree", "-r", projector_sha, "--",
+        "web/scripts/capture-content-snapshot.ts", "web/scripts/lib", "web/package-lock.json",
+        "scripts/lib/staging193-capture-bundle.mjs", "scripts/lib/server-capture-sqlite.mjs",
+        "scripts/lib/seal-staging193-capture.mjs", "fixtures/content-snapshot"])
+    schema_tree = capture_bytes(["git", "ls-tree", "--full-tree", "-r", schema_sha, "--",
+        *CMS_CAPTURE_SCHEMA_PATHS, *CMS_CAPTURE_MIGRATION_SCHEMA_PATHS])
+    if not projector_tree or not schema_tree:
+        raise Refusal("production projector or schema contract is unavailable")
+    return hashlib.sha256(projector_tree + b"\0" + schema_tree).hexdigest()
+
+
+def _prepare_historical_projector(projector_sha: str, destination: Path) -> dict[str, str]:
+    """Materialize only from the exact Git revision and install its locked runtime offline."""
+    if not SHA.fullmatch(projector_sha):
+        raise Refusal("historical projector source must be an exact commit")
+    payload = capture_bytes(["git", "archive", "--format=tar", projector_sha,
+                             "cms/src", "fixtures", "scripts/lib", "web"])
+    destination.mkdir(mode=0o700)
+    roots = ("cms/src", "fixtures", "scripts/lib", "web")
+    try:
+        with tarfile.open(fileobj=io.BytesIO(payload), mode="r:") as archive:
+            if archive.pax_headers.get("comment") != projector_sha:
+                raise Refusal("historical projector archive does not identify the exact Git commit")
+            seen = set()
+            for member in archive:
+                relative = PurePosixPath(member.name)
+                name = relative.as_posix()
+                if (relative.is_absolute() or ".." in relative.parts or name in seen
+                        or not (member.isfile() or member.isdir())
+                        or not any(name == root or name.startswith(root + "/")
+                                   or (member.isdir() and root.startswith(name + "/")) for root in roots)):
+                    raise Refusal("historical projector archive has an unsafe member")
+                seen.add(name)
+                target = destination / relative
+                if member.isdir():
+                    target.mkdir(mode=0o700, parents=True, exist_ok=True)
+                    continue
+                target.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+                with target.open("xb") as output:
+                    shutil.copyfileobj(archive.extractfile(member), output)
+    except (OSError, tarfile.TarError) as error:
+        raise Refusal("historical projector archive could not be materialized") from error
+    web = destination / "web"
+    lock = web / "package-lock.json"
+    if not lock.is_file() or not (web / "scripts/capture-content-snapshot.ts").is_file():
+        raise Refusal("historical projector lacks its source or dependency lock")
+    user_config, global_config = destination / ".npm-user-empty", destination / ".npm-global-empty"
+    for config in (user_config, global_config):
+        config.touch(exist_ok=False)
+    install_env = {
+        "PATH": os.environ.get("PATH", os.defpath),
+        "CI": "1", "npm_config_cache": str(Path.home() / ".npm"),
+        "npm_config_userconfig": str(user_config), "npm_config_globalconfig": str(global_config),
+    }
+    result = subprocess.run(["npm", "ci", "--offline", "--ignore-scripts", "--no-audit", "--no-fund"],
+                            cwd=web, env=install_env, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                            timeout=300, check=False)
+    if result.returncode:
+        raise Refusal("historical projector requires the exact locked packages in the local offline npm cache")
+    if not (web / "node_modules/.bin/tsx").is_file():
+        raise Refusal("historical projector cannot start its pinned TS runtime")
+    return {"PATH": install_env["PATH"], "ASTRO_TELEMETRY_DISABLED": "1", "CI": "1"}
+
+
 def production_paired_backup_fingerprint(payload: bytes, source_sha: str, operation_id: str,
                                          run_id: int, attempt: int, old_cms_source_sha: str,
-                                         expected_schema_digest: str) -> str:
-    """Project the verified, pre-migration production SQLite backup with its old CMS schema."""
+                                         expected_schema_digest: str, *, projector_sha: Optional[str] = None) -> str:
+    """Project the verified pre-migration backup with its exact schema and projector."""
+    projector_sha = projector_sha or source_sha
     verify_backup_tar(payload, hashlib.sha256(payload).hexdigest())
     with tempfile.TemporaryDirectory(prefix="ikpk-paired-restore-capture-") as temporary:
         root = Path(temporary) / "capture"
@@ -1179,23 +1261,35 @@ def production_paired_backup_fingerprint(payload: bytes, source_sha: str, operat
                 target.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
                 with target.open("xb") as output:
                     shutil.copyfileobj(stream, output)
+        manifest_file = root / "manifest.json"
         try:
-            (root / "manifest.json").unlink()
-        except FileNotFoundError:
-            raise Refusal("verified production backup lacks its capture manifest")
+            backup_manifest = json.loads(manifest_file.read_bytes())
+            manifest_file.unlink()
+        except (OSError, ValueError) as error:
+            raise Refusal("verified production backup lacks its capture manifest") from error
+        registry_sha = backup_manifest.get("historicalRegistrySha256")
+        registry = root / "historical-registry.json"
         schema_root = Path(temporary) / "old-cms-schema"
         schema_digest = production_paired_schema_from_commit(old_cms_source_sha, schema_root)
         if schema_digest != expected_schema_digest:
             raise Refusal("old CMS schema bytes differ from the digest bound to this verified backup")
-        capture(["node", "scripts/lib/seal-staging193-capture.mjs", str(root), operation_id, source_sha,
-                 str(schema_root), "production-static", str(run_id), str(attempt)])
+        workspace = Path(temporary) / "projector"
+        environment = _prepare_historical_projector(projector_sha, workspace)
+        seal = subprocess.run(["node", "scripts/lib/seal-staging193-capture.mjs", str(root), operation_id, source_sha,
+                               str(schema_root), "production-static", str(run_id), str(attempt)],
+                              cwd=workspace, env=environment, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False)
+        if seal.returncode:
+            raise Refusal("historical projector could not seal the verified backup and media")
         snapshot_dir = Path(temporary) / "snapshot"
-        environment = {key: value for key, value in os.environ.items()
-                       if key not in ("CMS_URL", "STRAPI_URL", "GH_TOKEN", "GITHUB_TOKEN", "SSH_AUTH_SOCK", "IKPK_DEPLOY_KEY")}
         environment.update({"CONTENT_SNAPSHOT_DIR": str(snapshot_dir), "CONTENT_CAPTURE_SCHEMA_ROOT": str(schema_root)})
+        if registry_sha is not None:
+            if not (workspace / "web/scripts/lib/historical-exceptions.ts").is_file():
+                raise Refusal("historical projector cannot read the original declared registry")
+            environment.update({"CONTENT_HISTORICAL_EXCEPTIONS_FILE": str(registry),
+                                "CONTENT_HISTORICAL_EXCEPTIONS_SHA256": registry_sha})
         result = subprocess.run(["web/node_modules/.bin/tsx", "web/scripts/capture-content-snapshot.ts",
                                  "--server-capture", "--profile", "production-static", str(root)],
-                                cwd=ROOT, env=environment, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False)
+                                cwd=workspace, env=environment, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False)
         if result.returncode:
             raise Refusal(f"verified backup CMS content projection failed ({result.returncode}): "
                           f"{result.stderr.decode(errors='replace').strip()}")
@@ -1253,6 +1347,62 @@ def registration_checker_workspace(source_sha: str, destination: Path) -> Path:
     return web
 
 
+def validate_production_content_acceptance(candidate_archive: bytes, static_digest: str, snapshot_fingerprint: str,
+                                           backup_path: Path, backup: dict, operation_id: str, source_sha: str,
+                                           admitted_run: dict) -> None:
+    if (backup.get("operationId") != operation_id or backup.get("sourceSha") != source_sha
+            or any(backup.get(key) != admitted_run.get(key) for key in ("runId", "attempt"))):
+        raise Refusal("production backup sidecar belongs to a different operation or exact release admission")
+    try:
+        with tarfile.open(fileobj=io.BytesIO(candidate_archive), mode="r:") as archive:
+            names = [entry for entry in archive.getmembers() if entry.name == "snapshot/production-migration-proof.json"]
+            if len(names) > 1 or (names and (not names[0].isfile() or names[0].size > 64 * 1024)):
+                raise Refusal("unexpected production migration proof archive member")
+            proof = json.load(archive.extractfile(names[0])) if names else None
+            capture_bytes = archive.extractfile("snapshot/capture-manifest.json").read() if names else None
+            projected = json.load(archive.extractfile("snapshot/snapshot.json")) if names else None
+        if proof is None:
+            old_contract = backup.get("oldProjectorContractSha256")
+            if old_contract is not None and old_contract != production_projector_contract(source_sha, source_sha):
+                raise Refusal("production projector semantics changed without an audited proof of equivalence")
+            if snapshot_fingerprint != backup.get("snapshotFingerprint"):
+                raise Refusal("built production snapshot differs from the fingerprint captured in the verified backup")
+            return
+        capture = json.loads(capture_bytes)
+        if (not isinstance(proof, dict) or proof.get("version") != 1 or proof.get("operationId") != operation_id
+                or proof.get("sourceSha") != source_sha or proof.get("staticTreeSha256") != static_digest
+                or proof.get("captureSha256") != hashlib.sha256(capture_bytes).hexdigest()
+                or any(proof.get(key) != admitted_run.get(key) for key in ("runId", "attempt"))):
+            raise Refusal("production migration proof differs from browser-checked candidate and release admission")
+        if any(not re.fullmatch(r"[a-f0-9]{64}", str(proof.get(key))) for key in (
+                "receiptSha256", "registrySha256", "migrationPlanDigest")):
+            raise Refusal("production migration proof has malformed evidence digests")
+        composition = proof.get("composition")
+        if not isinstance(composition, dict) or composition.get("backupArchiveSha256") != backup.get("sha256"):
+            raise Refusal("production migration proof belongs to another verified backup")
+        target = composition.get("targetProjection")
+        if (not isinstance(target, dict) or target.get("fingerprint") != snapshot_fingerprint
+                or target.get("captureSha256") != proof["captureSha256"]
+                or target.get("databaseSha256") != capture.get("databaseSha256")
+                or target.get("schemaDigest") != capture.get("schemaDigest")
+                or target.get("mediaManifestSha256") != capture.get("mediaManifestSha256")
+                or target.get("contentSha256") != hashlib.sha256(json.dumps(
+                    projected.get("content"), sort_keys=True, separators=(",", ":")).encode()).hexdigest()):
+            raise Refusal("production migration target projection differs from the accepted candidate")
+        if backup_path.is_symlink():
+            raise Refusal("production migration off-host backup is unsafe")
+        backup_bytes = backup_path.read_bytes()
+        verify_backup_tar(backup_bytes, backup["sha256"])
+        with tarfile.open(fileobj=io.BytesIO(backup_bytes), mode="r:") as archive:
+            source = json.load(archive.extractfile("manifest.json"))
+        if (source.get("operationId") != operation_id
+                or source.get("databaseSha256") != composition.get("backupDatabaseSha256")
+                or source.get("mediaManifestSha256") != composition.get("backupMediaManifestSha256")):
+            raise Refusal("production migration proof does not bind the verified source database and media")
+    except (OSError, ValueError, tarfile.TarError, AttributeError, KeyError) as error:
+        raise Refusal("production content acceptance evidence is unreadable") from error
+
+
 def browser_check(source_sha: str, operation_id: str, static_digest: str, archive: bytes,
                   profile: str = "staging194", admitted_run: Optional[dict] = None,
                   chat_loader_src: Optional[str] = None,
@@ -1283,7 +1433,8 @@ def browser_check(source_sha: str, operation_id: str, static_digest: str, archiv
                     if normalized.startswith("static/"):
                         relative = Path(normalized.removeprefix("static/"))
                         target_root = static_root
-                    elif normalized in ("snapshot/snapshot.json", "snapshot/capture-manifest.json"):
+                    elif normalized in ("snapshot/snapshot.json", "snapshot/capture-manifest.json") or (
+                            profile == "production-paired" and normalized == "snapshot/production-migration-proof.json"):
                         relative = Path(normalized).relative_to("snapshot")
                         target_root = snapshot_root
                     else:
@@ -1576,9 +1727,12 @@ def invoke(args: argparse.Namespace, *, admission: Optional[dict] = None) -> Opt
             old_cms_path = None
             if profile == "production-paired":
                 status = parse_host_json(ssh_remote(["status", "--operation-id", args.operation_id], profile=profile))
-                old_cms_path = (status.get("oldPair") or {}).get("cmsPath")
+                fenced_old_pair = status.get("oldPair") or {}
+                old_cms_path = fenced_old_pair.get("cmsPath")
                 if not paired_old_cms or old_cms_path != paired_old_cms[0]:
                     raise Refusal("journaled old CMS release changed after read-only preflight")
+                if fenced_old_pair.get("historicalRegistryManifest") != old_pair.get("historicalRegistryManifest"):
+                    raise Refusal("journaled old registry changed after read-only preflight")
             if profile == "production-paired":
                 backup_path = persist_offhost_backup(backup_dir, args.operation_id, args.source_sha,
                     remote_backup, first.get("backupSha256", ""), provenance, old_cms_path)
@@ -1588,6 +1742,10 @@ def invoke(args: argparse.Namespace, *, admission: Optional[dict] = None) -> Opt
             digest = hashlib.sha256(backup_path.read_bytes()).hexdigest()
             if profile == "production-paired":
                 metadata_record = json.loads(backup_path.with_suffix(".json").read_text(encoding="utf-8"))
+                old_registry = fenced_old_pair.get("historicalRegistryManifest")
+                if ("historicalRegistryManifest" in fenced_old_pair
+                        and metadata_record.get("oldHistoricalRegistrySha256") != (old_registry or {}).get("registrySha256")):
+                    raise Refusal("production backup registry differs from the fenced old pair")
                 if (metadata_record.get("oldCmsSourceSha") != paired_old_cms[1] or
                         metadata_record.get("oldCmsSchemaSha256") != paired_old_cms[2] or
                         not isinstance(metadata_record.get("snapshotFingerprint"), str)):
@@ -1650,9 +1808,8 @@ def invoke(args: argparse.Namespace, *, admission: Optional[dict] = None) -> Opt
                 backup_metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
             except (OSError, ValueError) as error:
                 raise Refusal("production backup provenance sidecar is unavailable before static acceptance") from error
-            if (backup_metadata.get("sourceSha") != args.source_sha or
-                    backup_metadata.get("snapshotFingerprint") != snapshot_fingerprint):
-                raise Refusal("built production snapshot differs from the fingerprint captured in the verified backup")
+            validate_production_content_acceptance(candidate_bytes, digest, snapshot_fingerprint,
+                backup_dir / f"{args.operation_id}.tar", backup_metadata, args.operation_id, args.source_sha, admitted_run)
         current_run = (validate_production_paired_admission(args.source_sha) if profile == "production-paired"
                        else validate_sha_and_ci(args.source_sha, profile))
         if profile == "staging194" and current_run != admitted_run:
@@ -1783,12 +1940,26 @@ def invoke(args: argparse.Namespace, *, admission: Optional[dict] = None) -> Opt
                         not re.fullmatch(r"[a-f0-9]{64}", record["oldCmsSchemaSha256"])):
                     raise Refusal("production recovery backup is missing its exact source admission")
                 status = parse_host_json(ssh_remote(["status", "--operation-id", args.operation_id], profile=profile))
-                old_cms_path = (status.get("oldPair") or {}).get("cmsPath")
+                recovery_old_pair = status.get("oldPair") or {}
+                old_cms_path = recovery_old_pair.get("cmsPath")
                 old_match = re.search(r"/releases/([a-f0-9]{40})-[^/]+(?:/|$)", old_cms_path or "")
                 if not old_match or old_match.group(1) != record["oldCmsSourceSha"]:
                     raise Refusal("backup old CMS schema source does not match the journaled old CMS release")
+                if "historicalRegistryManifest" in recovery_old_pair:
+                    old_registry = recovery_old_pair["historicalRegistryManifest"]
+                    with tarfile.open(fileobj=io.BytesIO(payload), mode="r:") as archive:
+                        source_registry = json.load(archive.extractfile("manifest.json")).get("historicalRegistrySha256")
+                    if source_registry != (old_registry or {}).get("registrySha256") or source_registry != record.get("oldHistoricalRegistrySha256"):
+                        raise Refusal("backup historical registry cannot be matched to the original production pair")
+                projector_sha = record.get("oldProjectorSourceSha", record["sourceSha"])
+                original_contract = record.get("oldProjectorContractSha256")
+                if original_contract is not None and (
+                        original_contract != production_projector_contract(projector_sha, record["oldCmsSourceSha"])
+                        or record.get("oldProjectorNodeVersion") != production_projector_node_version()):
+                    raise Refusal("production recovery projector or runtime differs from the verified backup")
                 fingerprint = production_paired_backup_fingerprint(payload, record["sourceSha"], args.operation_id,
-                    record["runId"], record["attempt"], record["oldCmsSourceSha"], record["oldCmsSchemaSha256"])
+                    record["runId"], record["attempt"], record["oldCmsSourceSha"], record["oldCmsSchemaSha256"],
+                    projector_sha=projector_sha)
                 if record.get("snapshotFingerprint") != fingerprint:
                     raise Refusal("off-host backup snapshot fingerprint differs from its verified sidecar")
                 restored = parse_host_json(ssh_remote(["restore", "--operation-id", args.operation_id,

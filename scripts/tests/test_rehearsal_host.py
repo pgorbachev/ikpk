@@ -2900,6 +2900,7 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
                  patch.object(operator, "make_archive", return_value=(b"source archive", "e" * 64)), \
                  patch.object(operator, "production_paired_schema_source", return_value=(old_source, "f" * 64)), \
                  patch.object(operator, "production_paired_backup_fingerprint", return_value=fingerprint), \
+                 patch.object(operator, "production_projector_contract", return_value="a" * 64), \
                  patch.object(operator, "capture", side_effect=AssertionError("must not read shared stand ledger")) as capture:
                 operator.invoke(args)
             self.assertFalse(capture.called)
@@ -2919,11 +2920,16 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
             if arguments[0] == "status": return json.dumps({"sourceSha": source_sha, "phase": "cms-activated"}).encode()
             if arguments[0] == "static-publish": return json.dumps({"phase": "browser-check-required",
                 "staticTreeSha256": "a" * 64}).encode()
-            if arguments[0] == "export-static": return b"static candidate"
+            if arguments[0] == "export-static":
+                candidate = io.BytesIO()
+                with tarfile.open(fileobj=candidate, mode="w:"):
+                    pass
+                return candidate.getvalue()
             raise AssertionError(arguments)
         with tempfile.TemporaryDirectory(prefix="ikpk-production-stale-snapshot-") as temporary:
             backup_dir = Path(temporary); backup_dir.mkdir(exist_ok=True)
-            (backup_dir / "production-op.json").write_text(json.dumps({"sourceSha": source_sha,
+            (backup_dir / "production-op.json").write_text(json.dumps({
+                "operationId": "production-op", "sourceSha": source_sha, "runId": 7, "attempt": 2,
                 "snapshotFingerprint": fingerprint}), encoding="utf-8")
             args = Namespace(profile="production-paired", command="static-publish", host=None,
                              operation_id="production-op", source_sha=source_sha, backup_dir=temporary)
