@@ -87,6 +87,10 @@ function checkHtml(root: string, files: string[], now: Date, snapshot: Snapshot)
     const foundLinks = new Set<string>();
     const pageRoute = file === '404.html' ? '/404' : file.endsWith('index.html')
       ? ('/' + file.slice(0, -'index.html'.length)).replace(/(.)\/$/, '$1') : null;
+    // The public directory contains one static search-engine verification response.
+    if (pageRoute === null && file !== 'yandex_ee694e7be59ffcf0.html') {
+      throw new Error(`${file}: unexpected staging194 HTML route`);
+    }
     const canonicals: (string | undefined)[] = [];
     const robotsDirectives: (string | undefined)[] = [];
     let banner = 0;

@@ -157,9 +157,9 @@ export function paymentEndpoint(): string | null {
 
 export { PROD_FORM_HOST, DEMO_STUB_PATH };
 
-export const hasStaging194RegistrationLinks = Boolean(
-  import.meta.env && import.meta.env.STAGING194_REGISTRATION_LINKS === true,
-);
+// Astro and the prerender process receive the same validated runner environment.
+export const hasStaging194RegistrationLinks = typeof process !== 'undefined'
+  && process.env.STAGING194_REGISTRATION_LINKS === '1';
 
 /** Only registration CTAs bound to a specific CMS occurrence may use the source link on 194. */
 export function occurrenceRegistrationHref(url: string | undefined | null): string {

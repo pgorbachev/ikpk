@@ -162,7 +162,6 @@ export default defineConfig({
   // $uri/ — иначе он редиректит на вариант со слэшем и смысл теряется.
   trailingSlash: 'never',
   vite: {
-    define: { 'import.meta.env.STAGING194_REGISTRATION_LINKS': JSON.stringify(registrationLinks === '1') },
     // `node_modules` can point at an immutable shared dependency release. Keep
     // Vite's prebundle cache in the writable workspace instead of following it.
     cacheDir: join(webRoot, '.astro', 'vite-cache'),

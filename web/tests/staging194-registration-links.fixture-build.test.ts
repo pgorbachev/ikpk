@@ -106,6 +106,10 @@ describe('registration links in the staging194 static output', () => {
     ['extra registration link on an editorial page', `
       html = html.replace('</body>', '<a href="https://extra.example.invalid/editorial">Записаться на семинар</a></body>');
     `, 'statyi/registration-link-fixture/index.html'],
+    ['unexpected flat HTML page', `
+      fs.writeFileSync('dist-demo193/unchecked.html', '<a href="/raspisanie-i-tseny">Расписание</a>');
+      html += '<!-- test mutation -->';
+    `],
     ['indexable editorial page', `html = html.replace('content="noindex, nofollow"', 'content="index, follow"');`,
       'statyi/registration-link-fixture/index.html'],
     ['production canonical on an editorial page', `
@@ -185,7 +189,7 @@ describe('registration links in the staging194 static output', () => {
   it.each(mutations)('withholds paired digest confirmation for %s', (_scenario, mutate, page) => {
     const result = pairedAcceptance(mutate, page);
     expect(result.confirmed, JSON.stringify(result)).toEqual([]);
-    expect(result.reason).toMatch(/registration|occurrence/i);
+    expect(result.reason).toMatch(/registration|occurrence|staging194 HTML route/i);
   });
 
 });
