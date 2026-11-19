@@ -157,7 +157,9 @@ export function paymentEndpoint(): string | null {
 
 export { PROD_FORM_HOST, DEMO_STUB_PATH };
 
-export const hasStaging194RegistrationLinks = import.meta.env?.STAGING194_REGISTRATION_LINKS === true;
+export const hasStaging194RegistrationLinks = Boolean(
+  import.meta.env && import.meta.env.STAGING194_REGISTRATION_LINKS === true,
+);
 
 /** Only registration CTAs bound to a specific CMS occurrence may use the source link on 194. */
 export function occurrenceRegistrationHref(url: string | undefined | null): string {

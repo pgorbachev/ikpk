@@ -13,7 +13,8 @@ from scripts.rehearsal import staging193 as operator
 
 tree, snapshot_path = map(Path, sys.argv[1:3])
 build_now = sys.argv[3]
-operation_id, source_sha = "registration-fixture", "a" * 40
+operation_id = "registration-fixture"
+source_sha = operator.capture(["git", "rev-parse", "HEAD"])
 manifest = {"operationId": operation_id, "sourceSha": source_sha, "sourceId": "demo193-cms",
             "schemaDigest": "b" * 64, "databaseSha256": "c" * 64, "mediaManifestSha256": "d" * 64}
 manifest_bytes = json.dumps(manifest).encode()
@@ -57,6 +58,11 @@ def respond(arguments, **_kwargs):
 run = subprocess.run
 def local_checks(argv, **kwargs):
     # This fixture exercises the local registration checker. Browser smoke has its own fixture.
+    if argv[:2] == ["npm", "ci"]:
+        if "--install-fails" in sys.argv[4:]:
+            return subprocess.CompletedProcess(argv, 1)
+        (Path(kwargs["cwd"]) / "node_modules").symlink_to(operator.ROOT / "web/node_modules", target_is_directory=True)
+        return subprocess.CompletedProcess(argv, 0)
     if Path(argv[0]).name == "playwright":
         return subprocess.CompletedProcess(argv, 0)
     return run(argv, **kwargs)

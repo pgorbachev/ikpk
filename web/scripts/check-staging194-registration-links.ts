@@ -35,13 +35,19 @@ function elementText(node: Node): string {
   return 'childNodes' in node ? node.childNodes.map(elementText).join(' ') : '';
 }
 
-function isCrmUrl(value: string): boolean {
+function parseLink(value: string | undefined): URL | null {
+  if (!value) return null;
   try {
-    const { hostname } = new URL(value, DEMO193_ORIGIN);
-    return /(?:^|\.)bitrix24(?:site)?\.ru$/i.test(hostname);
+    return new URL(value, DEMO193_ORIGIN);
   } catch {
-    return false;
+    return null;
   }
+}
+
+function isRegistrationLabel(node: Element): boolean {
+  const caption = attr(node, 'aria-label') ?? elementText(node);
+  return /^(?:записаться|зарегистрироваться|(?:подать|отправить) заявку)(?:[\s.!]|$)/i
+    .test(caption.replace(/\s+/g, ' ').trim());
 }
 
 function linkedPage(links: Map<string, string>, occurrences: Map<string, string>, id: number, start: string, href: string) {
@@ -50,12 +56,14 @@ function linkedPage(links: Map<string, string>, occurrences: Map<string, string>
   if (href) links.set(String(id), href);
 }
 
-function checkHtml(root: string, files: string[], now: Date) {
+function checkHtml(root: string, files: string[], now: Date, snapshot: Snapshot) {
+  const sourceLinks = new Map(snapshot.content.types.schedule_entries.map((entry) =>
+    [entry.id, typeof entry.registrationFormLink === 'string' ? safeHref(entry.registrationFormLink) : '']));
   const routes = new Map<string, { links: Map<string, string>; occurrences: Map<string, string> }>();
   const entries = getScheduleEntries();
   const active = entries.filter((entry) => entry.status === 'active' && isBeforeStart(entry, now));
   const scheduleLinks = { links: new Map<string, string>(), occurrences: new Map<string, string>() };
-  for (const entry of active) linkedPage(scheduleLinks.links, scheduleLinks.occurrences, entry.id, entry.startAt, safeHref(entry.registrationFormLink));
+  for (const entry of active) linkedPage(scheduleLinks.links, scheduleLinks.occurrences, entry.id, entry.startAt, sourceLinks.get(entry.id) ?? '');
   routes.set(schedule, scheduleLinks);
   for (const { seminar, courseGroup, institute } of getSeminarPagePaths()) {
     const file = `${institute.slug}/${courseGroup.slug}/${seminar.slug}/index.html`;
@@ -63,11 +71,11 @@ function checkHtml(root: string, files: string[], now: Date) {
     const seminarLinks = { links: new Map<string, string>(), occurrences: new Map<string, string>() };
     for (const entry of active.filter((item) => scheduleBelongsToSeminar(item, seminar))) {
       linkedPage(seminarLinks.links, seminarLinks.occurrences, entry.id, entry.startAt,
-        safeHref(entry.registrationFormLink) || '/raspisanie-i-tseny');
+        sourceLinks.get(entry.id) || '/raspisanie-i-tseny');
     }
     routes.set(file, seminarLinks);
   }
-  const knownExternal = new Set(entries.map((entry) => safeHref(entry.registrationFormLink))
+  const knownExternal = new Set([...sourceLinks.values()]
     .filter((href) => /^https?:\/\//i.test(href)));
   const robots = readFileSync(join(root, 'robots.txt'), 'utf8').split(/\r?\n/)
     .map((line) => line.split('#', 1)[0].trim()).filter(Boolean);
@@ -82,7 +90,7 @@ function checkHtml(root: string, files: string[], now: Date) {
     const canonicals: (string | undefined)[] = [];
     const robotsDirectives: (string | undefined)[] = [];
     let banner = 0;
-    if (/mc\.yandex\.ru\/(?:metrika\/|watch\/39506315)|top-fwz1\.mail\.ru\/|data-chat-loader|data-payment-(?:form|endpoint)/i.test(html)) {
+    if (/mc\.yandex\.ru\/(?:metrika\/|watch\/39506315)|top-fwz1\.mail\.ru\//i.test(html)) {
       throw new Error(`${file}: forbidden staging194 integration`);
     }
     for (const node of elements(parse(html, { scriptingEnabled: false }))) {
@@ -98,11 +106,17 @@ function checkHtml(root: string, files: string[], now: Date) {
       const id = attr(node, registration);
       const boundRow = ancestorWith(node, occurrence);
       const isCta = node.tagName === 'a' && (classes(node).includes('seminar-register-link') ||
-        (boundRow && file === schedule && classes(node).includes('btn-primary')) ||
-        ((boundRow || expected) && /^Записаться на (?:семинар|вебинар)$/i.test(elementText(node).replace(/\s+/g, ' ').trim())));
-      if (id !== undefined || isCta) {
+        (boundRow && file === schedule && classes(node).includes('btn-primary')));
+      const href = attr(node, 'href');
+      const target = parseLink(href);
+      const offSite = target && /^https?:$/.test(target.protocol) && target.origin !== DEMO193_ORIGIN;
+      const unmarkedRegistration = node.tagName === 'a' && (boundRow || offSite) && isRegistrationLabel(node);
+      if (node.attrs.some(({ name }) => /^(?:data-chat-(?:loader-src|trigger)|data-payment-(?:form|endpoint))$/.test(name))) {
+        throw new Error(`${file}: forbidden staging194 integration`);
+      }
+      if (id !== undefined || isCta || unmarkedRegistration) {
         if (!isCta || id === undefined || !boundRow || attr(boundRow, occurrence) !== id || foundLinks.has(id)
-            || expected?.links.get(id) !== attr(node, 'href') || !expected?.links.has(id)) {
+            || expected?.links.get(id) !== href || !expected?.links.has(id)) {
           throw new Error(`${file}: unexpected registration CTA for occurrence ${id ?? 'unknown'}`);
         }
         foundLinks.add(id);
@@ -110,7 +124,8 @@ function checkHtml(root: string, files: string[], now: Date) {
       for (const { name, value } of node.attrs) {
         if (!/(?:href|src|action)$/.test(name)) continue;
         if (isCta && name === 'href') continue;
-        if (isCrmUrl(value) || knownExternal.has(value)) {
+        const host = parseLink(value)?.hostname ?? '';
+        if (/(?:^|\.)bitrix24(?:site)?\.ru$/i.test(host) || knownExternal.has(value)) {
           throw new Error(`${file}: registration URL outside its approved CTA`);
         }
       }
@@ -162,7 +177,7 @@ const treeDigest = () => digestTree(root, artifactFiles(root));
 const before = await treeDigest();
 if (mode === 'check') {
   process.env.CONTENT_SNAPSHOT_DIR = resolve(snapshotDirectory);
-  checkHtml(root, artifactFiles(root), new Date(buildNow));
+  checkHtml(root, artifactFiles(root), new Date(buildNow), snapshot);
   if (await treeDigest() !== before) throw new Error('staging194 candidate changed during registration check');
 } else if (before !== expectedTreeDigest) {
   throw new Error('staging194 checked candidate changed before switch');

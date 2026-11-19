@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process';
-import { cpSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { cpSync, mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -10,7 +10,7 @@ import { refreshStaging194 } from './helpers/staging194-refresh-fixture';
 
 const approvedOrigin = 'https://194.226.99.10';
 const real = 'https://b24-fixture.bitrix24site.ru/crm_form/registration/?a=1&b=2';
-const temporary = 'https://forms.example.invalid/temporary/?session=26';
+const temporary = 'https://forms.example.invalid/temporary/?continue=https://storage.yandexcloud.net/ikpk-image/uploads/form.webp';
 const editorialForm = 'https://b24-fixture.bitrix24site.ru/crm_form/editorial/';
 const links = { 25: real, 26: temporary, 27: null };
 
@@ -37,6 +37,12 @@ describe('registration links in the staging194 static output', () => {
       CHAT_OFFLINE_MESSAGE: 'absent',
       STAGING194_REGISTRATION_LINKS: '1',
     } });
+    // These paths exercise the HTML gate and stub browser/asset checks.
+    for (const file of readdirSync(fixture.outDir, { recursive: true, withFileTypes: true })) {
+      if (file.isFile() && file.name !== 'robots.txt' && !file.name.endsWith('.html')) {
+        rmSync(join(file.parentPath, file.name));
+      }
+    }
   }, 150_000);
   afterAll(() => fixture?.close());
 
@@ -83,26 +89,29 @@ describe('registration links in the staging194 static output', () => {
     expect(active.snapshotId).toBe(JSON.parse(readFileSync(join(fixture.snapshotDir, 'snapshot.json'), 'utf8')).snapshotId);
   });
 
-  const mutations = [
+  const mutations: [string, string, string?][] = [
     ['swapped URLs', `
       rewrite('Два месяца', ${JSON.stringify(temporary)});
       rewrite('Три месяца', ${JSON.stringify(real.replace('&', '&amp;'))});
     `],
     ['extra URL', `html = html.replace(/<article\\b[^>]*>.*?<\\/article>/gs, (card) =>
         card.includes('Два месяца') ? card.replace('</article>',
-          '<a href="https://extra.example.invalid/another">Записаться на семинар</a></article>') : card);`],
+          '<a href="https://extra.example.invalid/another">Записаться</a></article>') : card);`],
     ['missing CTA', `rewrite('Два месяца', null);`],
     ['URL for an empty occurrence', `rewrite('Следующий год', 'https://extra.example.invalid/empty');`],
     ['missing schedule page', 'fs.unlinkSync(path);'],
     ['extra registration link outside occurrence rows', `
       html = html.replace('</body>', '<a href="https://extra.example.invalid/outside">Записаться на семинар</a></body>');
     `],
+    ['extra registration link on an editorial page', `
+      html = html.replace('</body>', '<a href="https://extra.example.invalid/editorial">Записаться на семинар</a></body>');
+    `, 'statyi/registration-link-fixture/index.html'],
     ['indexable editorial page', `html = html.replace('content="noindex, nofollow"', 'content="index, follow"');`,
       'statyi/registration-link-fixture/index.html'],
     ['production canonical on an editorial page', `
       html = html.replace('href="https://194.226.99.10/statyi/', 'href="https://ikpk.su/statyi/');
     `, 'statyi/registration-link-fixture/index.html'],
-  ] as const;
+  ];
 
   const candidateMutation = (mutate: string, page = 'raspisanie-i-tseny/index.html') => String.raw`
       const path = ${JSON.stringify(`dist-demo193/${page}`)};
@@ -140,7 +149,7 @@ describe('registration links in the staging194 static output', () => {
     expect(result.switched).toBe(false);
   });
 
-  function pairedAcceptance(mutate?: string, page?: string) {
+  function pairedAcceptance(mutate?: string, page?: string, installFails = false) {
     const root = mkdtempSync(join(tmpdir(), 'ikpk194-cta-pair-'));
     try {
       const tree = join(root, 'dist-demo193');
@@ -151,7 +160,7 @@ describe('registration links in the staging194 static output', () => {
         expect(result.status, result.stderr).toBe(0);
       }
       const result = spawnSync('python3', [join(import.meta.dirname, 'helpers/staging194-paired-fixture.py'),
-        tree, join(fixture.snapshotDir, 'snapshot.json'), fixture.buildNow], {
+        tree, join(fixture.snapshotDir, 'snapshot.json'), fixture.buildNow, ...(installFails ? ['--install-fails'] : [])], {
         cwd: join(import.meta.dirname, '../..'), env: { ...process.env, PYTHONPATH: '.' }, encoding: 'utf8',
       });
       expect(result.status, result.stderr).toBe(0);
@@ -165,6 +174,12 @@ describe('registration links in the staging194 static output', () => {
     const result = pairedAcceptance();
     expect(result.reason).toBeNull();
     expect(result.confirmed).toEqual([expect.stringMatching(/^[0-9a-f]{64}$/)]);
+  });
+
+  it('withholds paired digest confirmation when the locked dependencies cannot be installed', () => {
+    const result = pairedAcceptance(undefined, undefined, true);
+    expect(result.confirmed).toEqual([]);
+    expect(result.reason).toMatch(/dependencies are unavailable/);
   });
 
   it.each(mutations)('withholds paired digest confirmation for %s', (_scenario, mutate, page) => {

@@ -35,6 +35,33 @@ def space_preflight_response(arguments):
 
 
 class OperatorAdmissionTests(unittest.TestCase):
+    def test_registration_checker_uses_committed_source_and_lockfile(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            checkout = root / "checkout"
+            subprocess.run(["git", "init", "-q", str(checkout)], check=True)
+            checker = "web/scripts/check-staging194-registration-links.ts"
+            lockfile = "web/package-lock.json"
+            files = {checker: "committed checker", lockfile: "committed lock",
+                     "web/package.json": "package", "web/tsconfig.json": "tsconfig",
+                     "web/src/lib/data.ts": "committed data", "scripts/publication-launcher.mjs": "helper"}
+            for name, content in files.items():
+                path = checkout / name
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(content, encoding="utf-8")
+            with patch.object(staging193, "ROOT", checkout):
+                staging193.capture(["git", "add", "."])
+                staging193.capture(["git", "-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid",
+                                    "commit", "-qm", "committed checker"])
+                admitted = staging193.capture(["git", "rev-parse", "HEAD"])
+                (checkout / checker).write_text("tampered checker", encoding="utf-8")
+                (checkout / lockfile).write_text("stale lock", encoding="utf-8")
+                archived = root / "exact"
+                staging193.registration_checker_workspace(admitted, archived)
+                self.assertEqual((archived / checker).read_text(encoding="utf-8"), files[checker])
+                self.assertEqual((archived / lockfile).read_text(encoding="utf-8"), files[lockfile])
+                self.assertFalse((archived / "web/node_modules").exists())
+
     def setUp(self):
         self.runs = [{
             "headSha": SHA,

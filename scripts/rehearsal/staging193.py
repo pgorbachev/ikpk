@@ -1228,6 +1228,31 @@ def _static_tree_sha256(root: Path) -> str:
     return digest.hexdigest()
 
 
+def registration_checker_workspace(source_sha: str, destination: Path) -> Path:
+    if not SHA.fullmatch(source_sha):
+        raise Refusal("registration checker requires an exact source commit")
+    source = capture_bytes(["git", "archive", "--format=tar", source_sha, "--",
+                            "web/package.json", "web/package-lock.json", "web/tsconfig.json", "web/scripts", "web/src/lib",
+                            "scripts/publication-launcher.mjs"])
+    destination.mkdir()
+    with tarfile.open(fileobj=io.BytesIO(source), mode="r:") as archive:
+        for member in archive.getmembers():
+            name = PurePosixPath(member.name)
+            if name.is_absolute() or ".." in name.parts or not (member.isdir() or member.isfile()):
+                raise Refusal("registration checker source contains an unsupported member")
+            if member.isfile():
+                target = destination / name
+                target.parent.mkdir(parents=True, exist_ok=True)
+                handle = archive.extractfile(member)
+                if handle is None:
+                    raise Refusal("registration checker source is unreadable")
+                target.write_bytes(handle.read())
+    web = destination / "web"
+    if not (web / "scripts/check-staging194-registration-links.ts").is_file():
+        raise Refusal("exact source has no staging194 registration checker")
+    return web
+
+
 def browser_check(source_sha: str, operation_id: str, static_digest: str, archive: bytes,
                   profile: str = "staging194", admitted_run: Optional[dict] = None,
                   chat_loader_src: Optional[str] = None,
@@ -1340,13 +1365,16 @@ def browser_check(source_sha: str, operation_id: str, static_digest: str, archiv
             if (not isinstance(build_now, str)
                     or snapshot_sha != hashlib.sha256((snapshot_root / "snapshot.json").read_bytes()).hexdigest()):
                 raise Refusal("paired staging194 registration snapshot differs from the candidate")
-            checker = ROOT / "web/node_modules/.bin/tsx"
-            if not checker.is_file():
-                raise Refusal("local registration acceptance dependencies are missing")
+            checker_web = registration_checker_workspace(source_sha, root / "checker")
             checker_env = {key: os.environ[key] for key in ("PATH", "HOME", "TMPDIR") if key in os.environ}
+            installed = subprocess.run(["npm", "ci", "--ignore-scripts", "--prefer-offline", "--no-audit", "--no-fund"],
+                                       cwd=checker_web, env=checker_env, capture_output=True, text=True, check=False)
+            checker = checker_web / "node_modules/.bin/tsx"
+            if installed.returncode or not checker.is_file():
+                raise Refusal("exact-source registration acceptance dependencies are unavailable")
             check = subprocess.run([str(checker), "scripts/check-staging194-registration-links.ts", "check",
                                     str(static_root), str(snapshot_root), snapshot_sha, build_now],
-                                   cwd=ROOT / "web", env=checker_env, capture_output=True, text=True, check=False)
+                                   cwd=checker_web, env=checker_env, capture_output=True, text=True, check=False)
             if check.returncode:
                 raise Refusal(f"candidate registration CTA check failed: {check.stderr.strip()}")
             if _static_tree_sha256(static_root) != static_digest:

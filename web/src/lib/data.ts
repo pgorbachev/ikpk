@@ -455,6 +455,18 @@ export function getArticle(slug: string): Article | undefined {
   return getArticles().find((a) => a.slug === slug);
 }
 
+let originalRegistrationLinks: Map<number, string | null> | undefined;
+
+export function getSnapshotRegistrationLinks(): ReadonlyMap<number, string | null> {
+  if (!originalRegistrationLinks) {
+    const raw = readFileSync(join(snapshotDir(), 'snapshot.json'), 'utf8');
+    const { content } = JSON.parse(raw) as SnapshotFile;
+    const entries = content.types.schedule_entries as Array<{ id: number; registrationFormLink: string | null }>;
+    originalRegistrationLinks = new Map(entries.map(({ id, registrationFormLink }) => [id, registrationFormLink]));
+  }
+  return originalRegistrationLinks;
+}
+
 let _schedule: ScheduleEntry[] | null = null;
 export function getScheduleEntries(): ScheduleEntry[] {
   if (!_schedule) _schedule = loadJson<ScheduleEntry[]>('schedule_entries.json').map(normalizeScheduleEntry).map(withSeminarDefaults).map(withSeminarTeachers);
