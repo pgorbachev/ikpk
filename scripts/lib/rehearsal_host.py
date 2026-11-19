@@ -2400,12 +2400,16 @@ def _production_static_projector(config: dict[str, Any], static: Path, tree_dige
                 or release.get("staticTreeSha256") != tree_digest):
             raise HostFailure("selected production release projector disagrees with its publication identity")
         paired_state = Path(config["stateDir"])
-        rows = [row for row in RehearsalState(paired_state).read_journal_for_cleanup()
-                if row.get("operationId") == operation]
-        paired = any(row.get("record") == "committed" and row.get("sourceSha") == source_sha
-                     for row in rows) and any(
-            row.get("record") == "new-bundle" and row.get("newPair", {}).get("staticTreeSha256") == tree_digest
-            and row["newPair"].get("snapshotId") == snapshot for row in rows)
+        pair_state = paired_state.parent / "initial-prod" if operation == INITIAL_PROD_OPERATION_ID else paired_state
+        rows = [row for row in RehearsalState(pair_state).read_journal_for_cleanup()
+                if row.get("operationId") == operation] if pair_state.is_dir() else []
+        commits = [row for row in rows if row.get("record") == "committed"]
+        bundles = [row for row in rows if row.get("record") == "new-bundle"]
+        bundle = bundles[0].get("newPair") if len(bundles) == 1 else None
+        paired = (len(commits) == 1 and isinstance(bundle, dict)
+                  and commits[0].get("sourceSha") == bundles[0].get("sourceSha") == source_sha
+                  and rows.index(bundles[0]) < rows.index(commits[0]) and bundle.get("staticPath") == str(static)
+                  and bundle.get("staticTreeSha256") == tree_digest and bundle.get("snapshotId") == snapshot)
         static_state = paired_state.parent / "production-static"
         static_rows = [row for row in RehearsalState(static_state).read_journal_for_cleanup()
                        if row.get("operationId") == operation] if not paired and static_state.is_dir() else []

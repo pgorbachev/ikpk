@@ -530,6 +530,31 @@ class WouldSwitch(Exception):
 
 
 class ProductionStaticProjectorTests(unittest.TestCase):
+    def test_initial_production_requires_exact_terminal_bundle(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            operation = rehearsal_host.INITIAL_PROD_OPERATION_ID
+            release = root / f"{OLD_PROJECTOR}-{operation}"
+            release.mkdir()
+            digest = "a" * 64
+            snapshot = "snap:" + "b" * 64
+            info = {"commit": OLD_PROJECTOR, "operationId": operation,
+                    "snapshotId": snapshot, "staticTreeSha256": digest}
+            (release / "release.json").write_text(json.dumps(info))
+            (root / "initial-prod").mkdir()
+            config = {"stateDir": str(root / "production-paired")}
+            (root / "production-paired").mkdir()
+            committed = {"record": "committed", "sourceSha": OLD_PROJECTOR, "operationId": operation}
+            bundle = {"record": "new-bundle", "sourceSha": OLD_PROJECTOR, "operationId": operation,
+                      "newPair": {"staticPath": str(release), "snapshotId": snapshot, "staticTreeSha256": digest}}
+            def rows(state):
+                return [bundle, committed] if state.root == root / "initial-prod" else []
+            with patch.object(rehearsal_host.RehearsalState, "read_journal_for_cleanup", autospec=True, side_effect=rows):
+                self.assertEqual(rehearsal_host._production_static_projector(config, release, digest, {})["sourceSha"], OLD_PROJECTOR)
+                bundle["newPair"]["staticPath"] = str(root / "other")
+                with self.assertRaisesRegex(rehearsal_host.HostFailure, "terminal operation"):
+                    rehearsal_host._production_static_projector(config, release, digest, {})
+
     def test_cms_refresh_uses_terminal_state_and_active_cms_identity(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary).resolve()
