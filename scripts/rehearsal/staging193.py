@@ -1032,13 +1032,22 @@ CMS_CAPTURE_SCHEMA_PATHS = tuple(
      ("institute", "course-group", "seminar", "teacher", "article", "schedule-entry",
       "news-item", "promotion", "page", "video-playlist")] +
     ["cms/src/components/shared/seo.json", "cms/src/components/seminar/document-record.json"])
+CMS_CAPTURE_MIGRATION_SCHEMA_PATHS = (
+    "cms/src/components/seminar/registry-fact.json",
+    "cms/src/components/seminar/nmo-fact.json",
+)
 
 
 def production_paired_schema_from_commit(source_sha: str, schema_root: Path) -> str:
     if not SHA.fullmatch(source_sha):
         raise Refusal("old CMS source SHA must be a full lowercase commit ID")
     capture(["git", "cat-file", "-e", f"{source_sha}^{{commit}}"])
-    archive = capture_bytes(["git", "archive", "--format=tar", source_sha, *CMS_CAPTURE_SCHEMA_PATHS])
+    # Older admitted sources lack these component files. Archive only the paths tracked
+    # in the bound commit. The capture reader requires referenced component schemas.
+    migration_paths = capture(["git", "ls-tree", "--full-tree", "--name-only", source_sha,
+                               "--", *CMS_CAPTURE_MIGRATION_SCHEMA_PATHS]).splitlines()
+    schema_paths = set(CMS_CAPTURE_SCHEMA_PATHS) | set(migration_paths)
+    archive = capture_bytes(["git", "archive", "--format=tar", source_sha, *sorted(schema_paths)])
     schema_root.mkdir(mode=0o700, parents=True, exist_ok=False)
     seen = set()
     try:
@@ -1046,7 +1055,7 @@ def production_paired_schema_from_commit(source_sha: str, schema_root: Path) -> 
             for member in source.getmembers():
                 if member.isdir():
                     continue
-                if member.issym() or member.islnk() or not member.isfile() or member.name not in CMS_CAPTURE_SCHEMA_PATHS:
+                if member.issym() or member.islnk() or not member.isfile() or member.name not in schema_paths:
                     raise Refusal("old CMS source archive has an unexpected schema member")
                 if member.name in seen:
                     raise Refusal("old CMS source archive repeats a schema member")
@@ -1060,10 +1069,10 @@ def production_paired_schema_from_commit(source_sha: str, schema_root: Path) -> 
                 output.write_bytes(stream.read())
     except tarfile.TarError as error:
         raise Refusal("old CMS source archive is not readable") from error
-    if seen != set(CMS_CAPTURE_SCHEMA_PATHS):
+    if seen != schema_paths:
         raise Refusal("old CMS source commit lacks the exact capture schema contract")
     digest = hashlib.sha256()
-    for path in sorted(CMS_CAPTURE_SCHEMA_PATHS):
+    for path in sorted(schema_paths):
         relative = Path(path).relative_to("cms/src").as_posix().encode()
         payload = (schema_root / relative.decode()).read_bytes()
         digest.update(len(relative).to_bytes(4, "big")); digest.update(relative)

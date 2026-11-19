@@ -5,7 +5,9 @@ import { createHash } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 
 const TYPES = ['institute', 'course-group', 'seminar', 'teacher', 'article', 'schedule-entry', 'news-item', 'promotion', 'page', 'video-playlist'];
-const COMPONENTS = ['shared.seo', 'seminar.document-record', 'seminar.registry-fact', 'seminar.nmo-fact'];
+const BASE_COMPONENTS = ['shared.seo', 'seminar.document-record'];
+const MIGRATION_COMPONENTS = ['seminar.registry-fact', 'seminar.nmo-fact'];
+const COMPONENTS = [...BASE_COMPONENTS, ...MIGRATION_COMPONENTS];
 const scalarTypes = new Set(['string', 'text', 'richtext', 'uid', 'enumeration', 'integer', 'decimal', 'boolean', 'json', 'date', 'datetime']);
 const snake = (s) => s.replace(/[A-Z]/g, (c) => `_${c.toLowerCase()}`).replaceAll('-', '_');
 const quote = (s) => { if (!/^[a-z_][a-z0-9_]*$/.test(s)) throw new Error(`unsupported SQL identifier: ${s}`); return `"${s}"`; };
@@ -13,7 +15,25 @@ const quote = (s) => { if (!/^[a-z_][a-z0-9_]*$/.test(s)) throw new Error(`unsup
 export function loadCaptureSchemas(schemaRoot) {
   const schemas = {};
   for (const name of TYPES) schemas[`api::${name}.${name}`] = JSON.parse(readFileSync(join(schemaRoot, 'api', name, 'content-types', name, 'schema.json'), 'utf8'));
-  for (const name of COMPONENTS) schemas[name] = JSON.parse(readFileSync(join(schemaRoot, 'components', ...name.split('.')) + '.json', 'utf8'));
+  const components = new Map();
+  function loadComponent(name) {
+    if (components.has(name)) return;
+    if (!COMPONENTS.includes(name)) throw new Error(`schema unsupported component: ${name}`);
+    const schema = JSON.parse(readFileSync(join(schemaRoot, 'components', ...name.split('.')) + '.json', 'utf8'));
+    components.set(name, schema);
+    loadReferencedComponents(schema);
+  }
+  function loadReferencedComponents(schema) {
+    for (const attr of Object.values(schema.attributes)) {
+      if (attr.type === 'component') loadComponent(attr.component);
+    }
+  }
+  for (const name of BASE_COMPONENTS) loadComponent(name);
+  for (const schema of Object.values(schemas)) loadReferencedComponents(schema);
+  // Preserve the historical ordering used in both capture digests.
+  for (const name of COMPONENTS) {
+    if (components.has(name)) schemas[name] = components.get(name);
+  }
   return schemas;
 }
 
