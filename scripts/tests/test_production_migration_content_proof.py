@@ -1,6 +1,7 @@
 """Contract checks for the production-paired operator, using a local host double."""
 
 import base64
+import copy
 import hashlib
 import io
 import json
@@ -486,6 +487,63 @@ class ProductionPublicationProofTests(unittest.TestCase):
 
 class WouldSwitch(Exception):
     """Stop immediately before any actual publication or service checks."""
+
+
+class CrossVersionPublicProjectionTests(unittest.TestCase):
+    def test_expected_v2_result_preserves_untouched_public_content_and_relation_identity(self):
+        teacher_a = {"id": 1, "legacy_id": "99", "name": "Teacher A", "order": 1}
+        teacher_b = {"id": 2, "legacy_id": "100", "name": "Teacher B", "order": 2}
+        seminar = {"id": 3, "name": "Seminar", "description_html": "<p>Legacy public text</p>",
+                   "description_text": "Legacy public text",
+                   "teachers": [{"legacy_id": "99", "name": "Teacher A", "order": 1}]}
+        occurrence = {"id": 4, "price": 0, "city": "Онлайн", "startAt": "2027-02-10T21:00:00.000Z",
+                      "registrationFormLink": "https://forms.invalid/approve",
+                      "teachers": [{"id": "99", "fullName": "Teacher A"}],
+                      "seminar": {"id": 3, "name": "Seminar", "slug": "seminar"}}
+        article = {"id": 5, "body_html": "<p>Untouched article</p>"}
+        original = {"content": {"media": [{"ref": "/uploads/photo.webp", "contentId": "abc"}],
+                               "types": {"teachers": [teacher_a, teacher_b], "seminars": [seminar],
+                                         "schedule_entries": [occurrence], "articles": [article]}}}
+        target = copy.deepcopy(original)
+        target["contractVersion"] = 2
+        actual = target["content"]["types"]
+        for row, document in zip((actual["teachers"][0], actual["teachers"][1], actual["seminars"][0],
+                                  actual["schedule_entries"][0], actual["articles"][0]),
+                                 ("teacher-a", "teacher-b", "seminar", "entry", "article")):
+            row["documentId"] = document
+        actual["seminars"][0].update({"documents": [{"id": 21, "registry": [{"id": 51}]}],
+                                      "content_section_anchors": {"documents": "documents"}})
+        actual["seminars"][0]["teachers"][0]["documentId"] = "teacher-a"
+        actual["schedule_entries"][0].update({"isOnline": True, "price": None, "city": None})
+        actual["schedule_entries"][0]["teachers"][0]["documentId"] = "teacher-a"
+        actual["schedule_entries"][0]["seminar"]["documentId"] = "seminar"
+        reviewed = {
+            "version": 1,
+            "documentIds": {"teachers": {"1": "teacher-a", "2": "teacher-b"}, "seminars": {"3": "seminar"},
+                            "schedule_entries": {"4": "entry"}, "articles": {"5": "article"}},
+            "schedule": {"4": {"price": None, "city": None, "isOnline": True}},
+            "seminars": {"3": {"documents": [{"id": 21, "registry": [{"id": 51}]}],
+                               "content_section_anchors": {"documents": "documents"}}},
+        }
+        operator.validate_migrated_public_projection(original, target, reviewed)
+        mutations = [
+            ("teachers", lambda doc: doc["content"]["types"]["schedule_entries"][0]["teachers"][0]
+                .update(documentId="teacher-b")),
+            ("anchor", lambda doc: doc["content"]["types"]["seminars"][0]["content_section_anchors"].clear()),
+            ("registry", lambda doc: doc["content"]["types"]["seminars"][0]["documents"][0]["registry"].clear()),
+            ("unrelated article", lambda doc: doc["content"]["types"]["articles"][0].pop("body_html")),
+            ("another calendar", lambda doc: doc["content"]["types"]["schedule_entries"][0]
+                .update(startAt="2027-02-11T00:00:00.000Z")),
+            ("registration address", lambda doc: doc["content"]["types"]["schedule_entries"][0]
+                .update(registrationFormLink="https://forms.invalid/unreviewed")),
+            ("media", lambda doc: doc["content"]["media"].clear()),
+        ]
+        for description, mutate in mutations:
+            with self.subTest(description=description):
+                changed = copy.deepcopy(target)
+                mutate(changed)
+                with self.assertRaises(operator.Refusal):
+                    operator.validate_migrated_public_projection(original, changed, reviewed)
 
 
 @unittest.skipUnless(os.environ.get("IKPK_TEST_HISTORICAL_BACKUP"),

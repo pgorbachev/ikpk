@@ -4860,6 +4860,70 @@ def _sqlite_logical_digest(path: Path) -> str:
     return digest.hexdigest()
 
 
+def _reviewed_public_projection(contract: dict[str, Any], readback: dict[str, list]) -> dict[str, Any]:
+    """Build the v1-to-v2 public changes from approved plans and the audited SQLite graph."""
+    collections = {
+        "institutes": "institutes", "course_groups": "course-groups", "seminars": "seminars",
+        "teachers": "teachers", "articles": "articles", "schedule_entries": "schedule-entries",
+        "news": "news-items", "promotions": "promotions", "static_pages": "pages",
+        "video_playlists": "video-playlists",
+    }
+    document_ids = {}
+    for target, source in collections.items():
+        identifiers = {str(row["id"]): row["documentId"] for row in readback[source]}
+        if (len(identifiers) != len(readback[source]) or len(set(identifiers.values())) != len(identifiers)
+                or any(not isinstance(value, str) or not value for value in identifiers.values())):
+            raise HostFailure("audited public record identities are missing or ambiguous")
+        document_ids[target] = identifiers
+    schedule_fields = {"price": "price", "is_free": "isFree", "city": "city", "is_online": "isOnline",
+                       "duration": "duration"}
+    schedule = {}
+    for row in contract["schedule"]["plan"]["entries"]:
+        if not row["published"]:
+            continue
+        key = str(row["rowId"])
+        if document_ids["schedule_entries"].get(key) != row["documentId"] or key in schedule:
+            raise HostFailure("reviewed schedule projection differs from its audited public record")
+        fields = {}
+        for field, value in row["changes"].items():
+            if field not in schedule_fields:
+                raise HostFailure("reviewed schedule plan changes an unsupported public field")
+            fields[schedule_fields[field]] = bool(value) if field in ("is_free", "is_online") else value
+        schedule[key] = fields
+    if schedule.keys() != document_ids["schedule_entries"].keys():
+        raise HostFailure("reviewed schedule plan does not cover every published occurrence")
+    added_seminar = ("duration", "audience", "content_format", "content_section_anchors", "documents_state",
+                     "documents", "training_registries", "nmo")
+    seminars = {str(row["id"]): {key: row[key] for key in added_seminar} for row in readback["seminars"]}
+    approved_posts = set()
+    translated = {"description": "description_html", "full_text": "full_text_html",
+                  "learning_mode": "learning_mode", "learning_plan": "learning_plan",
+                  "recommendations": "recommendations", "audience": "audience",
+                  "content_format": "content_format", "content_section_anchors": "content_section_anchors"}
+    for row in contract["content"]["plan"]["payload"]["entries"]:
+        if row["version"] != "published":
+            continue
+        key = str(row["id"])
+        if key in approved_posts or document_ids["seminars"].get(key) != row["document_id"]:
+            raise HostFailure("reviewed seminar projection differs from its audited public record")
+        approved_posts.add(key)
+        for field, value in row["post"].items():
+            if field not in translated:
+                raise HostFailure("reviewed seminar plan changes an unsupported public field")
+            if field == "content_section_anchors" and isinstance(value, str):
+                value = json.loads(value)
+            name = translated[field]
+            if name in added_seminar and seminars[key][name] != value:
+                raise HostFailure("audited seminar scalar differs from the exact reviewed postimage")
+            seminars[key][name] = value
+            if field == "description":
+                seminars[key]["description_text"] = (re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", value)
+                    .replace("&nbsp;", " ")).strip() if isinstance(value, str) else value)
+    if approved_posts != set(seminars):
+        raise HostFailure("reviewed content plan does not cover every published seminar")
+    return {"version": 1, "documentIds": document_ids, "schedule": schedule, "seminars": seminars}
+
+
 def _audit_fresh_production_composition(config: dict[str, Any], state: RehearsalState,
                                         operation_id: str, source_sha: str, candidate_db: Path,
                                         cohort_admission: dict[str, Any]) -> dict[str, Any]:
@@ -4931,24 +4995,33 @@ def _audit_fresh_production_composition(config: dict[str, Any], state: Rehearsal
     code = """
 import { readFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
-const [modulePath, reviewPath, digest, paths] = process.argv.slice(1);
+const [modulePath, reviewPath, digest, pathsJson, readerPath, schemaRoot] = process.argv.slice(1);
+const paths = JSON.parse(pathsJson);
 const { auditSeminarMigrationComposition } = await import(pathToFileURL(modulePath));
 const result = auditSeminarMigrationComposition({
-  paths: JSON.parse(paths), contract: JSON.parse(readFileSync(reviewPath, 'utf8')), expectedContractDigest: digest,
+  paths, contract: JSON.parse(readFileSync(reviewPath, 'utf8')), expectedContractDigest: digest,
 });
 if (result.partial !== true || result.passed !== false || result.blockedOn !== 'registry-cohort-binding') {
   throw new Error('the independent composition audit did not verify all reviewed stages');
 }
+const { readPublishedSqlite } = await import(pathToFileURL(readerPath));
+process.stdout.write(JSON.stringify(readPublishedSqlite(paths.content, schemaRoot).collections));
 """
-    _run_as_cms(config, artifact, [
+    readback = _run_as_cms(config, artifact, [
         config.get("nodeBinary", "/usr/bin/node"), "--input-type=module", "-e", code,
         str(artifact / "scripts/audit-seminar-migration-composition.mjs"), str(review_path),
         review["expectedContractDigest"], json.dumps(paths, separators=(",", ":")),
-    ], timeout=300, read_only_path=[artifact, dependencies, operation_root])
+        str(source_root / "scripts/lib/server-capture-sqlite.mjs"), str(source_root / "cms/src"),
+    ], timeout=300, read_only_path=[artifact, dependencies, operation_root, source_root / "scripts/lib", source_root / "cms/src"])
     after = _capture_migration_pause(operation_root, operation_id, source_sha, cms_uid=cms_uid, config=config)
     if before != after or sha256_file_bytes(_cohort_file(review_path)) != review["expectedFileSha256"]:
         raise HostFailure("fresh production composition evidence changed during independent audit")
-    return {"compositionContractDigest": review["expectedContractDigest"], "stageSnapshots": stages}
+    try:
+        public_projection = _reviewed_public_projection(contract, json.loads(readback))
+    except (KeyError, TypeError, ValueError) as error:
+        raise HostFailure("audited production composition lacks a complete public projection") from error
+    return {"compositionContractDigest": review["expectedContractDigest"], "stageSnapshots": stages,
+            "publicProjection": public_projection}
 
 
 def _production_uploads_digest(media: list[dict[str, Any]]) -> str:
@@ -5093,6 +5166,7 @@ def _prepare_historical_cohort(config: dict[str, Any], state: RehearsalState, op
             "backupDatabaseSha256": backup["databaseSha256"],
             "backupMediaManifestSha256": backup["mediaManifestSha256"],
             "targetProjection": target_projection,
+            "targetRegistryBase64": base64.b64encode(registry_bytes).decode("ascii"),
         }
     state._append(intent)
     return intent
