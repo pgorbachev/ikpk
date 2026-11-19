@@ -1101,7 +1101,8 @@ def production_paired_schema_source(cms_path: str) -> tuple[str, str]:
 
 def persist_offhost_backup(directory: Path, operation_id: str, source_sha: str, payload: bytes,
                            expected_sha256: str, admission: Optional[dict] = None,
-                           old_cms_path: Optional[str] = None) -> Path:
+                           old_cms_path: Optional[str] = None,
+                           *, old_projector_sha: Optional[str] = None) -> Path:
     verify_backup_tar(payload, expected_sha256)
     target = directory / f"{operation_id}.tar"
     metadata = target.with_suffix(".json")
@@ -1136,16 +1137,18 @@ def persist_offhost_backup(directory: Path, operation_id: str, source_sha: str, 
             os.close(dir_fd)
     if admission is not None:
         schema_sha, schema_digest = production_paired_schema_source(old_cms_path or "")
+        if old_projector_sha is None or not SHA.fullmatch(old_projector_sha):
+            raise Refusal("verified production backup lacks its independent historical projector source")
         if (type(admission.get("runId")) is not int or admission["runId"] <= 0 or
                 type(admission.get("attempt")) is not int or admission["attempt"] <= 0):
             raise Refusal("production backup admission is missing its exact run and attempt")
         with tarfile.open(fileobj=io.BytesIO(payload), mode="r:") as archive:
             registry_sha = json.load(archive.extractfile("manifest.json")).get("historicalRegistrySha256")
         fingerprint = production_paired_backup_fingerprint(payload, source_sha, operation_id,
-            admission["runId"], admission["attempt"], schema_sha, schema_digest, projector_sha=schema_sha)
+            admission["runId"], admission["attempt"], schema_sha, schema_digest, projector_sha=old_projector_sha)
         schema_metadata = {"oldCmsSourceSha": schema_sha, "oldCmsSchemaSha256": schema_digest,
-                           "oldProjectorSourceSha": schema_sha, "oldHistoricalRegistrySha256": registry_sha,
-                           "oldProjectorContractSha256": production_projector_contract(schema_sha, schema_sha),
+                           "oldProjectorSourceSha": old_projector_sha, "oldHistoricalRegistrySha256": registry_sha,
+                           "oldProjectorContractSha256": production_projector_contract(old_projector_sha, schema_sha),
                            "oldProjectorNodeVersion": production_projector_node_version(),
                            "snapshotFingerprint": fingerprint}
     metadata_record = {"operationId": operation_id, "sourceSha": source_sha, "sha256": expected_sha256}
@@ -1174,7 +1177,8 @@ def production_projector_contract(projector_sha: str, schema_sha: str) -> str:
     if not SHA.fullmatch(projector_sha) or not SHA.fullmatch(schema_sha):
         raise Refusal("production projector or schema revision is invalid")
     projector_tree = capture_bytes(["git", "ls-tree", "--full-tree", "-r", projector_sha, "--",
-        "web/scripts/capture-content-snapshot.ts", "web/scripts/lib", "web/package-lock.json",
+        "web/scripts/capture-content-snapshot.ts", "web/scripts/lib", "web/src/lib", "web/package.json",
+        "web/package-lock.json", "web/tsconfig.json", "cms/src/lib/demo193-source-empty-fields.json",
         "scripts/lib/staging193-capture-bundle.mjs", "scripts/lib/server-capture-sqlite.mjs",
         "scripts/lib/seal-staging193-capture.mjs", "fixtures/content-snapshot"])
     schema_tree = capture_bytes(["git", "ls-tree", "--full-tree", "-r", schema_sha, "--",
@@ -1361,10 +1365,12 @@ def validate_production_content_acceptance(candidate_archive: bytes, static_dige
             proof = json.load(archive.extractfile(names[0])) if names else None
             capture_bytes = archive.extractfile("snapshot/capture-manifest.json").read() if names else None
             projected = json.load(archive.extractfile("snapshot/snapshot.json")) if names else None
+        old_contract = backup.get("oldProjectorContractSha256")
+        if (proof is not None or old_contract is not None) and (
+                not isinstance(old_contract, str)
+                or old_contract != production_projector_contract(source_sha, source_sha)):
+            raise Refusal("production projector semantics changed without an audited proof of equivalence")
         if proof is None:
-            old_contract = backup.get("oldProjectorContractSha256")
-            if old_contract is not None and old_contract != production_projector_contract(source_sha, source_sha):
-                raise Refusal("production projector semantics changed without an audited proof of equivalence")
             if snapshot_fingerprint != backup.get("snapshotFingerprint"):
                 raise Refusal("built production snapshot differs from the fingerprint captured in the verified backup")
             return
@@ -1661,6 +1667,10 @@ def invoke(args: argparse.Namespace, *, admission: Optional[dict] = None) -> Opt
         old_pair = preflight.get("oldPair")
         if not isinstance(old_pair, dict) or not isinstance(old_pair.get("cmsPath"), str):
             raise Refusal("read-only production preflight did not identify the old CMS release")
+        static_match = re.search(r"/releases/([a-f0-9]{40})-[^/]+/?$", str(old_pair.get("staticPath")))
+        if not static_match or "historicalRegistryManifest" not in old_pair:
+            raise Refusal("production preflight lacks the old static projector source or registry baseline")
+        old_projector_sha = static_match.group(1)
         paired_old_cms = (old_pair["cmsPath"], *production_paired_schema_source(old_pair["cmsPath"]))
         if not (ROOT / "web/node_modules/.bin/tsx").is_file():
             raise Refusal("local content snapshot tooling is unavailable before production fence")
@@ -1731,11 +1741,14 @@ def invoke(args: argparse.Namespace, *, admission: Optional[dict] = None) -> Opt
                 old_cms_path = fenced_old_pair.get("cmsPath")
                 if not paired_old_cms or old_cms_path != paired_old_cms[0]:
                     raise Refusal("journaled old CMS release changed after read-only preflight")
-                if fenced_old_pair.get("historicalRegistryManifest") != old_pair.get("historicalRegistryManifest"):
-                    raise Refusal("journaled old registry changed after read-only preflight")
+                if (fenced_old_pair.get("staticPath") != old_pair["staticPath"]
+                        or "historicalRegistryManifest" not in fenced_old_pair
+                        or fenced_old_pair["historicalRegistryManifest"] != old_pair["historicalRegistryManifest"]):
+                    raise Refusal("journaled old static projector or registry changed after read-only preflight")
             if profile == "production-paired":
                 backup_path = persist_offhost_backup(backup_dir, args.operation_id, args.source_sha,
-                    remote_backup, first.get("backupSha256", ""), provenance, old_cms_path)
+                    remote_backup, first.get("backupSha256", ""), provenance, old_cms_path,
+                    old_projector_sha=old_projector_sha)
             else:
                 backup_path = persist_offhost_backup(backup_dir, args.operation_id, args.source_sha,
                     remote_backup, first.get("backupSha256", ""))
@@ -1954,7 +1967,9 @@ def invoke(args: argparse.Namespace, *, admission: Optional[dict] = None) -> Opt
                 projector_sha = record.get("oldProjectorSourceSha", record["sourceSha"])
                 original_contract = record.get("oldProjectorContractSha256")
                 if original_contract is not None and (
-                        original_contract != production_projector_contract(projector_sha, record["oldCmsSourceSha"])
+                        "historicalRegistryManifest" not in recovery_old_pair
+                        or not re.search(rf"/releases/{re.escape(projector_sha)}-[^/]+/?$", str(recovery_old_pair.get("staticPath")))
+                        or original_contract != production_projector_contract(projector_sha, record["oldCmsSourceSha"])
                         or record.get("oldProjectorNodeVersion") != production_projector_node_version()):
                     raise Refusal("production recovery projector or runtime differs from the verified backup")
                 fingerprint = production_paired_backup_fingerprint(payload, record["sourceSha"], args.operation_id,

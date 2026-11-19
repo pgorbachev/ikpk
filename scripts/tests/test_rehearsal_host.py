@@ -2756,9 +2756,11 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
             with patch.object(operator, "production_paired_backup_fingerprint", return_value=fingerprint):
                 backup = operator.persist_offhost_backup(Path(temporary), "paired-op", "a" * 40, archive,
                     sha(archive), {"runId": 7, "attempt": 2},
-                    f"/opt/ikpk-cms/releases/{source_sha}-paired-op/.staging193-rehearsal/op/migration/cms-artifact")
+                    f"/opt/ikpk-cms/releases/{source_sha}-paired-op/.staging193-rehearsal/op/migration/cms-artifact",
+                    old_projector_sha="9fad640520a90518a89d2751701acd2faa10ab21")
             metadata = json.loads(backup.with_suffix(".json").read_text(encoding="utf-8"))
             self.assertEqual(metadata["oldCmsSourceSha"], source_sha)
+            self.assertEqual(metadata["oldProjectorSourceSha"], "9fad640520a90518a89d2751701acd2faa10ab21")
             self.assertRegex(metadata["oldCmsSchemaSha256"], r"^[a-f0-9]{64}$")
             self.assertEqual(metadata["sha256"], sha(archive))
             self.assertEqual(metadata["runId"], 7)
@@ -2775,7 +2777,8 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
                 with self.assertRaisesRegex(operator.Refusal, "tsx failed"):
                     operator.persist_offhost_backup(Path(temporary), "durable-op", "a" * 40, archive,
                         sha(archive), {"runId": 7, "attempt": 2},
-                        f"/opt/ikpk-cms/releases/{source_sha}-old/cms-artifact")
+                        f"/opt/ikpk-cms/releases/{source_sha}-old/cms-artifact",
+                        old_projector_sha=source_sha)
             backup = Path(temporary) / "durable-op.tar"
             metadata = json.loads(backup.with_suffix(".json").read_text(encoding="utf-8"))
             self.assertEqual(backup.read_bytes(), archive)
@@ -2785,7 +2788,9 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
     def test_production_paired_direct_cms_update_checks_old_schema_before_source_admission(self):
         source_sha = "c" * 40
         status = json.dumps({"phase": "idle", "oldPair": {"cmsPath":
-            f"/opt/ikpk-cms/releases/{source_sha}-old-release/cms-artifact"}}).encode()
+            f"/opt/ikpk-cms/releases/{source_sha}-old-release/cms-artifact",
+            "staticPath": f"/var/www/ikpk/releases/{source_sha}-old-release",
+            "historicalRegistryManifest": None}}).encode()
         args = Namespace(profile="production-paired", command="cms-update", host=None,
                          operation_id="shallow-preflight")
         def ssh(arguments, **_kwargs):
@@ -2872,7 +2877,9 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
         archive = backup_archive()
         fingerprint = "sha256:" + "d" * 64
         status = json.dumps({"phase": "idle", "oldPair": {"cmsPath":
-            f"/opt/ikpk-cms/releases/{old_source}-old-release/cms-artifact"}}).encode()
+            f"/opt/ikpk-cms/releases/{old_source}-old-release/cms-artifact",
+            "staticPath": f"/var/www/ikpk/releases/{old_source}-old-release",
+            "historicalRegistryManifest": None}}).encode()
         calls = []
         def ssh(arguments, **_kwargs):
             calls.append(arguments)

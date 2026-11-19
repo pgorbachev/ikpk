@@ -371,7 +371,8 @@ class OperatorAdmissionTests(unittest.TestCase):
             args = type("Args", (), {"profile": "production-paired", "host": staging193.INITIAL_PROD_HOST,
                 "command": "cms-update", "operation_id": "paired-no-tsx", "source_sha": SHA,
                 "backup_dir": None})()
-            status = json.dumps({"phase": "idle", "oldPair": {"cmsPath": "/opt/old/cms"}}).encode()
+            status = json.dumps({"phase": "idle", "oldPair": {"cmsPath": "/opt/old/cms",
+                "staticPath": f"/var/www/ikpk/releases/{SHA}-old-release", "historicalRegistryManifest": None}}).encode()
             def ssh(arguments, **_kwargs):
                 preflight = space_preflight_response(arguments)
                 return preflight if preflight is not None else status
@@ -405,7 +406,8 @@ class OperatorAdmissionTests(unittest.TestCase):
         def ssh(arguments, **kwargs):
             calls.append((arguments, kwargs))
             if arguments[0] == "status":
-                return json.dumps({"oldPair": {"cmsPath": "/opt/ikpk-cms/releases/old"}}).encode()
+                return json.dumps({"oldPair": {"cmsPath": "/opt/ikpk-cms/releases/old",
+                    "staticPath": f"/var/www/ikpk/releases/{SHA}-old-release", "historicalRegistryManifest": None}}).encode()
             return json.dumps({"phase": "cms-activated"}).encode()
 
         try:
@@ -1389,7 +1391,8 @@ class PairedCmsAdmissionRecheckTests(unittest.TestCase):
             def ssh(arguments, **_kwargs):
                 calls.append(arguments)
                 if arguments[0] == "status":
-                    return json.dumps({"phase": "idle", "oldPair": {"cmsPath": old_cms_path}}).encode()
+                    return json.dumps({"phase": "idle", "oldPair": {"cmsPath": old_cms_path,
+                        "staticPath": f"/var/www/ikpk/releases/{'d' * 40}-old-release", "historicalRegistryManifest": None}}).encode()
                 if arguments[0] == "export-backup":
                     return b"verified off-host backup"
                 if arguments[0] == "cms-update" and "--offhost-sha256" in arguments:
@@ -1399,7 +1402,7 @@ class PairedCmsAdmissionRecheckTests(unittest.TestCase):
                                        "backupSha256": "d" * 64}).encode()
                 self.fail(f"unexpected host command: {arguments[0]}")
 
-            def persist_backup(directory, operation_id, source_sha, payload, digest, *extra):
+            def persist_backup(directory, operation_id, source_sha, payload, digest, *extra, **_projector):
                 backup_path.write_bytes(payload)
                 if profile == "production-paired":
                     (root / f"{operation_id}.json").write_text(json.dumps({

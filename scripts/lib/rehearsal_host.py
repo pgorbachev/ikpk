@@ -4839,6 +4839,27 @@ def _validate_registry_cohort(manifest: dict[str, Any], *, config: Optional[dict
         raise HostFailure('registry cohort differs from configured CMS/database')
 
 
+def _sqlite_logical_digest(path: Path) -> str:
+    """Fingerprint schema and every SQL row independent of Backup API file headers."""
+    import sqlite3
+    if path.is_symlink() or path.resolve(strict=True) != path:
+        raise HostFailure("migration comparison database path is not canonical")
+    connection = sqlite3.connect(path.as_uri() + "?mode=ro&immutable=1", uri=True)
+    digest = hashlib.sha256()
+    try:
+        connection.execute("PRAGMA query_only=ON")
+        for name in ("user_version", "application_id"):
+            digest.update(json.dumps(connection.execute(f"PRAGMA {name}").fetchone()).encode())
+        for statement in connection.iterdump():
+            digest.update(statement.encode())
+            digest.update(b"\n")
+    except sqlite3.Error as error:
+        raise HostFailure("cannot read all audited SQLite tables and rows") from error
+    finally:
+        connection.close()
+    return digest.hexdigest()
+
+
 def _audit_fresh_production_composition(config: dict[str, Any], state: RehearsalState,
                                         operation_id: str, source_sha: str, candidate_db: Path,
                                         cohort_admission: dict[str, Any]) -> dict[str, Any]:
@@ -4896,6 +4917,12 @@ def _audit_fresh_production_composition(config: dict[str, Any], state: Rehearsal
                 json.dumps([cohort_admission["binding"]["candidateDatabaseSha256"], None],
                            separators=(",", ":")).encode())):
         raise HostFailure("fresh production composition endpoint or source differs from receipt")
+    audited_source = Path(paths["source"])
+    backup_database = Path(config["backupRoot"]) / operation_id / "database.sqlite"
+    audited_final = Path(paths["content"])
+    if (_sqlite_logical_digest(audited_source) != _sqlite_logical_digest(backup_database)
+            or _sqlite_logical_digest(audited_final) != _sqlite_logical_digest(candidate_db)):
+        raise HostFailure("audited source or final stage differs logically from the backup or activation candidate")
     cms_uid = pwd.getpwnam(config["cmsUser"]).pw_uid
     before = _capture_migration_pause(operation_root, operation_id, source_sha, cms_uid=cms_uid, config=config)
     _, _, dependencies = _validate_prepared_cms_candidate(config, source_root, operation_id, provenance,

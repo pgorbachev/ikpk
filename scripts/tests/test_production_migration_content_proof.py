@@ -99,6 +99,7 @@ class ProductionPublicationProofTests(unittest.TestCase):
             "runId": ADMISSION["runId"], "attempt": ADMISSION["attempt"],
             "oldCmsSourceSha": OLD_CMS, "oldCmsSchemaSha256": "a" * 64,
             "snapshotFingerprint": snapshot_fingerprint(self.original),
+            "oldProjectorContractSha256": "8" * 64,
         }
         self.config = {
             "profile": "production-paired", "releaseRoot": str(self.root / "releases"),
@@ -336,6 +337,7 @@ class ProductionPublicationProofTests(unittest.TestCase):
         with patch.object(operator, "ssh_remote", side_effect=ssh), \
              patch.object(operator, "validate_production_paired_admission", return_value=ADMISSION), \
              patch.object(operator, "browser_check", side_effect=browser_check), \
+             patch.object(operator, "production_projector_contract", return_value="8" * 64), \
              patch.object(rehearsal_host, "_verify_fence"), \
              patch.object(rehearsal_host, "_switch_static_pointer", side_effect=switch):
             operator.invoke(args)
@@ -349,6 +351,20 @@ class ProductionPublicationProofTests(unittest.TestCase):
     def test_ordinary_release_accepts_the_original_fingerprint(self):
         self.publish()
         self.assertEqual(len(self.switches), 1)
+
+    def test_ordinary_release_refuses_unreviewed_projector_change_even_with_matching_fingerprint(self):
+        self.sidecar["oldProjectorContractSha256"] = "7" * 64
+        self.assert_refused()
+
+    def test_logical_database_binding_rejects_unaudited_nonpublic_changes(self):
+        copied = self.root / "candidate.copy"
+        with sqlite3.connect(self.db) as source, sqlite3.connect(copied) as other:
+            source.backup(other)
+        sealed = rehearsal_host._sqlite_logical_digest(self.db)
+        self.assertEqual(rehearsal_host._sqlite_logical_digest(copied), sealed)
+        with sqlite3.connect(copied) as other:
+            other.execute("UPDATE admin_users SET blocked=1")
+        self.assertNotEqual(rehearsal_host._sqlite_logical_digest(copied), sealed)
 
     def test_ordinary_release_refuses_changed_fingerprint(self):
         with self.assertRaises(operator.Refusal):
