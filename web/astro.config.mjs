@@ -4,6 +4,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'astro/config';
 import sitemap from '@astrojs/sitemap';
+import { DEMO193_ORIGIN } from './scripts/demo193-profile.mjs';
 
 const demoOutput = process.env.DEMO_OUTPUT === '1';
 const demoProfile = String(process.env.DEMO_PROFILE ?? '').trim();
@@ -11,6 +12,16 @@ const demoSite = process.env.DEMO_SITE_URL ?? 'https://194.226.99.10';
 const initialProdProfile = process.env.INITIAL_PROD_PROFILE === '1';
 const initialProdChatLoader = 'https://cdn-ru.bitrix24.ru/b35315886/crm/site_button/loader_2_siutnh.js';
 const staging194StaticMainChat = process.env.CHAT_LOADER_PROFILE === 'staging194-static-main';
+const registrationLinks = process.env.STAGING194_REGISTRATION_LINKS;
+if (registrationLinks !== undefined &&
+    (registrationLinks !== '1' || demoProfile !== 'demo193' || demoSite !== DEMO193_ORIGIN ||
+     process.env.DEMO_OUTPUT || initialProdProfile || process.env.PAYMENT_ROLE !== 'ci' ||
+     process.env.DEPLOY_MODE !== 'stand' || process.env.DEMO_FORMS !== 'stub' ||
+     process.env.CHAT_LOADER_SRC !== 'none' || process.env.CHAT_OFFLINE_MESSAGE !== 'absent' ||
+     process.env.CHAT_LOADER_PROFILE || process.env.CHAT_LOADER_FALLBACK || process.env.PAYMENT_ENDPOINT_PROD ||
+     process.env.PAYMENT_ENDPOINT_STAND || process.env.PAYMENT_ENDPOINT_DEMO)) {
+  throw new Error('staging194 registration links require the isolated demo193 build profile');
+}
 if (demoProfile && demoProfile !== 'demo193') {
   throw new Error('DEMO_PROFILE must be the approved demo193 profile');
 }

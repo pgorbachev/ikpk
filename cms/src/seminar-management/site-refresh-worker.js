@@ -1,4 +1,5 @@
 import { spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { chmodSync, lstatSync, mkdirSync, readFileSync, readlinkSync, readdirSync, realpathSync, rmSync } from 'node:fs';
 import { dirname, isAbsolute, join } from 'node:path';
 import {
@@ -49,7 +50,7 @@ function runStep(command, args, cwd, extraEnv, restrictedEnv = false) {
   if (result.error || result.status !== 0) {
     return { ok: false, detail: redact(result.stderr || result.stdout || result.error?.message || 'сбой') };
   }
-  return { ok: true };
+  return { ok: true, stdout: result.stdout };
 }
 
 function removeCaptureBundle(path) {
@@ -113,6 +114,14 @@ async function executeRefreshUnderLock(workspace, webRoot, registryReader) {
   let result;
   let buildOutputName = null;
   let historicalRegistry;
+  let registrationConfirmation;
+  const web = join(workspace, 'web');
+  const snapshotDir = join(web, '.snapshot');
+  const readSnapshot = () => readFileSync(join(snapshotDir, 'snapshot.json'));
+  const checkRegistration = (mode, releaseDir, snapshotSha, buildNow, treeDigest) =>
+    runStep(process.execPath, [join(web, 'node_modules', 'tsx', 'dist', 'cli.mjs'),
+      'scripts/check-staging194-registration-links.ts', mode, releaseDir, snapshotDir, snapshotSha, buildNow,
+      ...(treeDigest ? [treeDigest] : [])], web, {}, true);
   const historyRequired = process.env.IKPK_CAPTURE_PROFILE === 'staging194' || process.env.INITIAL_PROD_PROFILE === '1';
   result = await runRefresh({
       webRoot,
@@ -124,7 +133,6 @@ async function executeRefreshUnderLock(workspace, webRoot, registryReader) {
       capture: () => {
         historicalRegistry = registryReader({ required: historyRequired, requireCohort: historyRequired });
         const historyEnv = { CONTENT_HISTORICAL_EXCEPTIONS_FILE: '', CONTENT_HISTORICAL_EXCEPTIONS_SHA256: '', ...historicalRegistry };
-        const snapshotDir = join(workspace, 'web', '.snapshot');
         mkdirSync(snapshotDir, { recursive: true });
         if (process.env.IKPK_CAPTURE_PROFILE === 'staging194') {
           if (process.env.IKPK_VERIFY_URL !== 'https://194.226.99.10/release.json'
@@ -185,8 +193,20 @@ async function executeRefreshUnderLock(workspace, webRoot, registryReader) {
           if (JSON.stringify(registryReader({ required: historyRequired, requireCohort: historyRequired })) !== JSON.stringify(historicalRegistry)) return { ok: false, detail: 'historical registry changed after capture' };
         } catch (error) { return { ok: false, detail: error.message }; }
         const historyEnv = { CONTENT_HISTORICAL_EXCEPTIONS_FILE: '', CONTENT_HISTORICAL_EXCEPTIONS_SHA256: '', ...historicalRegistry };
-        const built = runStep('npm', [ 'run', ...(staging194 ? ['build:demo193'] : ['build']) ],
-          join(workspace, 'web'), siteBuildEnv(workspace, staging194, production, process.env, historyEnv), staging194 || production);
+        const buildNow = staging194 ? new Date().toISOString() : undefined;
+        let snapshotSha;
+        if (staging194) {
+          try {
+            snapshotSha = createHash('sha256').update(readSnapshot()).digest('hex');
+          } catch {
+            return { ok: false, detail: 'staging194 registration snapshot is unreadable' };
+          }
+        }
+        const buildEnv = siteBuildEnv(workspace, staging194, production, process.env, historyEnv);
+        if (buildNow) buildEnv.SEMINAR_BUILD_NOW = buildNow;
+        const built = runStep('npm', ['run', ...(staging194
+          ? ['build:demo193', '--', '--staging194-registration-links'] : ['build'])],
+          web, buildEnv, staging194 || production);
         if (!built.ok) return built;
         try {
           if (JSON.stringify(registryReader({ required: historyRequired, requireCohort: historyRequired })) !== JSON.stringify(historicalRegistry)) return { ok: false, detail: 'historical registry changed during build' };
@@ -194,7 +214,7 @@ async function executeRefreshUnderLock(workspace, webRoot, registryReader) {
         const commit = installedCommit(webRoot, process.env.IKPK_INSTALLED_COMMIT);
         let snapshotId;
         try {
-          snapshotId = JSON.parse(readFileSync(join(workspace, 'web', '.snapshot', 'snapshot.json'), 'utf8')).snapshotId;
+          snapshotId = JSON.parse(readSnapshot()).snapshotId;
         } catch {
           snapshotId = null;
         }
@@ -203,11 +223,22 @@ async function executeRefreshUnderLock(workspace, webRoot, registryReader) {
         const releaseId = `content-${Date.now()}`;
         const output = staging194 ? 'dist-demo193' : 'dist';
         buildOutputName = output;
-        publishTree(join(workspace, 'web', output), webRoot, releaseId, identity);
+        const releaseDir = publishTree(join(web, output), webRoot, releaseId, identity);
+        if (staging194) {
+          const checked = checkRegistration('check', releaseDir, snapshotSha, buildNow);
+          if (!checked.ok) return checked;
+          const digest = checked.stdout?.trim() ?? '';
+          if (!/^[a-f0-9]{64}$/.test(digest)) return { ok: false, detail: 'registration check returned no tree digest' };
+          registrationConfirmation = { releaseDir, snapshotSha, buildNow, digest };
+        }
         return { ok: true, releaseId, identity };
       },
       canVerify: () => Boolean(process.env.IKPK_VERIFY_URL),
       readCurrent: () => readlinkSync(join(webRoot, 'current')),
+      validateCandidate: () => registrationConfirmation
+        ? checkRegistration('confirm', registrationConfirmation.releaseDir, registrationConfirmation.snapshotSha,
+          registrationConfirmation.buildNow, registrationConfirmation.digest)
+        : { ok: true },
       switchRelease: (releaseId, expectedPrevious) => switchCurrent(webRoot, releaseId, expectedPrevious),
       verify: (expected) =>
         verifyRelease({

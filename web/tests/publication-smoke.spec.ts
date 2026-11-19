@@ -76,11 +76,14 @@ test('schedule renders its cards and registration links without submitting them'
   await expect(page.locator('[data-schedule-item]')).toHaveCount(count);
   await expect(page.locator('[data-schedule-item]:visible').first(), 'no visible schedule cards').toBeVisible();
   await expect(page.locator('[data-testid="schedule-toolbar"]')).toBeVisible();
-  const links = page.locator('a[href*="bitrix24"], a[href^="/demo-zayavka"]');
+  const occurrenceLinks = process.env.PUBLICATION_STAGING194_REGISTRATION_LINKS === '1'
+    ? ', a[data-registration-occurrence]' : '';
+  const links = page.locator(`a[href*="bitrix24"], a[href^="/demo-zayavka"]${occurrenceLinks}`);
   expect(await links.count(), 'no registration or subscription link').toBeGreaterThan(0);
   await expect(links.filter({ visible: true }).first(), 'no visible registration or subscription link').toBeVisible();
   const role = process.env.DEPLOY_MODE;
-  for (const href of await links.evaluateAll((elements) => elements.map((element) => element.getAttribute('href')))) {
+  const formLinks = occurrenceLinks ? links.and(page.locator('a:not([data-registration-occurrence])')) : links;
+  for (const href of await formLinks.evaluateAll((elements) => elements.map((element) => element.getAttribute('href')))) {
     expect(href).toMatch(role === 'stand' && process.env.DEMO_FORMS === 'stub' ? /^\/demo-zayavka/ : /^https:\/\/[^/]+\.bitrix24(?:site)?\.ru\//);
   }
 });

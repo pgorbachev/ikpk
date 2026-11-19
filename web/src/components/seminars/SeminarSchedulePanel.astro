@@ -22,9 +22,9 @@
  *     названной при выборе варианта.
  */
 import StartVisibility from '../StartVisibility.astro';
-import { formatDate, formatPrice, formatDurationDisplay } from '../../lib/data';
+import { formatDate, formatPrice, formatDurationDisplay, getSnapshotRegistrationLinks } from '../../lib/data';
 import { calendarDay } from '../../lib/schedule-window';
-import { registrationHref, isExternalFormHref } from '../../lib/forms';
+import { hasStaging194RegistrationLinks, occurrenceRegistrationHref, isExternalFormHref } from '../../lib/forms';
 import { MANAGER_PHONE, MANAGER_PHONE_HREF, PHONE, PHONE_HREF } from '../../lib/navigation';
 import type { ScheduleEntry } from '../../lib/data';
 
@@ -34,6 +34,7 @@ interface Row {
 }
 
 const { rows = [] } = Astro.props as { rows?: Row[] };
+const sourceRegistrationLinks = hasStaging194RegistrationLinks ? getSnapshotRegistrationLinks() : null;
 
 /**
  * Год и «г.» — неразрывны, остальное в дате переносится как обычный текст.
@@ -65,10 +66,11 @@ function metaLine(entry: ScheduleEntry): string {
     {rows.length > 0 && (
       <ol class="seminar-schedule-list">
         {rows.map(({ entry, teachers }) => {
-          const href = registrationHref(entry.registrationFormLink) || '/raspisanie-i-tseny';
+          const href = occurrenceRegistrationHref(
+            sourceRegistrationLinks ? sourceRegistrationLinks.get(entry.id) : entry.registrationFormLink) || '/raspisanie-i-tseny';
           const external = isExternalFormHref(href);
           return (
-            <li data-start-offer data-start-at={entry.startAt} data-start-note={entry.additionalText} class="seminar-schedule-entry" data-seminar-schedule-card>
+            <li data-start-offer data-start-at={entry.startAt} data-start-note={entry.additionalText} class="seminar-schedule-entry" data-seminar-schedule-card data-schedule-occurrence={hasStaging194RegistrationLinks ? entry.id : undefined}>
               {/*
                 Каждая дата — своя часть, тире между ними остаётся точкой переноса, а
                 внутри части неразрывны только год и «г.». Иначе диапазон рвётся посреди
@@ -111,6 +113,7 @@ function metaLine(entry: ScheduleEntry): string {
                 </span>
                 <a
                   class="seminar-register-link"
+                  data-registration-occurrence={hasStaging194RegistrationLinks ? entry.id : undefined}
                   href={href}
                   target={external ? '_blank' : undefined}
                   rel={external ? 'noopener noreferrer' : undefined}

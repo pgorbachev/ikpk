@@ -156,3 +156,19 @@ export function paymentEndpoint(): string | null {
 }
 
 export { PROD_FORM_HOST, DEMO_STUB_PATH };
+
+// Astro and the prerender process receive the same validated runner environment.
+export const hasStaging194RegistrationLinks = typeof process !== 'undefined'
+  && process.env.STAGING194_REGISTRATION_LINKS === '1';
+
+/** Only registration CTAs bound to a specific CMS occurrence may use the source link on 194. */
+export function occurrenceRegistrationHref(url: string | undefined | null): string {
+  return hasStaging194RegistrationLinks ? safeHref(url) : registrationHref(url);
+}
+
+export function demoFormsBannerText(isDemo193: boolean): string {
+  if (hasStaging194RegistrationLinks) {
+    return 'Стейджинг-стенд: ссылки записи на семинары действуют. Остальные формы заявки ведут на заглушки.';
+  }
+  return `${isDemo193 ? 'Стейджинг-стенд' : 'Демо-стенд'}: формы заявки отключены, обращения в CRM не создаются`;
+}

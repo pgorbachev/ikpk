@@ -6,10 +6,8 @@ import Breadcrumbs from '../../../components/Breadcrumbs.astro';
 import SeminarSchedulePanel from '../../../components/seminars/SeminarSchedulePanel.astro';
 import SeminarDocuments from '../../../components/seminars/SeminarDocuments.astro';
 import {
-  getInstitutes,
-  getCourseGroups,
-  getSeminars,
   getScheduleEntries,
+  getSeminarPagePaths,
   getTeachers,
   cleanBodyHtml,
   resolveTeacherReference,
@@ -21,24 +19,10 @@ import RichContent from '../../../components/RichContent.astro';
 import { calendarDay, isBeforeStart } from '../../../lib/schedule-window';
 import type { GetStaticPaths } from 'astro';
 
-export const getStaticPaths: GetStaticPaths = () => {
-  const institutes = getInstitutes();
-  const allCGs = getCourseGroups();
-  const allSeminars = getSeminars();
-  const paths: { params: Record<string, string>; props: Record<string, unknown> }[] = [];
-
-  for (const sem of allSeminars) {
-    const cg = allCGs.find((c) => c.legacy_id === sem.course_group_legacy_id);
-    if (!cg) continue;
-    const inst = institutes.find((i) => i.slug === cg.institute_legacy_id);
-    if (!inst) continue;
-    paths.push({
-      params: { institute: inst.slug, courseGroup: cg.slug, seminar: sem.slug },
-      props: { seminar: sem, courseGroup: cg, institute: inst },
-    });
-  }
-  return paths;
-};
+export const getStaticPaths: GetStaticPaths = () => getSeminarPagePaths().map(({ seminar, courseGroup, institute }) => ({
+  params: { institute: institute.slug, courseGroup: courseGroup.slug, seminar: seminar.slug },
+  props: { seminar, courseGroup, institute },
+}));
 
 const { seminar, courseGroup, institute } = Astro.props as {
   seminar: Seminar;

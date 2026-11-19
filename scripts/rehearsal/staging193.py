@@ -1228,9 +1228,35 @@ def _static_tree_sha256(root: Path) -> str:
     return digest.hexdigest()
 
 
+def registration_checker_workspace(source_sha: str, destination: Path) -> Path:
+    if not SHA.fullmatch(source_sha):
+        raise Refusal("registration checker requires an exact source commit")
+    source = capture_bytes(["git", "archive", "--format=tar", source_sha, "--",
+                            "web/package.json", "web/package-lock.json", "web/tsconfig.json", "web/scripts", "web/src/lib",
+                            "scripts/publication-launcher.mjs"])
+    destination.mkdir()
+    with tarfile.open(fileobj=io.BytesIO(source), mode="r:") as archive:
+        for member in archive.getmembers():
+            name = PurePosixPath(member.name)
+            if name.is_absolute() or ".." in name.parts or not (member.isdir() or member.isfile()):
+                raise Refusal("registration checker source contains an unsupported member")
+            if member.isfile():
+                target = destination / name
+                target.parent.mkdir(parents=True, exist_ok=True)
+                handle = archive.extractfile(member)
+                if handle is None:
+                    raise Refusal("registration checker source is unreadable")
+                target.write_bytes(handle.read())
+    web = destination / "web"
+    if not (web / "scripts/check-staging194-registration-links.ts").is_file():
+        raise Refusal("exact source has no staging194 registration checker")
+    return web
+
+
 def browser_check(source_sha: str, operation_id: str, static_digest: str, archive: bytes,
                   profile: str = "staging194", admitted_run: Optional[dict] = None,
-                  chat_loader_src: Optional[str] = None) -> Optional[str]:
+                  chat_loader_src: Optional[str] = None,
+                  registration_links: bool = False) -> Optional[str]:
     executable = ROOT / "web/node_modules/.bin/playwright"
     if not executable.is_file():
         raise Refusal("local Playwright dependencies are missing; browser acceptance was not run")
@@ -1327,6 +1353,33 @@ def browser_check(source_sha: str, operation_id: str, static_digest: str, archiv
                 or proof.get("bundleDigest") != bundle_digest):
             raise Refusal("off-host candidate snapshot is not the sealed CMS capture for this release")
 
+        if registration_links:
+            try:
+                registration_proof = json.loads((static_root / ".ikpk-registration-proof.json").read_text(encoding="utf-8"))
+            except (OSError, ValueError) as error:
+                raise Refusal("paired staging194 registration proof is unreadable") from error
+            if profile != "staging194" or chat_loader_src or not isinstance(registration_proof, dict):
+                raise Refusal("paired staging194 registration proof is missing")
+            snapshot_sha = registration_proof.get("snapshotFileSha256")
+            build_now = registration_proof.get("buildNow")
+            if (not isinstance(build_now, str)
+                    or snapshot_sha != hashlib.sha256((snapshot_root / "snapshot.json").read_bytes()).hexdigest()):
+                raise Refusal("paired staging194 registration snapshot differs from the candidate")
+            checker_web = registration_checker_workspace(source_sha, root / "checker")
+            checker_env = {key: os.environ[key] for key in ("PATH", "HOME", "TMPDIR") if key in os.environ}
+            installed = subprocess.run(["npm", "ci", "--ignore-scripts", "--prefer-offline", "--no-audit", "--no-fund"],
+                                       cwd=checker_web, env=checker_env, capture_output=True, text=True, check=False)
+            checker = checker_web / "node_modules/.bin/tsx"
+            if installed.returncode or not checker.is_file():
+                raise Refusal("exact-source registration acceptance dependencies are unavailable")
+            check = subprocess.run([str(checker), "scripts/check-staging194-registration-links.ts", "check",
+                                    str(static_root), str(snapshot_root), snapshot_sha, build_now],
+                                   cwd=checker_web, env=checker_env, capture_output=True, text=True, check=False)
+            if check.returncode:
+                raise Refusal(f"candidate registration CTA check failed: {check.stderr.strip()}")
+            if _static_tree_sha256(static_root) != static_digest:
+                raise Refusal("candidate tree changed during registration acceptance")
+
         class QuietHandler(http.server.SimpleHTTPRequestHandler):
             def log_message(self, _format, *_args):
                 pass
@@ -1362,6 +1415,9 @@ def browser_check(source_sha: str, operation_id: str, static_digest: str, archiv
                     raise Refusal("initial production browser proof requires the exact admitted run and attempt")
                 environment.update({"PUBLICATION_RUN_ID": str(admitted_run["runId"]),
                                     "PUBLICATION_ATTEMPT": str(admitted_run["attempt"])})
+            environment.pop("PUBLICATION_STAGING194_REGISTRATION_LINKS", None)
+            if registration_links:
+                environment["PUBLICATION_STAGING194_REGISTRATION_LINKS"] = "1"
             for key in ("SSH_AUTH_SOCK", "GH_TOKEN", "GITHUB_TOKEN", "IKPK_DEPLOY_KEY"):
                 environment.pop(key, None)
             result = subprocess.run([str(executable), "test", "tests/publication-smoke.spec.ts",
@@ -1582,7 +1638,11 @@ def invoke(args: argparse.Namespace, *, admission: Optional[dict] = None) -> Opt
             raise Refusal("host returned an invalid static candidate digest")
         candidate_bytes = ssh_remote(["export-static", "--operation-id", args.operation_id,
                                       "--source-sha", args.source_sha], profile=profile)
-        snapshot_fingerprint = browser_check(args.source_sha, args.operation_id, digest, candidate_bytes, profile, admitted_run)
+        if profile == "staging194":
+            snapshot_fingerprint = browser_check(args.source_sha, args.operation_id, digest, candidate_bytes, profile,
+                                                 admitted_run, registration_links=True)
+        else:
+            snapshot_fingerprint = browser_check(args.source_sha, args.operation_id, digest, candidate_bytes, profile, admitted_run)
         if profile == "production-paired":
             backup_dir = backup_root(args.backup_dir, profile)
             metadata_path = backup_dir / f"{args.operation_id}.json"

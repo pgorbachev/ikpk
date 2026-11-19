@@ -10,8 +10,27 @@ export const DEMO193_ORIGIN = 'https://194.226.99.10';
 export const STAGING194_STATIC_MAIN_CHAT_LOADER_SRC =
   'https://cdn-ru.bitrix24.ru/b35315886/crm/site_button/loader_2_siutnh.js';
 
-/** @param {NodeJS.ProcessEnv} [inherited] */
-export function resolveDemo193Environment(inherited = process.env) {
+/**
+ * @param {NodeJS.ProcessEnv} [inherited]
+ * @param {boolean} [registrationLinks]
+ */
+export function resolveDemo193Environment(inherited = process.env, registrationLinks = false) {
+  if (inherited.STAGING194_REGISTRATION_LINKS !== undefined) {
+    throw new Error('staging194 registration links must be requested by the build argument');
+  }
+  if (registrationLinks) {
+    const expected = {
+      DEMO_PROFILE: 'demo193', DEMO_SITE_URL: DEMO193_ORIGIN, DEPLOY_MODE: 'stand',
+      PAYMENT_ROLE: 'ci', DEMO_FORMS: 'stub', CHAT_LOADER_SRC: 'none',
+      CHAT_OFFLINE_MESSAGE: 'absent',
+    };
+    if (Object.entries(expected).some(([key, value]) => inherited[key] && inherited[key] !== value)
+        || inherited.DEMO_OUTPUT || inherited.INITIAL_PROD_PROFILE === '1' || inherited.CHAT_LOADER_PROFILE
+        || inherited.CHAT_LOADER_FALLBACK || inherited.PAYMENT_ENDPOINT_PROD
+        || inherited.PAYMENT_ENDPOINT_STAND || inherited.PAYMENT_ENDPOINT_DEMO) {
+      throw new Error('staging194 registration links require the isolated demo193 build profile');
+    }
+  }
   const env = { ...inherited };
   const staging194StaticMain = inherited.CHAT_LOADER_PROFILE === 'staging194-static-main';
   if (inherited.CHAT_LOADER_PROFILE && !staging194StaticMain) {
@@ -38,5 +57,9 @@ export function resolveDemo193Environment(inherited = process.env) {
   if (staging194StaticMain) env.CHAT_LOADER_PROFILE = 'staging194-static-main';
   else delete env.CHAT_LOADER_PROFILE;
 
+  if (registrationLinks) {
+    env.STAGING194_REGISTRATION_LINKS = '1';
+    env.SEMINAR_BUILD_NOW ??= new Date().toISOString();
+  }
   return env;
 }

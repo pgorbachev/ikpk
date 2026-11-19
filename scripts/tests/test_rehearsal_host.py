@@ -779,6 +779,38 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
             self.assertEqual(build.call_args.args, (config, source, capture))
             self.assertEqual(build.call_args.kwargs["operation_id"], operation_id)
 
+    def test_staging194_paired_build_requests_occurrence_registration_links(self):
+        with tempfile.TemporaryDirectory(prefix="ikpk-paired-registration-") as temporary:
+            root = Path(temporary)
+            source_sha, operation_id = "a" * 40, "staging-registration"
+            capture = root / ".staging193-rehearsal" / operation_id / "capture"
+            capture.mkdir(parents=True)
+            config = {"profile": "staging194", "siteBaseUrl": "https://194.226.99.10",
+                      "staticReleaseRoot": str(root / "static")}
+            state = SimpleNamespace(phase=lambda _op: {"phase": "cms-activated", "sourceSha": source_sha})
+
+            def stop_at_build(_config, _cwd, argv, **kwargs):
+                if argv[:2] != ["/usr/bin/npm", "run"]:
+                    snapshot = root / "web/.snapshot/snapshot.json"
+                    snapshot.parent.mkdir(parents=True, exist_ok=True)
+                    snapshot.write_text('{"snapshotId":"snap:test"}', encoding="utf-8")
+                    return ""
+                self.assertEqual(argv, ["/usr/bin/npm", "run", "build:demo193", "--",
+                                        "--staging194-registration-links"])
+                environment = kwargs["environment"]
+                self.assertEqual(environment["DEMO_FORMS"], "stub")
+                self.assertEqual(environment["PAYMENT_ROLE"], "ci")
+                self.assertEqual(environment["CHAT_LOADER_SRC"], "none")
+                raise RuntimeError("paired staging build observed")
+
+            with patch.object(rehearsal_host, "_candidate_root", return_value=root), \
+                 patch.object(rehearsal_host, "_verify_fence"), \
+                 patch.object(rehearsal_host, "_validate_prepared_web_dependencies"), \
+                 patch.object(rehearsal_host, "_run_as_cms", side_effect=stop_at_build):
+                with self.assertRaisesRegex(RuntimeError, "paired staging build observed"):
+                    rehearsal_host._static_publish(config, state, Namespace(
+                        operation_id=operation_id, source_sha=source_sha, browser_digest=None))
+
     def test_browser_retry_reuses_retained_static_candidate_and_sealed_capture(self):
         for host_profile, capture_profile in (("production-paired", "production-static"),
                                               ("staging194", None)):

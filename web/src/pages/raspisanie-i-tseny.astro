@@ -2,10 +2,10 @@
 import SchedulePage from '../components/schedule/SchedulePage.astro';
 import BaseLayout from '../layouts/BaseLayout.astro';
 import Breadcrumbs from '../components/Breadcrumbs.astro';
-import { formatDurationDisplay, formatPrice, getInstitutes, getPage, getScheduleEntries, getSeminarBuildNow, getTeachers, resolveTeacherReference, teacherPageHref } from '../lib/data';
+import { formatDurationDisplay, formatPrice, getInstitutes, getPage, getScheduleEntries, getSnapshotRegistrationLinks, getSeminarBuildNow, getTeachers, resolveTeacherReference, teacherPageHref } from '../lib/data';
 import { calendarDay, isBeforeStart } from '../lib/schedule-window';
 import { monthKeys, monthOptions } from '../lib/schedule-months';
-import { registrationHref } from '../lib/forms';
+import { hasStaging194RegistrationLinks, occurrenceRegistrationHref } from '../lib/forms';
 import { publicScheduleTitle } from '../lib/schedule-public-title';
 
 const page = getPage('raspisanie-i-tseny');
@@ -65,6 +65,7 @@ const visiblePrograms = entries
   .filter((value, index, values) => values.findIndex((candidate) => candidate.slug === value.slug) === index)
   .sort((a, b) => a.name.localeCompare(b.name, 'ru'));
 
+const sourceRegistrationLinks = hasStaging194RegistrationLinks ? getSnapshotRegistrationLinks() : null;
 const items = entries.map((entry) => {
   const institute = instituteByName.get(entry.institute.name);
   const teacher = entry.teachers?.[0]
@@ -101,8 +102,8 @@ const items = entries.map((entry) => {
     priceLabel: entry.isFree === true ? 'Бесплатно' : formatPrice(entry.newPrice),
     programName: entry.program.name,
     programSlug: entry.program.slug,
-    // на демо-стенде подменяется заглушкой/тестовым порталом (см. lib/forms.ts)
-    registrationHref: registrationHref(entry.registrationFormLink),
+    registrationHref: occurrenceRegistrationHref(
+      sourceRegistrationLinks ? sourceRegistrationLinks.get(entry.id) : entry.registrationFormLink),
     searchIndex,
     teacherHref,
     teacherLabel: entry.institute.shortname === 'ИКПК' ? 'Преподаватель:' : 'Автор:',
