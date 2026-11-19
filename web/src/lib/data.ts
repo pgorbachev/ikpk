@@ -686,6 +686,16 @@ function withSeminarTeachers(entry: ScheduleEntry): ScheduleEntry {
   };
 }
 
+export function getSeminarPagePaths() {
+  const institutes = getInstitutes();
+  const courseGroups = getCourseGroups();
+  return getSeminars().flatMap((seminar) => {
+    const courseGroup = courseGroups.find((group) => group.legacy_id === seminar.course_group_legacy_id);
+    const institute = courseGroup && institutes.find((item) => item.slug === courseGroup.institute_legacy_id);
+    return courseGroup && institute ? [{ seminar, courseGroup, institute }] : [];
+  });
+}
+
 export function scheduleBelongsToSeminar(entry: ScheduleEntry, seminar: Seminar): boolean {
   const resolved = resolveSeminar(getSeminars(), entry.seminar ?? {});
   if (!resolved) return false;

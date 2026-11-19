@@ -16,6 +16,7 @@ interface Props {
   cityName: string;
   priceLabel: string;
   registrationHref?: string;
+  registrationOccurrence?: number;
   additionalText?: string;
   extraNote?: string;
 }
@@ -34,6 +35,7 @@ const {
   cityName,
   priceLabel,
   registrationHref = '',
+  registrationOccurrence,
   additionalText = '',
   extraNote = '',
 } = Astro.props as Props;
@@ -108,6 +110,7 @@ const isFreePrice = priceLabel.trim().toLowerCase() === 'бесплатно';
         {registrationHref && (
           <a
             href={registrationHref}
+            data-registration-occurrence={registrationOccurrence}
             class="btn btn-primary"
             target={isExternalFormHref(registrationHref) ? '_blank' : undefined}
             rel={isExternalFormHref(registrationHref) ? 'noopener' : undefined}

@@ -156,3 +156,17 @@ export function paymentEndpoint(): string | null {
 }
 
 export { PROD_FORM_HOST, DEMO_STUB_PATH };
+
+export const hasStaging194RegistrationLinks = import.meta.env?.STAGING194_REGISTRATION_LINKS === true;
+
+/** Only registration CTAs bound to a specific CMS occurrence may use the source link on 194. */
+export function occurrenceRegistrationHref(url: string | undefined | null): string {
+  return hasStaging194RegistrationLinks ? safeHref(url) : registrationHref(url);
+}
+
+export function demoFormsBannerText(isDemo193: boolean): string {
+  if (hasStaging194RegistrationLinks) {
+    return 'Стейджинг-стенд: ссылки записи на семинары действуют. Остальные формы заявки ведут на заглушки.';
+  }
+  return `${isDemo193 ? 'Стейджинг-стенд' : 'Демо-стенд'}: формы заявки отключены, обращения в CRM не создаются`;
+}

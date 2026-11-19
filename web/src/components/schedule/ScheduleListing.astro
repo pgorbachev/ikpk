@@ -1,4 +1,5 @@
 ---
+import { hasStaging194RegistrationLinks } from '../../lib/forms';
 import ScheduleEventCard from './ScheduleEventCard.astro';
 
 interface ScheduleItem {
@@ -48,6 +49,7 @@ const { items } = Astro.props as Props;
       data-start-at={card.startAt}
       data-start-note={card.additionalText}
       data-schedule-item
+      data-schedule-occurrence={hasStaging194RegistrationLinks ? card.id : undefined}
       data-institute={card.instituteSlug}
       data-program={card.programSlug}
       data-city={card.citySlug}
@@ -68,6 +70,7 @@ const { items } = Astro.props as Props;
         cityName={card.cityName}
         priceLabel={card.priceLabel}
         registrationHref={card.registrationHref}
+        registrationOccurrence={hasStaging194RegistrationLinks ? card.id : undefined}
         additionalText={card.additionalText}
       />
     </div>

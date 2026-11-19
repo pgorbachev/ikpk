@@ -5,7 +5,7 @@ import Breadcrumbs from '../components/Breadcrumbs.astro';
 import { formatDurationDisplay, formatPrice, getInstitutes, getPage, getScheduleEntries, getSeminarBuildNow, getTeachers, resolveTeacherReference, teacherPageHref } from '../lib/data';
 import { calendarDay, isBeforeStart } from '../lib/schedule-window';
 import { monthKeys, monthOptions } from '../lib/schedule-months';
-import { registrationHref } from '../lib/forms';
+import { occurrenceRegistrationHref } from '../lib/forms';
 import { publicScheduleTitle } from '../lib/schedule-public-title';
 
 const page = getPage('raspisanie-i-tseny');
@@ -101,8 +101,7 @@ const items = entries.map((entry) => {
     priceLabel: entry.isFree === true ? 'Бесплатно' : formatPrice(entry.newPrice),
     programName: entry.program.name,
     programSlug: entry.program.slug,
-    // на демо-стенде подменяется заглушкой/тестовым порталом (см. lib/forms.ts)
-    registrationHref: registrationHref(entry.registrationFormLink),
+    registrationHref: occurrenceRegistrationHref(entry.registrationFormLink),
     searchIndex,
     teacherHref,
     teacherLabel: entry.institute.shortname === 'ИКПК' ? 'Преподаватель:' : 'Автор:',

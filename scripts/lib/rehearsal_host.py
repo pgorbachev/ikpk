@@ -25,6 +25,7 @@ import subprocess
 import sys
 import tarfile
 import tempfile
+from datetime import datetime, timezone
 import time
 import uuid
 from contextlib import contextmanager, nullcontext
@@ -5329,7 +5330,11 @@ def _build_static(config: dict[str, Any], source_root: Path, capture: Path,
                   chat_loader_src: Optional[str] = None,
                   operation_id: Optional[str] = None,
                   reused_capture: Optional[dict[str, str]] = None,
-                  reuse_snapshot: bool = False) -> tuple[Path, str]:
+                  reuse_snapshot: bool = False,
+                  staging194_registration_links: bool = False) -> tuple[Path, str]:
+    if staging194_registration_links and (config.get("profile", "staging194") != "staging194"
+            or config.get("siteBaseUrl") != "https://194.226.99.10" or chat_loader_src is not None):
+        raise HostFailure("original registration links are restricted to paired staging194 publication")
     if chat_loader_src is not None and (config.get("profile", "staging194") not in ("staging194", "production-static")
                                         or chat_loader_src != STAGING194_CHAT_LOADER_SRC):
         raise HostFailure("only staging194 static-main may use the owner-approved chat loader; production-static uses the production profile")
@@ -5370,8 +5375,20 @@ def _build_static(config: dict[str, Any], source_root: Path, capture: Path,
     build_environment = dict(capture_environment, MAINTENANCE_BANNER=maintenance_banner)
     if chat_loader_src is not None and config.get("profile", "staging194") == "staging194":
         build_environment["CHAT_LOADER_PROFILE"] = "staging194-static-main"
-    _run_as_cms(config, web, ["/usr/bin/npm", "run", build_script], timeout=1800,
+    build_command = ["/usr/bin/npm", "run", build_script]
+    registration_proof = None
+    if staging194_registration_links:
+        build_command += ["--", "--staging194-registration-links"]
+        build_now = datetime.now(timezone.utc).isoformat()
+        build_environment["SEMINAR_BUILD_NOW"] = build_now
+        registration_proof = {
+            "buildNow": build_now,
+            "snapshotFileSha256": sha256_file(web / ".snapshot/snapshot.json"),
+        }
+    _run_as_cms(config, web, build_command, timeout=1800,
                 environment=build_environment, read_only_path=read_only_paths)
+    if registration_proof and registration_proof["snapshotFileSha256"] != sha256_file(web / ".snapshot/snapshot.json"):
+        raise HostFailure("paired staging194 snapshot changed during the build")
     if needs_history and _historical_registry_environment(require_cohort=True, config=config) != history:
         raise HostFailure('registry changed during capture or build')
     dist = web / dist_name
@@ -5391,6 +5408,10 @@ def _build_static(config: dict[str, Any], source_root: Path, capture: Path,
                 or proof.get("attempt") != source_identity.get("attempt")
                 or proof.get("targetHost") != INITIAL_PROD_HOST or proof.get("siteUrl") != "https://ikpk.su"):
             raise HostFailure("initial-prod capture proof differs from exact source/run/target admission")
+    if registration_proof:
+        proof_path = dist / ".ikpk-registration-proof.json"
+        durable_json(proof_path, registration_proof)
+        os.chmod(proof_path, 0o644)
     release = {"commit": source_identity["sourceSha"], "operationId": operation_id or capture.parent.name,
                "snapshotId": snapshot.get("snapshotId"),
                "staticTreeSha256": _tree_sha256(dist)}
@@ -6713,7 +6734,11 @@ def _static_publish(config: dict[str, Any], state: RehearsalState, args: argpars
             capture = source_root / ".staging193-rehearsal" / op / "capture"
             if capture.is_symlink() or not capture.is_dir():
                 raise HostFailure("sealed CMS capture is missing before static build")
-            built, built_digest = _build_static(config, source_root, capture, operation_id=op)
+            if config.get("profile", "staging194") == "staging194":
+                built, built_digest = _build_static(config, source_root, capture, operation_id=op,
+                                                    staging194_registration_links=True)
+            else:
+                built, built_digest = _build_static(config, source_root, capture, operation_id=op)
         else:
             built_digest = _tree_sha256(built)
         digest = built_digest
@@ -6726,6 +6751,18 @@ def _static_publish(config: dict[str, Any], state: RehearsalState, args: argpars
     digest = _tree_sha256(release)
     if args.browser_digest != digest:
         raise HostFailure("browser acceptance digest differs from the served static candidate")
+    if config.get("profile", "staging194") == "staging194":
+        try:
+            metadata = json.loads((release / "release.json").read_text(encoding="utf-8"))
+            snapshot_path = source_root / "web/.snapshot/snapshot.json"
+            snapshot = json.loads(snapshot_path.read_text(encoding="utf-8"))
+            registration_proof = json.loads((release / ".ikpk-registration-proof.json").read_text(encoding="utf-8"))
+            if (metadata["commit"] != sha or metadata["operationId"] != op or metadata["staticTreeSha256"] != digest
+                    or metadata["snapshotId"] != snapshot["snapshotId"]
+                    or registration_proof["snapshotFileSha256"] != sha256_file(snapshot_path)):
+                raise ValueError("snapshot proof mismatch")
+        except (OSError, ValueError, KeyError, TypeError) as error:
+            raise HostFailure("paired staging194 registration snapshot proof changed before switch") from error
     start = next((row for row in state._operation_rows(op) if row.get("record") == "start"), None)
     if not start:
         raise HostFailure("operation journal has no source admission record")

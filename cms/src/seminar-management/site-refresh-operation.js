@@ -798,6 +798,25 @@ export async function runRefresh(deps) {
     releaseId: built.releaseId,
     switched: false,
   });
+  if (deps.validateCandidate) {
+    let checked;
+    try {
+      checked = deps.validateCandidate();
+    } catch (error) {
+      checked = { ok: false, detail: error.message };
+    }
+    if (!checked.ok) {
+      return finish(deps, {
+        status: 'failed',
+        phase: 'build',
+        message: MESSAGES.failed,
+        detail: redact(checked.detail),
+        startedAt,
+        finishedAt: deps.now(),
+        switched: false,
+      });
+    }
+  }
   try {
     deps.switchRelease(built.releaseId, previousRaw);
   } catch (error) {
