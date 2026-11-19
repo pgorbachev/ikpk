@@ -87,6 +87,36 @@ describe('demo193 deployed build profile', () => {
     ]);
   });
 
+  it('enables the occurrence exception explicitly and refuses a conflicting live chat profile', async () => {
+    const { mkdtempSync, writeFileSync } = await import('node:fs');
+    const { tmpdir } = await import('node:os');
+    const { spawnSync } = await import('node:child_process');
+    const bin = mkdtempSync(join(tmpdir(), 'demo193-registration-flags-'));
+    temporaryDirectories.push(bin);
+    for (const command of ['astro', 'pagefind']) {
+      writeFileSync(join(bin, command),
+        '#!/bin/sh\nprintf "%s|%s|%s|%s\\n" "$STAGING194_REGISTRATION_LINKS" "$DEMO_FORMS" "$PAYMENT_ROLE" "$CHAT_LOADER_SRC"\n',
+        { mode: 0o755 });
+    }
+    const invoke = (args: string[], env: NodeJS.ProcessEnv = {}) => spawnSync(process.execPath,
+      [join(WEB, 'scripts/build-demo193.mjs'), ...args], {
+        cwd: WEB, encoding: 'utf8', env: { ...process.env, PATH: `${bin}:${process.env.PATH}`, ...env },
+      });
+    const normal = invoke([]);
+    expect(normal.status, normal.stderr).toBe(0);
+    expect(normal.stdout.trim().split('\n')[0]).toBe('|stub|ci|none');
+    const links = invoke(['--staging194-registration-links']);
+    expect(links.status, links.stderr).toBe(0);
+    expect(links.stdout.trim().split('\n')[0]).toBe('1|stub|ci|none');
+
+    const conflict = invoke(['--staging194-registration-links'], {
+      CHAT_LOADER_PROFILE: 'staging194-static-main',
+      CHAT_LOADER_SRC: 'https://cdn-ru.bitrix24.ru/b35315886/crm/site_button/loader_2_siutnh.js',
+    });
+    expect(conflict.status).not.toBe(0);
+    expect(conflict.stdout.trim()).toBe('');
+  });
+
   it('provides a dedicated command and leaves the established demo and production commands intact', () => {
     const scripts = JSON.parse(readFileSync(join(WEB, 'package.json'), 'utf8')).scripts;
     expect(scripts['build:demo193'], 'there is no explicit demo193 build entrypoint').toBeTypeOf('string');

@@ -2,6 +2,7 @@ import { spawnSync } from 'node:child_process';
 import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { contentFingerprint, snapshotId, type SnapshotContent } from '../../scripts/lib/content-snapshot';
 import { HOME_OFFER_IDS } from '../../src/lib/book-offers';
 
 const WEB_ROOT = join(import.meta.dirname, '../..');
@@ -74,7 +75,11 @@ function scheduleEntry(
   return entry;
 }
 
-export function buildSeminarDatesFixture() {
+export function buildSeminarDatesFixture(options: {
+  editorialFormHref?: string;
+  registrationLinks?: Record<number, string | null>;
+  environment?: NodeJS.ProcessEnv;
+} = {}) {
   const source = JSON.parse(readFileSync(join(SNAPSHOT_SOURCE, 'snapshot.json'), 'utf8')) as Snapshot;
   const pages = fixtureRecords(source);
   const types = source.content.types;
@@ -108,6 +113,22 @@ export function buildSeminarDatesFixture() {
     scheduleEntry(pages, 2, 'active', '2026-09-01', '2026-09-14', 'ИСТЕКЛО'),
   ];
 
+  if (options.editorialFormHref) {
+    fixtureTypes.articles = [{
+      ...((types.articles[0] ?? {}) as Record<string, unknown>),
+      slug: 'registration-link-fixture', title: 'Редакционная форма', body_text: 'Запись из статьи', image: null,
+      published_at: '2026-09-01', body_html: `<p><a href="${options.editorialFormHref}">Запись из статьи</a></p>`,
+    }];
+  }
+
+  if (options.registrationLinks) {
+    for (const entry of fixtureTypes.schedule_entries as { id: number; registrationFormLink: string | null }[]) {
+      if (Object.hasOwn(options.registrationLinks, entry.id)) {
+        entry.registrationFormLink = options.registrationLinks[entry.id];
+      }
+    }
+  }
+
   const fixtureRoot = tempDir('ikpk-seminar-date-snapshot-');
   // Astro uses cwd/.astro/.prerender for outDir outside cwd; widget probes
   // already build there. Keep this fixture's prerender output in its own tree.
@@ -115,9 +136,12 @@ export function buildSeminarDatesFixture() {
   mkdirSync(buildParent, { recursive: true });
   const buildRoot = tempDir('ikpk-seminar-date-build-', buildParent);
   const outDir = join(buildRoot, 'dist');
+  const content = { types: fixtureTypes } as SnapshotContent;
+  const fingerprint = contentFingerprint(content);
   writeFileSync(
     join(fixtureRoot, 'snapshot.json'),
-    `${JSON.stringify({ ...source, referenceDate: SNAPSHOT_REFERENCE_DATE, content: { types: fixtureTypes } })}\n`,
+    `${JSON.stringify({ ...source, referenceDate: SNAPSHOT_REFERENCE_DATE, content, fingerprint,
+      snapshotId: snapshotId({ fingerprint, referenceDate: SNAPSHOT_REFERENCE_DATE }) })}\n`,
   );
   copyFileSync(join(SNAPSHOT_SOURCE, 'collapsible_panels.json'), join(fixtureRoot, 'collapsible_panels.json'));
 
@@ -126,7 +150,7 @@ export function buildSeminarDatesFixture() {
     cwd: WEB_ROOT,
     encoding: 'utf8',
     timeout: 120_000,
-    env: { ...process.env, CONTENT_SNAPSHOT_DIR: fixtureRoot, SEMINAR_BUILD_NOW: `${BUILD_DATE}T09:00:00+03:00` },
+    env: { ...process.env, ...options.environment, CONTENT_SNAPSHOT_DIR: fixtureRoot, SEMINAR_BUILD_NOW: `${BUILD_DATE}T09:00:00+03:00` },
   });
   if (result.error || result.status !== 0) {
     rmSync(fixtureRoot, { recursive: true, force: true });
@@ -135,7 +159,7 @@ export function buildSeminarDatesFixture() {
       `Controlled Astro build failed (${result.status ?? 'no exit status'}):\n${result.error?.message ?? ''}\n${result.stdout}\n${result.stderr}`,
     );
   }
-  return { pages, outDir, close: () => {
+  return { pages, outDir, snapshotDir: fixtureRoot, buildNow: `${BUILD_DATE}T09:00:00+03:00`, close: () => {
     rmSync(fixtureRoot, { recursive: true, force: true });
     rmSync(buildRoot, { recursive: true, force: true });
   } };
