@@ -101,6 +101,7 @@ class ProductionPublicationProofTests(unittest.TestCase):
             "oldCmsSourceSha": OLD_CMS, "oldCmsSchemaSha256": "a" * 64,
             "snapshotFingerprint": snapshot_fingerprint(self.original),
             "oldProjectorContractSha256": "8" * 64,
+            "oldProjectorSourceSha": OLD_PROJECTOR, "oldProjectorNodeVersion": "v22-test",
         }
         self.config = {
             "profile": "production-paired", "releaseRoot": str(self.root / "releases"),
@@ -274,6 +275,12 @@ class ProductionPublicationProofTests(unittest.TestCase):
             **ADMISSION,
         }
 
+    def public_content(self, row, *, historical=False):
+        occurrence = {"id": 1, **row}
+        if historical:
+            occurrence.pop("documentId")
+        return {"types": {"teachers": [], "seminars": [], "schedule_entries": [occurrence]}, "media": []}
+
     def publish(self, row=None):
         self.state.mark_cms_activated(OPERATION)
         if row is None:
@@ -284,8 +291,8 @@ class ProductionPublicationProofTests(unittest.TestCase):
         manifest = self.capture_manifest(sha(self.final_db.read_bytes()))
         capture_sha = self.write_json(self.capture / "manifest.json", manifest)
         self.write_json(self.snapshot, {
-            "snapshotId": "snap:test", "fingerprint": snapshot_fingerprint(row),
-            "content": {"scheduleEntries": [row]},
+            "contractVersion": 2, "snapshotId": "snap:test", "fingerprint": snapshot_fingerprint(row),
+            "content": self.public_content(row),
             "captureProof": {
                 "captureId": OPERATION, "schemaDigest": manifest["schemaDigest"],
                 "databaseDigest": manifest["databaseSha256"], "bundleDigest": capture_sha,
@@ -329,6 +336,12 @@ class ProductionPublicationProofTests(unittest.TestCase):
             with tarfile.open(fileobj=io.BytesIO(archive)) as bundle:
                 return json.load(bundle.extractfile("snapshot/snapshot.json"))["fingerprint"]
 
+        def old_projection(*_args, projection_output, **_kwargs):
+            # The production path independently executes and authenticates the exact prior projector.
+            # This reduced fixture has no Strapi schema, so keep that boundary tied to its source rows.
+            self.write_json(projection_output, {"content": self.public_content(self.original, historical=True)})
+            return snapshot_fingerprint(self.original)
+
         def switch(*_args):
             self.switches.append(static_digest)
             raise WouldSwitch
@@ -339,6 +352,8 @@ class ProductionPublicationProofTests(unittest.TestCase):
              patch.object(operator, "validate_production_paired_admission", return_value=ADMISSION), \
              patch.object(operator, "browser_check", side_effect=browser_check), \
              patch.object(operator, "production_projector_contract", return_value="8" * 64), \
+             patch.object(operator, "production_projector_node_version", return_value="v22-test"), \
+             patch.object(operator, "production_paired_backup_fingerprint", side_effect=old_projection), \
              patch.object(rehearsal_host, "_verify_fence"), \
              patch.object(rehearsal_host, "_switch_static_pointer", side_effect=switch):
             operator.invoke(args)
@@ -356,6 +371,26 @@ class ProductionPublicationProofTests(unittest.TestCase):
     def test_ordinary_release_refuses_unreviewed_projector_change_even_with_matching_fingerprint(self):
         self.sidecar["oldProjectorContractSha256"] = "7" * 64
         self.assert_refused()
+
+    def test_ordinary_release_refuses_missing_original_projector_schema_binding(self):
+        self.sidecar.pop("oldCmsSourceSha")
+        self.sidecar.pop("oldProjectorContractSha256")
+        self.assert_refused()
+
+    def test_lossless_sqlite_digest_keeps_nul_suffix_and_hidden_rowid(self):
+        baseline = self.root / "text.sqlite"
+        altered = self.root / "altered.sqlite"
+        with sqlite3.connect(baseline) as source:
+            source.execute("CREATE TABLE evidence(value TEXT)")
+            source.execute("INSERT INTO evidence (rowid,value) VALUES (?,?)", (1, "X\0one"))
+        shutil.copyfile(baseline, altered)
+        expected = rehearsal_host._sqlite_logical_digest(baseline)
+        with sqlite3.connect(altered) as other:
+            other.execute("UPDATE evidence SET value=?", ("X\0two",))
+        self.assertNotEqual(rehearsal_host._sqlite_logical_digest(altered), expected)
+        with sqlite3.connect(altered) as other:
+            other.execute("UPDATE evidence SET rowid=2,value=?", ("X\0one",))
+        self.assertNotEqual(rehearsal_host._sqlite_logical_digest(altered), expected)
 
     def test_logical_database_binding_rejects_unaudited_nonpublic_changes(self):
         copied = self.root / "candidate.copy"
@@ -416,7 +451,12 @@ class ProductionPublicationProofTests(unittest.TestCase):
                     fingerprints[step] = check
             self.assertEqual(candidate_db.read_bytes(), self.final_stage.read_bytes())
             return {"compositionContractDigest": receipt["compositionReview"]["expectedContractDigest"],
-                    "stageSnapshots": fingerprints}
+                    "stageSnapshots": fingerprints,
+                    "publicProjection": {
+                        "version": 1, "documentIds": {"teachers": {}, "seminars": {},
+                            "schedule_entries": {"1": self.original["documentId"]}},
+                        "schedule": {"1": {"price": None}}, "seminars": {},
+                    }}
 
         with patch.object(rehearsal_host, "_verify_fence"), \
              patch.object(rehearsal_host, "_assert_no_database_handles"), \
@@ -430,7 +470,7 @@ class ProductionPublicationProofTests(unittest.TestCase):
                 candidate, {"payloadSha256": "b" * 64}, admission, trusted_uid=os.getuid(),
                 target_projection={
                     "fingerprint": snapshot_fingerprint(self.transformed), "captureSha256": capture_sha,
-                    "contentSha256": sha(json.dumps({"scheduleEntries": [self.transformed]},
+                    "contentSha256": sha(json.dumps(self.public_content(self.transformed),
                         sort_keys=True, separators=(",", ":")).encode()),
                     "databaseSha256": manifest["databaseSha256"], "schemaDigest": manifest["schemaDigest"],
                     "mediaManifestSha256": manifest["mediaManifestSha256"],

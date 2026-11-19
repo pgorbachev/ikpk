@@ -4840,24 +4840,143 @@ def _validate_registry_cohort(manifest: dict[str, Any], *, config: Optional[dict
 
 
 def _sqlite_logical_digest(path: Path) -> str:
-    """Fingerprint schema and every SQL row independent of Backup API file headers."""
+    """Hash logical SQLite schema and type-tagged cell bytes, including hidden row identities."""
     import sqlite3
+    import struct
     if path.is_symlink() or path.resolve(strict=True) != path:
         raise HostFailure("migration comparison database path is not canonical")
     connection = sqlite3.connect(path.as_uri() + "?mode=ro&immutable=1", uri=True)
     digest = hashlib.sha256()
+
+    def framed(tag, value):
+        digest.update(tag)
+        digest.update(len(value).to_bytes(8, "big"))
+        digest.update(value)
+
+    def row(values):
+        framed(b"R", len(values).to_bytes(8, "big"))
+        for cell in values:
+            if cell is None:
+                framed(b"N", b"")
+            elif type(cell) is int:
+                framed(b"I", cell.to_bytes(8, "big", signed=True))
+            elif type(cell) is float:
+                framed(b"F", struct.pack(">d", cell))
+            elif isinstance(cell, str):
+                framed(b"T", cell.encode("utf-8"))
+            elif isinstance(cell, bytes):
+                framed(b"B", cell)
+            else:
+                raise HostFailure("SQLite comparison encountered an unsupported cell type")
+
+    def quote_identifier(value):
+        return '"' + value.replace('"', '""') + '"'
+
     try:
         connection.execute("PRAGMA query_only=ON")
         for name in ("user_version", "application_id"):
-            digest.update(json.dumps(connection.execute(f"PRAGMA {name}").fetchone()).encode())
-        for statement in connection.iterdump():
-            digest.update(statement.encode())
-            digest.update(b"\n")
-    except sqlite3.Error as error:
+            row(connection.execute(f"PRAGMA {name}").fetchone())
+        for definition in connection.execute("SELECT type,name,tbl_name,sql FROM sqlite_schema ORDER BY type,name"):
+            row(definition)
+        tables = sorted(connection.execute("PRAGMA main.table_list").fetchall(), key=lambda entry: entry[1])
+        for _, name, kind, _, without_rowid, _ in tables:
+            if name == "sqlite_schema" or kind == "view":
+                continue
+            if kind not in ("table", "shadow"):
+                raise HostFailure("SQLite comparison cannot establish physical identities for a virtual table")
+            framed(b"D", name.encode("utf-8"))
+            columns = connection.execute("SELECT name,pk FROM pragma_table_xinfo(?)", (name,)).fetchall()
+            table = quote_identifier(name)
+            if without_rowid:
+                primary = [quote_identifier(column) for column, ordinal in sorted(columns, key=lambda pair: pair[1]) if ordinal]
+                if not primary:
+                    raise HostFailure("SQLite comparison has an unrecognized WITHOUT ROWID table")
+                rows = connection.execute(f"SELECT * FROM {table} ORDER BY {','.join(primary)}")
+            else:
+                declared = {column.lower() for column, _ in columns}
+                hidden = next((alias for alias in ("rowid", "_rowid_", "oid") if alias not in declared), None)
+                if hidden is None:
+                    raise HostFailure("SQLite comparison cannot safely address a hidden rowid")
+                rows = connection.execute(f"SELECT {hidden},* FROM {table} ORDER BY {hidden}")
+            for values in rows:
+                row(values)
+    except (sqlite3.Error, UnicodeError) as error:
         raise HostFailure("cannot read all audited SQLite tables and rows") from error
     finally:
         connection.close()
     return digest.hexdigest()
+
+
+def _audited_public_sqlite(path: Path) -> dict[str, list]:
+    """Read the v2 public identity and document graph directly, independently of web capture."""
+    import sqlite3
+    database = sqlite3.connect(path.as_uri() + "?mode=ro&immutable=1", uri=True)
+    database.row_factory = sqlite3.Row
+    names = {
+        "institutes": "institutes", "course-groups": "course_groups", "seminars": "seminars",
+        "teachers": "teachers", "articles": "articles", "schedule-entries": "schedule_entries",
+        "news-items": "news_items", "promotions": "promotions", "pages": "pages",
+        "video-playlists": "video_playlists",
+    }
+    booleans = {"issuer_unknown", "includes_completed_level", "completion_required", "hours_may_vary",
+                "document_type_unspecified", "document_on_template", "international"}
+    components = {
+        "documents": ("seminar.document-record", "components_seminar_document_records"),
+        "training_registries": ("seminar.registry-fact", "components_seminar_registry_facts"),
+        "nmo": ("seminar.nmo-fact", "components_seminar_nmo_facts"),
+        "registry": ("seminar.registry-fact", "components_seminar_registry_facts"),
+    }
+
+    def component_graph(parent, field, link_table):
+        component_type, table = components[field]
+        links = database.execute(
+            f'SELECT component_type,cmp_id FROM {link_table} WHERE entity_id=? AND field=? ORDER BY "order",cmp_id',
+            (parent, field),
+        ).fetchall()
+        result = []
+        for link_type, link_id in links:
+            if link_type != component_type:
+                raise HostFailure("audited publication graph refers to the wrong component type")
+            raw = database.execute(f"SELECT * FROM {table} WHERE id=?", (link_id,)).fetchone()
+            if raw is None:
+                raise HostFailure("audited publication graph contains a missing component")
+            value = dict(raw)
+            for key in value.keys() & booleans:
+                if value[key] is not None:
+                    if value[key] not in (0, 1):
+                        raise HostFailure("audited publication graph contains an invalid boolean")
+                    value[key] = bool(value[key])
+            if field == "documents":
+                value["registry"] = component_graph(value["id"], "registry", "components_seminar_document_records_cmps")
+            result.append(value)
+        return result
+
+    try:
+        database.execute("PRAGMA query_only=ON")
+        collections = {}
+        for kind, table in names.items():
+            attributes = ",duration,audience,content_format,content_section_anchors,documents_state" if kind == "seminars" else ""
+            collections[kind] = [
+                dict(row) for row in database.execute(
+                    f'SELECT id,document_id AS "documentId"{attributes} FROM {table} WHERE published_at IS NOT NULL ORDER BY id')
+            ]
+        for record in collections["seminars"]:
+            anchors = record["content_section_anchors"]
+            if anchors is not None:
+                record["content_section_anchors"] = json.loads(anchors)
+            for field in ("documents", "training_registries", "nmo"):
+                graph = component_graph(record["id"], field, "seminars_cmps")
+                if field == "nmo":
+                    if len(graph) > 1:
+                        raise HostFailure("audited seminar has more than one NMO record")
+                    record[field] = graph[0] if graph else None
+                else:
+                    record[field] = graph
+        return collections
+    except (sqlite3.Error, ValueError) as error:
+        raise HostFailure("cannot independently read the audited public database identities and document graph") from error
+    finally:
+        database.close()
 
 
 def _reviewed_public_projection(contract: dict[str, Any], readback: dict[str, list]) -> dict[str, Any]:
@@ -4981,21 +5100,34 @@ def _audit_fresh_production_composition(config: dict[str, Any], state: Rehearsal
                 json.dumps([cohort_admission["binding"]["candidateDatabaseSha256"], None],
                            separators=(",", ":")).encode())):
         raise HostFailure("fresh production composition endpoint or source differs from receipt")
-    audited_source = Path(paths["source"])
-    backup_database = Path(config["backupRoot"]) / operation_id / "database.sqlite"
-    audited_final = Path(paths["content"])
-    if (_sqlite_logical_digest(audited_source) != _sqlite_logical_digest(backup_database)
-            or _sqlite_logical_digest(audited_final) != _sqlite_logical_digest(candidate_db)):
-        raise HostFailure("audited source or final stage differs logically from the backup or activation candidate")
     cms_uid = pwd.getpwnam(config["cmsUser"]).pw_uid
-    before = _capture_migration_pause(operation_root, operation_id, source_sha, cms_uid=cms_uid, config=config)
+    before = _capture_migration_pause(operation_root, operation_id, source_sha, include_bytes=True,
+                                      cms_uid=cms_uid, config=config)
+    backup_database = Path(config["backupRoot"]) / operation_id / "database.sqlite"
+    source_name = Path(paths["source"]).name
+    final_name = Path(paths["content"]).name
+    if before["bytes"].get(f"source/{source_name}-wal"):
+        raise HostFailure("production composition source has uncheckpointed WAL")
+    with tempfile.TemporaryDirectory(prefix="ikpk-composition-audit-") as temporary:
+        sealed = Path(temporary).resolve(strict=True)
+        copies = {
+            "source": before["bytes"][f"source/{source_name}"],
+            "final": before["bytes"][f"stage-snapshots/{final_name}"],
+            "candidate": before["bytes"]["candidate.db"],
+        }
+        for name, raw in copies.items():
+            (sealed / f"{name}.db").write_bytes(raw)
+        if (_sqlite_logical_digest(sealed / "source.db") != _sqlite_logical_digest(backup_database)
+                or _sqlite_logical_digest(sealed / "final.db") != _sqlite_logical_digest(sealed / "candidate.db")):
+            raise HostFailure("audited source or final stage differs logically from the backup or activation candidate")
+        readback = _audited_public_sqlite(sealed / "final.db")
     _, _, dependencies = _validate_prepared_cms_candidate(config, source_root, operation_id, provenance,
                                                           allow_runtime_updater=True)
     artifact = _protected_cms_migration_artifact(config, source_root, operation_id, provenance, dependencies)
     code = """
 import { readFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
-const [modulePath, reviewPath, digest, pathsJson, readerPath, schemaRoot] = process.argv.slice(1);
+const [modulePath, reviewPath, digest, pathsJson] = process.argv.slice(1);
 const paths = JSON.parse(pathsJson);
 const { auditSeminarMigrationComposition } = await import(pathToFileURL(modulePath));
 const result = auditSeminarMigrationComposition({
@@ -5004,20 +5136,17 @@ const result = auditSeminarMigrationComposition({
 if (result.partial !== true || result.passed !== false || result.blockedOn !== 'registry-cohort-binding') {
   throw new Error('the independent composition audit did not verify all reviewed stages');
 }
-const { readPublishedSqlite } = await import(pathToFileURL(readerPath));
-process.stdout.write(JSON.stringify(readPublishedSqlite(paths.content, schemaRoot).collections));
 """
-    readback = _run_as_cms(config, artifact, [
+    _run_as_cms(config, artifact, [
         config.get("nodeBinary", "/usr/bin/node"), "--input-type=module", "-e", code,
         str(artifact / "scripts/audit-seminar-migration-composition.mjs"), str(review_path),
         review["expectedContractDigest"], json.dumps(paths, separators=(",", ":")),
-        str(source_root / "scripts/lib/server-capture-sqlite.mjs"), str(source_root / "cms/src"),
-    ], timeout=300, read_only_path=[artifact, dependencies, operation_root, source_root / "scripts/lib", source_root / "cms/src"])
+    ], timeout=300, read_only_path=[artifact, dependencies, operation_root])
     after = _capture_migration_pause(operation_root, operation_id, source_sha, cms_uid=cms_uid, config=config)
-    if before != after or sha256_file_bytes(_cohort_file(review_path)) != review["expectedFileSha256"]:
+    if before["files"] != after["files"] or sha256_file_bytes(_cohort_file(review_path)) != review["expectedFileSha256"]:
         raise HostFailure("fresh production composition evidence changed during independent audit")
     try:
-        public_projection = _reviewed_public_projection(contract, json.loads(readback))
+        public_projection = _reviewed_public_projection(contract, readback)
     except (KeyError, TypeError, ValueError) as error:
         raise HostFailure("audited production composition lacks a complete public projection") from error
     return {"compositionContractDigest": review["expectedContractDigest"], "stageSnapshots": stages,

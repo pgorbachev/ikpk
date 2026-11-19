@@ -2768,6 +2768,34 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
             self.assertEqual(metadata["snapshotFingerprint"], fingerprint)
             self.assertNotIn("provenanceLineage", metadata)
 
+    def test_completed_production_backup_preserves_original_projector_and_admission_on_resume(self):
+        cms_sha = "a" * 40
+        original_projector = "b" * 40
+        old_static_projector = "c" * 40
+        archive = backup_archive("resume-op")
+        archive_sha = sha(archive)
+        existing = {"operationId": "resume-op", "sourceSha": original_projector, "sha256": archive_sha,
+                    "runId": 7, "attempt": 2, "oldCmsSourceSha": cms_sha, "oldCmsSchemaSha256": "d" * 64,
+                    "snapshotFingerprint": "sha256:" + "e" * 64}
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            path = directory / "resume-op.tar"
+            path.write_bytes(archive)
+            metadata = path.with_suffix(".json")
+            metadata.write_text(json.dumps(existing, indent=2), encoding="utf-8")
+            metadata_bytes = metadata.read_bytes()
+            with patch.object(operator, "production_paired_schema_source", return_value=(cms_sha, "d" * 64)), \
+                 patch.object(operator, "production_paired_backup_fingerprint") as projector:
+                self.assertEqual(operator.persist_offhost_backup(
+                    directory, "resume-op", original_projector, archive, archive_sha, {"runId": 7, "attempt": 2},
+                    "/old", old_projector_sha=old_static_projector), path)
+                with self.assertRaisesRegex(operator.Refusal, "different or incomplete recovery evidence"):
+                    operator.persist_offhost_backup(
+                        directory, "resume-op", original_projector, archive, archive_sha,
+                        {"runId": 7, "attempt": 3}, "/old", old_projector_sha=old_static_projector)
+                projector.assert_not_called()
+            self.assertEqual(metadata.read_bytes(), metadata_bytes)
+
     def test_production_backup_is_durable_before_content_projection_can_fail(self):
         source_sha = "2fee597b5335f6c61fd61a622fa2a5f3f475a605"
         archive = backup_archive()
@@ -2937,12 +2965,13 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
             backup_dir = Path(temporary); backup_dir.mkdir(exist_ok=True)
             (backup_dir / "production-op.json").write_text(json.dumps({
                 "operationId": "production-op", "sourceSha": source_sha, "runId": 7, "attempt": 2,
-                "snapshotFingerprint": fingerprint}), encoding="utf-8")
+                "oldCmsSourceSha": source_sha, "snapshotFingerprint": fingerprint}), encoding="utf-8")
             args = Namespace(profile="production-paired", command="static-publish", host=None,
                              operation_id="production-op", source_sha=source_sha, backup_dir=temporary)
             with patch.object(operator, "ssh_remote", side_effect=ssh), \
                  patch.object(operator, "validate_production_paired_admission", return_value={"runId": 7, "attempt": 2}), \
-                 patch.object(operator, "browser_check", return_value="sha256:" + "e" * 64):
+                 patch.object(operator, "browser_check", return_value="sha256:" + "e" * 64), \
+                 patch.object(operator, "production_projector_contract", return_value="f" * 64):
                 with self.assertRaisesRegex(operator.Refusal, "differs from the fingerprint captured in the verified backup"):
                     operator.invoke(args)
             self.assertEqual([call[0] for call in calls], ["status", "static-publish", "export-static"])

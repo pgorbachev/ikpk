@@ -1107,6 +1107,8 @@ def persist_offhost_backup(directory: Path, operation_id: str, source_sha: str, 
     target = directory / f"{operation_id}.tar"
     metadata = target.with_suffix(".json")
     schema_metadata = {}
+    base = {"operationId": operation_id, "sourceSha": source_sha, "sha256": expected_sha256}
+    old = None
     # Persist verified bytes and a minimal binding before schema projection/tsx work.
     # A later local tooling failure must not strand the fenced operation without a copy.
     verify_backup_tar(payload, expected_sha256)
@@ -1117,12 +1119,10 @@ def persist_offhost_backup(directory: Path, operation_id: str, source_sha: str, 
             old = json.loads(metadata.read_text(encoding="utf-8"))
         except (OSError, ValueError) as error:
             raise Refusal("existing off-host backup metadata is unreadable") from error
-        if hashlib.sha256(target.read_bytes()).hexdigest() != expected_sha256 or any(
-                old.get(k) != v for k, v in {"operationId": operation_id, "sourceSha": source_sha,
-                                            "sha256": expected_sha256}.items()):
+        if (not isinstance(old, dict) or hashlib.sha256(target.read_bytes()).hexdigest() != expected_sha256
+                or any(old.get(k) != v for k, v in base.items())):
             raise Refusal("existing off-host backup belongs to different bytes or operation")
     else:
-        base = {"operationId": operation_id, "sourceSha": source_sha, "sha256": expected_sha256}
         flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
         fd = os.open(target, flags, 0o600)
         with os.fdopen(fd, "wb") as output:
@@ -1144,6 +1144,21 @@ def persist_offhost_backup(directory: Path, operation_id: str, source_sha: str, 
             raise Refusal("production backup admission is missing its exact run and attempt")
         with tarfile.open(fileobj=io.BytesIO(payload), mode="r:") as archive:
             registry_sha = json.load(archive.extractfile("manifest.json")).get("historicalRegistrySha256")
+        if old is not None and old != base:
+            if (old.get("oldCmsSourceSha") != schema_sha or old.get("oldCmsSchemaSha256") != schema_digest
+                    or any(old.get(key) != admission.get(key) for key in ("runId", "attempt"))
+                    or old.get("oldHistoricalRegistrySha256") != registry_sha
+                    or not re.fullmatch(r"sha256:[a-f0-9]{64}", str(old.get("snapshotFingerprint")))):
+                raise Refusal("existing completed production backup binds different or incomplete recovery evidence")
+            if "oldProjectorSourceSha" in old and (
+                    old["oldProjectorSourceSha"] != old_projector_sha
+                    or old.get("oldProjectorNodeVersion") != production_projector_node_version()
+                    or old.get("oldProjectorContractSha256") != production_projector_contract(old_projector_sha, schema_sha)):
+                raise Refusal("existing completed production backup binds a different projector or runtime")
+            if "oldProjectorSourceSha" not in old and any(key in old for key in (
+                    "oldProjectorNodeVersion", "oldProjectorContractSha256", "oldHistoricalRegistrySha256")):
+                raise Refusal("existing completed production backup has partial projector evidence")
+            return target
         fingerprint = production_paired_backup_fingerprint(payload, source_sha, operation_id,
             admission["runId"], admission["attempt"], schema_sha, schema_digest, projector_sha=old_projector_sha)
         schema_metadata = {"oldCmsSourceSha": schema_sha, "oldCmsSchemaSha256": schema_digest,
@@ -1425,13 +1440,15 @@ def validate_migrated_public_projection(original: dict, target: dict, reviewed: 
                                        source_media: Optional[list[dict]] = None,
                                        registry: Optional[list[dict]] = None) -> None:
     """Reconstruct the v2 public result from the v1 backup and reviewed per-record changes."""
-    if (original.get("contractVersion", 1) != 1 or target.get("contractVersion") != 2
+    original_version = original.get("contractVersion", 1)
+    if (original_version not in (1, 2) or target.get("contractVersion") != 2
             or not isinstance(reviewed, dict) or reviewed.get("version") != 1):
         raise Refusal("production public projection versions have no reviewed comparison")
     expected = copy.deepcopy(original["content"])
     actual = target["content"]
+    expected.pop("historicalExceptions", None)
     if set(expected) != {"types", "media"} or set(actual) - {"historicalExceptions"} != set(expected):
-        raise Refusal("production migration changed unreviewed public content or historical exception properties")
+        raise Refusal("production migration changed unreviewed public content properties")
     pairs = reviewed["documentIds"]
     if expected["types"].keys() != pairs.keys() or actual["types"].keys() != pairs.keys():
         raise Refusal("production migration changes the published collection set")
@@ -1441,23 +1458,26 @@ def validate_migrated_public_projection(original: dict, target: dict, reviewed: 
             raise Refusal(f"production migration changes published record identities in {kind}")
         for record in records:
             document_id = pairs[kind][str(record["id"])]
-            if not isinstance(document_id, str) or not document_id or "documentId" in record:
+            if (not isinstance(document_id, str) or not document_id
+                    or (original_version == 2 and record.get("documentId") != document_id)
+                    or (original_version == 1 and "documentId" in record)):
                 raise Refusal(f"production migration has invalid reviewed document identities in {kind}")
             record["documentId"] = document_id
-    teachers = {}
-    for teacher in expected["types"]["teachers"]:
-        key = (str(teacher.get("legacy_id")), teacher["name"])
-        if key in teachers:
-            raise Refusal("production migration cannot unambiguously match the historical teacher identities")
-        teachers[key] = teacher["documentId"]
-    for record in expected["types"]["seminars"]:
-        for ref in record.get("teachers", []):
-            ref["documentId"] = teachers[(str(ref.get("legacy_id")), ref["name"])]
-    for record in expected["types"]["schedule_entries"]:
-        for ref in record.get("teachers", []):
-            ref["documentId"] = teachers[(str(ref["id"]), ref["fullName"])]
-        if record.get("seminar") is not None:
-            record["seminar"]["documentId"] = pairs["seminars"][str(record["seminar"]["id"])]
+    if original_version == 1:
+        teachers = {}
+        for teacher in expected["types"]["teachers"]:
+            key = (str(teacher.get("legacy_id")), teacher["name"])
+            if key in teachers:
+                raise Refusal("production migration cannot unambiguously match the historical teacher identities")
+            teachers[key] = teacher["documentId"]
+        for record in expected["types"]["seminars"]:
+            for ref in record.get("teachers", []):
+                ref["documentId"] = teachers[(str(ref.get("legacy_id")), ref["name"])]
+        for record in expected["types"]["schedule_entries"]:
+            for ref in record.get("teachers", []):
+                ref["documentId"] = teachers[(str(ref["id"]), ref["fullName"])]
+            if record.get("seminar") is not None:
+                record["seminar"]["documentId"] = pairs["seminars"][str(record["seminar"]["id"])]
     permitted = {
         "schedule_entries": ("schedule", {"price", "isFree", "city", "isOnline", "duration"}),
         "seminars": ("seminars", {"duration", "audience", "content_format", "content_section_anchors", "documents_state",
@@ -1504,11 +1524,15 @@ def validate_production_content_acceptance(candidate_archive: bytes, static_dige
             proof = json.load(archive.extractfile(names[0])) if names else None
             capture_bytes = archive.extractfile("snapshot/capture-manifest.json").read() if names else None
             projected = json.load(archive.extractfile("snapshot/snapshot.json")) if names else None
-        old_contract = backup.get("oldProjectorContractSha256")
-        target_contract = (production_projector_contract(source_sha, source_sha)
-                           if proof is not None or old_contract is not None else None)
+        projector_sha = backup.get("oldProjectorSourceSha", backup.get("sourceSha"))
+        schema_sha = backup.get("oldCmsSourceSha")
+        if not isinstance(projector_sha, str) or not isinstance(schema_sha, str):
+            raise Refusal("production backup does not identify the original projector and CMS schema")
+        old_contract = production_projector_contract(projector_sha, schema_sha)
+        if backup.get("oldProjectorContractSha256", old_contract) != old_contract:
+            raise Refusal("production original projector contract does not match its verified backup")
         if proof is None:
-            if old_contract != target_contract:
+            if old_contract != production_projector_contract(source_sha, source_sha):
                 raise Refusal("production projector semantics changed without an audited proof of equivalence")
             if snapshot_fingerprint != backup.get("snapshotFingerprint"):
                 raise Refusal("built production snapshot differs from the fingerprint captured in the verified backup")
@@ -1547,30 +1571,25 @@ def validate_production_content_acceptance(candidate_archive: bytes, static_dige
                 or source.get("databaseSha256") != composition.get("backupDatabaseSha256")
                 or source.get("mediaManifestSha256") != composition.get("backupMediaManifestSha256")):
             raise Refusal("production migration proof does not bind the verified source database and media")
-        if old_contract != target_contract:
-            projector_sha = backup.get("oldProjectorSourceSha")
-            schema_sha = backup.get("oldCmsSourceSha")
-            if (not isinstance(projector_sha, str) or not isinstance(schema_sha, str)
-                    or not isinstance(composition.get("publicProjection"), dict)
-                    or old_contract != production_projector_contract(projector_sha, schema_sha)
-                    or backup.get("oldProjectorNodeVersion") != production_projector_node_version()):
-                raise Refusal("production projector semantics changed without an audited proof of equivalence")
-            with tempfile.TemporaryDirectory(prefix="ikpk-original-public-projection-") as directory:
-                original = Path(directory) / "snapshot.json"
-                fingerprint = production_paired_backup_fingerprint(
-                    backup_bytes, source_sha, operation_id, backup["runId"], backup["attempt"],
-                    schema_sha, backup["oldCmsSchemaSha256"], projector_sha=projector_sha,
-                    projection_output=original)
-                if fingerprint != backup.get("snapshotFingerprint"):
-                    raise Refusal("production historical public projection differs from the verified backup")
-                approved_registry = base64.b64decode(composition["targetRegistryBase64"], validate=True)
-                if hashlib.sha256(approved_registry).hexdigest() != proof["registrySha256"]:
-                    raise Refusal("production target registry bytes differ from the reviewed cohort")
-                registry = json.loads(approved_registry)
-                if not isinstance(registry, list) or not isinstance(source_media, list):
-                    raise Refusal("production source media or target registry has an invalid shape")
-                validate_migrated_public_projection(json.loads(original.read_bytes()), projected,
-                                                    composition["publicProjection"], source_media, registry)
+        if (not isinstance(composition.get("publicProjection"), dict)
+                or backup.get("oldProjectorNodeVersion") != production_projector_node_version()):
+            raise Refusal("production migration has no complete independent public comparison")
+        with tempfile.TemporaryDirectory(prefix="ikpk-original-public-projection-") as directory:
+            original = Path(directory) / "snapshot.json"
+            fingerprint = production_paired_backup_fingerprint(
+                backup_bytes, source_sha, operation_id, backup["runId"], backup["attempt"],
+                schema_sha, backup["oldCmsSchemaSha256"], projector_sha=projector_sha,
+                projection_output=original)
+            if fingerprint != backup.get("snapshotFingerprint"):
+                raise Refusal("production historical public projection differs from the verified backup")
+            approved_registry = base64.b64decode(composition["targetRegistryBase64"], validate=True)
+            if hashlib.sha256(approved_registry).hexdigest() != proof["registrySha256"]:
+                raise Refusal("production target registry bytes differ from the reviewed cohort")
+            registry = json.loads(approved_registry)
+            if not isinstance(registry, list) or not isinstance(source_media, list):
+                raise Refusal("production source media or target registry has an invalid shape")
+            validate_migrated_public_projection(json.loads(original.read_bytes()), projected,
+                                                composition["publicProjection"], source_media, registry)
     except (OSError, ValueError, tarfile.TarError, AttributeError, KeyError) as error:
         raise Refusal("production content acceptance evidence is unreadable") from error
 
