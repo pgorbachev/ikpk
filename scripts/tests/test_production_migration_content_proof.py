@@ -542,18 +542,20 @@ class ProductionStaticProjectorTests(unittest.TestCase):
                     "snapshotId": snapshot, "staticTreeSha256": digest}
             (release / "release.json").write_text(json.dumps(info))
             (root / "initial-prod").mkdir()
-            config = {"stateDir": str(root / "production-paired")}
             (root / "production-paired").mkdir()
-            committed = {"record": "committed", "sourceSha": OLD_PROJECTOR, "operationId": operation}
-            bundle = {"record": "new-bundle", "sourceSha": OLD_PROJECTOR, "operationId": operation,
-                      "newPair": {"staticPath": str(release), "snapshotId": snapshot, "staticTreeSha256": digest}}
-            def rows(state):
-                return [bundle, committed] if state.root == root / "initial-prod" else []
-            with patch.object(rehearsal_host.RehearsalState, "read_journal_for_cleanup", autospec=True, side_effect=rows):
-                self.assertEqual(rehearsal_host._production_static_projector(config, release, digest, {})["sourceSha"], OLD_PROJECTOR)
-                bundle["newPair"]["staticPath"] = str(root / "other")
-                with self.assertRaisesRegex(rehearsal_host.HostFailure, "terminal operation"):
-                    rehearsal_host._production_static_projector(config, release, digest, {})
+            config = {"stateDir": str(root / "production-paired")}
+            state = rehearsal_host.RehearsalState(root / "initial-prod")
+            state.begin(operation, OLD_PROJECTOR, {"cmsSha": SOURCE, "staticSha": SOURCE})
+            state.confirm_fence(operation, lambda: True)
+            state.mark_cms_activated(operation)
+            state.accept_new_pair(operation, {"sourceSha": OLD_PROJECTOR, "cmsSha": OLD_PROJECTOR,
+                "staticSha": OLD_PROJECTOR, "snapshotId": snapshot, "staticTreeSha256": digest})
+            state.commit(operation)
+            state.finalize(operation, lambda: True)
+            self.assertEqual(rehearsal_host._production_static_projector(config, release, digest, {})["sourceSha"], OLD_PROJECTOR)
+            (release / "release.json").write_text(json.dumps({**info, "snapshotId": "snap:" + "c" * 64}))
+            with self.assertRaisesRegex(rehearsal_host.HostFailure, "terminal operation"):
+                rehearsal_host._production_static_projector(config, release, digest, {})
 
     def test_cms_refresh_uses_terminal_state_and_active_cms_identity(self):
         with tempfile.TemporaryDirectory() as temporary:

@@ -2408,7 +2408,8 @@ def _production_static_projector(config: dict[str, Any], static: Path, tree_dige
         bundle = bundles[0].get("newPair") if len(bundles) == 1 else None
         paired = (len(commits) == 1 and isinstance(bundle, dict)
                   and commits[0].get("sourceSha") == bundles[0].get("sourceSha") == source_sha
-                  and rows.index(bundles[0]) < rows.index(commits[0]) and bundle.get("staticPath") == str(static)
+                  and rows.index(bundles[0]) < rows.index(commits[0])
+                  and bundle.get("sourceSha") == bundle.get("staticSha") == source_sha
                   and bundle.get("staticTreeSha256") == tree_digest and bundle.get("snapshotId") == snapshot)
         static_state = paired_state.parent / "production-static"
         static_rows = [row for row in RehearsalState(static_state).read_journal_for_cleanup()
