@@ -136,7 +136,7 @@ export function buildSeminarDatesFixture(options: {
   mkdirSync(buildParent, { recursive: true });
   const buildRoot = tempDir('ikpk-seminar-date-build-', buildParent);
   const outDir = join(buildRoot, 'dist');
-  const content = { types: fixtureTypes } as SnapshotContent;
+  const content = { types: fixtureTypes, media: [] } as SnapshotContent;
   const fingerprint = contentFingerprint(content);
   writeFileSync(
     join(fixtureRoot, 'snapshot.json'),

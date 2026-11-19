@@ -1,4 +1,6 @@
-import { readFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { cpSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { attr, findAll, textOf, walk } from './helpers/dom';
@@ -81,7 +83,7 @@ describe('registration links in the staging194 static output', () => {
     expect(active.snapshotId).toBe(JSON.parse(readFileSync(join(fixture.snapshotDir, 'snapshot.json'), 'utf8')).snapshotId);
   });
 
-  it.each([
+  const mutations = [
     ['swapped URLs', `
       rewrite('Два месяца', ${JSON.stringify(temporary)});
       rewrite('Три месяца', ${JSON.stringify(real.replace('&', '&amp;'))});
@@ -92,9 +94,18 @@ describe('registration links in the staging194 static output', () => {
     ['missing CTA', `rewrite('Два месяца', null);`],
     ['URL for an empty occurrence', `rewrite('Следующий год', 'https://extra.example.invalid/empty');`],
     ['missing schedule page', 'fs.unlinkSync(path);'],
-  ])('rejects %s before changing the active CMS refresh release', (_scenario, mutate) => {
-    const { result, current, active, previous } = refreshStaging194(fixture, String.raw`
-      const path = 'dist-demo193/raspisanie-i-tseny/index.html';
+    ['extra registration link outside occurrence rows', `
+      html = html.replace('</body>', '<a href="https://extra.example.invalid/outside">Записаться на семинар</a></body>');
+    `],
+    ['indexable editorial page', `html = html.replace('content="noindex, nofollow"', 'content="index, follow"');`,
+      'statyi/registration-link-fixture/index.html'],
+    ['production canonical on an editorial page', `
+      html = html.replace('href="https://194.226.99.10/statyi/', 'href="https://ikpk.su/statyi/');
+    `, 'statyi/registration-link-fixture/index.html'],
+  ] as const;
+
+  const candidateMutation = (mutate: string, page = 'raspisanie-i-tseny/index.html') => String.raw`
+      const path = ${JSON.stringify(`dist-demo193/${page}`)};
       const before = fs.readFileSync(path, 'utf8');
       let html = before;
       function rewrite(city, href) {
@@ -111,11 +122,55 @@ describe('registration links in the staging194 static output', () => {
         if (html === before) throw Error('candidate mutation did not match the rendered output');
         fs.writeFileSync(path, html);
       }
-    `);
+    `;
+
+  it.each(mutations)('rejects %s before changing the active CMS refresh release', (_scenario, mutate, page) => {
+    const { result, current, active, previous } = refreshStaging194(fixture, candidateMutation(mutate, page));
     expect(current, JSON.stringify(result)).toBe(previous);
     expect(active.snapshotId).toBe('snap:old');
     expect(result.status).toBe('failed');
     expect(result.switched).toBe(false);
+  });
+
+  it('refuses a CMS refresh candidate changed after validation', () => {
+    const { result, current, active, previous } = refreshStaging194(fixture, undefined, true);
+    expect(current, JSON.stringify(result)).toBe(previous);
+    expect(active.snapshotId).toBe('snap:old');
+    expect(result.status).toBe('failed');
+    expect(result.switched).toBe(false);
+  });
+
+  function pairedAcceptance(mutate?: string, page?: string) {
+    const root = mkdtempSync(join(tmpdir(), 'ikpk194-cta-pair-'));
+    try {
+      const tree = join(root, 'dist-demo193');
+      cpSync(fixture.outDir, tree, { recursive: true });
+      if (mutate) {
+        const result = spawnSync(process.execPath, ['-e', "const fs = require('node:fs');" + candidateMutation(mutate, page)],
+          { cwd: root, encoding: 'utf8' });
+        expect(result.status, result.stderr).toBe(0);
+      }
+      const result = spawnSync('python3', [join(import.meta.dirname, 'helpers/staging194-paired-fixture.py'),
+        tree, join(fixture.snapshotDir, 'snapshot.json'), fixture.buildNow], {
+        cwd: join(import.meta.dirname, '../..'), env: { ...process.env, PYTHONPATH: '.' }, encoding: 'utf8',
+      });
+      expect(result.status, result.stderr).toBe(0);
+      return JSON.parse(result.stdout.trim().split('\n').at(-1)!);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  }
+
+  it('confirms the digest of the matching paired candidate', () => {
+    const result = pairedAcceptance();
+    expect(result.reason).toBeNull();
+    expect(result.confirmed).toEqual([expect.stringMatching(/^[0-9a-f]{64}$/)]);
+  });
+
+  it.each(mutations)('withholds paired digest confirmation for %s', (_scenario, mutate, page) => {
+    const result = pairedAcceptance(mutate, page);
+    expect(result.confirmed, JSON.stringify(result)).toEqual([]);
+    expect(result.reason).toMatch(/registration|occurrence/i);
   });
 
 });

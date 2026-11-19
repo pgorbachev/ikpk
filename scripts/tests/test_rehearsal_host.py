@@ -791,6 +791,9 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
 
             def stop_at_build(_config, _cwd, argv, **kwargs):
                 if argv[:2] != ["/usr/bin/npm", "run"]:
+                    snapshot = root / "web/.snapshot/snapshot.json"
+                    snapshot.parent.mkdir(parents=True, exist_ok=True)
+                    snapshot.write_text('{"snapshotId":"snap:test"}', encoding="utf-8")
                     return ""
                 self.assertEqual(argv, ["/usr/bin/npm", "run", "build:demo193", "--",
                                         "--staging194-registration-links"])

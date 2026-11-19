@@ -9,7 +9,7 @@ const worker = new URL('../../../cms/src/seminar-management/site-refresh-worker.
 const commit = 'a'.repeat(40);
 const digest = 'b'.repeat(64);
 
-export function refreshStaging194(fixture: { snapshotDir: string; outDir: string; buildNow: string }, mutation?: string) {
+export function refreshStaging194(fixture: { snapshotDir: string; outDir: string; buildNow: string }, mutation?: string, changeAfterCheck = false) {
   const root = mkdtempSync(join(tmpdir(), 'ikpk194-cta-refresh-'));
   const put = (file: string, content: string, mode = 0o644) => {
     mkdirSync(dirname(file), { recursive: true });
@@ -40,8 +40,12 @@ export function refreshStaging194(fixture: { snapshotDir: string; outDir: string
     put(join(web, 'node_modules/tsx/package.json'), '{}');
     put(join(web, 'node_modules/tsx/dist/cli.mjs'), `
       import fs from 'node:fs';
+      import { join } from 'node:path';
       import { spawnSync } from 'node:child_process';
       if (process.argv[2] !== 'scripts/capture-content-snapshot.ts') {
+        if (${changeAfterCheck} && process.argv[3] === 'confirm') {
+          fs.appendFileSync(join(process.argv[4], 'raspisanie-i-tseny/index.html'), '<!-- candidate changed -->');
+        }
         const result = spawnSync(process.execPath, [${JSON.stringify(join(repo, 'web/node_modules/tsx/dist/cli.mjs'))}, ...process.argv.slice(2)],
           { stdio: 'inherit' });
         process.exit(result.status ?? 1);
