@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, unlinkSync, writeFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -40,8 +40,11 @@ interface VerifiedCaptureBundle {
   media: { url: string }[];
 }
 
-function fixtureDatabase(path: string, includeUnshownDocument = true): void {
-  const schemas = loadCaptureSchemas(schemaRoot) as Record<string, FixtureSchema>;
+function fixtureDatabase(
+  path: string,
+  includeUnshownDocument = true,
+  schemas = loadCaptureSchemas(schemaRoot) as Record<string, FixtureSchema>,
+): void {
   const db = new DatabaseSync(path);
   const snake = (value: string) => value.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`);
   for (const [uid, schema] of Object.entries(schemas)) {
@@ -87,10 +90,13 @@ function fixtureDatabase(path: string, includeUnshownDocument = true): void {
   `);
   if (includeUnshownDocument) {
     db.exec(`INSERT INTO components_seminar_document_records (id, document, issuer) VALUES (12,'Certificate','Issuer');
-      INSERT INTO components_seminar_registry_facts (id,name,subject,url) VALUES (14,'Registry','document','https://example.org/#registry'), (15,'IAHE','training','https://example.org/#training');
+      INSERT INTO seminars_cmps VALUES (3,5,12,'seminar.document-record','documents',1);`);
+  }
+  if (includeUnshownDocument && schemas['seminar.registry-fact']) {
+    db.exec(`INSERT INTO components_seminar_registry_facts (id,name,subject,url) VALUES (14,'Registry','document','https://example.org/#registry'), (15,'IAHE','training','https://example.org/#training');
       INSERT INTO components_seminar_nmo_facts (id,status) VALUES (16,'possible');
       INSERT INTO components_seminar_document_records_cmps VALUES (1,12,14,'seminar.registry-fact','registry',1);
-      INSERT INTO seminars_cmps VALUES (3,5,12,'seminar.document-record','documents',1), (4,5,15,'seminar.registry-fact','training_registries',1), (5,5,16,'seminar.nmo-fact','nmo',1);`);
+      INSERT INTO seminars_cmps VALUES (4,5,15,'seminar.registry-fact','training_registries',1), (5,5,16,'seminar.nmo-fact','nmo',1);`);
   }
   db.close();
 }
@@ -141,8 +147,87 @@ afterEach(() => {
   for (const root of temporaryRoots.splice(0)) {
     chmodSync(root, 0o700);
     if (existsSync(join(root, 'media'))) chmodSync(join(root, 'media'), 0o700);
+    const archive = join(root, 'archive');
+    if (existsSync(archive)) {
+      chmodSync(archive, 0o700);
+      for (const entry of readdirSync(archive, { recursive: true, withFileTypes: true })) {
+        if (entry.isDirectory()) chmodSync(join(entry.parentPath, entry.name), 0o700);
+      }
+    }
     rmSync(root, { recursive: true, force: true });
   }
+});
+
+function archivedCaptureSchema(sourceSha: string): string {
+  const root = mkdtempSync(join(tmpdir(), 'ikpk-archived-capture-schema-'));
+  temporaryRoots.push(root);
+  const archive = join(root, 'archive');
+  const run = spawnSync('python3', ['-c', [
+    'import sys',
+    'from pathlib import Path',
+    'from scripts.rehearsal.staging193 import production_paired_schema_from_commit',
+    'print(production_paired_schema_from_commit(sys.argv[1], Path(sys.argv[2])))',
+  ].join('\n'), sourceSha, archive], { cwd: repoRoot, encoding: 'utf8' });
+  expect(run.status, run.stderr || run.error?.message).toBe(0);
+  expect(run.stdout.trim()).toMatch(/^[0-9a-f]{64}$/);
+  return archive;
+}
+
+function archivedFixtureSchemas(archive: string): Record<string, FixtureSchema> {
+  const schemas: Record<string, FixtureSchema> = {};
+  const apis = join(archive, 'api');
+  for (const name of readdirSync(apis)) {
+    schemas[`api::${name}.${name}`] = JSON.parse(readFileSync(
+      join(apis, name, 'content-types', name, 'schema.json'), 'utf8',
+    ));
+  }
+  for (const uid of ['shared.seo', 'seminar.document-record']) {
+    schemas[uid] = JSON.parse(readFileSync(
+      join(archive, 'components', ...uid.split('.')) + '.json', 'utf8',
+    ));
+  }
+  return schemas;
+}
+
+describe('production backup schema compatibility', () => {
+  it('projects published rows and legacy documents from the exact 9fad CMS schema', () => {
+    const archive = archivedCaptureSchema('9fad640520a90518a89d2751701acd2faa10ab21');
+    expect(existsSync(join(archive, 'components/seminar/registry-fact.json'))).toBe(false);
+    expect(existsSync(join(archive, 'components/seminar/nmo-fact.json'))).toBe(false);
+    const database = join(archive, '..', 'database.sqlite');
+    fixtureDatabase(database, true, archivedFixtureSchemas(archive));
+
+    const captured = readPublishedSqlite(database, archive);
+    expect(captured.schemaDigest).toMatch(/^[a-f0-9]{64}$/);
+    expect(captured.collections.seminars).toHaveLength(1);
+    expect(captured.collections.seminars[0]).toMatchObject({
+      documentId: 'seminar',
+      name: 'Published',
+      teachers: [{ documentId: 'teacher', name: 'Teacher' }],
+      seo: { seo_title: 'Published SEO' },
+      documents: [{ document: 'Certificate', issuer: 'Issuer' }],
+      image: [{ url: '/uploads/photo.jpg' }],
+    });
+  });
+
+  it('exports the referenced seminar component schemas at the exact b974 CMS revision', () => {
+    const archive = archivedCaptureSchema('b974b71df79c6bdb1c2a7c692c27723e0b73e854');
+    const schemas = loadCaptureSchemas(archive);
+    expect(schemas['seminar.registry-fact']).toMatchObject({ collectionName: 'components_seminar_registry_facts' });
+    expect(schemas['seminar.nmo-fact']).toMatchObject({ collectionName: 'components_seminar_nmo_facts' });
+  });
+
+  it('rejects current schemas with a missing referenced component schema', () => {
+    const root = mkdtempSync(join(tmpdir(), 'ikpk-missing-capture-component-'));
+    temporaryRoots.push(root);
+    const archive = join(root, 'schema');
+    cpSync(schemaRoot, archive, { recursive: true });
+    unlinkSync(join(archive, 'components/seminar/registry-fact.json'));
+
+    const database = join(root, 'database.sqlite');
+    fixtureDatabase(database);
+    expect(() => readPublishedSqlite(database, archive)).toThrow(/registry-fact/);
+  });
 });
 
 describe('staging193 sealed SQLite capture', () => {
