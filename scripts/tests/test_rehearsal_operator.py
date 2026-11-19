@@ -1428,6 +1428,7 @@ class PairedCmsAdmissionRecheckTests(unittest.TestCase):
                  patch.object(staging193, "make_archive", return_value=(b"source archive", "a" * 64)) as make_archive, \
                  patch.object(staging193, "backup_root", return_value=root), \
                  patch.object(staging193, "persist_offhost_backup", side_effect=persist_backup) as save_backup, \
+                 patch.object(staging193, "_prepare_historical_projector"), \
                  admission_patch as admission:
                 if changed:
                     message = ("production Release/main/CI admission changed before CMS activation"
