@@ -199,22 +199,25 @@ describe('production backup schema compatibility', () => {
 
     const captured = readPublishedSqlite(database, archive);
     expect(captured.schemaDigest).toMatch(/^[a-f0-9]{64}$/);
-    expect(captured.collections.seminars).toHaveLength(1);
-    expect(captured.collections.seminars[0]).toMatchObject({
-      documentId: 'seminar',
-      name: 'Published',
-      teachers: [{ documentId: 'teacher', name: 'Teacher' }],
-      seo: { seo_title: 'Published SEO' },
-      documents: [{ document: 'Certificate', issuer: 'Issuer' }],
-      image: [{ url: '/uploads/photo.jpg' }],
+    expect(captured.collections).toMatchObject({
+      seminars: [{
+        documentId: 'seminar',
+        name: 'Published',
+        teachers: [{ documentId: 'teacher', name: 'Teacher' }],
+        seo: { seo_title: 'Published SEO' },
+        documents: [{ document: 'Certificate', issuer: 'Issuer' }],
+        image: [{ url: '/uploads/photo.jpg' }],
+      }],
     });
   });
 
   it('exports the referenced seminar component schemas at the exact b974 CMS revision', () => {
     const archive = archivedCaptureSchema('b974b71df79c6bdb1c2a7c692c27723e0b73e854');
     const schemas = loadCaptureSchemas(archive);
-    expect(schemas['seminar.registry-fact']).toMatchObject({ collectionName: 'components_seminar_registry_facts' });
-    expect(schemas['seminar.nmo-fact']).toMatchObject({ collectionName: 'components_seminar_nmo_facts' });
+    expect(schemas).toMatchObject({
+      'seminar.registry-fact': { collectionName: 'components_seminar_registry_facts' },
+      'seminar.nmo-fact': { collectionName: 'components_seminar_nmo_facts' },
+    });
   });
 
   it('rejects current schemas with a missing referenced component schema', () => {
