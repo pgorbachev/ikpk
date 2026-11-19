@@ -2385,8 +2385,13 @@ def _production_static_projector(config: dict[str, Any], static: Path, tree_dige
         raise HostFailure("selected production release has no exact unreused snapshot projector")
     if re.fullmatch(r"content-[0-9]+", static.name):
         refresh = json.loads(_cohort_file(Path(config["siteRefreshState"])))
+        refresh_commit = refresh.get("commit")
+        # Historical successful CMS refresh state did not record commit. In
+        # that shape require its terminal phase and the exact installed source.
         if (refresh.get("status") != "succeeded" or refresh.get("switched") is not True
-                or refresh.get("releaseId") != static.name or refresh.get("commit") != source_sha
+                or refresh.get("releaseId") != static.name
+                or (refresh_commit is None and refresh.get("phase") != "done")
+                or (refresh_commit is not None and refresh_commit != source_sha)
                 or cms_source_environment.get("IKPK_INSTALLED_COMMIT") != source_sha):
             raise HostFailure("selected production CMS refresh projector disagrees with its terminal state or installed source")
     else:

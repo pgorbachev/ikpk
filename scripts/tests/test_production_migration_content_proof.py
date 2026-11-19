@@ -536,8 +536,7 @@ class ProductionStaticProjectorTests(unittest.TestCase):
             release = root / "content-1780000000000"
             release.mkdir()
             info = {"commit": OLD_PROJECTOR, "snapshotId": "snap:" + "a" * 64}
-            state = {"status": "succeeded", "switched": True, "commit": OLD_PROJECTOR,
-                     "releaseId": release.name}
+            state = {"status": "succeeded", "phase": "done", "switched": True, "releaseId": release.name}
             release_file = release / "release.json"
             state_file = root / "refresh-state.json"
             config = {"siteRefreshState": str(state_file)}
@@ -547,6 +546,9 @@ class ProductionStaticProjectorTests(unittest.TestCase):
             self.assertEqual(rehearsal_host._production_static_projector(config, release, "unused", environment),
                 {"sourceSha": OLD_PROJECTOR, "snapshotId": info["snapshotId"],
                  "releaseMetadataSha256": sha(release_file.read_bytes())})
+            state_file.write_text(json.dumps({**state, "commit": SOURCE}))
+            with self.assertRaisesRegex(rehearsal_host.HostFailure, "disagrees"):
+                rehearsal_host._production_static_projector(config, release, "unused", environment)
             release_file.write_text(json.dumps({**info, "commit": SOURCE}))
             state_file.write_text(json.dumps({**state, "commit": SOURCE}))
             with self.assertRaisesRegex(rehearsal_host.HostFailure, "disagrees"):
