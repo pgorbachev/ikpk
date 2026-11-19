@@ -424,8 +424,10 @@ class ProductionPublicationProofTests(unittest.TestCase):
 
     def test_fresh_price_normalization_passes_only_after_independent_audit(self):
         candidate, admission = self.prepare_cohort(defer_intent=True)
-        registry_directory = self.root / "registry-cohorts"
-        registry_directory.mkdir()
+        # The actual registry guard checks every ancestor, including Linux /tmp.
+        registry = tempfile.TemporaryDirectory(prefix=".ikpk-registry-test-", dir=Path.home())
+        self.addCleanup(registry.cleanup)
+        registry_directory = Path(registry.name).resolve()
 
         def audit(config, state, operation_id, source_sha, candidate_db, cohort_admission):
             self.assertEqual((config, state, operation_id, source_sha),
