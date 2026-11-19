@@ -2374,6 +2374,46 @@ def _assert_site_refresh_idle(config: dict[str, Any], *, allow_interrupted: bool
             raise HostFailure("SSH publication is unfinished; recover it before host publication")
 
 
+def _production_static_projector(config: dict[str, Any], static: Path, tree_digest: str,
+                                 cms_source_environment: dict) -> dict[str, str]:
+    """Identify the producer of the selected static snapshot, including CMS refresh releases."""
+    raw = _cohort_file(static / "release.json")
+    release = json.loads(raw)
+    source_sha, snapshot = release.get("commit"), release.get("snapshotId")
+    if (not SHA_RE.fullmatch(str(source_sha)) or not re.fullmatch(r"snap:[a-f0-9]{64}", str(snapshot))
+            or release.get("reusedCapture") is not None):
+        raise HostFailure("selected production release has no exact unreused snapshot projector")
+    if re.fullmatch(r"content-[0-9]+", static.name):
+        refresh = json.loads(_cohort_file(Path(config["siteRefreshState"])))
+        if (refresh.get("status") != "succeeded" or refresh.get("switched") is not True
+                or refresh.get("releaseId") != static.name or refresh.get("commit") != source_sha
+                or cms_source_environment.get("IKPK_INSTALLED_COMMIT") != source_sha):
+            raise HostFailure("selected production CMS refresh projector disagrees with its terminal state or installed source")
+    else:
+        operation = release.get("operationId")
+        if (not isinstance(operation, str) or static.name != f"{source_sha}-{operation}"
+                or release.get("staticTreeSha256") != tree_digest):
+            raise HostFailure("selected production release projector disagrees with its publication identity")
+        paired_state = Path(config["stateDir"])
+        rows = [row for row in RehearsalState(paired_state).read_journal_for_cleanup()
+                if row.get("operationId") == operation]
+        paired = any(row.get("record") == "committed" and row.get("sourceSha") == source_sha
+                     for row in rows) and any(
+            row.get("record") == "new-bundle" and row.get("newPair", {}).get("staticTreeSha256") == tree_digest
+            and row["newPair"].get("snapshotId") == snapshot for row in rows)
+        static_state = paired_state.parent / "production-static"
+        static_rows = [row for row in RehearsalState(static_state).read_journal_for_cleanup()
+                       if row.get("operationId") == operation] if not paired and static_state.is_dir() else []
+        static_main = any(row.get("record") == "static-main-committed" and row.get("sourceSha") == source_sha
+                          and row.get("staticTreeSha256") == tree_digest and row.get("snapshotId") == snapshot
+                          for row in static_rows) and any(
+            row.get("record") == "static-main-switch-intent" and row.get("candidateStaticPath") == str(static)
+            for row in static_rows)
+        if not (paired or static_main):
+            raise HostFailure("selected production release projector lacks a matching terminal operation")
+    return {"sourceSha": source_sha, "snapshotId": snapshot, "releaseMetadataSha256": sha256_file_bytes(raw)}
+
+
 def _old_pair(config: dict[str, Any]) -> dict[str, Any]:
     cms = _current_target(Path(config["currentCms"]))
     static = _current_target(Path(config["currentStatic"]))
@@ -2393,6 +2433,8 @@ def _old_pair(config: dict[str, Any]) -> dict[str, Any]:
         result["cmsSourceEnvironment"] = _staging194_cms_source_env(config)
     elif config.get("profile") == "production-paired":
         result["cmsSourceEnvironment"] = _paired_cms_source_env(config)
+        result["staticProjector"] = _production_static_projector(
+            config, static, result["staticTreeSha256"], result["cmsSourceEnvironment"])
         result["mediaStateSha256"] = _media_state_sha256(_media_inventory(config))
     return result
 
@@ -4879,6 +4921,10 @@ def _sqlite_logical_digest(path: Path) -> str:
         for definition in connection.execute("SELECT type,name,tbl_name,sql FROM sqlite_schema ORDER BY type,name"):
             row(definition)
         tables = sorted(connection.execute("PRAGMA main.table_list").fetchall(), key=lambda entry: entry[1])
+        names = {entry[1] for entry in tables}
+        declared = {row[0] for row in connection.execute("SELECT name FROM sqlite_schema WHERE type='table'")}
+        if not tables or not declared.issubset(names):
+            raise HostFailure("SQLite comparison cannot enumerate the complete table inventory")
         for _, name, kind, _, without_rowid, _ in tables:
             if name == "sqlite_schema" or kind == "view":
                 continue

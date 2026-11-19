@@ -1122,6 +1122,10 @@ def persist_offhost_backup(directory: Path, operation_id: str, source_sha: str, 
         if (not isinstance(old, dict) or hashlib.sha256(target.read_bytes()).hexdigest() != expected_sha256
                 or any(old.get(k) != v for k, v in base.items())):
             raise Refusal("existing off-host backup belongs to different bytes or operation")
+        if admission is None:
+            if old != base:
+                raise Refusal("existing backup has production admission and cannot be rewritten for another profile")
+            return target
     else:
         flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
         fd = os.open(target, flags, 0o600)
@@ -1852,13 +1856,18 @@ def invoke(args: argparse.Namespace, *, admission: Optional[dict] = None) -> Opt
         old_pair = preflight.get("oldPair")
         if not isinstance(old_pair, dict) or not isinstance(old_pair.get("cmsPath"), str):
             raise Refusal("read-only production preflight did not identify the old CMS release")
-        static_match = re.search(r"/releases/([a-f0-9]{40})-[^/]+/?$", str(old_pair.get("staticPath")))
-        if not static_match or "historicalRegistryManifest" not in old_pair:
+        static_projector = old_pair.get("staticProjector")
+        if (not isinstance(static_projector, dict) or not SHA.fullmatch(str(static_projector.get("sourceSha")))
+                or not re.fullmatch(r"snap:[a-f0-9]{64}", str(static_projector.get("snapshotId")))
+                or not re.fullmatch(r"[a-f0-9]{64}", str(static_projector.get("releaseMetadataSha256")))
+                or "historicalRegistryManifest" not in old_pair):
             raise Refusal("production preflight lacks the old static projector source or registry baseline")
-        old_projector_sha = static_match.group(1)
+        old_projector_sha = static_projector["sourceSha"]
         paired_old_cms = (old_pair["cmsPath"], *production_paired_schema_source(old_pair["cmsPath"]))
         if not (ROOT / "web/node_modules/.bin/tsx").is_file():
             raise Refusal("local content snapshot tooling is unavailable before production fence")
+        with tempfile.TemporaryDirectory(prefix="ikpk-historical-projector-preflight-") as local_probe:
+            _prepare_historical_projector(old_projector_sha, Path(local_probe) / "projector")
     if args.command == "cms-update":
         provenance = (validate_production_paired_admission(args.source_sha) if profile == "production-paired"
                       else validate_sha_and_ci(args.source_sha, profile))
@@ -1927,6 +1936,7 @@ def invoke(args: argparse.Namespace, *, admission: Optional[dict] = None) -> Opt
                 if not paired_old_cms or old_cms_path != paired_old_cms[0]:
                     raise Refusal("journaled old CMS release changed after read-only preflight")
                 if (fenced_old_pair.get("staticPath") != old_pair["staticPath"]
+                        or fenced_old_pair.get("staticProjector") != static_projector
                         or "historicalRegistryManifest" not in fenced_old_pair
                         or fenced_old_pair["historicalRegistryManifest"] != old_pair["historicalRegistryManifest"]):
                     raise Refusal("journaled old static projector or registry changed after read-only preflight")
@@ -2153,7 +2163,7 @@ def invoke(args: argparse.Namespace, *, admission: Optional[dict] = None) -> Opt
                 original_contract = record.get("oldProjectorContractSha256")
                 if original_contract is not None and (
                         "historicalRegistryManifest" not in recovery_old_pair
-                        or not re.search(rf"/releases/{re.escape(projector_sha)}-[^/]+/?$", str(recovery_old_pair.get("staticPath")))
+                        or (recovery_old_pair.get("staticProjector") or {}).get("sourceSha") != projector_sha
                         or original_contract != production_projector_contract(projector_sha, record["oldCmsSourceSha"])
                         or record.get("oldProjectorNodeVersion") != production_projector_node_version()):
                     raise Refusal("production recovery projector or runtime differs from the verified backup")

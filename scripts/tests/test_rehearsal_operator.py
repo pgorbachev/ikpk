@@ -372,7 +372,7 @@ class OperatorAdmissionTests(unittest.TestCase):
                 "command": "cms-update", "operation_id": "paired-no-tsx", "source_sha": SHA,
                 "backup_dir": None})()
             status = json.dumps({"phase": "idle", "oldPair": {"cmsPath": "/opt/old/cms",
-                "staticPath": f"/var/www/ikpk/releases/{SHA}-old-release", "historicalRegistryManifest": None}}).encode()
+                "staticPath": f"/var/www/ikpk/releases/{SHA}-old-release", "staticProjector": {"sourceSha": SHA, "snapshotId": "snap:" + "c" * 64, "releaseMetadataSha256": "e" * 64}, "historicalRegistryManifest": None}}).encode()
             def ssh(arguments, **_kwargs):
                 preflight = space_preflight_response(arguments)
                 return preflight if preflight is not None else status
@@ -407,7 +407,7 @@ class OperatorAdmissionTests(unittest.TestCase):
             calls.append((arguments, kwargs))
             if arguments[0] == "status":
                 return json.dumps({"oldPair": {"cmsPath": "/opt/ikpk-cms/releases/old",
-                    "staticPath": f"/var/www/ikpk/releases/{SHA}-old-release", "historicalRegistryManifest": None}}).encode()
+                    "staticPath": f"/var/www/ikpk/releases/{SHA}-old-release", "staticProjector": {"sourceSha": SHA, "snapshotId": "snap:" + "c" * 64, "releaseMetadataSha256": "e" * 64}, "historicalRegistryManifest": None}}).encode()
             return json.dumps({"phase": "cms-activated"}).encode()
 
         try:
@@ -419,6 +419,7 @@ class OperatorAdmissionTests(unittest.TestCase):
                  patch.object(staging193, "fetch_cms_candidate_artifact", return_value=b"cms tar payload") as artifact_fetch, \
                  patch.object(staging193, "make_archive", return_value=(b"source archive", "a" * 64)) as make_archive, \
                  patch.object(staging193, "production_paired_schema_source", return_value=(SHA, "f" * 64)), \
+                 patch.object(staging193, "_prepare_historical_projector"), \
                  patch.object(staging193, "ssh_remote", side_effect=ssh):
                 staging193.invoke(args)
             return local_space, target_space, calls, paired, paired_admission, cms_admission, artifact_fetch, make_archive
@@ -1392,7 +1393,7 @@ class PairedCmsAdmissionRecheckTests(unittest.TestCase):
                 calls.append(arguments)
                 if arguments[0] == "status":
                     return json.dumps({"phase": "idle", "oldPair": {"cmsPath": old_cms_path,
-                        "staticPath": f"/var/www/ikpk/releases/{'d' * 40}-old-release", "historicalRegistryManifest": None}}).encode()
+                        "staticPath": f"/var/www/ikpk/releases/{'d' * 40}-old-release", "staticProjector": {"sourceSha": "d" * 40, "snapshotId": "snap:" + "c" * 64, "releaseMetadataSha256": "e" * 64}, "historicalRegistryManifest": None}}).encode()
                 if arguments[0] == "export-backup":
                     return b"verified off-host backup"
                 if arguments[0] == "cms-update" and "--offhost-sha256" in arguments:

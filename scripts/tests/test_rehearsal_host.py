@@ -2817,7 +2817,7 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
         source_sha = "c" * 40
         status = json.dumps({"phase": "idle", "oldPair": {"cmsPath":
             f"/opt/ikpk-cms/releases/{source_sha}-old-release/cms-artifact",
-            "staticPath": f"/var/www/ikpk/releases/{source_sha}-old-release",
+            "staticPath": f"/var/www/ikpk/releases/{source_sha}-old-release", "staticProjector": {"sourceSha": source_sha, "snapshotId": "snap:" + "c" * 64, "releaseMetadataSha256": "e" * 64},
             "historicalRegistryManifest": None}}).encode()
         args = Namespace(profile="production-paired", command="cms-update", host=None,
                          operation_id="shallow-preflight")
@@ -2906,7 +2906,7 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
         fingerprint = "sha256:" + "d" * 64
         status = json.dumps({"phase": "idle", "oldPair": {"cmsPath":
             f"/opt/ikpk-cms/releases/{old_source}-old-release/cms-artifact",
-            "staticPath": f"/var/www/ikpk/releases/{old_source}-old-release",
+            "staticPath": f"/var/www/ikpk/releases/{old_source}-old-release", "staticProjector": {"sourceSha": old_source, "snapshotId": "snap:" + "c" * 64, "releaseMetadataSha256": "e" * 64},
             "historicalRegistryManifest": None}}).encode()
         calls = []
         def ssh(arguments, **_kwargs):
@@ -2936,6 +2936,7 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
                  patch.object(operator, "production_paired_schema_source", return_value=(old_source, "f" * 64)), \
                  patch.object(operator, "production_paired_backup_fingerprint", return_value=fingerprint), \
                  patch.object(operator, "production_projector_contract", return_value="a" * 64), \
+                 patch.object(operator, "_prepare_historical_projector"), \
                  patch.object(operator, "capture", side_effect=AssertionError("must not read shared stand ledger")) as capture:
                 operator.invoke(args)
             self.assertFalse(capture.called)

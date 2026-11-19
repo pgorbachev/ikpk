@@ -529,6 +529,30 @@ class WouldSwitch(Exception):
     """Stop immediately before any actual publication or service checks."""
 
 
+class ProductionStaticProjectorTests(unittest.TestCase):
+    def test_cms_refresh_uses_terminal_state_and_active_cms_identity(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            release = root / "content-1780000000000"
+            release.mkdir()
+            info = {"commit": OLD_PROJECTOR, "snapshotId": "snap:" + "a" * 64}
+            state = {"status": "succeeded", "switched": True, "commit": OLD_PROJECTOR,
+                     "releaseId": release.name}
+            release_file = release / "release.json"
+            state_file = root / "refresh-state.json"
+            config = {"siteRefreshState": str(state_file)}
+            release_file.write_text(json.dumps(info))
+            state_file.write_text(json.dumps(state))
+            environment = {"IKPK_INSTALLED_COMMIT": OLD_PROJECTOR}
+            self.assertEqual(rehearsal_host._production_static_projector(config, release, "unused", environment),
+                {"sourceSha": OLD_PROJECTOR, "snapshotId": info["snapshotId"],
+                 "releaseMetadataSha256": sha(release_file.read_bytes())})
+            release_file.write_text(json.dumps({**info, "commit": SOURCE}))
+            state_file.write_text(json.dumps({**state, "commit": SOURCE}))
+            with self.assertRaisesRegex(rehearsal_host.HostFailure, "disagrees"):
+                rehearsal_host._production_static_projector(config, release, "unused", environment)
+
+
 class CrossVersionPublicProjectionTests(unittest.TestCase):
     def test_expected_v2_result_preserves_untouched_public_content_and_relation_identity(self):
         teacher_a = {"id": 1, "legacy_id": "99", "name": "Teacher A", "order": 1}
