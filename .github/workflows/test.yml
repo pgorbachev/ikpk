@@ -634,6 +634,7 @@ jobs:
           scripts.tests.test_operator_review_limit
           scripts.tests.test_pause_host_to_extractor
           scripts.tests.test_private_dependency_installer
+          scripts.tests.test_production_migration_content_proof
           scripts.tests.test_protected_migration_artifact
           scripts.tests.test_review_transport_race_regression
           scripts.tests.test_reviewed_migration_admission
