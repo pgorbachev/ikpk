@@ -174,6 +174,29 @@ test.describe('Content quality', () => {
   });
 
   test('schedule pagination reveals the next results and moves keyboard focus', async ({ page }) => {
+    // This test exercises pagination, not the age of the pinned CMS snapshot. Replace
+    // only its schedule rows before the real controls initialize so it always has
+    // two pages even when the snapshot's real events have already started.
+    await page.route('**/raspisanie-i-tseny', async (route) => {
+      const response = await route.fetch();
+      const html = await response.text();
+      const marker = '<script data-schedule-controls>';
+      expect(html).toContain(marker);
+      const fixture = `<script>
+        const list = document.querySelector('[data-testid="schedule-list"]');
+        if (!list) throw new Error('Missing schedule list');
+        list.replaceChildren(...Array.from({ length: 26 }, (_, index) => {
+          const item = document.createElement('div');
+          item.setAttribute('data-schedule-item', '');
+          item.setAttribute('data-start-offer', '');
+          item.setAttribute('data-start-at', new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString());
+          item.className = 'schedule-card';
+          item.textContent = 'Тестовое проведение ' + (index + 1);
+          return item;
+        }));
+      </script>`;
+      await route.fulfill({ response, body: html.replace(marker, `${fixture}${marker}`) });
+    });
     const response = await page.goto('/raspisanie-i-tseny');
     expect(response?.status()).toBe(200);
 
@@ -183,6 +206,7 @@ test.describe('Content quality', () => {
     const pageTwo = page.locator('[data-schedule-pagination]').getByRole('button', { name: 'Страница 2', exact: true });
     await expect(pageTwo).toBeVisible();
     const firstPageFirstResult = await cards.first().textContent();
+    expect(firstPageFirstResult).toBe('Тестовое проведение 1');
 
     if (hasScrollport) {
       await expect(scrollport).toBeVisible();
@@ -200,6 +224,7 @@ test.describe('Content quality', () => {
 
     await expect(cards).not.toHaveCount(0);
     expect(await cards.first().textContent()).not.toBe(firstPageFirstResult);
+    await expect(cards.first()).toHaveText('Тестовое проведение 26');
     const firstResult = cards.first();
     await expect.poll(async () => firstResult.evaluate((element) => {
       const port = element.closest('[data-page-scrollport]');
