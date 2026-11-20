@@ -61,8 +61,5 @@ const seminars = getUpcomingSeminars(Infinity);
   .upcoming-foot { display: flex; align-items: center; justify-content: space-between; gap: 0.6rem; margin-top: 0.4rem; }
   .upcoming-price { font-size: var(--font-l); font-weight: 700; }
   .upcoming-price.free { color: var(--color-accent-600); }
-  @media (max-width: 780px) {
-    .upcoming-grid { grid-template-columns: 1fr; }
-    .upcoming-foot { justify-content: flex-start; }
-  }
+  @media (max-width: 780px) { .upcoming-grid { grid-template-columns: 1fr; } }
 </style>
