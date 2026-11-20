@@ -1,7 +1,7 @@
 {
   "status": "dist-reviewed",
   "generatedFrom": "source AST + built output; CI must not regenerate",
-  "generatedFromSha": "ddba28ec768dab66ede386244ed109c6d223d4eb",
+  "generatedFromSha": "eaca577aae2f21d31e9b5f4ac98287a914bc2432",
   "distRoots": [
     "web/dist",
     "web/dist-demo"
@@ -457,7 +457,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/",
       "placement": "doc-order:7:link",
-      "identity": "link|href=/_astro/CtaBand.BXrFmUTv.css|rel=stylesheet",
+      "identity": "link|href=/_astro/CtaBand.J_feDEQR.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "production",
@@ -51244,7 +51244,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/preview/b",
       "placement": "doc-order:9:link",
-      "identity": "link|href=/_astro/CtaBand.BXrFmUTv.css|rel=stylesheet",
+      "identity": "link|href=/_astro/CtaBand.J_feDEQR.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "demo"
@@ -51484,7 +51484,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/preview/c",
       "placement": "doc-order:8:link",
-      "identity": "link|href=/_astro/CtaBand.BXrFmUTv.css|rel=stylesheet",
+      "identity": "link|href=/_astro/CtaBand.J_feDEQR.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "demo"
@@ -51754,7 +51754,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/preview/d",
       "placement": "doc-order:8:link",
-      "identity": "link|href=/_astro/CtaBand.BXrFmUTv.css|rel=stylesheet",
+      "identity": "link|href=/_astro/CtaBand.J_feDEQR.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "demo"
@@ -52034,7 +52034,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/preview/editorial",
       "placement": "doc-order:9:link",
-      "identity": "link|href=/_astro/CtaBand.BXrFmUTv.css|rel=stylesheet",
+      "identity": "link|href=/_astro/CtaBand.J_feDEQR.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "demo"
@@ -52964,7 +52964,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/preview/faculty",
       "placement": "doc-order:9:link",
-      "identity": "link|href=/_astro/CtaBand.BXrFmUTv.css|rel=stylesheet",
+      "identity": "link|href=/_astro/CtaBand.J_feDEQR.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "demo"
@@ -54094,7 +54094,7 @@
       "slotId": "src:layouts/BaseLayout.astro:css-import:0:../styles/global.css",
       "route": "/preview/modular",
       "placement": "doc-order:8:link",
-      "identity": "link|href=/_astro/CtaBand.BXrFmUTv.css|rel=stylesheet",
+      "identity": "link|href=/_astro/CtaBand.J_feDEQR.css|rel=stylesheet",
       "count": 1,
       "builds": [
         "demo"
