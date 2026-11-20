@@ -484,8 +484,8 @@
     "file": "components/home/sections/UpcomingSeminars.astro",
     "nodeKind": "element",
     "locator": "components/home/sections/UpcomingSeminars.astro:L34:C1:style",
-    "fingerprint": "2287893bbabc0731b484e0ba3dd2967ada73ee190ddc227b5f8b4fa6b252b74a",
-    "identity": "style|body:ed91b5ca94c488f4"
+    "fingerprint": "9abe5574f1364d0277e5239be436104214649b6bc5f725ce298fbd68d5103b81",
+    "identity": "style|body:1b80e9526cc0b062"
   },
   {
     "slotId": "src:components/home/sections/UpcomingTable.astro:L48:C1:style",
