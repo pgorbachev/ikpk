@@ -949,6 +949,17 @@ def _verified_cleanup_backup(directory: Path, operation_id: str, expected_databa
         finally:
             checked.close()
         expected = {"manifest.json", "database.sqlite", "media-manifest.json"}
+        registry_path = directory / "historical-registry.json"
+        registry_digest = manifest.get("historicalRegistrySha256")
+        if registry_digest is not None:
+            if not SHA256_RE.fullmatch(str(registry_digest)):
+                return False
+            registry = _cohort_file(registry_path)
+            if sha256_file_bytes(registry) != registry_digest or not isinstance(json.loads(registry), list):
+                return False
+            expected.add(registry_path.name)
+        elif os.path.lexists(registry_path):
+            return False
         for item in media_doc["media"]:
             if not isinstance(item, dict):
                 return False
@@ -1920,6 +1931,15 @@ def _backup(config: dict[str, Any], operation_id: str) -> dict[str, Any]:
                 "postCheckpointLiveSha256": post_checkpoint_live_sha,
                 "databaseSha256": sha256_file(database_copy), "mediaManifestSha256": sha256_file(backup_dir / "media-manifest.json"),
                 "media": media}
+    if config.get("profile") == "production-paired":
+        prior = _current_historical_manifest(config)
+        if prior is not None:
+            registry_sha = prior["registrySha256"]
+            registry = _cohort_file(HISTORICAL_REGISTRY_DIRECTORY / f"registry-{registry_sha}.json")
+            if sha256_file_bytes(registry) != registry_sha:
+                raise HostFailure("production backup historical registry differs from the active cohort")
+            (backup_dir / "historical-registry.json").write_bytes(registry)
+            manifest["historicalRegistrySha256"] = registry_sha
     durable_json(backup_dir / "manifest.json", manifest)
     archive = backup_dir / "backup.tar"
     with tarfile.open(archive, "w") as output:
@@ -2354,6 +2374,56 @@ def _assert_site_refresh_idle(config: dict[str, Any], *, allow_interrupted: bool
             raise HostFailure("SSH publication is unfinished; recover it before host publication")
 
 
+def _production_static_projector(config: dict[str, Any], static: Path, tree_digest: str,
+                                 cms_source_environment: dict) -> dict[str, str]:
+    """Identify the producer of the selected static snapshot, including CMS refresh releases."""
+    raw = _cohort_file(static / "release.json")
+    release = json.loads(raw)
+    source_sha, snapshot = release.get("commit"), release.get("snapshotId")
+    if (not SHA_RE.fullmatch(str(source_sha)) or not re.fullmatch(r"snap:[a-f0-9]{64}", str(snapshot))
+            or release.get("reusedCapture") is not None):
+        raise HostFailure("selected production release has no exact unreused snapshot projector")
+    if re.fullmatch(r"content-[0-9]+", static.name):
+        refresh = json.loads(_cohort_file(Path(config["siteRefreshState"])))
+        refresh_commit = refresh.get("commit")
+        # Historical successful CMS refresh state did not record commit. In
+        # that shape require its terminal phase and the exact installed source.
+        if (refresh.get("status") != "succeeded" or refresh.get("switched") is not True
+                or refresh.get("releaseId") != static.name
+                or (refresh_commit is None and refresh.get("phase") != "done")
+                or (refresh_commit is not None and refresh_commit != source_sha)
+                or cms_source_environment.get("IKPK_INSTALLED_COMMIT") != source_sha):
+            raise HostFailure("selected production CMS refresh projector disagrees with its terminal state or installed source")
+    else:
+        operation = release.get("operationId")
+        if (not isinstance(operation, str) or static.name != f"{source_sha}-{operation}"
+                or release.get("staticTreeSha256") != tree_digest):
+            raise HostFailure("selected production release projector disagrees with its publication identity")
+        paired_state = Path(config["stateDir"])
+        pair_state = paired_state.parent / "initial-prod" if operation == INITIAL_PROD_OPERATION_ID else paired_state
+        rows = [row for row in RehearsalState(pair_state).read_journal_for_cleanup()
+                if row.get("operationId") == operation] if pair_state.is_dir() else []
+        commits = [row for row in rows if row.get("record") == "committed"]
+        bundles = [row for row in rows if row.get("record") == "new-bundle"]
+        bundle = bundles[0].get("newPair") if len(bundles) == 1 else None
+        paired = (len(commits) == 1 and isinstance(bundle, dict)
+                  and commits[0].get("sourceSha") == bundles[0].get("sourceSha") == source_sha
+                  and rows.index(bundles[0]) < rows.index(commits[0])
+                  and bundle.get("sourceSha") == bundle.get("staticSha") == source_sha
+                  and bundle.get("staticTreeSha256") == tree_digest and bundle.get("snapshotId") == snapshot)
+        static_state = paired_state.parent / "production-static"
+        static_rows = [row for row in RehearsalState(static_state).read_journal_for_cleanup()
+                       if row.get("operationId") == operation] if not paired and static_state.is_dir() else []
+        static_main = any(row.get("record") == "static-main-committed" and row.get("sourceSha") == source_sha
+                          and row.get("staticTreeSha256") == tree_digest and row.get("snapshotId") == snapshot
+                          for row in static_rows) and any(
+            row.get("record") == "static-main-switch-intent" and row.get("candidateStaticPath") == str(static)
+            for row in static_rows)
+        if not (paired or static_main):
+            raise HostFailure("selected production release projector lacks a matching terminal operation")
+    return {"sourceSha": source_sha, "snapshotId": snapshot, "releaseMetadataSha256": sha256_file_bytes(raw)}
+
+
 def _old_pair(config: dict[str, Any]) -> dict[str, Any]:
     cms = _current_target(Path(config["currentCms"]))
     static = _current_target(Path(config["currentStatic"]))
@@ -2373,6 +2443,8 @@ def _old_pair(config: dict[str, Any]) -> dict[str, Any]:
         result["cmsSourceEnvironment"] = _staging194_cms_source_env(config)
     elif config.get("profile") == "production-paired":
         result["cmsSourceEnvironment"] = _paired_cms_source_env(config)
+        result["staticProjector"] = _production_static_projector(
+            config, static, result["staticTreeSha256"], result["cmsSourceEnvironment"])
         result["mediaStateSha256"] = _media_state_sha256(_media_inventory(config))
     return result
 
@@ -4672,7 +4744,9 @@ def _activate_cms(config: dict[str, Any], cms_release: Path, candidate_db: Path,
             raise HostFailure('historical cohort proof differs from admitted CI source')
         with _verify_candidate_capture(config, source_root, capture, candidate_db, cohort_admission['binding'], admitted) as capture_proof:
             cohort_intent = _prepare_historical_cohort(config, state, operation_id, source_sha,
-                cms_release, candidate_db, cms_artifact, cohort_admission)
+                cms_release, candidate_db, cms_artifact, cohort_admission,
+                **({"target_projection": capture_proof["targetProjection"]}
+                   if config.get("profile") == "production-paired" else {}))
             if (_candidate_capture_identity(candidate_db, capture_proof['databaseSha256']) != capture_proof['database']
                     or sha256_file(capture_proof['sealedDatabase']) != capture_proof['databaseSha256']):
                 raise HostFailure('candidate changed after capture verification')
@@ -4817,10 +4891,368 @@ def _validate_registry_cohort(manifest: dict[str, Any], *, config: Optional[dict
         raise HostFailure('registry cohort differs from configured CMS/database')
 
 
+def _sqlite_logical_digest(path: Path) -> str:
+    """Hash logical SQLite schema and type-tagged cell bytes, including hidden row identities."""
+    import sqlite3
+    import struct
+    if path.is_symlink() or path.resolve(strict=True) != path:
+        raise HostFailure("migration comparison database path is not canonical")
+    connection = sqlite3.connect(path.as_uri() + "?mode=ro&immutable=1", uri=True)
+    digest = hashlib.sha256()
+
+    def framed(tag, value):
+        digest.update(tag)
+        digest.update(len(value).to_bytes(8, "big"))
+        digest.update(value)
+
+    def row(values):
+        framed(b"R", len(values).to_bytes(8, "big"))
+        for cell in values:
+            if cell is None:
+                framed(b"N", b"")
+            elif type(cell) is int:
+                framed(b"I", cell.to_bytes(8, "big", signed=True))
+            elif type(cell) is float:
+                framed(b"F", struct.pack(">d", cell))
+            elif isinstance(cell, str):
+                framed(b"T", cell.encode("utf-8"))
+            elif isinstance(cell, bytes):
+                framed(b"B", cell)
+            else:
+                raise HostFailure("SQLite comparison encountered an unsupported cell type")
+
+    def quote_identifier(value):
+        return '"' + value.replace('"', '""') + '"'
+
+    try:
+        connection.execute("PRAGMA query_only=ON")
+        for name in ("user_version", "application_id"):
+            row(connection.execute(f"PRAGMA {name}").fetchone())
+        for definition in connection.execute("SELECT type,name,tbl_name,sql FROM sqlite_schema ORDER BY type,name"):
+            row(definition)
+        tables = sorted(connection.execute("PRAGMA main.table_list").fetchall(), key=lambda entry: entry[1])
+        names = {entry[1] for entry in tables}
+        declared = {row[0] for row in connection.execute("SELECT name FROM sqlite_schema WHERE type='table'")}
+        if not tables or not declared.issubset(names):
+            raise HostFailure("SQLite comparison cannot enumerate the complete table inventory")
+        for _, name, kind, _, without_rowid, _ in tables:
+            if name == "sqlite_schema" or kind == "view":
+                continue
+            if kind not in ("table", "shadow"):
+                raise HostFailure("SQLite comparison cannot establish physical identities for a virtual table")
+            framed(b"D", name.encode("utf-8"))
+            columns = connection.execute("SELECT name,pk FROM pragma_table_xinfo(?)", (name,)).fetchall()
+            table = quote_identifier(name)
+            if without_rowid:
+                primary = [quote_identifier(column) for column, ordinal in sorted(columns, key=lambda pair: pair[1]) if ordinal]
+                if not primary:
+                    raise HostFailure("SQLite comparison has an unrecognized WITHOUT ROWID table")
+                rows = connection.execute(f"SELECT * FROM {table} ORDER BY {','.join(primary)}")
+            else:
+                declared = {column.lower() for column, _ in columns}
+                hidden = next((alias for alias in ("rowid", "_rowid_", "oid") if alias not in declared), None)
+                if hidden is None:
+                    raise HostFailure("SQLite comparison cannot safely address a hidden rowid")
+                rows = connection.execute(f"SELECT {hidden},* FROM {table} ORDER BY {hidden}")
+            for values in rows:
+                row(values)
+    except (sqlite3.Error, UnicodeError) as error:
+        raise HostFailure("cannot read all audited SQLite tables and rows") from error
+    finally:
+        connection.close()
+    return digest.hexdigest()
+
+
+def _audited_public_sqlite(path: Path) -> dict[str, list]:
+    """Read the v2 public identity and document graph directly, independently of web capture."""
+    import sqlite3
+    database = sqlite3.connect(path.as_uri() + "?mode=ro&immutable=1", uri=True)
+    database.row_factory = sqlite3.Row
+    names = {
+        "institutes": "institutes", "course-groups": "course_groups", "seminars": "seminars",
+        "teachers": "teachers", "articles": "articles", "schedule-entries": "schedule_entries",
+        "news-items": "news_items", "promotions": "promotions", "pages": "pages",
+        "video-playlists": "video_playlists",
+    }
+    booleans = {"issuer_unknown", "includes_completed_level", "completion_required", "hours_may_vary",
+                "document_type_unspecified", "document_on_template", "international"}
+    components = {
+        "documents": ("seminar.document-record", "components_seminar_document_records"),
+        "training_registries": ("seminar.registry-fact", "components_seminar_registry_facts"),
+        "nmo": ("seminar.nmo-fact", "components_seminar_nmo_facts"),
+        "registry": ("seminar.registry-fact", "components_seminar_registry_facts"),
+    }
+
+    def component_graph(parent, field, link_table):
+        component_type, table = components[field]
+        links = database.execute(
+            f'SELECT component_type,cmp_id FROM {link_table} WHERE entity_id=? AND field=? ORDER BY "order",cmp_id',
+            (parent, field),
+        ).fetchall()
+        result = []
+        for link_type, link_id in links:
+            if link_type != component_type:
+                raise HostFailure("audited publication graph refers to the wrong component type")
+            raw = database.execute(f"SELECT * FROM {table} WHERE id=?", (link_id,)).fetchone()
+            if raw is None:
+                raise HostFailure("audited publication graph contains a missing component")
+            value = dict(raw)
+            for key in value.keys() & booleans:
+                if value[key] is not None:
+                    if value[key] not in (0, 1):
+                        raise HostFailure("audited publication graph contains an invalid boolean")
+                    value[key] = bool(value[key])
+            if field == "documents":
+                value["registry"] = component_graph(value["id"], "registry", "components_seminar_document_records_cmps")
+            result.append(value)
+        return result
+
+    try:
+        database.execute("PRAGMA query_only=ON")
+        collections = {}
+        for kind, table in names.items():
+            attributes = ",duration,audience,content_format,content_section_anchors,documents_state" if kind == "seminars" else ""
+            collections[kind] = [
+                dict(row) for row in database.execute(
+                    f'SELECT id,document_id AS "documentId"{attributes} FROM {table} WHERE published_at IS NOT NULL ORDER BY id')
+            ]
+        for record in collections["seminars"]:
+            anchors = record["content_section_anchors"]
+            if anchors is not None:
+                record["content_section_anchors"] = json.loads(anchors)
+            for field in ("documents", "training_registries", "nmo"):
+                graph = component_graph(record["id"], field, "seminars_cmps")
+                if field == "nmo":
+                    if len(graph) > 1:
+                        raise HostFailure("audited seminar has more than one NMO record")
+                    record[field] = graph[0] if graph else None
+                else:
+                    record[field] = graph
+        return collections
+    except (sqlite3.Error, ValueError) as error:
+        raise HostFailure("cannot independently read the audited public database identities and document graph") from error
+    finally:
+        database.close()
+
+
+def _reviewed_public_projection(contract: dict[str, Any], readback: dict[str, list]) -> dict[str, Any]:
+    """Build the v1-to-v2 public changes from approved plans and the audited SQLite graph."""
+    collections = {
+        "institutes": "institutes", "course_groups": "course-groups", "seminars": "seminars",
+        "teachers": "teachers", "articles": "articles", "schedule_entries": "schedule-entries",
+        "news": "news-items", "promotions": "promotions", "static_pages": "pages",
+        "video_playlists": "video-playlists",
+    }
+    document_ids = {}
+    for target, source in collections.items():
+        identifiers = {str(row["id"]): row["documentId"] for row in readback[source]}
+        if (len(identifiers) != len(readback[source]) or len(set(identifiers.values())) != len(identifiers)
+                or any(not isinstance(value, str) or not value for value in identifiers.values())):
+            raise HostFailure("audited public record identities are missing or ambiguous")
+        document_ids[target] = identifiers
+    schedule_fields = {"price": "price", "is_free": "isFree", "city": "city", "is_online": "isOnline",
+                       "duration": "duration"}
+    schedule = {}
+    for row in contract["schedule"]["plan"]["entries"]:
+        if not row["published"]:
+            continue
+        key = str(row["rowId"])
+        if document_ids["schedule_entries"].get(key) != row["documentId"] or key in schedule:
+            raise HostFailure("reviewed schedule projection differs from its audited public record")
+        fields = {}
+        for field, value in row["changes"].items():
+            if field not in schedule_fields:
+                raise HostFailure("reviewed schedule plan changes an unsupported public field")
+            fields[schedule_fields[field]] = bool(value) if field in ("is_free", "is_online") else value
+        schedule[key] = fields
+    if schedule.keys() != document_ids["schedule_entries"].keys():
+        raise HostFailure("reviewed schedule plan does not cover every published occurrence")
+    added_seminar = ("duration", "audience", "content_format", "content_section_anchors", "documents_state",
+                     "documents", "training_registries", "nmo")
+    seminars = {str(row["id"]): {key: row[key] for key in added_seminar} for row in readback["seminars"]}
+    approved_posts = set()
+    translated = {"description": "description_html", "full_text": "full_text_html",
+                  "learning_mode": "learning_mode", "learning_plan": "learning_plan",
+                  "recommendations": "recommendations", "audience": "audience",
+                  "content_format": "content_format", "content_section_anchors": "content_section_anchors"}
+    for row in contract["content"]["plan"]["payload"]["entries"]:
+        if row["version"] != "published":
+            continue
+        key = str(row["id"])
+        if key in approved_posts or document_ids["seminars"].get(key) != row["document_id"]:
+            raise HostFailure("reviewed seminar projection differs from its audited public record")
+        approved_posts.add(key)
+        for field, value in row["post"].items():
+            if field not in translated:
+                raise HostFailure("reviewed seminar plan changes an unsupported public field")
+            if field == "content_section_anchors" and isinstance(value, str):
+                value = json.loads(value)
+            name = translated[field]
+            if name in added_seminar and seminars[key][name] != value:
+                raise HostFailure("audited seminar scalar differs from the exact reviewed postimage")
+            seminars[key][name] = value
+            if field == "description":
+                seminars[key]["description_text"] = (re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", value)
+                    .replace("&nbsp;", " ")).strip() if isinstance(value, str) else value)
+    if approved_posts != set(seminars):
+        raise HostFailure("reviewed content plan does not cover every published seminar")
+    return {"version": 1, "documentIds": document_ids, "schedule": schedule, "seminars": seminars}
+
+
+def _audit_fresh_production_composition(config: dict[str, Any], state: RehearsalState,
+                                        operation_id: str, source_sha: str, candidate_db: Path,
+                                        cohort_admission: dict[str, Any]) -> dict[str, Any]:
+    """Independently audit the already executed, operation-bound stages before activation."""
+    source_root = _candidate_root(config, source_sha, operation_id)
+    receipt_path = Path(cohort_admission["receiptPath"])
+    operation_root = _cms_artifact_path(source_root, operation_id).parent
+    if receipt_path != operation_root / "receipt.json" or candidate_db != operation_root / "candidate.db":
+        raise HostFailure("fresh production migration files differ from their fixed operation paths")
+    receipt_bytes = _cohort_file(receipt_path)
+    if sha256_file_bytes(receipt_bytes) != cohort_admission["receiptSha256"]:
+        raise HostFailure("fresh production migration receipt changed before independent audit")
+    receipt = json.loads(receipt_bytes)
+    rows = state._operation_rows(operation_id)
+    controls = _effective_migration_reviews([
+        row["control"] for row in rows
+        if row.get("record") in ("migration-review-admitted", "migration-review-submitted")
+        and row.get("sourceSha") == source_sha
+    ], receipt_path)
+    provenance = json.loads(_cohort_file(source_root / ".ikpk-rehearsal-ci.json"))
+    proof = _verify_seminar_proof(source_root, provenance)
+    _verify_migration_receipt_admission(receipt_path, controls, proof)
+    review = receipt.get("compositionReview")
+    audit = receipt.get("compositionAudit")
+    if (not isinstance(review, dict) or not isinstance(audit, dict) or audit.get("passed") is not True
+            or audit.get("partial") is not False or audit.get("mode") == "inherited-cohort"
+            or not receipt.get("registryReview") or not isinstance(receipt.get("reviewedSteps"), dict)):
+        raise HostFailure("fresh production migration is missing independently admitted composition evidence")
+    review_path = Path(review["reviewFilePath"])
+    contract_raw = _cohort_file(review_path)
+    if sha256_file_bytes(contract_raw) != review.get("expectedFileSha256"):
+        raise HostFailure("fresh production composition contract bytes differ from review")
+    contract = json.loads(contract_raw)
+    roles = ("permissions", "schedule", "documents", "content")
+    try:
+        steps = {role: contract["steps"][role]["id"] for role in roles}
+        if len(set(steps.values())) != len(roles):
+            raise ValueError()
+        if set(receipt["reviewedSteps"]) != {steps[role] for role in roles if role != "permissions"}:
+            raise ValueError()
+        if any(contract[role]["expectedPlanDigest"] != receipt["reviewedSteps"][steps[role]]["expectedPlanDigest"]
+               for role in roles if role != "permissions"):
+            raise ValueError()
+        stages = {step: receipt["stageSnapshots"][step]["snapshotFingerprint"] for step in steps.values()}
+        paths = {"source": receipt["sourceDbPath"], **{
+            "schema" if role == "permissions" else role: receipt["stageSnapshots"][step]["path"]
+            for role, step in steps.items()
+        }}
+    except (KeyError, TypeError, ValueError) as error:
+        raise HostFailure("fresh production composition lacks its full reviewed stage chain") from error
+    if (contract.get("cmsArtifactSha256") != receipt["artifactSha256"]
+            or contract.get("ledger", {}).get("operationId") != operation_id
+            or contract.get("ledger", {}).get("sourceSnapshotSha256") != receipt["source"]["snapshotSha256"]
+            or receipt["stageSnapshots"][steps["content"]]["candidateFingerprint"] != sha256_file_bytes(
+                json.dumps([cohort_admission["binding"]["candidateDatabaseSha256"], None],
+                           separators=(",", ":")).encode())):
+        raise HostFailure("fresh production composition endpoint or source differs from receipt")
+    cms_uid = pwd.getpwnam(config["cmsUser"]).pw_uid
+    before = _capture_migration_pause(operation_root, operation_id, source_sha, include_bytes=True,
+                                      cms_uid=cms_uid, config=config)
+    backup_database = Path(config["backupRoot"]) / operation_id / "database.sqlite"
+    source_name = Path(paths["source"]).name
+    final_name = Path(paths["content"]).name
+    if before["bytes"].get(f"source/{source_name}-wal"):
+        raise HostFailure("production composition source has uncheckpointed WAL")
+    with tempfile.TemporaryDirectory(prefix="ikpk-composition-audit-") as temporary:
+        sealed = Path(temporary).resolve(strict=True)
+        copies = {
+            "source": before["bytes"][f"source/{source_name}"],
+            "final": before["bytes"][f"stage-snapshots/{final_name}"],
+            "candidate": before["bytes"]["candidate.db"],
+        }
+        for name, raw in copies.items():
+            (sealed / f"{name}.db").write_bytes(raw)
+        if (_sqlite_logical_digest(sealed / "source.db") != _sqlite_logical_digest(backup_database)
+                or _sqlite_logical_digest(sealed / "final.db") != _sqlite_logical_digest(sealed / "candidate.db")):
+            raise HostFailure("audited source or final stage differs logically from the backup or activation candidate")
+        readback = _audited_public_sqlite(sealed / "final.db")
+    _, _, dependencies = _validate_prepared_cms_candidate(config, source_root, operation_id, provenance,
+                                                          allow_runtime_updater=True)
+    artifact = _protected_cms_migration_artifact(config, source_root, operation_id, provenance, dependencies)
+    code = """
+import { readFileSync } from 'node:fs';
+import { pathToFileURL } from 'node:url';
+const [modulePath, reviewPath, digest, pathsJson] = process.argv.slice(1);
+const paths = JSON.parse(pathsJson);
+const { auditSeminarMigrationComposition } = await import(pathToFileURL(modulePath));
+const result = auditSeminarMigrationComposition({
+  paths, contract: JSON.parse(readFileSync(reviewPath, 'utf8')), expectedContractDigest: digest,
+});
+if (result.partial !== true || result.passed !== false || result.blockedOn !== 'registry-cohort-binding') {
+  throw new Error('the independent composition audit did not verify all reviewed stages');
+}
+"""
+    _run_as_cms(config, artifact, [
+        config.get("nodeBinary", "/usr/bin/node"), "--input-type=module", "-e", code,
+        str(artifact / "scripts/audit-seminar-migration-composition.mjs"), str(review_path),
+        review["expectedContractDigest"], json.dumps(paths, separators=(",", ":")),
+    ], timeout=300, read_only_path=[artifact, dependencies, operation_root])
+    after = _capture_migration_pause(operation_root, operation_id, source_sha, cms_uid=cms_uid, config=config)
+    if before["files"] != after["files"] or sha256_file_bytes(_cohort_file(review_path)) != review["expectedFileSha256"]:
+        raise HostFailure("fresh production composition evidence changed during independent audit")
+    try:
+        public_projection = _reviewed_public_projection(contract, readback)
+    except (KeyError, TypeError, ValueError) as error:
+        raise HostFailure("audited production composition lacks a complete public projection") from error
+    return {"compositionContractDigest": review["expectedContractDigest"], "stageSnapshots": stages,
+            "publicProjection": public_projection}
+
+
+def _production_uploads_digest(media: list[dict[str, Any]]) -> str:
+    uploads = {}
+    for item in media:
+        url = item.get("url")
+        if not isinstance(url, str) or not url.startswith(("/uploads/", "/media/")):
+            raise HostFailure("production media inventory contains an invalid URL")
+        if not url.startswith("/uploads/"):
+            continue
+        if (url in uploads or not SHA256_RE.fullmatch(str(item.get("sha256")))
+                or type(item.get("size")) is not int or item["size"] < 0):
+            raise HostFailure("production upload inventory contains an invalid or duplicate entry")
+        uploads[url] = (item["sha256"], item["size"])
+    return sha256_file_bytes(json.dumps(uploads, sort_keys=True, separators=(",", ":")).encode())
+
+
+def _production_target_projection(snapshot: dict[str, Any], manifest_bytes: bytes,
+                                  media_bytes: bytes) -> dict[str, str]:
+    manifest = json.loads(manifest_bytes)
+    proof = snapshot.get("captureProof") or {}
+    fingerprint = snapshot.get("fingerprint")
+    content = snapshot.get("content")
+    if (not isinstance(content, dict) or not re.fullmatch(r"sha256:[a-f0-9]{64}", str(fingerprint))
+            or proof.get("databaseDigest") != manifest.get("databaseSha256")
+            or proof.get("schemaDigest") != manifest.get("schemaDigest")
+            or proof.get("mediaManifestDigest") != manifest.get("mediaManifestSha256")
+            or proof.get("bundleDigest") != sha256_file_bytes(manifest_bytes)
+            or sha256_file_bytes(media_bytes) != manifest.get("mediaManifestSha256")
+            or any(not SHA256_RE.fullmatch(str(manifest.get(key))) for key in (
+                "databaseSha256", "schemaDigest", "mediaManifestSha256"))):
+        raise HostFailure("independent production target projection is not bound to its sealed capture")
+    media_document = json.loads(media_bytes)
+    media = media_document.get("media") if isinstance(media_document, dict) else media_document
+    if not isinstance(media, list):
+        raise HostFailure("independent production target capture has no upload inventory")
+    return {"fingerprint": fingerprint, "databaseSha256": manifest["databaseSha256"],
+            "schemaDigest": manifest["schemaDigest"], "mediaManifestSha256": manifest["mediaManifestSha256"],
+            "captureSha256": proof["bundleDigest"], "uploadsDigest": _production_uploads_digest(media),
+            "contentSha256": sha256_file_bytes(json.dumps(content, sort_keys=True, separators=(",", ":")).encode())}
+
+
 def _prepare_historical_cohort(config: dict[str, Any], state: RehearsalState, operation_id: str,
                                source_sha: str, cms_release: Path, candidate_db: Path,
                                cms_artifact: dict[str, Any], admission: dict[str, Any], *,
-                               trusted_uid: int = 0) -> dict[str, Any]:
+                               trusted_uid: int = 0, target_projection: Optional[dict[str, str]] = None) -> dict[str, Any]:
     """Seal independently approved bytes before the first live mutation.
 
     Admission is produced by the journal-bound review transport, never inferred
@@ -4879,6 +5311,15 @@ def _prepare_historical_cohort(config: dict[str, Any], state: RehearsalState, op
         raise HostFailure('live database changed after the fenced backup')
     if sha256_file(candidate_db) != binding['candidateDatabaseSha256']:
         raise HostFailure('candidate database differs from approved registry cohort')
+    fresh = None
+    if config.get("profile") == "production-paired" and receipt.get("inheritedCohort") is None:
+        fresh = _audit_fresh_production_composition(config, state, operation_id, source_sha, candidate_db, admission)
+        if sha256_file_bytes(_cohort_file(receipt_path)) != admission["receiptSha256"]:
+            raise HostFailure("fresh production receipt changed after independent audit")
+        if not isinstance(target_projection, dict) or target_projection.get("databaseSha256") != binding["candidateDatabaseSha256"]:
+            raise HostFailure("fresh production migration lacks independently verified target projection")
+        if target_projection.get("uploadsDigest") != _production_uploads_digest(backup["media"]):
+            raise HostFailure("fresh production migration changes the verified backup upload inventory")
     registry_bytes = _cohort_file(Path(admission['registryPath']))
     if sha256_file_bytes(registry_bytes) != binding['registrySha256'] or not isinstance(json.loads(registry_bytes), list):
         raise HostFailure('historical registry differs from independently approved bytes')
@@ -4903,6 +5344,15 @@ def _prepare_historical_cohort(config: dict[str, Any], state: RehearsalState, op
               'binding': binding, 'receiptSha256': admission['receiptSha256'],
               'cmsRelease': str(cms_release), 'previousManifest': previous,
               'sourceLiveSha256': backup['postCheckpointLiveSha256']}
+    if fresh is not None:
+        intent["freshComposition"] = {
+            **fresh,
+            "backupArchiveSha256": backup["archiveSha256"],
+            "backupDatabaseSha256": backup["databaseSha256"],
+            "backupMediaManifestSha256": backup["mediaManifestSha256"],
+            "targetProjection": target_projection,
+            "targetRegistryBase64": base64.b64encode(registry_bytes).decode("ascii"),
+        }
     state._append(intent)
     return intent
 
@@ -5298,7 +5748,8 @@ def _verify_candidate_capture(config: dict[str, Any], source_root: Path, capture
         if (sha256_file_bytes(_cohort_file(registry_copy)) != expected_registry
                 or _tree_sha256(bundle) != before[1] or sha256_file(bundle / 'database.sqlite') != expected_db):
             raise HostFailure('sealed candidate inputs differ from admitted originals')
-        manifest = json.loads(_cohort_file(bundle / 'manifest.json'))
+        manifest_bytes = _cohort_file(bundle / 'manifest.json')
+        manifest = json.loads(manifest_bytes)
         if (manifest.get('databaseSha256') != expected_db or manifest.get('sourceSha') != binding.get('sourceCommit')
                 or manifest.get('operationId') != binding.get('operationId')):
             raise HostFailure('candidate capture manifest differs from registry admission')
@@ -5322,7 +5773,10 @@ def _verify_candidate_capture(config: dict[str, Any], source_root: Path, capture
             raise HostFailure('candidate snapshot proof differs from approved database')
         yield {'database': before[0], 'databaseSha256': expected_db, 'captureTreeSha256': before[1],
                'registrySha256': expected_registry, 'proofArtifactSha256': proof['payloadSha256'],
-               'sealedDatabase': bundle / 'database.sqlite'}
+               'sealedDatabase': bundle / 'database.sqlite',
+               **({"targetProjection": _production_target_projection(
+                   snapshot, manifest_bytes, _cohort_file(bundle / "media-manifest.json"))}
+                  if config.get("profile") == "production-paired" else {})}
 
 
 def _build_static(config: dict[str, Any], source_root: Path, capture: Path,
@@ -5534,6 +5988,12 @@ def _import_offhost_backup(config: dict[str, Any], operation_id: str, payload: b
             raise HostFailure("off-host database bytes do not match the operation backup manifest")
         if sha256_file(temporary / "media-manifest.json") != manifest.get("mediaManifestSha256"):
             raise HostFailure("off-host media manifest bytes do not match the operation backup manifest")
+        registry = temporary / "historical-registry.json"
+        registry_digest = manifest.get("historicalRegistrySha256")
+        if registry_digest is not None or os.path.lexists(registry):
+            raw = _cohort_file(registry)
+            if sha256_file_bytes(raw) != registry_digest or not isinstance(json.loads(raw), list):
+                raise HostFailure("off-host historical registry differs from the operation backup manifest")
         media_doc = json.loads(media_bytes)
         media = media_doc.get("media") if isinstance(media_doc, dict) else media_doc
         if not isinstance(media, list):
@@ -6688,6 +7148,85 @@ def _static_main_recover(config: dict[str, Any], state: RehearsalState, operatio
     return {"operationId": operation_id, "phase": "recovered"}
 
 
+def _production_migration_static_proof(config: dict[str, Any], state: RehearsalState, operation_id: str,
+                                       source_sha: str, snapshot: Path, capture_manifest: Path,
+                                       static_digest: str) -> Optional[dict[str, Any]]:
+    if config.get("profile") != "production-paired":
+        return None
+    rows = state._operation_rows(operation_id)
+    intents = [row for row in rows if row.get("record") == "historical-cohort-intent"]
+    if not intents:
+        return None
+    selected = [row for row in rows if row.get("record") == "historical-cohort-selected"]
+    if len(intents) != 1 or len(selected) != 1:
+        raise HostFailure("production migration has no uniquely selected cohort")
+    intent = intents[0]
+    binding = intent["binding"]
+    manifest = selected[0]["manifest"]
+    if (intent.get("sourceSha") != source_sha or selected[0].get("sourceSha") != source_sha
+            or manifest.get("receiptSha256") != intent["receiptSha256"]
+            or any(manifest.get(key) != binding[key] for key in (
+                "operationId", "sourceCommit", "candidateDatabaseSha256", "registrySha256", "migrationPlanDigest"))):
+        raise HostFailure("production migration selected cohort differs from its journal binding")
+    source_root = _candidate_root(config, source_sha, operation_id)
+    receipt_path = _cms_artifact_path(source_root, operation_id).parent / "receipt.json"
+    try:
+        receipt_bytes = _cohort_file(receipt_path)
+        receipt = json.loads(receipt_bytes)
+    except (OSError, ValueError) as error:
+        raise HostFailure("selected production migration receipt is unreadable") from error
+    if (sha256_file_bytes(receipt_bytes) != intent["receiptSha256"]
+            or receipt.get("registryBinding") != binding
+            or receipt.get("operationId") != operation_id or receipt.get("sourceCommitSha") != source_sha):
+        raise HostFailure("selected production migration receipt differs from the journal")
+    fresh = intent.get("freshComposition")
+    if receipt.get("inheritedCohort") is not None:
+        if fresh is not None or receipt.get("compositionAudit", {}).get("mode") != "inherited-cohort":
+            raise HostFailure("inherited production migration cannot use fresh composition proof")
+        return None
+    if not isinstance(fresh, dict) or not isinstance(fresh.get("stageSnapshots"), dict):
+        raise HostFailure("fresh production migration has no independent composition proof")
+    if (fresh.get("compositionContractDigest") != receipt.get("compositionReview", {}).get("expectedContractDigest")
+            or len(fresh["stageSnapshots"]) != 4
+            or any(receipt.get("stageSnapshots", {}).get(step, {}).get("snapshotFingerprint") != digest
+                   for step, digest in fresh["stageSnapshots"].items())):
+        raise HostFailure("fresh production migration stages differ from independently audited evidence")
+    stages_root = receipt_path.parent / "stage-snapshots"
+    for step, accepted in fresh["stageSnapshots"].items():
+        if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", step):
+            raise HostFailure("fresh production stage has an invalid identity")
+        stage = stages_root / f"{operation_id}.{step}.db"
+        if (receipt["stageSnapshots"][step]["path"] != str(stage)
+                or any(os.path.lexists(str(stage) + suffix) for suffix in ("-wal", "-shm", "-journal"))):
+            raise HostFailure("fresh production stage path or SQLite sidecars changed")
+        raw = _cohort_file(stage, maximum=1024 * 1024 * 1024)
+        actual = sha256_file_bytes(json.dumps([sha256_file_bytes(raw), None], separators=(",", ":")).encode())
+        if actual != accepted:
+            raise HostFailure("fresh production stage bytes changed after independent audit")
+    backup = _backup_manifest(config, operation_id)
+    if (fresh.get("backupArchiveSha256") != backup["archiveSha256"]
+            or fresh.get("backupDatabaseSha256") != backup["databaseSha256"]
+            or fresh.get("backupMediaManifestSha256") != backup["mediaManifestSha256"]):
+        raise HostFailure("fresh production migration proof differs from the verified backup")
+    capture_bytes = _cohort_file(capture_manifest)
+    capture = json.loads(capture_bytes)
+    projected = json.loads(_cohort_file(snapshot, maximum=100 * 1024 * 1024))
+    target = fresh["targetProjection"]
+    if (capture.get("operationId") != operation_id or capture.get("sourceSha") != source_sha
+            or capture.get("profile") != "production-static"
+            or capture.get("databaseSha256") != binding["candidateDatabaseSha256"]
+            or target != _production_target_projection(projected, capture_bytes,
+                                                       _cohort_file(capture_manifest.with_name("media-manifest.json")))):
+        raise HostFailure("static snapshot differs from the independently checked target projection")
+    return {
+        "version": 1, "operationId": operation_id, "sourceSha": source_sha,
+        "runId": capture.get("runId"), "attempt": capture.get("attempt"),
+        "receiptSha256": intent["receiptSha256"], "captureSha256": sha256_file_bytes(capture_bytes),
+        "staticTreeSha256": static_digest, "registrySha256": binding["registrySha256"],
+        "migrationPlanDigest": binding["migrationPlanDigest"], "composition": fresh,
+    }
+
+
 def _static_publish(config: dict[str, Any], state: RehearsalState, args: argparse.Namespace) -> dict[str, Any]:
     op, sha = args.operation_id, args.source_sha
     phase = state.phase(op)
@@ -6771,6 +7310,9 @@ def _static_publish(config: dict[str, Any], state: RehearsalState, args: argpars
     provenance = json.loads((_candidate_root(config, sha, op) / ".ikpk-rehearsal-ci.json").read_text(encoding="utf-8"))
     if provenance.get("sourceSha") != sha or provenance.get("repository") != "pgorbachev/ikpk":
         raise HostFailure("static candidate provenance no longer matches the pinned source identity")
+    capture_root = source_root / ".staging193-rehearsal" / op / "capture"
+    _production_migration_static_proof(config, state, op, sha, source_root / "web/.snapshot/snapshot.json",
+                                       capture_root / "manifest.json", digest)
     _switch_static_pointer(config, Path(config["currentStatic"]), release,
                            Path(config["staticReleaseRoot"]))
     _wait_health(config["cmsHealthUrl"], 1200)
@@ -6835,6 +7377,8 @@ def _export_static(config: dict[str, Any], state: RehearsalState, operation_id: 
     for required in (snapshot, capture_manifest):
         if required.is_symlink() or not required.is_file():
             raise HostFailure("sealed source snapshot proof is unavailable for off-host acceptance")
+    proof = _production_migration_static_proof(config, state, operation_id, source_sha,
+                                              snapshot, capture_manifest, _tree_sha256(release))
     buffer = io.BytesIO()
     with tarfile.open(fileobj=buffer, mode="w:") as archive:
         for path in sorted(release.rglob("*")):
@@ -6846,6 +7390,11 @@ def _export_static(config: dict[str, Any], state: RehearsalState, operation_id: 
             archive.add(path, arcname="static/" + path.relative_to(release).as_posix(), recursive=False)
         archive.add(snapshot, arcname="snapshot/snapshot.json", recursive=False)
         archive.add(capture_manifest, arcname="snapshot/capture-manifest.json", recursive=False)
+        if proof is not None:
+            payload = json.dumps(proof, separators=(",", ":")).encode()
+            info = tarfile.TarInfo("snapshot/production-migration-proof.json")
+            info.size = len(payload)
+            archive.addfile(info, io.BytesIO(payload))
     return buffer.getvalue()
 
 

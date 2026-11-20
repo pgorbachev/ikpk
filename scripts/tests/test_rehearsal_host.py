@@ -2756,15 +2756,45 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
             with patch.object(operator, "production_paired_backup_fingerprint", return_value=fingerprint):
                 backup = operator.persist_offhost_backup(Path(temporary), "paired-op", "a" * 40, archive,
                     sha(archive), {"runId": 7, "attempt": 2},
-                    f"/opt/ikpk-cms/releases/{source_sha}-paired-op/.staging193-rehearsal/op/migration/cms-artifact")
+                    f"/opt/ikpk-cms/releases/{source_sha}-paired-op/.staging193-rehearsal/op/migration/cms-artifact",
+                    old_projector_sha="9fad640520a90518a89d2751701acd2faa10ab21")
             metadata = json.loads(backup.with_suffix(".json").read_text(encoding="utf-8"))
             self.assertEqual(metadata["oldCmsSourceSha"], source_sha)
+            self.assertEqual(metadata["oldProjectorSourceSha"], "9fad640520a90518a89d2751701acd2faa10ab21")
             self.assertRegex(metadata["oldCmsSchemaSha256"], r"^[a-f0-9]{64}$")
             self.assertEqual(metadata["sha256"], sha(archive))
             self.assertEqual(metadata["runId"], 7)
             self.assertEqual(metadata["attempt"], 2)
             self.assertEqual(metadata["snapshotFingerprint"], fingerprint)
             self.assertNotIn("provenanceLineage", metadata)
+
+    def test_completed_production_backup_preserves_original_projector_and_admission_on_resume(self):
+        cms_sha = "a" * 40
+        original_projector = "b" * 40
+        old_static_projector = "c" * 40
+        archive = backup_archive("resume-op")
+        archive_sha = sha(archive)
+        existing = {"operationId": "resume-op", "sourceSha": original_projector, "sha256": archive_sha,
+                    "runId": 7, "attempt": 2, "oldCmsSourceSha": cms_sha, "oldCmsSchemaSha256": "d" * 64,
+                    "snapshotFingerprint": "sha256:" + "e" * 64}
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            path = directory / "resume-op.tar"
+            path.write_bytes(archive)
+            metadata = path.with_suffix(".json")
+            metadata.write_text(json.dumps(existing, indent=2), encoding="utf-8")
+            metadata_bytes = metadata.read_bytes()
+            with patch.object(operator, "production_paired_schema_source", return_value=(cms_sha, "d" * 64)), \
+                 patch.object(operator, "production_paired_backup_fingerprint") as projector:
+                self.assertEqual(operator.persist_offhost_backup(
+                    directory, "resume-op", original_projector, archive, archive_sha, {"runId": 7, "attempt": 2},
+                    "/old", old_projector_sha=old_static_projector), path)
+                with self.assertRaisesRegex(operator.Refusal, "different or incomplete recovery evidence"):
+                    operator.persist_offhost_backup(
+                        directory, "resume-op", original_projector, archive, archive_sha,
+                        {"runId": 7, "attempt": 3}, "/old", old_projector_sha=old_static_projector)
+                projector.assert_not_called()
+            self.assertEqual(metadata.read_bytes(), metadata_bytes)
 
     def test_production_backup_is_durable_before_content_projection_can_fail(self):
         source_sha = "2fee597b5335f6c61fd61a622fa2a5f3f475a605"
@@ -2775,7 +2805,8 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
                 with self.assertRaisesRegex(operator.Refusal, "tsx failed"):
                     operator.persist_offhost_backup(Path(temporary), "durable-op", "a" * 40, archive,
                         sha(archive), {"runId": 7, "attempt": 2},
-                        f"/opt/ikpk-cms/releases/{source_sha}-old/cms-artifact")
+                        f"/opt/ikpk-cms/releases/{source_sha}-old/cms-artifact",
+                        old_projector_sha=source_sha)
             backup = Path(temporary) / "durable-op.tar"
             metadata = json.loads(backup.with_suffix(".json").read_text(encoding="utf-8"))
             self.assertEqual(backup.read_bytes(), archive)
@@ -2785,7 +2816,9 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
     def test_production_paired_direct_cms_update_checks_old_schema_before_source_admission(self):
         source_sha = "c" * 40
         status = json.dumps({"phase": "idle", "oldPair": {"cmsPath":
-            f"/opt/ikpk-cms/releases/{source_sha}-old-release/cms-artifact"}}).encode()
+            f"/opt/ikpk-cms/releases/{source_sha}-old-release/cms-artifact",
+            "staticPath": f"/var/www/ikpk/releases/{source_sha}-old-release", "staticProjector": {"sourceSha": source_sha, "snapshotId": "snap:" + "c" * 64, "releaseMetadataSha256": "e" * 64},
+            "historicalRegistryManifest": None}}).encode()
         args = Namespace(profile="production-paired", command="cms-update", host=None,
                          operation_id="shallow-preflight")
         def ssh(arguments, **_kwargs):
@@ -2872,7 +2905,9 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
         archive = backup_archive()
         fingerprint = "sha256:" + "d" * 64
         status = json.dumps({"phase": "idle", "oldPair": {"cmsPath":
-            f"/opt/ikpk-cms/releases/{old_source}-old-release/cms-artifact"}}).encode()
+            f"/opt/ikpk-cms/releases/{old_source}-old-release/cms-artifact",
+            "staticPath": f"/var/www/ikpk/releases/{old_source}-old-release", "staticProjector": {"sourceSha": old_source, "snapshotId": "snap:" + "c" * 64, "releaseMetadataSha256": "e" * 64},
+            "historicalRegistryManifest": None}}).encode()
         calls = []
         def ssh(arguments, **_kwargs):
             calls.append(arguments)
@@ -2900,6 +2935,8 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
                  patch.object(operator, "make_archive", return_value=(b"source archive", "e" * 64)), \
                  patch.object(operator, "production_paired_schema_source", return_value=(old_source, "f" * 64)), \
                  patch.object(operator, "production_paired_backup_fingerprint", return_value=fingerprint), \
+                 patch.object(operator, "production_projector_contract", return_value="a" * 64), \
+                 patch.object(operator, "_prepare_historical_projector"), \
                  patch.object(operator, "capture", side_effect=AssertionError("must not read shared stand ledger")) as capture:
                 operator.invoke(args)
             self.assertFalse(capture.called)
@@ -2919,17 +2956,23 @@ class RehearsalHostFilesystemTests(unittest.TestCase):
             if arguments[0] == "status": return json.dumps({"sourceSha": source_sha, "phase": "cms-activated"}).encode()
             if arguments[0] == "static-publish": return json.dumps({"phase": "browser-check-required",
                 "staticTreeSha256": "a" * 64}).encode()
-            if arguments[0] == "export-static": return b"static candidate"
+            if arguments[0] == "export-static":
+                candidate = io.BytesIO()
+                with tarfile.open(fileobj=candidate, mode="w:"):
+                    pass
+                return candidate.getvalue()
             raise AssertionError(arguments)
         with tempfile.TemporaryDirectory(prefix="ikpk-production-stale-snapshot-") as temporary:
             backup_dir = Path(temporary); backup_dir.mkdir(exist_ok=True)
-            (backup_dir / "production-op.json").write_text(json.dumps({"sourceSha": source_sha,
-                "snapshotFingerprint": fingerprint}), encoding="utf-8")
+            (backup_dir / "production-op.json").write_text(json.dumps({
+                "operationId": "production-op", "sourceSha": source_sha, "runId": 7, "attempt": 2,
+                "oldCmsSourceSha": source_sha, "snapshotFingerprint": fingerprint}), encoding="utf-8")
             args = Namespace(profile="production-paired", command="static-publish", host=None,
                              operation_id="production-op", source_sha=source_sha, backup_dir=temporary)
             with patch.object(operator, "ssh_remote", side_effect=ssh), \
                  patch.object(operator, "validate_production_paired_admission", return_value={"runId": 7, "attempt": 2}), \
-                 patch.object(operator, "browser_check", return_value="sha256:" + "e" * 64):
+                 patch.object(operator, "browser_check", return_value="sha256:" + "e" * 64), \
+                 patch.object(operator, "production_projector_contract", return_value="f" * 64):
                 with self.assertRaisesRegex(operator.Refusal, "differs from the fingerprint captured in the verified backup"):
                     operator.invoke(args)
             self.assertEqual([call[0] for call in calls], ["status", "static-publish", "export-static"])

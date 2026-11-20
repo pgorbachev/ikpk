@@ -1,3 +1,4 @@
+import hashlib
 import json
 import os
 import shutil
@@ -367,6 +368,31 @@ class ReleaseCleanupTests(unittest.TestCase):
         backup_database.write_bytes(backup_database.read_bytes() + b'corruption')
         self.assertFalse(host._verified_cleanup_backup(backup, 'valid-op', str(database.resolve())))
         self.assertFalse(host._verified_cleanup_backup(backup, 'valid-op', '/different/database.sqlite'))
+
+    def test_production_backup_cleanup_checks_the_bound_registry(self):
+        directory = self.state_dir.resolve() / 'registry'
+        directory.mkdir()
+        registry = b'[]'
+        digest = hashlib.sha256(registry).hexdigest()
+        (directory / f'registry-{digest}.json').write_bytes(registry)
+        backup_root = self.state_dir.resolve() / 'backups'
+        backup_root.mkdir()
+        database = self.state_dir.resolve() / 'cms.sqlite'
+        with sqlite3.connect(database) as connection:
+            connection.execute('CREATE TABLE proof (value TEXT)')
+        media_root = self.state_dir / 'uploads'
+        media_root.mkdir()
+        with patch.object(host, '_assert_no_database_handles'), \
+             patch.object(host, '_current_historical_manifest', return_value={'registrySha256': digest}), \
+             patch.object(host, 'HISTORICAL_REGISTRY_DIRECTORY', directory):
+            host._backup({'profile': 'production-paired', 'cmsDatabase': str(database), 'backupRoot': str(backup_root),
+                          'mediaRoots': [{'path': str(media_root), 'prefix': '/uploads/'}]}, 'registry-op')
+        backup = backup_root / 'registry-op'
+        self.assertTrue(host._verified_cleanup_backup(backup, 'registry-op', str(database)))
+        (backup / 'historical-registry.json').write_bytes(b'[1]')
+        self.assertFalse(host._verified_cleanup_backup(backup, 'registry-op', str(database)))
+        (backup / 'historical-registry.json').unlink()
+        self.assertFalse(host._verified_cleanup_backup(backup, 'registry-op', str(database)))
 
     def test_cleanup_marker_survives_backup_stage_failure_after_site_cleanup_and_retry(self):
         cms_release_root = self.state_dir / 'cms-releases'
