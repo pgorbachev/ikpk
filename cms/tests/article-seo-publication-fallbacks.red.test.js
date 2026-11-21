@@ -9,16 +9,60 @@ const completeArticle = {
   image: { id: 1 }, published_date: '2026-11-17T00:00:00.000Z', categories: [{ id: 1 }],
 };
 
-function lifecycle(article) {
+function lifecycle(article, action = 'publish') {
   let middleware;
+  let activeTransaction = null;
+  let activeTransactionHooks = null;
   const strapi = {
     requestContext: { get: () => ({ state: { auth: { strategy: { name: 'admin' }, credentials: { type: 'full-access' } } } }) },
-    documents: () => ({ findOne: async () => article }),
-    db: { query: () => ({ findMany: async () => [] }) },
+    documents: () => ({
+      findOne: async () => article,
+      update: async ({ data }) => Object.assign(article, data),
+    }),
+    db: {
+      config: { connection: { client: 'sqlite' } },
+      inTransaction() { return activeTransaction !== null; },
+      async transaction(callback) {
+        if (!callback) return { get: () => activeTransaction };
+        if (activeTransaction && activeTransactionHooks) {
+          return callback({
+            trx: activeTransaction,
+            onCommit(fn) { activeTransactionHooks.commit.push(fn); },
+            onRollback(fn) { activeTransactionHooks.rollback.push(fn); },
+          });
+        }
+        const trx = { async raw() {} };
+        activeTransaction = trx;
+        const hooks = { commit: [], rollback: [] };
+        activeTransactionHooks = hooks;
+        try {
+          const result = await callback({
+            trx,
+            onCommit(fn) { hooks.commit.push(fn); },
+            onRollback(fn) { hooks.rollback.push(fn); },
+          });
+          hooks.commit.forEach((fn) => fn());
+          return result;
+        } catch (error) {
+          hooks.rollback.forEach((fn) => fn());
+          throw error;
+        } finally {
+          activeTransaction = null;
+          activeTransactionHooks = null;
+        }
+      },
+      query: () => ({ findMany: async () => [] }),
+    },
   };
   strapi.documents.use = (handler) => { middleware = handler; };
   registerPublicationLifecycle(strapi);
-  return (params) => middleware({ uid: 'api::article.article', action: 'publish', params: { documentId: 'article-seo-red', ...params } }, async () => 'published');
+  return (params) => {
+    const contextParams = { documentId: 'article-seo-red', ...params };
+    return middleware({ uid: 'api::article.article', action, params: contextParams }, async () => {
+      if (action === 'update') Object.assign(article, contextParams.data ?? {});
+      return 'published';
+    });
+  };
 }
 
 test('CMS and scripts validators accept absent or blank Article SEO only, preserving other required fields', () => {
@@ -54,12 +98,13 @@ test('CMS and scripts validators accept absent or blank Article SEO only, preser
 test('CMS lifecycle publishes nested SEO omission or partial values without deriving or persisting defaults', async () => {
   const outcomes = [];
   for (const seo of [undefined, null, {}, { seo_title: 'Редакторский заголовок' }, { seo_description: 'Редакторское описание' }]) {
+    const expectedSeo = structuredClone(seo);
     const article = { ...completeArticle, ...(seo === undefined ? {} : { seo }) };
     let result;
     try { result = await lifecycle(article)({}); }
     catch (error) { outcomes.push(`${JSON.stringify(seo)}: ${error.message}`); continue; }
     assert.equal(result, 'published');
-    assert.deepEqual(article.seo, seo, 'publication must not persist generated defaults into CMS');
+    assert.deepEqual(article.seo, expectedSeo, 'publication must not persist generated defaults into CMS');
   }
   assert.deepEqual(outcomes, [], `nested optional SEO rejected: ${outcomes.join('; ')}`);
 });
@@ -74,11 +119,12 @@ test('publication validates the persisted nested SEO component after a partial u
     ...completeArticle,
     seo: { seo_title: 'Старый заголовок', seo_description: 'Сохраняемое описание' },
   };
-  const result = await lifecycle(persisted)({
+  const result = await lifecycle(persisted, 'update')({
+    status: 'published',
     data: { seo: { seo_title: 'Новый заголовок' } },
   });
   assert.equal(result, 'published');
   assert.deepEqual(persisted.seo, {
-    seo_title: 'Старый заголовок', seo_description: 'Сохраняемое описание',
-  }, 'lifecycle must not replace the persisted component with a partial request payload');
+    seo_title: 'Новый заголовок', seo_description: 'Сохраняемое описание',
+  }, 'a partial update changes only the supplied SEO field and retains the persisted description');
 });
