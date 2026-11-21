@@ -1207,6 +1207,101 @@ def production_projector_contract(projector_sha: str, schema_sha: str) -> str:
     return hashlib.sha256(projector_tree + b"\0" + schema_tree).hexdigest()
 
 
+REVIEWED_ORDINARY_PROJECTOR_PAIRS = {
+    (
+        "62744c31283e2c9b31e84512d3b8cfc793e8d5f7",
+        "3928819713b00cfbf982186d67ed2e29f47b913c9a9ba019ee0106b7255904b9",
+        "cf536b99bc5815a8b5a76f8315f07c60200c0d1d5728960e9a9593b1c113bcf0",
+    ),
+}
+
+
+def validate_ordinary_projector_equivalence(original: dict, candidate: dict, *,
+                                             old_projector_sha: str, candidate_projector_sha: str,
+                                             old_projector_contract_sha256: str,
+                                             candidate_projector_contract_sha256: str,
+                                             old_schema_sha256: str, candidate_schema_sha256: str) -> None:
+    """Permit only a reviewed projector-contract pair with identical full snapshot semantics."""
+    pair = (old_projector_sha, old_projector_contract_sha256, candidate_projector_contract_sha256)
+    if (not SHA.fullmatch(candidate_projector_sha) or pair not in REVIEWED_ORDINARY_PROJECTOR_PAIRS):
+        raise Refusal("ordinary production projector pair has no reviewed equivalence binding")
+    if (not re.fullmatch(r"[a-f0-9]{64}", old_schema_sha256)
+            or not re.fullmatch(r"[a-f0-9]{64}", candidate_schema_sha256)
+            or old_schema_sha256 != candidate_schema_sha256):
+        raise Refusal("ordinary production projector schema contract changed")
+
+    def semantic_snapshot(snapshot: dict) -> str:
+        if not isinstance(snapshot, dict):
+            raise Refusal("ordinary production projection is not an object")
+        if (type(snapshot.get("contractVersion")) is not int or snapshot["contractVersion"] not in (1, 2)
+                or not re.fullmatch(r"sha256:[a-f0-9]{64}", str(snapshot.get("fingerprint", "")))
+                or not isinstance(snapshot.get("content"), dict)
+                or not isinstance(snapshot["content"].get("types"), dict)
+                or not isinstance(snapshot["content"].get("media"), list)):
+            raise Refusal("ordinary production projection has an invalid content contract")
+        if (any(not isinstance(records, list) or any(not isinstance(record, dict) for record in records)
+                for records in snapshot["content"]["types"].values())
+                or any(not isinstance(media, dict) for media in snapshot["content"]["media"])
+                or ("historicalExceptions" in snapshot["content"]
+                    and (not isinstance(snapshot["content"]["historicalExceptions"], list)
+                         or any(not isinstance(item, dict) for item in snapshot["content"]["historicalExceptions"])) )):
+            raise Refusal("ordinary production projection has an invalid public record shape")
+        proof = snapshot.get("captureProof")
+        if (not isinstance(proof, dict)
+                or not re.fullmatch(r"[a-f0-9]{64}", str(proof.get("schemaDigest", "")))
+                or type(proof.get("version")) is not int or proof.get("version") != 1
+                or proof.get("method") != "quiesced-sqlite-backup"
+                or proof.get("sourceSha") != candidate_projector_sha
+                or type(proof.get("runId")) is not int or type(proof.get("attempt")) is not int):
+            raise Refusal("ordinary production projection is not bound to the verified schema and release")
+        if snapshot.get("sourcePolicy") != "production-static" or snapshot.get("sourceAge") != "source-bound":
+            raise Refusal("ordinary production projection has an unsupported source policy")
+        if not isinstance(snapshot.get("referenceDate"), str):
+            raise Refusal("ordinary production projection has no reference date")
+        stable = copy.deepcopy(snapshot)
+        stable["captureProof"].pop("databaseDigest", None)
+        stable["captureProof"].pop("mediaManifestDigest", None)
+        stable["captureProof"].pop("bundleDigest", None)
+        origin = stable.get("origin")
+        if isinstance(origin, dict):
+            origin.pop("capturedAt", None)
+        try:
+            return json.dumps(stable, sort_keys=True, separators=(",", ":"),
+                              ensure_ascii=False, allow_nan=False)
+        except (TypeError, ValueError) as error:
+            raise Refusal("ordinary production projection contains unsupported JSON values") from error
+
+    if semantic_snapshot(original) != semantic_snapshot(candidate):
+        raise Refusal("ordinary production projector public projection differs")
+
+
+def _strict_archive_json(archive: tarfile.TarFile, name: str) -> tuple[dict, bytes]:
+    entries = [member for member in archive.getmembers() if member.name == name]
+    if len(entries) != 1 or not entries[0].isfile() or entries[0].size > 16 * 1024 * 1024:
+        raise Refusal(f"candidate archive has no unique regular {name}")
+    stream = archive.extractfile(entries[0])
+    if stream is None:
+        raise Refusal(f"candidate archive member {name} is unreadable")
+
+    def reject_duplicate_keys(pairs):
+        result = {}
+        for key, value in pairs:
+            if key in result:
+                raise ValueError("duplicate JSON key")
+            result[key] = value
+        return result
+
+    try:
+        raw = stream.read()
+        value = json.loads(raw, object_pairs_hook=reject_duplicate_keys,
+                           parse_constant=lambda item: (_ for _ in ()).throw(ValueError(item)))
+    except (OSError, UnicodeDecodeError, ValueError) as error:
+        raise Refusal(f"candidate archive member {name} is invalid JSON") from error
+    if not isinstance(value, dict):
+        raise Refusal(f"candidate archive member {name} is not an object")
+    return value, raw
+
+
 def _prepare_historical_projector(projector_sha: str, destination: Path) -> dict[str, str]:
     """Materialize only from the exact Git revision and install its locked runtime offline."""
     if not SHA.fullmatch(projector_sha):
@@ -1250,9 +1345,14 @@ def _prepare_historical_projector(projector_sha: str, destination: Path) -> dict
         "CI": "1", "npm_config_cache": str(Path.home() / ".npm"),
         "npm_config_userconfig": str(user_config), "npm_config_globalconfig": str(global_config),
     }
-    result = subprocess.run(["npm", "ci", "--offline", "--ignore-scripts", "--no-audit", "--no-fund"],
-                            cwd=web, env=install_env, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                            timeout=300, check=False)
+    try:
+        result = subprocess.run(["npm", "ci", "--offline", "--ignore-scripts", "--no-audit", "--no-fund"],
+                                cwd=web, env=install_env, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                timeout=300, check=False)
+    except subprocess.TimeoutExpired as error:
+        raise Refusal("historical projector locked dependency installation timed out after 300 seconds") from error
+    except OSError as error:
+        raise Refusal("historical projector locked dependency installation could not start") from error
     if result.returncode:
         raise Refusal("historical projector requires the exact locked packages in the local offline npm cache")
     if not (web / "node_modules/.bin/tsx").is_file():
@@ -1517,8 +1617,11 @@ def validate_migrated_public_projection(original: dict, target: dict, reviewed: 
 def validate_production_content_acceptance(candidate_archive: bytes, static_digest: str, snapshot_fingerprint: str,
                                            backup_path: Path, backup: dict, operation_id: str, source_sha: str,
                                            admitted_run: dict) -> None:
-    if (backup.get("operationId") != operation_id or backup.get("sourceSha") != source_sha
-            or any(backup.get(key) != admitted_run.get(key) for key in ("runId", "attempt"))):
+    if (not isinstance(admitted_run, dict)
+            or any(type(admitted_run.get(key)) is not int or admitted_run[key] < 1 for key in ("runId", "attempt"))
+            or backup.get("operationId") != operation_id or backup.get("sourceSha") != source_sha
+            or any(type(backup.get(key)) is not int or backup[key] != admitted_run[key]
+                   for key in ("runId", "attempt"))):
         raise Refusal("production backup sidecar belongs to a different operation or exact release admission")
     try:
         with tarfile.open(fileobj=io.BytesIO(candidate_archive), mode="r:") as archive:
@@ -1526,8 +1629,12 @@ def validate_production_content_acceptance(candidate_archive: bytes, static_dige
             if len(names) > 1 or (names and (not names[0].isfile() or names[0].size > 16 * 1024 * 1024)):
                 raise Refusal("unexpected production migration proof archive member")
             proof = json.load(archive.extractfile(names[0])) if names else None
-            capture_bytes = archive.extractfile("snapshot/capture-manifest.json").read() if names else None
-            projected = json.load(archive.extractfile("snapshot/snapshot.json")) if names else None
+            if names:
+                capture_bytes = archive.extractfile("snapshot/capture-manifest.json").read()
+                projected = json.load(archive.extractfile("snapshot/snapshot.json"))
+            else:
+                candidate_manifest, capture_bytes = _strict_archive_json(archive, "snapshot/capture-manifest.json")
+                projected, _ = _strict_archive_json(archive, "snapshot/snapshot.json")
         projector_sha = backup.get("oldProjectorSourceSha", backup.get("sourceSha"))
         schema_sha = backup.get("oldCmsSourceSha")
         if not isinstance(projector_sha, str) or not isinstance(schema_sha, str):
@@ -1536,9 +1643,76 @@ def validate_production_content_acceptance(candidate_archive: bytes, static_dige
         if backup.get("oldProjectorContractSha256", old_contract) != old_contract:
             raise Refusal("production original projector contract does not match its verified backup")
         if proof is None:
-            if old_contract != production_projector_contract(source_sha, source_sha):
-                raise Refusal("production projector semantics changed without an audited proof of equivalence")
-            if snapshot_fingerprint != backup.get("snapshotFingerprint"):
+            candidate_contract = production_projector_contract(source_sha, source_sha)
+            if old_contract != candidate_contract:
+                if (backup.get("oldProjectorContractSha256") is None
+                        or backup.get("oldProjectorNodeVersion") != production_projector_node_version()):
+                    raise Refusal("ordinary production projector equivalence lacks exact original runtime evidence")
+                if backup_path.is_symlink() or not backup_path.is_file():
+                    raise Refusal("ordinary production original backup path is unsafe")
+                backup_bytes = backup_path.read_bytes()
+                verify_backup_tar(backup_bytes, backup["sha256"])
+                with tempfile.TemporaryDirectory(prefix="ikpk-ordinary-projector-equivalence-") as directory:
+                    original_path = Path(directory) / "original-snapshot.json"
+                    candidate_schema_root = Path(directory) / "candidate-schema"
+                    original_fingerprint = production_paired_backup_fingerprint(
+                        backup_bytes, source_sha, operation_id, backup["runId"], backup["attempt"],
+                        schema_sha, backup["oldCmsSchemaSha256"], projector_sha=projector_sha,
+                        projection_output=original_path)
+                    if original_fingerprint != backup.get("snapshotFingerprint"):
+                        raise Refusal("production historical public projection differs from the verified backup")
+                    original = json.loads(original_path.read_bytes())
+                    actual_candidate_schema = production_paired_schema_from_commit(source_sha, candidate_schema_root)
+                    original_proof = original.get("captureProof") if isinstance(original, dict) else None
+                    if (not isinstance(original_proof, dict)
+                            or type(original_proof.get("version")) is not int or original_proof.get("version") != 1
+                            or original_proof.get("method") != "quiesced-sqlite-backup"
+                            or original_proof.get("captureId") != operation_id
+                            or original_proof.get("sourceSha") != source_sha
+                            or type(original_proof.get("runId")) is not int
+                            or original_proof.get("runId") != admitted_run["runId"]
+                            or type(original_proof.get("attempt")) is not int
+                            or original_proof.get("attempt") != admitted_run["attempt"]
+                            or not re.fullmatch(r"[a-f0-9]{64}", str(original_proof.get("schemaDigest", "")))):
+                        raise Refusal("original production projection is not bound to the verified backup and release")
+                capture = candidate_manifest
+                if (capture.get("operationId") != operation_id or capture.get("sourceSha") != source_sha
+                        or capture.get("profile") != "production-static"
+                        or any(type(capture.get(key)) is not int or capture.get(key) != admitted_run[key]
+                               for key in ("runId", "attempt"))
+                        or not re.fullmatch(r"[a-f0-9]{64}", str(capture.get("databaseSha256", "")))
+                        or not re.fullmatch(r"[a-f0-9]{64}", str(capture.get("mediaManifestSha256", "")))
+                        or actual_candidate_schema != backup.get("oldCmsSchemaSha256")):
+                    raise Refusal("ordinary production candidate capture is not bound to the exact release and schema")
+                candidate_proof = projected.get("captureProof") if isinstance(projected, dict) else None
+                if (not isinstance(candidate_proof, dict)
+                        or type(candidate_proof.get("version")) is not int
+                        or candidate_proof.get("version") != 1
+                        or candidate_proof.get("method") != "quiesced-sqlite-backup"
+                        or candidate_proof.get("captureId") != operation_id
+                        or candidate_proof.get("databaseDigest") != capture["databaseSha256"]
+                        or candidate_proof.get("mediaManifestDigest") != capture["mediaManifestSha256"]
+                        or candidate_proof.get("schemaDigest") != capture.get("schemaDigest")
+                        or candidate_proof.get("bundleDigest") != hashlib.sha256(capture_bytes).hexdigest()
+                        or candidate_proof.get("sourceSha") != source_sha
+                        or type(candidate_proof.get("runId")) is not int
+                        or candidate_proof.get("runId") != admitted_run["runId"]
+                        or type(candidate_proof.get("attempt")) is not int
+                        or candidate_proof.get("attempt") != admitted_run["attempt"]):
+                    raise Refusal("ordinary production candidate projection differs from its browser-checked capture")
+                validate_ordinary_projector_equivalence(
+                    original, projected,
+                    old_projector_sha=projector_sha,
+                    candidate_projector_sha=source_sha,
+                    old_projector_contract_sha256=old_contract,
+                    candidate_projector_contract_sha256=candidate_contract,
+                    old_schema_sha256=backup["oldCmsSchemaSha256"],
+                    candidate_schema_sha256=actual_candidate_schema,
+                )
+                if (original_fingerprint != snapshot_fingerprint
+                        or projected.get("fingerprint") != snapshot_fingerprint):
+                    raise Refusal("ordinary production browser fingerprint differs from the reviewed projections")
+            elif snapshot_fingerprint != backup.get("snapshotFingerprint"):
                 raise Refusal("built production snapshot differs from the fingerprint captured in the verified backup")
             return
         capture = json.loads(capture_bytes)

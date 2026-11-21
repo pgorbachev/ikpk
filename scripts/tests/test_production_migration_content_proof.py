@@ -8,6 +8,7 @@ import json
 import os
 import shutil
 import sqlite3
+import subprocess
 import tarfile
 import tempfile
 import unittest
@@ -377,6 +378,120 @@ class ProductionPublicationProofTests(unittest.TestCase):
         self.sidecar.pop("oldProjectorContractSha256")
         self.assert_refused()
 
+    def ordinary_candidate_archive(self, *, content=None, schema_digest="a" * 64):
+        target_sha = "7b4548d234710e0f0daacc2c8a46787b1e822e2f"
+        manifest = {
+            "operationId": OPERATION, "sourceSha": target_sha,
+            "profile": "production-static", "databaseSha256": sha(self.final_db.read_bytes()),
+            "schemaDigest": schema_digest,
+            "mediaManifestSha256": json.loads((self.capture_backup / "manifest.json").read_bytes())["mediaManifestSha256"],
+            "runId": ADMISSION["runId"], "attempt": ADMISSION["attempt"],
+        }
+        manifest_bytes = json.dumps(manifest, sort_keys=True, separators=(",", ":")).encode()
+        snapshot = {
+            "contractVersion": 2, "fingerprint": snapshot_fingerprint(self.original),
+            "referenceDate": "2026-11-21", "snapshotId": "snap:test",
+            "sourcePolicy": "production-static", "sourceAge": "source-bound",
+            "origin": {"kind": "server-db", "sourceId": "initial-prod-server-db", "capturedAt": "2026-11-21T10:00:00Z"},
+            "skippedUploads": [], "content": content or self.public_content(self.original),
+            "captureProof": {
+                "version": 1, "method": "quiesced-sqlite-backup", "targetHost": "89.111.184.196",
+                "siteUrl": "https://ikpk.su", "sourceSha": target_sha, "runId": ADMISSION["runId"],
+                "attempt": ADMISSION["attempt"], "captureId": OPERATION,
+                "schemaDigest": schema_digest, "databaseDigest": manifest["databaseSha256"],
+                "mediaManifestDigest": manifest["mediaManifestSha256"],
+                "bundleDigest": sha(manifest_bytes),
+            },
+        }
+        output = io.BytesIO()
+        with tarfile.open(fileobj=output, mode="w:") as archive:
+            for name, value in (("snapshot/capture-manifest.json", manifest),
+                                ("snapshot/snapshot.json", snapshot)):
+                payload = manifest_bytes if name == "snapshot/capture-manifest.json" else json.dumps(
+                    value, sort_keys=True, separators=(",", ":")).encode()
+                member = tarfile.TarInfo(name)
+                member.size = len(payload)
+                archive.addfile(member, io.BytesIO(payload))
+        return output.getvalue()
+
+    def validate_ordinary_candidate(self, *, content=None, schema_digest="a" * 64):
+        old_sha = "62744c31283e2c9b31e84512d3b8cfc793e8d5f7"
+        target_sha = "7b4548d234710e0f0daacc2c8a46787b1e822e2f"
+        old_contract = "3928819713b00cfbf982186d67ed2e29f47b913c9a9ba019ee0106b7255904b9"
+        target_contract = "cf536b99bc5815a8b5a76f8315f07c60200c0d1d5728960e9a9593b1c113bcf0"
+        backup = {
+            **self.sidecar, "sourceSha": target_sha, "oldCmsSourceSha": old_sha,
+            "oldCmsSchemaSha256": "a" * 64, "oldProjectorSourceSha": old_sha,
+            "oldProjectorContractSha256": old_contract, "oldProjectorNodeVersion": "v22-test",
+        }
+
+        def contract(projector_sha, schema_sha):
+            if (projector_sha, schema_sha) == (old_sha, old_sha):
+                return old_contract
+            if (projector_sha, schema_sha) == (target_sha, target_sha):
+                return target_contract
+            raise AssertionError(f"unexpected projector contract request: {projector_sha} {schema_sha}")
+
+        def old_projection(*_args, projection_output, **_kwargs):
+            snapshot = {
+                "contractVersion": 2, "fingerprint": snapshot_fingerprint(self.original),
+                "referenceDate": "2026-11-21", "snapshotId": "snap:test",
+                "sourcePolicy": "production-static", "sourceAge": "source-bound",
+                "origin": {"kind": "server-db", "sourceId": "initial-prod-server-db", "capturedAt": "2026-11-21T09:00:00Z"},
+                "skippedUploads": [], "content": self.public_content(self.original),
+                "captureProof": {
+                    "version": 1, "method": "quiesced-sqlite-backup", "targetHost": "89.111.184.196",
+                    "siteUrl": "https://ikpk.su", "sourceSha": target_sha, "runId": ADMISSION["runId"],
+                    "attempt": ADMISSION["attempt"], "captureId": OPERATION, "schemaDigest": "a" * 64,
+                    "databaseDigest": self.source_digest, "mediaManifestDigest": "e" * 64,
+                    "bundleDigest": "f" * 64,
+                },
+            }
+            self.write_json(projection_output, snapshot)
+            return snapshot["fingerprint"]
+
+        with patch.object(operator, "production_projector_contract", side_effect=contract), \
+             patch.object(operator, "production_paired_schema_from_commit", return_value="a" * 64), \
+             patch.object(operator, "production_projector_node_version", return_value="v22-test"), \
+             patch.object(operator, "production_paired_backup_fingerprint", side_effect=old_projection):
+            operator.validate_production_content_acceptance(
+                self.ordinary_candidate_archive(content=content, schema_digest=schema_digest), "d" * 64,
+                snapshot_fingerprint(self.original), self.backup, backup, OPERATION, target_sha, ADMISSION,
+            )
+
+    def test_ordinary_release_accepts_reviewed_changed_projector_with_identical_projection(self):
+        self.validate_ordinary_candidate()
+
+    def test_ordinary_release_refuses_changed_content_with_reviewed_projector_pair(self):
+        candidate_content = self.public_content(self.original)
+        candidate_content["types"]["schedule_entries"][0]["newUnknownField"] = "changed"
+        with self.assertRaises(operator.Refusal):
+            self.validate_ordinary_candidate(content=candidate_content)
+
+    def test_ordinary_release_refuses_changed_schema_with_identical_projection(self):
+        with self.assertRaises(operator.Refusal):
+            self.validate_ordinary_candidate(schema_digest="c" * 64)
+
+    def test_ordinary_release_refuses_backup_bytes_that_do_not_match_sidecar(self):
+        old_sha = "62744c31283e2c9b31e84512d3b8cfc793e8d5f7"
+        backup = {
+            **self.sidecar, "sourceSha": "7b4548d234710e0f0daacc2c8a46787b1e822e2f",
+            "oldCmsSourceSha": old_sha, "oldCmsSchemaSha256": "a" * 64,
+            "oldProjectorSourceSha": old_sha,
+            "oldProjectorContractSha256": "0" * 64,
+            "sha256": "f" * 64,
+        }
+        def contract(projector_sha, _schema_sha):
+            return "0" * 64 if projector_sha == old_sha else "1" * 64
+
+        with patch.object(operator, "production_projector_contract", side_effect=contract), \
+             patch.object(operator, "production_projector_node_version", return_value="v22-test"), \
+             self.assertRaisesRegex(operator.Refusal, "backup bytes do not match"):
+            operator.validate_production_content_acceptance(
+                self.ordinary_candidate_archive(), "d" * 64, snapshot_fingerprint(self.original),
+                self.backup, backup, OPERATION, backup["sourceSha"], ADMISSION,
+            )
+
     def test_lossless_sqlite_digest_keeps_nul_suffix_and_hidden_rowid(self):
         baseline = self.root / "text.sqlite"
         altered = self.root / "altered.sqlite"
@@ -726,3 +841,126 @@ class HistoricalProductionRecoveryTests(unittest.TestCase):
             self.recover()
         self.assertEqual(self.actions, ["status"])
         self.assertFalse(self.restored.exists())
+
+
+class OrdinaryProjectorEquivalenceTests(unittest.TestCase):
+    """Fail-closed compatibility check for the one reviewed diagnostics-only pair."""
+
+    OLD_PROJECTOR_SHA = "62744c31283e2c9b31e84512d3b8cfc793e8d5f7"
+    CANDIDATE_PROJECTOR_SHA = "7b4548d234710e0f0daacc2c8a46787b1e822e2f"
+    OLD_CONTRACT_SHA256 = "3928819713b00cfbf982186d67ed2e29f47b913c9a9ba019ee0106b7255904b9"
+    CANDIDATE_CONTRACT_SHA256 = "cf536b99bc5815a8b5a76f8315f07c60200c0d1d5728960e9a9593b1c113bcf0"
+    SCHEMA_SHA256 = "b" * 64
+
+    def test_reviewed_contract_digests_match_the_exact_git_trees(self):
+        self.assertEqual(operator.production_projector_contract(self.OLD_PROJECTOR_SHA, self.OLD_PROJECTOR_SHA),
+                         self.OLD_CONTRACT_SHA256)
+        self.assertEqual(operator.production_projector_contract(
+            self.CANDIDATE_PROJECTOR_SHA, self.CANDIDATE_PROJECTOR_SHA), self.CANDIDATE_CONTRACT_SHA256)
+
+    def test_historical_projector_offline_install_timeout_is_a_clear_refusal(self):
+        original_run = subprocess.run
+
+        def timeout_npm_ci(command, *args, **kwargs):
+            if command[:2] == ["npm", "ci"]:
+                raise subprocess.TimeoutExpired(command, timeout=300)
+            return original_run(command, *args, **kwargs)
+
+        with tempfile.TemporaryDirectory(prefix="ikpk-projector-install-timeout-") as directory, \
+             patch.object(subprocess, "run", side_effect=timeout_npm_ci):
+            with self.assertRaisesRegex(operator.Refusal, "dependency installation timed out"):
+                operator._prepare_historical_projector(
+                    self.CANDIDATE_PROJECTOR_SHA, Path(directory) / "historical-projector")
+
+    def snapshots(self):
+        content = {
+            "types": {
+                "schedule_entries": [{
+                    "id": 17, "seminar": {"id": 3, "slug": "seminar"},
+                    "unknownPublicField": {"nested": [True, 1, None]},
+                }],
+                "seminars": [{"id": 3, "title": "Seminar"}],
+            },
+            "media": [{"ref": "/uploads/a.png", "contentId": "sha256:abc"}],
+            "historicalExceptions": [],
+        }
+        proof = {"version": 1, "method": "quiesced-sqlite-backup", "sourceSha": self.CANDIDATE_PROJECTOR_SHA,
+                 "runId": 7, "attempt": 2, "captureId": "operation", "schemaDigest": self.SCHEMA_SHA256,
+                 "databaseDigest": "c" * 64, "mediaManifestDigest": "d" * 64, "bundleDigest": "e" * 64}
+        snapshot = {"contractVersion": 2, "fingerprint": "sha256:" + sha(b"equal"),
+                    "referenceDate": "2026-11-21", "snapshotId": "snap:equal",
+                    "sourcePolicy": "production-static", "sourceAge": "source-bound",
+                    "origin": {"kind": "server-db", "sourceId": "initial-prod-server-db",
+                               "capturedAt": "2026-11-21T10:00:00Z"},
+                    "skippedUploads": [], "content": content, "captureProof": proof}
+        return copy.deepcopy(snapshot), copy.deepcopy(snapshot)
+
+    def compare(self, old, candidate, *, old_projector_sha=None, candidate_projector_sha=None,
+                candidate_projector_contract_sha256=None, old_schema_sha256=None,
+                candidate_schema_sha256=None):
+        return operator.validate_ordinary_projector_equivalence(
+            old, candidate,
+            old_projector_sha=old_projector_sha or self.OLD_PROJECTOR_SHA,
+            candidate_projector_sha=candidate_projector_sha or self.CANDIDATE_PROJECTOR_SHA,
+            old_projector_contract_sha256=self.OLD_CONTRACT_SHA256,
+            candidate_projector_contract_sha256=(candidate_projector_contract_sha256
+                                                 or self.CANDIDATE_CONTRACT_SHA256),
+            old_schema_sha256=old_schema_sha256 or self.SCHEMA_SHA256,
+            candidate_schema_sha256=candidate_schema_sha256 or self.SCHEMA_SHA256,
+        )
+
+    def test_reviewed_projector_pair_accepts_identical_complete_projection(self):
+        old, candidate = self.snapshots()
+        self.compare(old, candidate)
+
+    def test_refuses_changed_contract_version_when_projection_is_identical(self):
+        old, candidate = self.snapshots()
+        candidate["contractVersion"] = 1
+        with self.assertRaises(operator.Refusal):
+            self.compare(old, candidate)
+
+    def test_refuses_changed_schema_contract_when_projection_is_identical(self):
+        old, candidate = self.snapshots()
+        with self.assertRaises(operator.Refusal):
+            self.compare(old, candidate, candidate_schema_sha256="c" * 64)
+
+    def test_refuses_changed_reference_date(self):
+        old, candidate = self.snapshots()
+        candidate["referenceDate"] = "2026-11-22"
+        with self.assertRaises(operator.Refusal):
+            self.compare(old, candidate)
+
+    def test_refuses_any_public_content_change(self):
+        old, candidate = self.snapshots()
+        candidate["content"]["types"]["schedule_entries"][0]["seminar"]["slug"] = "changed"
+        with self.assertRaises(operator.Refusal):
+            self.compare(old, candidate)
+
+    def test_refuses_changed_unknown_public_field(self):
+        old, candidate = self.snapshots()
+        candidate["content"]["types"]["schedule_entries"][0]["newField"] = "must not be ignored"
+        with self.assertRaises(operator.Refusal):
+            self.compare(old, candidate)
+
+    def test_refuses_boolean_and_number_as_equal_public_values(self):
+        old, candidate = self.snapshots()
+        candidate["content"]["types"]["schedule_entries"][0]["unknownPublicField"]["nested"][0] = 1
+        with self.assertRaises(operator.Refusal):
+            self.compare(old, candidate)
+
+    def test_strict_archive_reader_rejects_duplicate_json_keys(self):
+        payload = b'{"schemaDigest":"' + self.SCHEMA_SHA256.encode() + b'","schemaDigest":"' + self.SCHEMA_SHA256.encode() + b'"}'
+        archive_bytes = io.BytesIO()
+        with tarfile.open(fileobj=archive_bytes, mode="w:") as archive:
+            member = tarfile.TarInfo("snapshot/capture-manifest.json")
+            member.size = len(payload)
+            archive.addfile(member, io.BytesIO(payload))
+        archive_bytes.seek(0)
+        with tarfile.open(fileobj=archive_bytes, mode="r:") as archive:
+            with self.assertRaises(operator.Refusal):
+                operator._strict_archive_json(archive, "snapshot/capture-manifest.json")
+
+    def test_refuses_unreviewed_projector_pair_even_when_projection_is_identical(self):
+        old, candidate = self.snapshots()
+        with self.assertRaises(operator.Refusal):
+            self.compare(old, candidate, candidate_projector_contract_sha256="f" * 64)
