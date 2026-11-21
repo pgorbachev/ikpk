@@ -20,8 +20,11 @@ function makeStrapi(opts: {
   courseGroupsByDocumentId?: Record<string, { slug: string }>;
   articles?: FakeArticle[];
   trustedImport?: boolean;
+  postgresLockError?: Error;
 }) {
   let middleware!: Middleware;
+  let activeTransaction: object | null = null;
+  let activeTransactionHooks: { commit: (() => void)[]; rollback: (() => void)[] } | null = null;
   const drafts = opts.draftsByUid ?? {};
   const courseGroups = opts.courseGroupsByDocumentId ?? {};
   const articles = opts.articles ?? [];
@@ -43,6 +46,45 @@ function makeStrapi(opts: {
       };
     },
     db: {
+      config: { connection: { client: opts.postgresLockError ? 'postgres' : 'sqlite' } },
+      inTransaction() { return activeTransaction !== null; },
+      async transaction(callback?: (args: {
+        trx: object;
+        onCommit: (fn: () => void) => void;
+        onRollback: (fn: () => void) => void;
+      }) => Promise<unknown>) {
+        if (!callback) return { get: () => activeTransaction };
+        if (activeTransaction && activeTransactionHooks) {
+          return callback({
+            trx: activeTransaction,
+            onCommit(fn) { activeTransactionHooks?.commit.push(fn); },
+            onRollback(fn) { activeTransactionHooks?.rollback.push(fn); },
+          });
+        }
+        const trx = {
+          async raw() {
+            if (opts.postgresLockError) throw opts.postgresLockError;
+          },
+        };
+        activeTransaction = trx;
+        const hooks = { commit: [] as (() => void)[], rollback: [] as (() => void)[] };
+        activeTransactionHooks = hooks;
+        try {
+          const result = await callback({
+            trx,
+            onCommit(fn) { hooks.commit.push(fn); },
+            onRollback(fn) { hooks.rollback.push(fn); },
+          });
+          hooks.commit.forEach((fn) => fn());
+          return result;
+        } catch (error) {
+          hooks.rollback.forEach((fn) => fn());
+          throw error;
+        } finally {
+          activeTransaction = null;
+          activeTransactionHooks = null;
+        }
+      },
       query(uid: string) {
         return {
           async findMany() {
@@ -61,6 +103,27 @@ function makeStrapi(opts: {
   const run = (context: MiddlewareContext) => middleware(context, async () => 'next-called');
   return { run };
 }
+
+test('failed PostgreSQL advisory lock rejects cleanly without unhandled rejection', async () => {
+  const { run } = makeStrapi({ postgresLockError: new Error('advisory lock failed') });
+  const unhandled: unknown[] = [];
+  const onUnhandled = (reason: unknown) => unhandled.push(reason);
+  process.on('unhandledRejection', onUnhandled);
+  try {
+    await assert.rejects(
+      run({ uid: 'api::article.article', action: 'create', params: { data: { title: 'Failed lock test' } } }),
+      /advisory lock failed/,
+    );
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.deepEqual(unhandled, []);
+    assert.equal(
+      await run({ uid: 'api::institute.institute', action: 'publish', params: { documentId: 'after-lock-error' } }),
+      'next-called',
+    );
+  } finally {
+    process.off('unhandledRejection', onUnhandled);
+  }
+});
 
 test('publish: отклоняет публикацию института без обязательного поля', async () => {
   const { run } = makeStrapi({

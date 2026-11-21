@@ -56,8 +56,43 @@ function fixture(t) {
  registerSiteRefresh(app, { hostPublicationStatus: () => null });
   const post=routes.find(r=>r.method==='POST').handler;
   t.after(()=>{ for(const k of Object.keys(process.env)) if (!(k in old)) delete process.env[k]; Object.assign(process.env,old); rmSync(root,{recursive:true,force:true}); });
-  return {root,state,webRoot,destinationLock,post};
+  const get = routes.find((route) => route.method === 'GET').handler;
+  return {root,state,webRoot,destinationLock,post,get};
 }
+
+test('GET и повторный POST не раскрывают старый технический вывод', async (t) => {
+  const f = fixture(t);
+  writeJsonAtomic(f.state, {
+    status: 'verification-failed', phase: 'verifying', releaseId: 'current', switched: true,
+    message: 'Проверка не прошла.', detail: 'Error: /private/file.js\nsecret-token',
+  });
+  for (const handler of [f.get, f.post]) {
+    const ctx = { state: { user: { id: 1 } }, request: { body: {} } };
+    await handler(ctx);
+    assert.equal(ctx.body.status, 'verification-failed');
+    assert.match(ctx.body.detail, /администратор/);
+    assert.doesNotMatch(JSON.stringify(ctx.body), /secret-token|private/);
+  }
+});
+
+test('POST возврата не раскрывает неизвестную ошибку проверки', async (t) => {
+  const f = fixture(t);
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => { throw new Error('Error: /private/file.js secret-token'); };
+  t.after(() => { globalThis.fetch = originalFetch; });
+  const previous = join(f.webRoot, 'releases/previous');
+  mkdirSync(previous);
+  writeFileSync(join(previous, 'release.json'), JSON.stringify({ commit: 'a'.repeat(40), snapshotId: 'old' }));
+  writeJsonAtomic(f.state, {
+    status: 'succeeded', releaseId: 'current', previousReleaseId: 'releases/previous', switched: true,
+  });
+  const ctx = { state: { user: { id: 1 } }, request: { body: { action: 'restore' } } };
+  await f.post(ctx);
+  assert.equal(ctx.body.status, 'verification-failed');
+  assert.equal(ctx.body.switched, true);
+  assert.match(ctx.body.detail, /администратор/);
+  assert.doesNotMatch(JSON.stringify(ctx.body), /secret-token|private/);
+});
 
 test('corrupt bytes survive real POST launch and Restore', async (t) => {
  const f=fixture(t); const bad=Buffer.from('{"previousReleaseId": "releases/old", broken'); writeFileSync(f.state,bad);

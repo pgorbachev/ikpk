@@ -466,7 +466,7 @@
       },
       {
         "path": "scripts/audit-data-migration.mjs",
-        "sha256": "73749191bbc6e475a3d9dc7c733abf499696c7f1c96398cbe7e61cb96a0e61dc"
+        "sha256": "fd7abaf805adb5cbf2c660e55a1a3aab81a33360242c07aaeb2aba7ab46bd73a"
       },
       {
         "path": "scripts/audit-schema-snapshot.mjs",

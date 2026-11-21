@@ -74,7 +74,8 @@ export function registerSiteRefresh(strapi, deps: { hostPublicationStatus?: type
       handler: async (ctx) => {
         if (!(await actorMayRefresh(strapi, ctx.state.user))) return deny(ctx);
         if (ctx.request.body?.action === 'restore') {
-          ctx.body = await restorePrevious({ hostPublicationStatus: readHostPublication });
+          const result = await restorePrevious({ hostPublicationStatus: readHostPublication });
+          ctx.body = { ...result, detail: publicView(result).detail };
           return;
         }
         if (ctx.request.body?.action === 'cancel-starting') {

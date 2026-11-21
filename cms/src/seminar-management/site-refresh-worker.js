@@ -1,6 +1,7 @@
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { chmodSync, lstatSync, mkdirSync, readFileSync, readlinkSync, readdirSync, realpathSync, rmSync } from 'node:fs';
+import { chmodSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readlinkSync, readdirSync, realpathSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { dirname, isAbsolute, join } from 'node:path';
 import {
   childEnvironment,
@@ -51,6 +52,27 @@ function runStep(command, args, cwd, extraEnv, restrictedEnv = false) {
     return { ok: false, detail: redact(result.stderr || result.stdout || result.error?.message || 'сбой') };
   }
   return { ok: true, stdout: result.stdout };
+}
+
+function runSnapshotStep(command, args, cwd, env, restricted) {
+  let diagnosticDir;
+  try { diagnosticDir = mkdtempSync(join(tmpdir(), 'ikpk-refresh-diagnostic-')); }
+  catch { return runStep(command, args, cwd, { ...env, IKPK_REFRESH_DIAGNOSTIC_FILE: '' }, restricted); }
+
+  const diagnosticFile = join(diagnosticDir, 'unlinked-occurrence');
+  try {
+    const result = runStep(command, args, cwd, { ...env, IKPK_REFRESH_DIAGNOSTIC_FILE: diagnosticFile }, restricted);
+    if (!result.ok) {
+      try {
+        const id = readFileSync(diagnosticFile, 'utf8');
+        if (/^[1-9][0-9]{0,15}$/.test(id) && Number.isSafeInteger(Number(id))) result.unlinkedOccurrenceId = id;
+      } catch { /* Ordinary failures leave no structured diagnostic. */ }
+    }
+    return result;
+  } finally {
+    try { rmSync(diagnosticDir, { recursive: true, force: true }); }
+    catch { /* The private file only contains the occurrence ID. */ }
+  }
 }
 
 function removeCaptureBundle(path) {
@@ -160,7 +182,7 @@ async function executeRefreshUnderLock(workspace, webRoot, registryReader) {
             result = runStep(process.execPath, [sealer, bundle, operationId, process.env.IKPK_INSTALLED_COMMIT,
               join(workspace, 'cms', 'src'), 'staging194'], workspace, {}, true);
             if (!result.ok) return result;
-            return runStep(
+            return runSnapshotStep(
               process.execPath,
               [join(workspace, 'web', 'node_modules', 'tsx', 'dist', 'cli.mjs'),
                 'scripts/capture-content-snapshot.ts', '--server-capture', bundle],
@@ -173,7 +195,7 @@ async function executeRefreshUnderLock(workspace, webRoot, registryReader) {
           }
         }
         if (process.env.IKPK_CAPTURE_PROFILE) return { ok: false, detail: 'unsupported server capture profile' };
-        return runStep(
+        return runSnapshotStep(
           process.execPath,
           [join(workspace, 'web', 'node_modules', 'tsx', 'dist', 'cli.mjs'), 'scripts/capture-content-snapshot.ts'],
           join(workspace, 'web'),
@@ -204,7 +226,7 @@ async function executeRefreshUnderLock(workspace, webRoot, registryReader) {
         }
         const buildEnv = siteBuildEnv(workspace, staging194, production, process.env, historyEnv);
         if (buildNow) buildEnv.SEMINAR_BUILD_NOW = buildNow;
-        const built = runStep('npm', ['run', ...(staging194
+        const built = runSnapshotStep('npm', ['run', ...(staging194
           ? ['build:demo193', '--', '--staging194-registration-links'] : ['build'])],
           web, buildEnv, staging194 || production);
         if (!built.ok) return built;

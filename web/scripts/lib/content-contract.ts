@@ -29,6 +29,20 @@ export interface ContractViolation {
   field?: string;
   rule: 'required-field-empty' | 'duplicate-identifier' | 'broken-relation' | 'slug-not-url-safe' | 'invalid-value' | 'historical-exception-invalid';
   relatedRecordIds?: string[];
+  occurrenceId?: number;
+}
+
+export function validOccurrenceId(value: unknown): value is number {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value > 0;
+}
+
+export class SnapshotContractError extends Error {
+  readonly unlinkedOccurrenceId?: number;
+
+  constructor(message: string, unlinkedOccurrenceId?: number) {
+    super(message);
+    this.unlinkedOccurrenceId = unlinkedOccurrenceId;
+  }
 }
 
 const URL_SAFE_SLUG = /^[A-Za-z0-9._~-]+$/;
@@ -215,7 +229,12 @@ export function validateSnapshotContract(snapshot: Snapshot, trust: HistoricalTr
         : event.seminar && typeof event.seminar === 'object' ? event.seminar as Record<string, unknown> : {};
       const seminar = resolveSeminar(seminars, relation);
       if (!seminar || (relation.slug != null && seminar.slug !== relation.slug)) {
-        violations.push({ type: 'schedule', recordId: recordId(event), rule: 'broken-relation' });
+        violations.push({
+          type: 'schedule',
+          recordId: recordId(event),
+          rule: 'broken-relation',
+          ...(validOccurrenceId(event.id) ? { occurrenceId: event.id } : {}),
+        });
       }
       const price = Object.hasOwn(event, 'price') ? event.price : event.newPrice;
       const priceMissing = price == null || price === '';
@@ -288,7 +307,11 @@ function assertSnapshotContractCore(snapshot: Snapshot, allowDemoProof: boolean,
     .map(([key, count]) => `${key} ×${count}`)
     .join('; ');
   const examples = violations.slice(0, 3).map((v) => v.recordId).join(', ');
-  throw new Error(`контракт снимка нарушен: ${violations.length} — ${summary}. Примеры: ${examples}`);
+  const unlinkedOccurrence = violations.find((v) => v.occurrenceId !== undefined);
+  throw new SnapshotContractError(
+    `контракт снимка нарушен: ${violations.length} — ${summary}. Примеры: ${examples}`,
+    unlinkedOccurrence?.occurrenceId,
+  );
 }
 
 /** The ordinary reader deliberately rejects initial-production one-off proofs. */

@@ -57,7 +57,8 @@ function fixture(t) {
     Object.assign(process.env, previous);
     rmSync(root, { recursive: true, force: true });
   });
-  return { root, workspace, state, lock, capture, post };
+  const get = routes.find((route) => route.method === 'GET').handler;
+  return { root, workspace, state, lock, capture, post, get };
 }
 
 function starting(token, pid = 2147483647) {
@@ -203,4 +204,44 @@ test('refresh intent is private even with a permissive umask', (t) => {
   try { writeJsonAtomic(f.state, starting('f'.repeat(32))); }
   finally { process.umask(previous); }
   assert.equal(statSync(f.state).mode & 0o777, 0o600);
+});
+
+for (const scenario of ['trusted', 'stderr-only', 'no-temp-dir']) test(`worker diagnostic: ${scenario}`, async (t) => {
+  const f = fixture(t);
+  const token = 'f'.repeat(32);
+  if (scenario === 'no-temp-dir') {
+    process.env.TMPDIR = join(f.root, 'missing-tmp');
+    process.env.TMP = process.env.TMPDIR;
+    process.env.TEMP = process.env.TMPDIR;
+  }
+  writeFileSync(join(f.workspace, 'web/node_modules/tsx/dist/cli.mjs'), `
+    import { writeFileSync } from 'node:fs';
+    const diagnostic = process.env.IKPK_REFRESH_DIAGNOSTIC_FILE;
+    writeFileSync(${JSON.stringify(f.capture)}, diagnostic ?? 'missing');
+    if (${scenario === 'trusted'}) writeFileSync(diagnostic, '72', { flag: 'wx', mode: 0o600 });
+    console.error('IKPK_REFRESH_UNLINKED_OCCURRENCE 73');
+    throw new Error('/private/file.js secret-token');
+  `);
+  writeJsonAtomic(f.state, starting(token));
+  const { worker, release } = await startBarrierWorker(f, token);
+  const exited = once(worker, 'exit');
+  writeFileSync(release, 'continue');
+  const [code] = await exited;
+  assert.equal(code, 0);
+  const record = JSON.parse(readFileSync(f.state, 'utf8'));
+  assert.equal(record.status, 'failed');
+  assert.equal(record.phase, 'capture');
+  assert.equal(record.switched, false);
+  const ctx = { state: { user: { id: 1 } } };
+  await f.get(ctx);
+  const diagnostic = readFileSync(f.capture, 'utf8');
+  if (scenario === 'no-temp-dir') assert.equal(diagnostic, '');
+  else {
+    assert.notEqual(diagnostic, '');
+    assert.equal(existsSync(dirname(diagnostic)), false);
+  }
+  if (scenario === 'trusted') assert.match(ctx.body.detail, /проведения №72/);
+  else assert.match(ctx.body.detail, /администратор/);
+  assert.doesNotMatch(ctx.body.detail, /№73/);
+  assert.doesNotMatch(JSON.stringify(ctx.body), /secret-token|private|IKPK_REFRESH/);
 });

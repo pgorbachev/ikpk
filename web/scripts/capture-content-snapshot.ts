@@ -11,7 +11,8 @@ import { cpSync, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, re
 import { createHash } from 'node:crypto';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { assertCaptureSnapshotContract } from './lib/capture-snapshot-contract.ts';
+import { assertCaptureSnapshotContract, reportSnapshotContractError } from './lib/capture-snapshot-contract.ts';
+import { SnapshotContractError, validOccurrenceId } from './lib/content-contract.ts';
 import {
   FIELD_MAP,
   SOURCE_TYPES,
@@ -653,11 +654,15 @@ async function liveCapture(): Promise<void> {
       if (!rawSeminar) continue;
       const slug = String(rawSeminar.slug ?? '');
       if (typeof rawSeminar.documentId !== 'string' || !rawSeminar.documentId.trim()) {
-        throw new Error(`живой захват: проведение ${String(entry.id)} не содержит documentId семинара`);
+        throw new SnapshotContractError(
+          `живой захват: проведение ${String(entry.id)} не содержит documentId семинара`, validOccurrenceId(entry.id) ? entry.id : undefined,
+        );
       }
       const seminar = resolveSeminar(types.seminars ?? [], rawSeminar);
       if (!seminar || seminar.slug !== slug) {
-        throw new Error(`живой захват: проведение ${String(entry.id)} не разрешает связь семинара по documentId`);
+        throw new SnapshotContractError(
+          `живой захват: проведение ${String(entry.id)} не разрешает связь семинара по documentId`, validOccurrenceId(entry.id) ? entry.id : undefined,
+        );
       }
       entry.seminar = { id: rawSeminar.id, documentId: rawSeminar.documentId, name: rawSeminar.name, slug };
       const group = seminar ? groupByLegacyId.get(String(seminar.course_group_legacy_id ?? '')) : undefined;
@@ -798,7 +803,7 @@ async function liveCapture(): Promise<void> {
 }
 
 if (cmsUrl || serverCapture) {
-  await liveCapture();
+  await liveCapture().catch(reportSnapshotContractError);
 } else {
   copyPinned();
 }

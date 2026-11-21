@@ -499,10 +499,10 @@ const SEMINAR_CONFIG_KEY = 'plugin_content_manager_configuration_content_types::
 const ARTICLE_CONFIG_KEY = 'plugin_content_manager_configuration_content_types::api::article.article';
 const ARTICLE_FIELD_LABELS = [
   ['title', 'Заголовок', 'Заголовок статьи.'],
-  ['slug', 'Адрес страницы', 'Часть адреса статьи после /statyi/.'],
+  ['slug', 'Адрес страницы', 'Формируется из заголовка при первом сохранении. После сохранения адрес не меняется.'],
   ['body', 'Текст статьи', 'Основной текст статьи на странице.'],
   ['image', 'Изображение', 'Показывается в шапке статьи и карточках каталога.'],
-  ['published_date', 'Дата публикации', 'Показывается на странице статьи и задаёт порядок в каталоге: сначала новые.'],
+  ['published_date', 'Дата публикации', 'Выберите календарный день по Москве. Новая статья без даты получит день первой публикации; если очистить уже сохранённую дату, останется прежний день.'],
   ['legacy_id', 'Старый идентификатор', ''],
   ['seo', 'SEO', 'Можно не заполнять: сайт возьмёт заголовок из названия статьи, а описание — из её текста после очистки. Если SEO-описание не заполнено и после очистки текста не останется, обновление сайта не состоится; запись в CMS останется опубликованной.'],
   ['categories', 'Категории', ''],
@@ -523,6 +523,7 @@ function articleEditorConfiguration() {
     edit: { label: 'Пользовательское поле', description: 'Оставить как есть.', visible: false, editable: false },
     list: { label: 'Пользовательское поле', searchable: false, sortable: false },
   };
+  metadatas.slug.edit.editable = true;
   return {
     settings: { defaultSortBy: 'published_date', defaultSortOrder: 'DESC', retainedSetting: 'keep-me' },
     layouts: { edit: [[{ name: 'title', size: 12 }], [{ name: 'body', size: 12 }]], list: ['title', 'published_date'] },
@@ -541,6 +542,7 @@ function articleLabelsSynced(source) {
       list: { ...existing.list, label },
     };
   }
+  candidate.metadatas.slug.edit.editable = false;
   return candidate;
 }
 
@@ -600,6 +602,7 @@ test('article label synchronization rejects layout, settings, visibility, editab
     ['layouts', mutateArticle((value) => { value.layouts.edit[0][0].size = 6; })],
     ['visible', mutateArticle((value) => { value.metadatas.title.edit.visible = true; })],
     ['editable', mutateArticle((value) => { value.metadatas.title.edit.editable = true; })],
+    ['slug-remains-editable', mutateArticle((value) => { value.metadatas.slug.edit.editable = true; })],
     ['unrelated-label', mutateArticle((value) => { value.metadatas.body.edit.label = 'Другое поле'; })],
     ['empty-approved-description-changed', mutateArticle((value) => { value.metadatas.legacy_id.edit.description = 'Изменённое сохранённое описание.'; })],
     ['existing-placeholder-changed', mutateArticle((value) => { value.metadatas.title.edit.placeholder = 'Не согласовано'; })],

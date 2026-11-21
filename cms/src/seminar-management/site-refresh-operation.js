@@ -36,6 +36,21 @@ export function mayRefresh(roleCodes) {
   return (roleCodes || []).some((code) => code === 'content-admin' || code === 'strapi-super-admin');
 }
 
+function editorDetail(record) {
+  if (record.status === 'failed' && ['capture', 'build'].includes(record.phase)
+      && typeof record.unlinkedOccurrenceId === 'string' && /^[1-9][0-9]{0,15}$/.test(record.unlinkedOccurrenceId)
+      && Number.isSafeInteger(Number(record.unlinkedOccurrenceId))) {
+    return `Для проведения №${record.unlinkedOccurrenceId} не найдена связь с опубликованным семинаром. Обратитесь к администратору сайта и сообщите номер проведения.`;
+  }
+  if (record.status === 'verification-failed' && typeof record.detail === 'string'
+      && /^HTTP [1-5][0-9]{2}$/.test(record.detail)) return record.detail;
+  if (!record.detail && !record.unlinkedOccurrenceId) return null;
+  if (record.phase === 'capture') {
+    return 'Не удалось проверить опубликованные записи. Обратитесь к администратору сайта.';
+  }
+  return 'Обратитесь к администратору сайта.';
+}
+
 export function publicView(record) {
   if (!record) return { status: 'idle', message: MESSAGES.idle };
   return {
@@ -48,7 +63,7 @@ export function publicView(record) {
     commit: typeof record.commit === 'string' && /^[0-9a-f]{40}$/.test(record.commit) ? record.commit : null,
     previousReleaseId: record.previousReleaseId || null,
     siteUrl: record.siteUrl || null,
-    detail: record.detail ? redact(record.detail) : null,
+    detail: editorDetail(record),
     cleanupPending: record.cleanupPending === true ? true : null,
     buildArtifactsCleanupPending: record.buildArtifactsCleanupPending === true ? true : null,
   };
@@ -735,6 +750,7 @@ export async function runRefresh(deps) {
       phase: 'capture',
       message: MESSAGES.failed,
       detail: redact(captured.detail),
+      unlinkedOccurrenceId: captured.unlinkedOccurrenceId,
       startedAt,
       finishedAt: deps.now(),
       switched: false,
@@ -757,6 +773,7 @@ export async function runRefresh(deps) {
       phase: 'build',
       message: MESSAGES.failed,
       detail: redact(built.detail),
+      unlinkedOccurrenceId: built.unlinkedOccurrenceId,
       startedAt,
       finishedAt: deps.now(),
       switched: false,
