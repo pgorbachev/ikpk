@@ -1,6 +1,7 @@
 import type { Core } from '@strapi/strapi';
 import { createRequire } from 'node:module';
 import { errors } from '@strapi/utils';
+import { AsyncLocalStorage } from 'node:async_hooks';
 import {
   checkPublication,
   checkDocumentRecord,
@@ -10,6 +11,7 @@ import {
   type DocumentsState,
 } from '../lib/publication-validation';
 import { isTrustedImport } from '../seminar-management/rules.js';
+import { articleSlug, moscowCalendarDateISO, todayInMoscow } from '../lib/article-publication';
 const sourceEmptyFields = createRequire(`${process.cwd()}/src/lifecycles/publication.ts`)('../lib/demo193-source-empty-fields.json') as {
   sourceSqlSha256: string;
   entries: SourceEmptyFieldEntry[];
@@ -44,6 +46,15 @@ const TYPE_BY_UID: Record<string, PublicationType> = {
 
 const COURSE_GROUP_UID = 'api::course-group.course-group';
 const ARTICLE_UID = 'api::article.article';
+const INTERNAL_ARTICLE_WRITE = new AsyncLocalStorage<boolean>();
+const ARTICLE_SLUG_LOCK_KEY = 'ikpk:article-slug-allocation';
+type ArticleTransactionLock = {
+  transaction: object;
+  ready: Promise<void>;
+  tail: Promise<void>;
+};
+const ARTICLE_LOCK_CONTEXT = new AsyncLocalStorage<ArticleTransactionLock>();
+const ARTICLE_TRANSACTION_LOCKS = new WeakMap<object, ArticleTransactionLock>();
 const SEMINAR_UID = 'api::seminar.seminar';
 const DEMO193_SOURCE_SQL_SHA256 = 'b7b056d6a226b9caed224c737dad18dc366d47a0ec397e0ef0f1c66f61762be2';
 const DEMO193_PUBLICATION_TYPE: Partial<Record<PublicationType, string>> = {
@@ -254,6 +265,133 @@ function buildPublicationRecord(type: PublicationType, entity: Record<string, un
   }
 }
 
+async function uniqueArticleSlug(
+  strapi: Core.Strapi,
+  title: unknown,
+  documentId?: string,
+): Promise<string> {
+  const base = articleSlug(title);
+  if (!base) return '';
+  const rows = (await strapi.db.query(ARTICLE_UID).findMany({
+    select: ['documentId', 'slug'],
+  })) as { documentId: string; slug: string | null }[];
+  const occupied = new Set(rows.filter((row) => row.documentId !== documentId).map((row) => row.slug).filter(Boolean));
+  if (!occupied.has(base)) return base;
+  for (let suffix = 2; suffix < 10000; suffix += 1) {
+    const candidate = `${base}-${suffix}`;
+    if (!occupied.has(candidate)) return candidate;
+  }
+  throw new ApplicationError('Не удалось подобрать уникальный адрес статьи');
+}
+
+async function withArticleSlugLock<T>(strapi: Core.Strapi, operation: () => Promise<T>): Promise<T> {
+  const activeTransaction = strapi.db.inTransaction()
+    ? (await strapi.db.transaction()).get() as object
+    : null;
+  const inheritedLock = ARTICLE_LOCK_CONTEXT.getStore();
+  if (activeTransaction && inheritedLock?.transaction === activeTransaction) return operation();
+
+  return strapi.db.transaction(async ({ trx, onCommit, onRollback }) => {
+    const transaction = trx as object;
+    let lock = ARTICLE_TRANSACTION_LOCKS.get(transaction);
+    if (!lock) {
+      const ready = strapi.db.config.connection.client === 'postgres'
+        ? Promise.resolve()
+          .then(() => trx.raw('SELECT pg_advisory_xact_lock(hashtext(?))', [ARTICLE_SLUG_LOCK_KEY]))
+          .then(() => undefined)
+        : Promise.resolve();
+      lock = { transaction, ready, tail: Promise.resolve() };
+      ARTICLE_TRANSACTION_LOCKS.set(transaction, lock);
+      const clearTransactionLock = () => ARTICLE_TRANSACTION_LOCKS.delete(transaction);
+      onCommit(clearTransactionLock);
+      onRollback(clearTransactionLock);
+    }
+
+    await lock.ready;
+    if (ARTICLE_LOCK_CONTEXT.getStore() === lock) return operation();
+
+    const previous = lock.tail;
+    let release!: () => void;
+    lock.tail = new Promise<void>((resolve) => { release = resolve; });
+    await previous;
+    try {
+      return await ARTICLE_LOCK_CONTEXT.run(lock, operation);
+    } finally {
+      release();
+    }
+  });
+}
+
+/*
+ * Preserve source publication values when an older draft has null scalar fields.
+ * The current draft remains authoritative for title and other fields.
+ */
+function mergeArticlePublishedDefaults(
+  draft: Record<string, unknown> | null,
+  published: Record<string, unknown> | null,
+): Record<string, unknown> | null {
+  if (!draft) return published;
+  if (!published) return draft;
+  return {
+    ...published,
+    ...draft,
+    slug: draft.slug || published.slug,
+    published_date: draft.published_date || published.published_date,
+  };
+}
+
+async function prepareArticleDefaults(
+  strapi: Core.Strapi,
+  existing: Record<string, unknown> | null,
+  incoming: Record<string, unknown>,
+  documentId: string | undefined,
+  publishedWrite: boolean,
+  trustedImport: boolean,
+): Promise<Record<string, unknown>> {
+  const data = { ...incoming };
+  const slugAlreadyAssigned = typeof existing?.slug === 'string' && existing.slug.length > 0;
+  const title = Object.prototype.hasOwnProperty.call(data, 'title') ? data.title : existing?.title;
+
+  if (trustedImport) {
+    // Imported historical URLs and dates are source data.
+    if (typeof data.slug === 'string') {
+      const rows = (await strapi.db.query(ARTICLE_UID).findMany({ select: ['documentId', 'slug'] })) as {
+        documentId: string; slug: string | null;
+      }[];
+      if (rows.some((row) => row.slug === data.slug && row.documentId !== documentId)) {
+        throw new ApplicationError(`Адрес импортируемой статьи уже занят: ${data.slug}`);
+      }
+    }
+    if (!data.slug && existing?.slug) data.slug = existing.slug;
+    if (publishedWrite) {
+      if (!data.published_date) data.published_date = existing?.published_date ?? moscowCalendarDateISO(todayInMoscow());
+    }
+    return data;
+  }
+
+  if (slugAlreadyAssigned) {
+    if (existing?.slug) data.slug = existing.slug;
+  } else {
+    delete data.slug;
+    if (typeof title === 'string' && title.trim() && (data.title !== undefined || !existing?.slug)) {
+      data.slug = await uniqueArticleSlug(strapi, title, documentId);
+    } else if (existing?.slug) {
+      data.slug = existing.slug;
+    }
+  }
+
+  // If a saved date is cleared, keep the previous day even when the draft has no slug yet.
+  // A new article with no saved date can still remain empty until its first publication.
+  if (Object.prototype.hasOwnProperty.call(data, 'published_date') && !data.published_date && existing?.published_date) {
+    data.published_date = existing.published_date;
+  }
+
+  if (publishedWrite && !data.published_date) {
+    data.published_date = existing?.published_date ?? moscowCalendarDateISO(todayInMoscow());
+  }
+  return data;
+}
+
 function mapDocumentRecord(raw: Record<string, unknown>): DocumentRecord {
   return {
     document: raw.document as string,
@@ -304,6 +442,7 @@ async function guardCategoryFlagRemoval(strapi: Core.Strapi, courseGroupDocument
  */
 export function registerPublicationLifecycle(strapi: Core.Strapi): void {
   strapi.documents.use(async (context, next) => {
+    const run = async () => {
     const type = TYPE_BY_UID[context.uid as string];
 
     if (context.uid === SEMINAR_UID && context.action === 'update') {
@@ -338,6 +477,18 @@ export function registerPublicationLifecycle(strapi: Core.Strapi): void {
     }
 
     const params = context.params as { documentId?: string; status?: string; data?: Record<string, unknown> };
+    let publishedWrite = false;
+    const continueWrite = async () => {
+      try {
+        return await next();
+      } catch (error) {
+        const detail = error instanceof Error ? error.message : String(error);
+        if (context.uid === ARTICLE_UID && /unique|constraint|duplicate/i.test(detail) && /slug/i.test(detail)) {
+          throw new ApplicationError('Адрес этой статьи уже занят. Обновите форму и сохраните запись ещё раз.');
+        }
+        throw error;
+      }
+    };
     if (
       type === 'article' && context.action === 'update' && params.documentId &&
       params.data && Object.prototype.hasOwnProperty.call(params.data, 'seo') && params.data.seo !== null &&
@@ -360,9 +511,33 @@ export function registerPublicationLifecycle(strapi: Core.Strapi): void {
       }
     }
 
-    const publishedWrite =
+    publishedWrite =
       context.action === 'publish' ||
       ((context.action === 'create' || context.action === 'update') && params.status === 'published');
+
+    if (type === 'article' && context.action === 'clone' && !isTrustedImport(strapi)) {
+      const source = params.documentId
+        ? (await strapi.documents(ARTICLE_UID as never).findOne({
+            documentId: params.documentId,
+            status: 'draft',
+            fields: ['title'],
+          })) as Record<string, unknown> | null
+        : null;
+      if (source) {
+        const cloneTitle = Object.prototype.hasOwnProperty.call(params.data ?? {}, 'title')
+          ? params.data?.title
+          : source.title;
+        params.data = {
+          ...(params.data ?? {}),
+          slug: typeof cloneTitle === 'string' && cloneTitle.trim()
+            ? await uniqueArticleSlug(strapi, cloneTitle)
+            : null,
+        };
+        return continueWrite();
+      }
+    }
+
+    let articlePublishData: Record<string, unknown> | null = null;
     if (type && publishedWrite) {
       let existing: Record<string, unknown> | null = null;
       if (params.documentId) {
@@ -378,12 +553,31 @@ export function registerPublicationLifecycle(strapi: Core.Strapi): void {
             populate: POPULATE_BY_TYPE[type],
           })) as Record<string, unknown> | null;
         }
+        if (type === 'article' && !INTERNAL_ARTICLE_WRITE.getStore()) {
+          const publishedDefaults = (await strapi.documents(ARTICLE_UID as never).findOne({
+            documentId: params.documentId,
+            status: 'published',
+            fields: ['title', 'slug', 'published_date'],
+          })) as Record<string, unknown> | null;
+          existing = mergeArticlePublishedDefaults(existing, publishedDefaults);
+        }
       }
 
       if (context.action === 'publish' ? existing : true) {
-        const entity = context.action === 'publish'
-          ? existing as Record<string, unknown>
-          : prospectiveEntity(type, existing, params.data ?? {});
+        let incoming = params.data ?? {};
+        if (type === 'article' && !INTERNAL_ARTICLE_WRITE.getStore()) {
+          incoming = await prepareArticleDefaults(
+            strapi,
+            existing,
+            incoming,
+            params.documentId,
+            true,
+            isTrustedImport(strapi),
+          );
+          if (context.action === 'publish') articlePublishData = incoming;
+          else params.data = incoming;
+        }
+        const entity = prospectiveEntity(type, existing, incoming);
         const record = buildPublicationRecord(type, entity);
         const verdict = checkPublication({ type, record });
         if (!verdict.ok && !allowsPinnedSourceEmptyFields(strapi, type, entity, verdict.missing, verdict.message)) {
@@ -399,6 +593,73 @@ export function registerPublicationLifecycle(strapi: Core.Strapi): void {
       }
     }
 
+    // A publish action has no data payload. Persist defaults in the already locked transaction.
+    if (articlePublishData && params.documentId) {
+      await INTERNAL_ARTICLE_WRITE.run(true, () => strapi.documents(ARTICLE_UID as never).update({
+        documentId: params.documentId as string,
+        status: 'draft',
+        data: articlePublishData as Record<string, unknown>,
+      }));
+      return continueWrite();
+    }
+
+    // Draft writes also generate the slug immediately and reject user supplied overrides.
+    if (
+      type === 'article' && !publishedWrite && !INTERNAL_ARTICLE_WRITE.getStore() &&
+      (context.action === 'create' || context.action === 'update')
+    ) {
+      let existing = params.documentId
+        ? (await strapi.documents(ARTICLE_UID as never).findOne({
+            documentId: params.documentId,
+            status: 'draft',
+            fields: ['title', 'slug', 'published_date'],
+          })) as Record<string, unknown> | null
+        : null;
+      if (params.documentId) {
+        const publishedVersion = (await strapi.documents(ARTICLE_UID as never).findOne({
+          documentId: params.documentId,
+          status: 'published',
+          fields: ['title', 'slug', 'published_date'],
+        })) as Record<string, unknown> | null;
+        existing = mergeArticlePublishedDefaults(existing, publishedVersion);
+      }
+      params.data = await prepareArticleDefaults(
+        strapi,
+        existing,
+        params.data ?? {},
+        params.documentId,
+        false,
+        isTrustedImport(strapi),
+      );
+    }
+
+    if (type === 'article' && context.action === 'unpublish' && params.documentId) {
+      const draft = (await strapi.documents(ARTICLE_UID as never).findOne({
+        documentId: params.documentId,
+        status: 'draft',
+        fields: ['slug', 'published_date'],
+      })) as Record<string, unknown> | null;
+      const publishedVersion = (await strapi.documents(ARTICLE_UID as never).findOne({
+        documentId: params.documentId,
+        status: 'published',
+        fields: ['slug', 'published_date'],
+      })) as Record<string, unknown> | null;
+      if (draft && publishedVersion) {
+        const fallback: Record<string, unknown> = {};
+        if (!draft.slug && publishedVersion.slug) fallback.slug = publishedVersion.slug;
+        if (!draft.published_date && publishedVersion.published_date) {
+          fallback.published_date = publishedVersion.published_date;
+        }
+        if (Object.keys(fallback).length > 0) {
+          await INTERNAL_ARTICLE_WRITE.run(true, () => strapi.documents(ARTICLE_UID as never).update({
+            documentId: params.documentId as string,
+            status: 'draft',
+            data: fallback,
+          }));
+        }
+      }
+    }
+
     if (context.uid === COURSE_GROUP_UID) {
       const params = context.params as { documentId?: string; data?: Record<string, unknown> };
       if ((context.action === 'unpublish' || context.action === 'delete') && params.documentId) {
@@ -409,6 +670,16 @@ export function registerPublicationLifecycle(strapi: Core.Strapi): void {
       }
     }
 
-    return next();
+    return continueWrite();
+    };
+
+    if (
+      context.uid === ARTICLE_UID && !INTERNAL_ARTICLE_WRITE.getStore() &&
+      ['create', 'update', 'publish', 'clone', 'unpublish', 'delete'].includes(context.action)
+    ) {
+      // Keep every read, validation, slug allocation, and write inside one lock per Document Service action.
+      return withArticleSlugLock(strapi, run);
+    }
+    return run();
   });
 }

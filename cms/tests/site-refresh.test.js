@@ -70,7 +70,40 @@ test('чужая роль и пароль не попадают в окруже�
   assert.equal(env.NODE_OPTIONS, '--max-old-space-size=480');
   assert.equal(env.CONTENT_ADMIN_PASSWORD, undefined);
   assert.equal(env.AWS_SECRET_ACCESS_KEY, undefined);
-  assert.equal(publicView({ detail: 'Bearer secret-token', status: 'failed' }).detail, 'Bearer [скрыто]');
+});
+
+test('ошибка связи показывает номер проведения и действие без технических журналов', async () => {
+  const { deps, calls } = harness({
+    capture: async () => ({
+      ok: false,
+      detail: 'Error: /private/file.js\n    at test (token=secret-token)',
+      unlinkedOccurrenceId: '72',
+    }),
+  });
+  const result = await runRefresh(deps);
+  assert.equal(result.switched, false);
+  assert.equal(calls.some((call) => call.switchedTo), false);
+  const view = publicView(result);
+  assert.match(view.detail, /проведения №72/);
+  assert.doesNotMatch(JSON.stringify(view), /secret-token|private|at test/);
+});
+
+test('ошибка связи объясняет причину и указывает доступное редактору действие', () => {
+  const { detail } = publicView({ status: 'failed', phase: 'capture', unlinkedOccurrenceId: '72' });
+  assert.equal(detail,
+    'Для проведения №72 не найдена связь с опубликованным семинаром. Обратитесь к администратору сайта и сообщите номер проведения.');
+});
+
+test('старые ошибки и недостоверные идентификаторы заменяются указанием связаться с администратором', () => {
+  const view = publicView({
+    status: 'failed',
+    phase: 'capture',
+    detail: 'Error: /private/file.js\n    at test (token=secret-token)',
+    unlinkedOccurrenceId: 'token=secret-token',
+  });
+  assert.match(view.detail, /администратор/);
+  assert.doesNotMatch(JSON.stringify(view), /secret-token|private|at test/);
+  assert.equal(publicView({ status: 'verification-failed', detail: 'HTTP 301' }).detail, 'HTTP 301');
 });
 
 test('обычный CMS refresh передаёт worker workspace и installed commit, убирая только profile flags', () => {

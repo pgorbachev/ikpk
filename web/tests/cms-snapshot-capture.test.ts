@@ -1,7 +1,8 @@
-import { describe, it, expect } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { describe, it, expect, vi } from 'vitest';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { assertCaptureSnapshotContract } from '../scripts/lib/capture-snapshot-contract.ts';
+import { assertCaptureSnapshotContract, reportSnapshotContractError } from '../scripts/lib/capture-snapshot-contract.ts';
 import { articleSeoDescriptionFallback } from '../scripts/lib/article-seo-fallback.ts';
 import {
   MODULES,
@@ -278,6 +279,27 @@ describe('контракт данных проверяется до генера
     expect(mod.validateSnapshotContract(snapshot).violations).toContainEqual(
       expect.objectContaining({ type: 'schedule', recordId: 'ev-1', rule: 'broken-relation' }),
     );
+  });
+
+  it('передаёт CMS номер проведения из нарушения контракта и сохраняет отказ', () => {
+    const snapshot = wholeSnapshot();
+    Object.assign(snapshot.content.types.schedule[0]!, { id: 72, slug: '73', seminar: 'sem-missing' });
+    const directory = mkdtempSync(join(tmpdir(), 'ikpk-refresh-diagnostic-test-'));
+    const path = join(directory, 'diagnostic');
+    vi.stubEnv('IKPK_REFRESH_DIAGNOSTIC_FILE', path);
+    try {
+      expect(() => {
+        try {
+          assertCaptureSnapshotContract(snapshot);
+        } catch (error) {
+          reportSnapshotContractError(error);
+        }
+      }).toThrow(/контракт снимка нарушен/);
+      expect(readFileSync(path, 'utf8')).toBe('72');
+    } finally {
+      vi.unstubAllEnvs();
+      rmSync(directory, { recursive: true, force: true });
+    }
   });
 
   // Сценарий: повторяющийся идентификатор

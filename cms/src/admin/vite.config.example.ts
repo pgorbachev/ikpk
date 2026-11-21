@@ -70,6 +70,7 @@ export default (config: UserConfig) => {
         '@': '/src',
         '@ikpk/native-relations': resolve(process.cwd(), 'node_modules/@strapi/content-manager/dist/admin/pages/EditView/components/FormInputs/Relations/Relations.mjs'),
         '@ikpk/document-context': resolve(process.cwd(), 'node_modules/@strapi/content-manager/dist/admin/hooks/useDocumentContext.mjs'),
+        '@ikpk/strapi-date-time-input': resolve(process.cwd(), 'node_modules/@strapi/admin/dist/admin/admin/src/components/FormInputs/DateTime.mjs'),
       },
     },
   });

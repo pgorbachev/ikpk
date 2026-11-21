@@ -65,9 +65,6 @@ async function configurations(onInitialConfiguration?: (uid: string, configurati
           const metadatas: Configuration['metadatas'] = Object.fromEntries(
             attributesOf(SCHEMAS[uid]).map((field) => [field, { edit: { visible: true }, list: {} }]),
           );
-          if (uid === 'api::article.article' && metadatas.slug) {
-            metadatas.slug.edit = { ...metadatas.slug.edit, editable: false };
-          }
           const configuration = {
             settings: uid === 'api::article.article' ? ARTICLE_EXISTING_CONFIGURATION.settings : {},
             metadatas,
@@ -170,12 +167,14 @@ test('подписи и подсказки статьи синхронизиру
 
   assert.equal(config.metadatas.title?.edit?.label, 'Заголовок');
   assert.equal(config.metadatas.slug?.edit?.label, 'Адрес страницы');
-  assert.match(config.metadatas.slug?.edit?.description ?? '', /часть адреса статьи после \/statyi\//i);
-  assert.doesNotMatch(config.metadatas.slug?.edit?.description ?? '', /автомат|созда[её]тся/i);
+  assert.match(config.metadatas.slug?.edit?.description ?? '', /формируется из заголовка/i);
+  assert.match(config.metadatas.slug?.edit?.description ?? '', /После сохранения адрес не меняется/i);
   assert.equal(config.metadatas.slug?.edit?.editable, false);
   assert.equal(config.metadatas.body?.edit?.label, 'Текст статьи');
   assert.equal(config.metadatas.image?.edit?.label, 'Изображение');
   assert.equal(config.metadatas.published_date?.edit?.label, 'Дата публикации');
+  assert.match(config.metadatas.published_date?.edit?.description ?? '', /календарный день по Москве/i);
+  assert.match(config.metadatas.published_date?.edit?.description ?? '', /если очистить уже сохранённую дату, останется прежний день/i);
   assert.equal(config.metadatas.legacy_id?.edit?.label, 'Старый идентификатор');
   assert.equal(config.metadatas.seo?.edit?.label, 'SEO');
   assert.match(config.metadatas.seo?.edit?.description ?? '', /Можно не заполнять/i);

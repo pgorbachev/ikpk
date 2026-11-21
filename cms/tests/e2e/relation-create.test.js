@@ -210,6 +210,54 @@ describe('связь проведения с семинаром: content-admin',
     assert.ok(page.url().includes(seminarId));
   });
 
+  test('сохранение семинара не отсоединяет опубликованное проведение', async () => {
+    const seminars = app.documents('api::seminar.seminar');
+    const entries = app.documents(uid);
+    const [teacher] = await app.documents('api::teacher.teacher').findMany({ filters: { slug: 'teacher' } });
+    const entry = await entries.create({ status: 'published', data: {
+      seminar: seminarId,
+      teachers: [teacher.documentId],
+      city: 'Ижевск',
+      startAt: '2026-12-01T00:00:00.000Z',
+      endAt: '2026-12-02T00:00:00.000Z',
+      entry_status: 'active',
+      registrationFormLink: 'https://example.org/register',
+    } });
+    try {
+      await openSeminar();
+      const row = page.getByRole('listitem').filter({ hasText: 'Ижевск' });
+      await row.getByText(/Ижевск/).waitFor();
+      await row.getByRole('button', { name: /^(удалить|remove)$/i }).click({ timeout: 5000 });
+
+      const saved = page.waitForResponse(response =>
+        response.request().method() === 'PUT' &&
+        response.url().includes(`/content-manager/collection-types/api::seminar.seminar/${seminarId}`),
+      );
+      await page.getByRole('button', { name: 'Сохранить', exact: true }).click();
+      const response = await saved;
+      const payload = response.request().postDataJSON();
+      const relation = payload.data?.schedule_entries ?? payload.schedule_entries;
+      assert.equal(relation.disconnect[0].documentId, entry.documentId);
+
+      for (const status of ['draft', 'published']) {
+        const savedEntry = await entries.findOne({ documentId: entry.documentId, status, populate: ['seminar'] });
+        assert.equal(savedEntry.seminar?.documentId, seminarId, status);
+        const savedSeminar = await seminars.findOne({ documentId: seminarId, status, populate: ['schedule_entries'] });
+        assert.ok(savedSeminar.schedule_entries.some(row => row.documentId === entry.documentId), status);
+      }
+      const message = 'Нельзя отсоединить сохранённое проведение от семинара.';
+      assert.equal(response.status(), 400);
+      assert.equal((await response.json()).error.message, message);
+      await page.getByText(message, { exact: true }).waitFor({ timeout: 5000 });
+
+      await openSeminar();
+      await row.getByText(/Ижевск/).click();
+      await page.locator('input[name="seminar"]').waitFor();
+    } finally {
+      await entries.delete({ documentId: entry.documentId });
+    }
+  });
+
   test('Content Manager creates and links a relation from the seminar form', async () => {
     let entryDocumentId;
     try {

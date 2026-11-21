@@ -8,7 +8,7 @@ import { cpSync, existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writ
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { materializeInto } from './lib/content-media-store.ts';
-import { assertCaptureSnapshotContract } from './lib/capture-snapshot-contract.ts';
+import { assertCaptureSnapshotContract, reportSnapshotContractError } from './lib/capture-snapshot-contract.ts';
 import type { Snapshot } from './lib/content-snapshot.ts';
 
 const webRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -51,8 +51,12 @@ if (!existsSync(join(source, 'snapshot.json'))) {
 // Snapshot validation is also required when a previously captured artifact is built later.
 const sourceSnapshot = JSON.parse(readFileSync(join(source, 'snapshot.json'), 'utf8')) as Snapshot;
 const sourcePolicy = sourceSnapshot.sourcePolicy;
-assertCaptureSnapshotContract(sourceSnapshot, undefined,
-  sourcePolicy === 'initial-production' ? 'initial-prod' : sourcePolicy === 'production-static' ? 'production-static' : undefined);
+try {
+  assertCaptureSnapshotContract(sourceSnapshot, undefined,
+    sourcePolicy === 'initial-production' ? 'initial-prod' : sourcePolicy === 'production-static' ? 'production-static' : undefined);
+} catch (error) {
+  reportSnapshotContractError(error);
+}
 
 // Кнопка обновления снимает прямо в web/.snapshot и тем же каталогом задаёт
 // CONTENT_SNAPSHOT_DIR. cpSync файла самого в себя — ERR_FS_CP_EINVAL, сборка падает

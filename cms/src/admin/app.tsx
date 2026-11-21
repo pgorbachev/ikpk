@@ -3,6 +3,7 @@ import type { StrapiApp } from '@strapi/strapi/admin';
 import { contentManagerHomeRoute } from './content-home';
 import { OccurrenceRelations } from './components/OccurrenceRelations';
 import OccurrencePrice from './components/OccurrencePrice';
+import ArticleCalendarDate from './components/ArticleCalendarDate';
 import { SITE_REFRESH_ICON_PATH, siteRefreshIconProps, type SiteRefreshIconProps } from './site-refresh-icon';
 
 function SiteRefreshIcon(props: SiteRefreshIconProps) {
@@ -20,6 +21,7 @@ export default {
   register(app: StrapiApp) {
     app.router.addRoute(contentManagerHomeRoute());
     app.addFields({ type: 'relation', Component: OccurrenceRelations });
+    app.addFields({ type: 'datetime', Component: ArticleCalendarDate });
     app.customFields.register({
       name: 'wall-clock-datetime',
       type: 'datetime',
