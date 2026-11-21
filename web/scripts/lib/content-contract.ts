@@ -37,8 +37,11 @@ export function validOccurrenceId(value: unknown): value is number {
 }
 
 export class SnapshotContractError extends Error {
-  constructor(message: string, readonly unlinkedOccurrenceId?: number) {
+  readonly unlinkedOccurrenceId?: number;
+
+  constructor(message: string, unlinkedOccurrenceId?: number) {
     super(message);
+    this.unlinkedOccurrenceId = unlinkedOccurrenceId;
   }
 }
 

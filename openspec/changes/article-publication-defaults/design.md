@@ -1,6 +1,6 @@
 ## Context
 
-База проверки — `origin/main` на `62744c31283e2c9b31e84512d3b8cfc793e8d5f7`. Схема Article хранит `published_date` как datetime и `slug` как UID с `targetField: title`. Синхронизация подписей формы сохраняет действующие настройки редактирования. Publication lifecycle проверяет дату и идентификатор при `publish` и при `create` или `update` с опубликованным статусом. Захват контента мапит `published_date` в `published_at`, а импорт переносит исходную дату в `published_date`.
+База проверки — основная ревизия с CMS-схемой Article: `cms/src/api/article/content-types/article/schema.json@62744c31283e2c9b31e84512d3b8cfc793e8d5f7:19-22`, `"type": "uid"`; дата задана в `cms/src/api/article/content-types/article/schema.json@62744c31283e2c9b31e84512d3b8cfc793e8d5f7:35-36`, `"type": "datetime"`. Синхронизация подписей формы сохраняет действующие настройки редактирования. Publication lifecycle проверяет дату и идентификатор при `publish` и при `create` или `update` с опубликованным статусом. Захват контента мапит `published_date` в `published_at`, а импорт переносит исходную дату в `published_date`.
 
 ## Goals / Non-Goals
 

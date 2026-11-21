@@ -477,7 +477,6 @@ export function registerPublicationLifecycle(strapi: Core.Strapi): void {
     }
 
     const params = context.params as { documentId?: string; status?: string; data?: Record<string, unknown> };
-    let publishedWrite = false;
     const continueWrite = async () => {
       try {
         return await next();
@@ -511,7 +510,7 @@ export function registerPublicationLifecycle(strapi: Core.Strapi): void {
       }
     }
 
-    publishedWrite =
+    const publishedWrite: boolean =
       context.action === 'publish' ||
       ((context.action === 'create' || context.action === 'update') && params.status === 'published');
 
