@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { parse, parseFragment } from 'parse5';
 import { prepareArticleImages } from '../src/lib/article-images.js';
 import { localizeAssetUrls } from '../src/lib/media.js';
 import { dist } from './helpers/dist-pages.js';
@@ -10,6 +11,20 @@ import {
   type MigrationPageInventory,
 } from './helpers/rich-content-safety/migration-page-inventory.js';
 import type { MigrationRow } from './helpers/rich-content-safety/migration.js';
+
+type HtmlNode = {
+  tagName?: string;
+  attrs?: { name: string; value: string }[];
+  childNodes?: HtmlNode[];
+};
+
+function descendants(node: HtmlNode): HtmlNode[] {
+  return [node, ...(node.childNodes ?? []).flatMap(descendants)];
+}
+
+function attr(node: HtmlNode, name: string): string | undefined {
+  return node.attrs?.find((item) => item.name === name)?.value;
+}
 
 describe('rich-content contract: migration classes in production output', () => {
   it('live inventory совпадает с committed evidence и article detail routes не теряют mapped classes', () => {
@@ -59,6 +74,24 @@ describe('rich-content contract: migration classes in production output', () => 
       const pageHtml = readFileSync(pagePath, 'utf-8');
       const hero = pageHtml.match(/<div class="article-hero"[^>]*>([\s\S]*?)<\/div>/)?.[1] ?? '';
       const heroImage = hero.match(/<img\b[^>]*\bsrc=(['"])(.*?)\1/i)?.[2];
+      const pageTree = parse(pageHtml) as unknown as HtmlNode;
+      const bodySink = descendants(pageTree).find(
+        (node) => attr(node, 'data-safe-rich-content') === 'article-body',
+      );
+      const bodyImageSources = bodySink
+        ? descendants(bodySink)
+            .filter((node) => node.tagName === 'img')
+            .map((node) => attr(node, 'src'))
+            .filter((src): src is string => Boolean(src))
+        : [];
+      const distinctSourceImages = article
+        ? descendants(parseFragment(article.body_html) as unknown as HtmlNode)
+            .filter((node) => node.tagName === 'img')
+            .map((node) => attr(node, 'src'))
+            .filter((src): src is string => Boolean(src))
+            .map(localizeAssetUrls)
+            .filter((src) => src !== localizeAssetUrls(article.image ?? ''))
+        : [];
 
       if (
         article?.image &&
@@ -66,7 +99,10 @@ describe('rich-content contract: migration classes in production output', () => 
         hasTransparentColor &&
         prepared &&
         !prepared.bodyHtml.includes(sourceImageTag!) &&
-        heroImage === localizeAssetUrls(article.image)
+        heroImage === localizeAssetUrls(article.image) &&
+        bodySink &&
+        !bodyImageSources.includes(localizeAssetUrls(sourceImage)) &&
+        distinctSourceImages.every((src) => bodyImageSources.includes(src))
       ) {
         safelyRelocatedCoverRoutes.add(route);
       }
