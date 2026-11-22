@@ -1,6 +1,6 @@
 ## Context
 
-База: `origin/main@7b4548d234710e0f0daacc2c8a46787b1e822e2f`. Классификатор в
+База — коммит `7b4548d234710e0f0daacc2c8a46787b1e822e2f`. Классификатор в
 `web/scripts/lib/dependabot-auto-merge.ts` пускает patch/minor только для npm `web`,
 npm `scripts` и `github-actions`. Сравнение узлов реестра в
 `web/scripts/check-dependabot-auto-merge.ts` считает узел изменённым, если
@@ -10,7 +10,7 @@ npm `scripts` и `github-actions`. Сравнение узлов реестра 
 На этой же ревизии обязательный `cms checks` запускает eslint, `tsc` и `npm test`.
 Скрипт `test` покрывает `src/**/*.test.ts` и `tests/*.test.js`. `cms` `test:e2e` стоит
 в nightly, а не в проверке, которая обязательна для слияния PR. У `payments` в
-`package.json` нет скрипта тестов: обязательны eslint, `tsc` и audit. Процесс
+`payments/package.json` нет скрипта тестов: обязательны eslint, `tsc` и audit. Процесс
 `payments` стартует через `node --import tsx`.
 
 См. proposal.md — зачем сужать класс. Требование — в дельте
@@ -81,7 +81,7 @@ eslint, `tsc` и `npm test`. Серверный код `cms` импортиру�
 Автослияние прошло бы при красном eslint и `tsc`. Открытый #492 остаётся ручным.
 
 **Отвергнуты `@types/react` и `@types/react-dom`.** Импорты React в отслеживаемом коде
-`cms` лежат в `src/admin/`. `cms/tsconfig.json` исключает этот каталог и не включает
+`cms` лежат в `cms/src/admin/`. `cms/tsconfig.json` исключает этот каталог и не включает
 `.tsx`. Обязательный `tsc` на таком подъёме не краснеет.
 
 **Отвергнуто: вся секция разработки.** Секция уже отвергнута как признак. Новая
