@@ -2,8 +2,8 @@
   "status": "implemented",
   "runtime": {
     "packages": [
-      "parse5",
-      "markdown-it"
+      "markdown-it",
+      "parse5"
     ],
     "lockfileNodes": [
       "node_modules/argparse",
