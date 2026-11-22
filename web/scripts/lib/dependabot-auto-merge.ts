@@ -184,10 +184,51 @@ export function isAuthoritativeEvidenceRun(input: AuthoritativeEvidenceRunInput)
     provenanceJobs[0].conclusion === 'success';
 }
 
+const CMS_TOOLCHAIN = new Set([
+  '@eslint/js',
+  'eslint',
+  'globals',
+  'typescript',
+  'typescript-eslint',
+  '@types/node',
+]);
+
 function updateMatchesAllowTable(update: DependencyUpdate): boolean {
   if (!['semver-patch', 'semver-minor'].includes(update.updateType)) return false;
   if (update.ecosystem === 'github-actions') return update.packageName === undefined;
-  return update.ecosystem === 'npm' && (update.packageName === 'web' || update.packageName === 'scripts');
+  if (update.ecosystem !== 'npm') return false;
+  if (update.packageName === 'web' || update.packageName === 'scripts') return true;
+  return update.packageName === 'cms' && CMS_TOOLCHAIN.has(update.dependencyName);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function dependencyMap(value: unknown): Record<string, unknown> | null {
+  if (value === undefined) return {};
+  return isRecord(value) ? value : null;
+}
+
+function mapsMatch(base: unknown, head: unknown): boolean {
+  const left = dependencyMap(base);
+  const right = dependencyMap(head);
+  if (!left || !right) return false;
+  const keys = Object.keys(left);
+  return keys.length === Object.keys(right).length &&
+    keys.every((key) => Object.hasOwn(right, key) && left[key] === right[key]);
+}
+
+export function registeredLockfileNodeChanged(base: unknown, head: unknown): boolean {
+  const baseMissing = base === undefined || base === null;
+  const headMissing = head === undefined || head === null;
+  if (baseMissing || headMissing) return baseMissing !== headMissing;
+  if (!isRecord(base) || !isRecord(head)) return true;
+  if (base.version !== head.version || base.resolved !== head.resolved || base.integrity !== head.integrity) {
+    return true;
+  }
+  return !mapsMatch(base.dependencies, head.dependencies) ||
+    !mapsMatch(base.optionalDependencies, head.optionalDependencies);
 }
 
 export function classifyPullRequest(input: ClassificationInput): ClassificationDecision {
