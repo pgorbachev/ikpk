@@ -142,6 +142,7 @@ export interface AuthoritativeEvidenceRunInput {
 
 export interface DependabotAutoMerge {
   classifyPullRequest(input: ClassificationInput): ClassificationDecision;
+  registeredLockfileNodeChanged(base: unknown, head: unknown): boolean;
   evaluateHead(input: HeadEvaluationInput): HeadEvaluation;
   evaluateMergeReadiness(input: MergeReadinessInput): Decision;
   normalizeDependabotEcosystem(ecosystem: string): string;

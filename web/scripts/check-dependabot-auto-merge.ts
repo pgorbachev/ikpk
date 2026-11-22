@@ -8,6 +8,7 @@ import {
   isAuthoritativeEvidenceRun,
   isTrustedPositiveEvidence,
   normalizeDependabotEcosystem,
+  registeredLockfileNodeChanged,
   type DependencyUpdate,
   type HeadEvaluation,
   type HeadEvaluationInput,
@@ -253,7 +254,7 @@ async function securityRegistry(baseSha: string, headSha: string): Promise<{
       directPackages.length > 0 && lockfileNodes.length > 0 &&
       unique(directPackages) && unique(lockfileNodes) && packagesExist && nodesExist && Boolean(headNodes);
     const changedLockfileNodes = consistent
-      ? lockfileNodes.filter((node) => JSON.stringify(baseNodes?.[node]) !== JSON.stringify(headNodes?.[node]))
+      ? lockfileNodes.filter((node) => registeredLockfileNodeChanged(baseNodes?.[node], headNodes?.[node]))
       : [];
     return { readable: true, consistent, directPackages, lockfileNodes, changedLockfileNodes };
   } catch {

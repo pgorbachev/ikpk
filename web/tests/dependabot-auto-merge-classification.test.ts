@@ -103,4 +103,70 @@ describe('Dependabot auto-merge classification table', () => {
       conclusion: 'failure',
     });
   });
+
+  const toolchain = ['@eslint/js', 'eslint', 'globals', 'typescript', 'typescript-eslint', '@types/node'] as const;
+
+  it.each(toolchain)('allows cms toolchain patch %s', async (dependencyName) => {
+    const { classifyPullRequest } = await loadDependabotAutoMerge();
+    expect(classifyPullRequest(input([update({
+      packageName: 'cms',
+      dependencyName,
+      updateType: 'semver-patch',
+      dependencySection: 'development',
+    })]))).toMatchObject({ eligible: true, status: 'eligible' });
+  });
+
+  it('allows a separate cms typescript-eslint minor', async () => {
+    const { classifyPullRequest } = await loadDependabotAutoMerge();
+    expect(classifyPullRequest(input([update({
+      packageName: 'cms',
+      dependencyName: 'typescript-eslint',
+      updateType: 'semver-minor',
+    })]))).toMatchObject({ eligible: true, status: 'eligible' });
+  });
+
+  it.each([
+    ['styled-components', 'semver-patch', 'production'],
+    ['@strapi/strapi', 'semver-patch', 'production'],
+    ['@types/react', 'semver-minor', 'development'],
+    ['@types/react-dom', 'semver-patch', 'development'],
+  ] as const)('keeps cms %s manual', async (dependencyName, updateType, dependencySection) => {
+    const { classifyPullRequest } = await loadDependabotAutoMerge();
+    expect(classifyPullRequest(input([update({
+      packageName: 'cms',
+      dependencyName,
+      updateType,
+      dependencySection,
+    })]))).toMatchObject({ eligible: false, status: 'manual-review' });
+  });
+
+  it.each([
+    ['toolchain name', 'typescript-eslint', 'semver-patch'],
+    ['process runner', 'tsx', 'semver-minor'],
+  ] as const)('keeps any payments update manual (%s)', async (_label, dependencyName, updateType) => {
+    const { classifyPullRequest } = await loadDependabotAutoMerge();
+    expect(classifyPullRequest(input([update({
+      packageName: 'payments',
+      dependencyName,
+      updateType,
+      dependencySection: 'development',
+    })]))).toMatchObject({ eligible: false, status: 'manual-review' });
+  });
+
+  it.each(toolchain)('keeps a cms toolchain major manual (%s)', async (dependencyName) => {
+    const { classifyPullRequest } = await loadDependabotAutoMerge();
+    expect(classifyPullRequest(input([update({
+      packageName: 'cms',
+      dependencyName,
+      updateType: 'semver-major',
+    })]))).toMatchObject({ eligible: false, status: 'manual-review' });
+  });
+
+  it('keeps a group manual when one member is outside the cms toolchain list', async () => {
+    const { classifyPullRequest } = await loadDependabotAutoMerge();
+    expect(classifyPullRequest(input([
+      update({ packageName: 'cms', dependencyName: 'eslint', updateType: 'semver-patch' }),
+      update({ packageName: 'cms', dependencyName: 'styled-components', updateType: 'semver-patch' }),
+    ]))).toMatchObject({ eligible: false, status: 'manual-review' });
+  });
 });
