@@ -92,7 +92,7 @@ describe('rich-content contract: migration classes in production output', () => 
             .filter((node) => node.tagName === 'img')
             .map((node) => attr(node, 'src'))
             .filter((src): src is string => Boolean(src))
-            .map(localizeAssetUrls)
+            .map((src) => localizeAssetUrls(src))
             .filter((src) => src !== localizeAssetUrls(article.image ?? ''))
         : [];
       const expectedBody = article && prepared
