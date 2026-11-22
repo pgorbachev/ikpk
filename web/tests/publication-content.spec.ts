@@ -56,6 +56,20 @@ test('candidate global search opens, returns captured content, navigates and clo
     await input.fill(subject.query);
     const hrefs = [subject.route, new URL(subject.route, page.url()).href].flatMap((href) => [href, `${href}/`]);
     const result = page.locator(hrefs.map((href) => `.pagefind-ui__result-link[href=${JSON.stringify(href)}]`).join(',')).first();
+    const results = page.locator('.pagefind-ui__result-link');
+    const loadMore = page.locator('.pagefind-ui__button').filter({ hasText: 'Показать ещё' });
+    // Wait until Pagefind has produced this query's first batch before deciding
+    // whether pagination is needed; `fill()` only starts the asynchronous search.
+    await expect(results.first()).toBeVisible({ timeout: 20_000 });
+    // The sealed article's first useful token can be common (for example, "нарушений")
+    // and rank its page beyond Pagefind's initial ten results. Follow the real results
+    // pagination until that exact captured route appears; an absent route still fails.
+    for (let pageIndex = 0; pageIndex < 100 && !(await result.count()); pageIndex++) {
+      if (!(await loadMore.isVisible().catch(() => false))) break;
+      const previousCount = await results.count();
+      await loadMore.click();
+      await expect.poll(() => results.count()).toBeGreaterThan(previousCount);
+    }
     await expect(result).toBeVisible({ timeout: 20_000 });
     await result.click(); await expect.poll(() => new URL(page.url()).pathname.replace(/\/$/, '')).toBe(subject.route);
     await expect(page.locator('h1').first()).toBeVisible();
