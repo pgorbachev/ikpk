@@ -96,6 +96,7 @@ export default defineConfig({
       'tests/seminar-snapshot-fields.render.test.ts',
       'tests/footer-snapshot-clock.render.test.ts',
       'tests/maintenance-notice.render.test.ts',
+      'tests/article-body-render.render.test.ts',
       // Private migration evidence uses Astro and separately supplied source data.
       // Keep it in vitest.migration.config.ts, not the ordinary unit transform.
       'tests/seminar-real-migration.migration.test.ts',

@@ -110,7 +110,7 @@ export async function generateBaselineArtifacts(): Promise<void> {
       packages: ORACLE_PACKAGES,
       lockfileNodes: subtreeLockfileNodes(lockfile, ORACLE_PACKAGES),
     },
-    note: 'Runtime sanitizer: parse5 (HTML5 tree construction). Oracle: Playwright Chromium DOMParser. Subtrees have no shared parser engine.',
+    note: 'Runtime Markdown renderer: markdown-it; HTML sanitizer: parse5 (HTML5 tree construction). Oracle: Playwright Chromium DOMParser. Subtrees have no shared parser engine.',
   });
   writeJson('output-occurrence-registry.json', {
     status: 'source-inventory-only',
@@ -266,7 +266,7 @@ function buildRenderedRegistry(data: {
 }
 
 // Runtime choice is reviewed; regeneration refreshes its lockfile subtree without reverting it.
-const RUNTIME_SANITIZER_PACKAGES = ['parse5'];
+const RUNTIME_SANITIZER_PACKAGES = ['markdown-it', 'parse5'];
 const ORACLE_PACKAGES = ['playwright'];
 
 if (process.argv[1]?.includes('generate-baseline')) {

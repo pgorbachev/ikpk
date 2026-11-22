@@ -29,6 +29,7 @@ export default await getViteConfig({
       'tests/home-people.render.test.ts',
       'tests/footer-snapshot-clock.render.test.ts',
       'tests/maintenance-notice.render.test.ts',
+      'tests/article-body-render.render.test.ts',
       'tests/seminar-price.render.test.ts',
       'tests/seminar-event-schema.render.test.ts',
       'tests/seminar-documents.render.test.ts',

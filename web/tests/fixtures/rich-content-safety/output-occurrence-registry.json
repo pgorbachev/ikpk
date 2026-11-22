@@ -149,7 +149,7 @@
     "src:pages/sotrudnichestvo-s-nami.astro:L53:C1:style",
     "src:pages/specialisty/[slug].astro:L54:C1:style",
     "src:pages/specialisty/index.astro:L47:C1:style",
-    "src:pages/statyi/[slug].astro:L155:C1:style",
+    "src:pages/statyi/[slug].astro:L164:C1:style",
     "src:pages/statyi/index.astro:L119:C17:template",
     "src:pages/statyi/index.astro:L139:C1:style",
     "src:pages/statyi/index.astro:L227:C1:script",
@@ -102859,7 +102859,7 @@
       "slotId": "src:components/ArticleCard.astro:L39:C1:style",
       "route": "/statyi/90percent-narushenij-v-skeletno-myshechnoj-sisteme",
       "placement": "doc-order:6:style",
-      "identity": "style|body:a6d6933cfe74d7b9",
+      "identity": "style|body:41921a23467aa97f",
       "count": 1,
       "builds": [
         "production",
@@ -103109,7 +103109,7 @@
       "slotId": "src:components/ArticleCard.astro:L39:C1:style",
       "route": "/statyi/beremennost-rody-i-vozmozhnosti-osteopatii",
       "placement": "doc-order:6:style",
-      "identity": "style|body:a6d6933cfe74d7b9",
+      "identity": "style|body:41921a23467aa97f",
       "count": 1,
       "builds": [
         "production",
@@ -103359,7 +103359,7 @@
       "slotId": "src:components/ArticleCard.astro:L39:C1:style",
       "route": "/statyi/diagnostika-helikobakterioza-metodom-prikladnoj-kineziologii",
       "placement": "doc-order:6:style",
-      "identity": "style|body:a6d6933cfe74d7b9",
+      "identity": "style|body:41921a23467aa97f",
       "count": 1,
       "builds": [
         "production",
@@ -103609,7 +103609,7 @@
       "slotId": "src:components/ArticleCard.astro:L39:C1:style",
       "route": "/statyi/diagnostika-i-lechenie-trematodnyh-invazij-u-vzroslyh",
       "placement": "doc-order:6:style",
-      "identity": "style|body:a6d6933cfe74d7b9",
+      "identity": "style|body:41921a23467aa97f",
       "count": 1,
       "builds": [
         "production",
@@ -103859,7 +103859,7 @@
       "slotId": "src:components/ArticleCard.astro:L39:C1:style",
       "route": "/statyi/gipertenziya",
       "placement": "doc-order:6:style",
-      "identity": "style|body:a6d6933cfe74d7b9",
+      "identity": "style|body:41921a23467aa97f",
       "count": 1,
       "builds": [
         "production",
@@ -104109,7 +104109,7 @@
       "slotId": "src:components/ArticleCard.astro:L39:C1:style",
       "route": "/statyi/giperventilyaciya-i-kraniosakralnyj-mehanizm",
       "placement": "doc-order:6:style",
-      "identity": "style|body:a6d6933cfe74d7b9",
+      "identity": "style|body:41921a23467aa97f",
       "count": 1,
       "builds": [
         "production",
@@ -104359,7 +104359,7 @@
       "slotId": "src:components/ArticleCard.astro:L39:C1:style",
       "route": "/statyi/gryzha-pishevodnogo-otverstiya-diafragmy",
       "placement": "doc-order:6:style",
-      "identity": "style|body:a6d6933cfe74d7b9",
+      "identity": "style|body:41921a23467aa97f",
       "count": 1,
       "builds": [
         "production",
@@ -104609,7 +104609,7 @@
       "slotId": "src:components/ArticleCard.astro:L39:C1:style",
       "route": "/statyi/institut-barralya-chem-unikalny-ego-programmy-obucheniya-dlya-specialistov-v-oblasti-zdorovya",
       "placement": "doc-order:6:style",
-      "identity": "style|body:a6d6933cfe74d7b9",
+      "identity": "style|body:41921a23467aa97f",
       "count": 1,
       "builds": [
         "production",
@@ -104859,7 +104859,7 @@
       "slotId": "src:components/ArticleCard.astro:L39:C1:style",
       "route": "/statyi/institut-barralya-kak-obuchenie-visceralnym-tehnikam-pomogaet-stat-professionalom",
       "placement": "doc-order:6:style",
-      "identity": "style|body:a6d6933cfe74d7b9",
+      "identity": "style|body:41921a23467aa97f",
       "count": 1,
       "builds": [
         "production",
@@ -105109,7 +105109,7 @@
       "slotId": "src:components/ArticleCard.astro:L39:C1:style",
       "route": "/statyi/ipolzovanie-kraniosakralnoj-terapii-dlya-snyatiya-ogranichenij-i-balansa-tela-pacienta-pri-ispolzovanii-massazhnyh-tehnik",
       "placement": "doc-order:6:style",
-      "identity": "style|body:a6d6933cfe74d7b9",
+      "identity": "style|body:41921a23467aa97f",
       "count": 1,
       "builds": [
         "production",
@@ -105359,7 +105359,7 @@
       "slotId": "src:components/ArticleCard.astro:L39:C1:style",
       "route": "/statyi/ispolzovanie-meridianov-pri-kraniosakralnoj-terapii",
       "placement": "doc-order:6:style",
-      "identity": "style|body:a6d6933cfe74d7b9",
+      "identity": "style|body:41921a23467aa97f",
       "count": 1,
       "builds": [
         "production",
@@ -105609,7 +105609,7 @@
       "slotId": "src:components/ArticleCard.astro:L39:C1:style",
       "route": "/statyi/istoriya-instituta-barralya-kak-vsyo-nachalos-i-chto-delaet-programmu-unikalnoj",
       "placement": "doc-order:6:style",
-      "identity": "style|body:a6d6933cfe74d7b9",
+      "identity": "style|body:41921a23467aa97f",
       "count": 1,
       "builds": [
         "production",
@@ -105859,7 +105859,7 @@
       "slotId": "src:components/ArticleCard.astro:L39:C1:style",
       "route": "/statyi/izmeneniya-v-hiropraktike-v-svete-protomorfologii",
       "placement": "doc-order:6:style",
-      "identity": "style|body:a6d6933cfe74d7b9",
+      "identity": "style|body:41921a23467aa97f",
       "count": 1,
       "builds": [
         "production",
@@ -106109,7 +106109,7 @@
       "slotId": "src:components/ArticleCard.astro:L39:C1:style",
       "route": "/statyi/izuchenie-ritmicheskih-dvizhenij-golovy-pozvolyayushih-opredelit-tretij-ritm",
       "placement": "doc-order:6:style",
-      "identity": "style|body:a6d6933cfe74d7b9",
+      "identity": "style|body:41921a23467aa97f",
       "count": 1,
       "builds": [
         "production",
@@ -106359,7 +106359,7 @@
       "slotId": "src:components/ArticleCard.astro:L39:C1:style",
       "route": "/statyi/kislotno-shelochnoj-balans-i-lechenie-pacienta",
       "placement": "doc-order:6:style",
-      "identity": "style|body:a6d6933cfe74d7b9",
+      "identity": "style|body:41921a23467aa97f",
       "count": 1,
       "builds": [
         "production",
@@ -106609,7 +106609,7 @@
       "slotId": "src:components/ArticleCard.astro:L39:C1:style",
       "route": "/statyi/klinicheskij-sluchaj-visceralnyh-manipulyacij-pri-podrostkovom-idiopaticheskom-skolioze",
       "placement": "doc-order:6:style",
-      "identity": "style|body:a6d6933cfe74d7b9",
+      "identity": "style|body:41921a23467aa97f",
       "count": 1,
       "builds": [
         "production",
@@ -106859,7 +106859,7 @@
       "slotId": "src:components/ArticleCard.astro:L39:C1:style",
       "route": "/statyi/kraniosakralnaya-terapiya-chto-eto-za-metod-i-kak-on-rabotaet",
       "placement": "doc-order:6:style",
-      "identity": "style|body:a6d6933cfe74d7b9",
+      "identity": "style|body:41921a23467aa97f",
       "count": 1,
       "builds": [
         "production",
@@ -107109,7 +107109,7 @@
       "slotId": "src:components/ArticleCard.astro:L39:C1:style",
       "route": "/statyi/kraniosakralnaya-terapiya-i-visceralnye-manipulyacii",
       "placement": "doc-order:6:style",
-      "identity": "style|body:a6d6933cfe74d7b9",
+      "identity": "style|body:41921a23467aa97f",
       "count": 1,
       "builds": [
         "production",
@@ -107359,7 +107359,7 @@
       "slotId": "src:components/ArticleCard.astro:L39:C1:style",
       "route": "/statyi/krestcovo-podvzdoshnye-i-podvzdoshno-krestcovye-narusheniya",
       "placement": "doc-order:6:style",
-      "identity": "style|body:a6d6933cfe74d7b9",
+      "identity": "style|body:41921a23467aa97f",
       "count": 1,
       "builds": [
         "production",
@@ -107609,7 +107609,7 @@
       "slotId": "src:components/ArticleCard.astro:L39:C1:style",
       "route": "/statyi/lechenie-allergij-v-hiropraktike",
       "placement": "doc-order:6:style",
-      "identity": "style|body:a6d6933cfe74d7b9",
+      "identity": "style|body:41921a23467aa97f",
       "count": 1,
       "builds": [
         "production",
@@ -107859,7 +107859,7 @@
       "slotId": "src:components/ArticleCard.astro:L39:C1:style",
       "route": "/statyi/lechenie-bronhialnoj-astmy",
       "placement": "doc-order:6:style",
-      "identity": "style|body:a6d6933cfe74d7b9",
+      "identity": "style|body:41921a23467aa97f",
       "count": 1,
       "builds": [
         "production",
@@ -108109,7 +108109,7 @@
       "slotId": "src:components/ArticleCard.astro:L39:C1:style",
       "route": "/statyi/metody-issledovaniya-mochi",
       "placement": "doc-order:6:style",
-      "identity": "style|body:a6d6933cfe74d7b9",
+      "identity": "style|body:41921a23467aa97f",
       "count": 1,
       "builds": [
         "production",
@@ -108359,7 +108359,7 @@
       "slotId": "src:components/ArticleCard.astro:L39:C1:style",
       "route": "/statyi/mikrobiota-hronicheskaya-obstruktivnaya-bolezn-legkih",
       "placement": "doc-order:6:style",
-      "identity": "style|body:a6d6933cfe74d7b9",
+      "identity": "style|body:41921a23467aa97f",
       "count": 1,
       "builds": [
         "production",
@@ -108609,7 +108609,7 @@
       "slotId": "src:components/ArticleCard.astro:L39:C1:style",
       "route": "/statyi/mikrobiota-vzaimodejstvie-mezhdu-mikrobiotoj-kishechnika-i-legkimi",
       "placement": "doc-order:6:style",
-      "identity": "style|body:a6d6933cfe74d7b9",
+      "identity": "style|body:41921a23467aa97f",
       "count": 1,
       "builds": [
         "production",
@@ -108859,7 +108859,7 @@
       "slotId": "src:components/ArticleCard.astro:L39:C1:style",
       "route": "/statyi/narusheniya-polovoj-funkcii-u-muzhchin-predstavlenie-ob-andropauze-1",
       "placement": "doc-order:6:style",
-      "identity": "style|body:a6d6933cfe74d7b9",
+      "identity": "style|body:41921a23467aa97f",
       "count": 1,
       "builds": [
         "production",
@@ -109109,7 +109109,7 @@
       "slotId": "src:components/ArticleCard.astro:L39:C1:style",
       "route": "/statyi/narusheniya-polovoj-funkcii-u-muzhchin-predstavlenie-ob-andropauze-2",
       "placement": "doc-order:6:style",
-      "identity": "style|body:a6d6933cfe74d7b9",
+      "identity": "style|body:41921a23467aa97f",
       "count": 1,
       "builds": [
         "production",
@@ -109359,7 +109359,7 @@
       "slotId": "src:components/ArticleCard.astro:L39:C1:style",
       "route": "/statyi/narusheniya-polovoj-funkcii-u-muzhchin-predstavlenie-ob-andropauze-3",
       "placement": "doc-order:6:style",
-      "identity": "style|body:a6d6933cfe74d7b9",
+      "identity": "style|body:41921a23467aa97f",
       "count": 1,
       "builds": [
         "production",
@@ -109609,7 +109609,7 @@
       "slotId": "src:components/ArticleCard.astro:L39:C1:style",
       "route": "/statyi/novyj-podhod-k-mozgu-strukturnyj-disbalans-i-usvoenie-pitatelnyh-veshestv",
       "placement": "doc-order:6:style",
-      "identity": "style|body:a6d6933cfe74d7b9",
+      "identity": "style|body:41921a23467aa97f",
       "count": 1,
       "builds": [
         "production",
@@ -109859,7 +109859,7 @@
       "slotId": "src:components/ArticleCard.astro:L39:C1:style",
       "route": "/statyi/osnovnye-principy-osteopatii",
       "placement": "doc-order:6:style",
-      "identity": "style|body:a6d6933cfe74d7b9",
+      "identity": "style|body:41921a23467aa97f",
       "count": 1,
       "builds": [
         "production",
@@ -110109,7 +110109,7 @@
       "slotId": "src:components/ArticleCard.astro:L39:C1:style",
       "route": "/statyi/otnoshenie-meridionalnoj-rnk-k-prikladnoj-kineziologii",
       "placement": "doc-order:6:style",
-      "identity": "style|body:a6d6933cfe74d7b9",
+      "identity": "style|body:41921a23467aa97f",
       "count": 1,
       "builds": [
         "production",
@@ -110359,7 +110359,7 @@
       "slotId": "src:components/ArticleCard.astro:L39:C1:style",
       "route": "/statyi/pattern-perekrestnogo-polzaniya-i-myshechnyj-spazm",
       "placement": "doc-order:6:style",
-      "identity": "style|body:a6d6933cfe74d7b9",
+      "identity": "style|body:41921a23467aa97f",
       "count": 1,
       "builds": [
         "production",
@@ -110609,7 +110609,7 @@
       "slotId": "src:components/ArticleCard.astro:L39:C1:style",
       "route": "/statyi/pishevoj-faktor-v-hiropraktike",
       "placement": "doc-order:6:style",
-      "identity": "style|body:a6d6933cfe74d7b9",
+      "identity": "style|body:41921a23467aa97f",
       "count": 1,
       "builds": [
         "production",
@@ -110859,7 +110859,7 @@
       "slotId": "src:components/ArticleCard.astro:L39:C1:style",
       "route": "/statyi/povrezhdenie-perifericheskih-nervov-i-sindrom-zapyastnogo-tunnelya",
       "placement": "doc-order:6:style",
-      "identity": "style|body:a6d6933cfe74d7b9",
+      "identity": "style|body:41921a23467aa97f",
       "count": 1,
       "builds": [
         "production",
@@ -111109,7 +111109,7 @@
       "slotId": "src:components/ArticleCard.astro:L39:C1:style",
       "route": "/statyi/predmet-prikladnoj-kineziologii",
       "placement": "doc-order:6:style",
-      "identity": "style|body:a6d6933cfe74d7b9",
+      "identity": "style|body:41921a23467aa97f",
       "count": 1,
       "builds": [
         "production",
@@ -111359,7 +111359,7 @@
       "slotId": "src:components/ArticleCard.astro:L39:C1:style",
       "route": "/statyi/prezentaciya-novogo-podhoda-k-lecheniyu-povrezhdeniya-diskov",
       "placement": "doc-order:6:style",
-      "identity": "style|body:a6d6933cfe74d7b9",
+      "identity": "style|body:41921a23467aa97f",
       "count": 1,
       "builds": [
         "production",
@@ -111609,7 +111609,7 @@
       "slotId": "src:components/ArticleCard.astro:L39:C1:style",
       "route": "/statyi/prikladnaya-kineziologiya-chto-eto-takoe-prostymi-slovami",
       "placement": "doc-order:6:style",
-      "identity": "style|body:a6d6933cfe74d7b9",
+      "identity": "style|body:41921a23467aa97f",
       "count": 1,
       "builds": [
         "production",
@@ -111859,7 +111859,7 @@
       "slotId": "src:components/ArticleCard.astro:L39:C1:style",
       "route": "/statyi/prikladnaya-kineziologiya-i-myshechnoe-testirovanie",
       "placement": "doc-order:6:style",
-      "identity": "style|body:a6d6933cfe74d7b9",
+      "identity": "style|body:41921a23467aa97f",
       "count": 1,
       "builds": [
         "production",
@@ -112109,7 +112109,7 @@
       "slotId": "src:components/ArticleCard.astro:L39:C1:style",
       "route": "/statyi/principy-balansirovaniya-myshc",
       "placement": "doc-order:6:style",
-      "identity": "style|body:a6d6933cfe74d7b9",
+      "identity": "style|body:41921a23467aa97f",
       "count": 1,
       "builds": [
         "production",
@@ -112359,7 +112359,7 @@
       "slotId": "src:components/ArticleCard.astro:L39:C1:style",
       "route": "/statyi/problemy-kolennogo-sustava",
       "placement": "doc-order:6:style",
-      "identity": "style|body:a6d6933cfe74d7b9",
+      "identity": "style|body:41921a23467aa97f",
       "count": 1,
       "builds": [
         "production",
@@ -112609,7 +112609,7 @@
       "slotId": "src:components/ArticleCard.astro:L39:C1:style",
       "route": "/statyi/provokaciya-shejnyh-pozvonkov",
       "placement": "doc-order:6:style",
-      "identity": "style|body:a6d6933cfe74d7b9",
+      "identity": "style|body:41921a23467aa97f",
       "count": 1,
       "builds": [
         "production",
@@ -112859,7 +112859,7 @@
       "slotId": "src:components/ArticleCard.astro:L39:C1:style",
       "route": "/statyi/raskruchivanie-meridianov-dlya-invertirovaniya-techeniya-anemii",
       "placement": "doc-order:6:style",
-      "identity": "style|body:a6d6933cfe74d7b9",
+      "identity": "style|body:41921a23467aa97f",
       "count": 1,
       "builds": [
         "production",
@@ -113109,7 +113109,7 @@
       "slotId": "src:components/ArticleCard.astro:L39:C1:style",
       "route": "/statyi/raskruchivanie-meridianov-pri-kontrakture-depyuitrena",
       "placement": "doc-order:6:style",
-      "identity": "style|body:a6d6933cfe74d7b9",
+      "identity": "style|body:41921a23467aa97f",
       "count": 1,
       "builds": [
         "production",
@@ -113359,7 +113359,7 @@
       "slotId": "src:components/ArticleCard.astro:L39:C1:style",
       "route": "/statyi/respiratornye-funkcii-cherepa",
       "placement": "doc-order:6:style",
-      "identity": "style|body:a6d6933cfe74d7b9",
+      "identity": "style|body:41921a23467aa97f",
       "count": 1,
       "builds": [
         "production",
@@ -113609,7 +113609,7 @@
       "slotId": "src:components/ArticleCard.astro:L39:C1:style",
       "route": "/statyi/sakroiliokalnye-i-iliosakralnye-narusheniya",
       "placement": "doc-order:6:style",
-      "identity": "style|body:a6d6933cfe74d7b9",
+      "identity": "style|body:41921a23467aa97f",
       "count": 1,
       "builds": [
         "production",
@@ -113859,7 +113859,7 @@
       "slotId": "src:components/ArticleCard.astro:L39:C1:style",
       "route": "/statyi/seminar-po-kraniosakralnoj-terapii-1-otzyv",
       "placement": "doc-order:6:style",
-      "identity": "style|body:a6d6933cfe74d7b9",
+      "identity": "style|body:41921a23467aa97f",
       "count": 1,
       "builds": [
         "production",
@@ -114109,7 +114109,7 @@
       "slotId": "src:components/ArticleCard.astro:L39:C1:style",
       "route": "/statyi/seminar-po-kraniosakralnoj-terapii-2-otzyv",
       "placement": "doc-order:6:style",
-      "identity": "style|body:a6d6933cfe74d7b9",
+      "identity": "style|body:41921a23467aa97f",
       "count": 1,
       "builds": [
         "production",
@@ -114359,7 +114359,7 @@
       "slotId": "src:components/ArticleCard.astro:L39:C1:style",
       "route": "/statyi/shizofreniya",
       "placement": "doc-order:6:style",
-      "identity": "style|body:a6d6933cfe74d7b9",
+      "identity": "style|body:41921a23467aa97f",
       "count": 1,
       "builds": [
         "production",
@@ -114609,7 +114609,7 @@
       "slotId": "src:components/ArticleCard.astro:L39:C1:style",
       "route": "/statyi/sindrom-tarzalnogo-tunnelya",
       "placement": "doc-order:6:style",
-      "identity": "style|body:a6d6933cfe74d7b9",
+      "identity": "style|body:41921a23467aa97f",
       "count": 1,
       "builds": [
         "production",
@@ -114859,7 +114859,7 @@
       "slotId": "src:components/ArticleCard.astro:L39:C1:style",
       "route": "/statyi/sluchaj-lecheniya-enureza",
       "placement": "doc-order:6:style",
-      "identity": "style|body:a6d6933cfe74d7b9",
+      "identity": "style|body:41921a23467aa97f",
       "count": 1,
       "builds": [
         "production",
@@ -115109,7 +115109,7 @@
       "slotId": "src:components/ArticleCard.astro:L39:C1:style",
       "route": "/statyi/terapevticheskoe-znachenie-visceralnoj-manipulyacii",
       "placement": "doc-order:6:style",
-      "identity": "style|body:a6d6933cfe74d7b9",
+      "identity": "style|body:41921a23467aa97f",
       "count": 1,
       "builds": [
         "production",
@@ -115359,7 +115359,7 @@
       "slotId": "src:components/ArticleCard.astro:L39:C1:style",
       "route": "/statyi/upravlyat-vospaleniem-v-organizme-s-pomoshyu-kraniosakralnoj-terapii",
       "placement": "doc-order:6:style",
-      "identity": "style|body:a6d6933cfe74d7b9",
+      "identity": "style|body:41921a23467aa97f",
       "count": 1,
       "builds": [
         "production",
@@ -115609,7 +115609,7 @@
       "slotId": "src:components/ArticleCard.astro:L39:C1:style",
       "route": "/statyi/uroki-kitajskogo-dlya-sovremennoj-hiropraktiki",
       "placement": "doc-order:6:style",
-      "identity": "style|body:a6d6933cfe74d7b9",
+      "identity": "style|body:41921a23467aa97f",
       "count": 1,
       "builds": [
         "production",
@@ -115859,7 +115859,7 @@
       "slotId": "src:components/ArticleCard.astro:L39:C1:style",
       "route": "/statyi/ustalost-i-borba-s-neyu",
       "placement": "doc-order:6:style",
-      "identity": "style|body:a6d6933cfe74d7b9",
+      "identity": "style|body:41921a23467aa97f",
       "count": 1,
       "builds": [
         "production",
@@ -116109,7 +116109,7 @@
       "slotId": "src:components/ArticleCard.astro:L39:C1:style",
       "route": "/statyi/visceralnaya-manipulyaciya",
       "placement": "doc-order:6:style",
-      "identity": "style|body:a6d6933cfe74d7b9",
+      "identity": "style|body:41921a23467aa97f",
       "count": 1,
       "builds": [
         "production",
@@ -116359,7 +116359,7 @@
       "slotId": "src:components/ArticleCard.astro:L39:C1:style",
       "route": "/statyi/visceralnaya-manipulyaciya-pri-hronicheskih-bolyah",
       "placement": "doc-order:6:style",
-      "identity": "style|body:a6d6933cfe74d7b9",
+      "identity": "style|body:41921a23467aa97f",
       "count": 1,
       "builds": [
         "production",
@@ -116609,7 +116609,7 @@
       "slotId": "src:components/ArticleCard.astro:L39:C1:style",
       "route": "/statyi/visceralnye-manipulyacii-i-tehniki-na-tkanyah-v-pediatricheskoj-praktike",
       "placement": "doc-order:6:style",
-      "identity": "style|body:a6d6933cfe74d7b9",
+      "identity": "style|body:41921a23467aa97f",
       "count": 1,
       "builds": [
         "production",
@@ -116859,7 +116859,7 @@
       "slotId": "src:components/ArticleCard.astro:L39:C1:style",
       "route": "/statyi/visceralnye-tehniki-chto-eto-takoe-i-kak-oni-mogut-uluchshit-zdorove",
       "placement": "doc-order:6:style",
-      "identity": "style|body:a6d6933cfe74d7b9",
+      "identity": "style|body:41921a23467aa97f",
       "count": 1,
       "builds": [
         "production",
@@ -117109,7 +117109,7 @@
       "slotId": "src:components/ArticleCard.astro:L39:C1:style",
       "route": "/statyi/vstrecha-pravoslavnoj-obshestvennosti-s-vrachom-osteopatom-pilyavskim-sergeem-orestovichem",
       "placement": "doc-order:6:style",
-      "identity": "style|body:a6d6933cfe74d7b9",
+      "identity": "style|body:41921a23467aa97f",
       "count": 1,
       "builds": [
         "production",
@@ -117359,7 +117359,7 @@
       "slotId": "src:components/ArticleCard.astro:L39:C1:style",
       "route": "/statyi/vstuplenie-k-kraniosakralnoj-paradigme-apledzhera",
       "placement": "doc-order:6:style",
-      "identity": "style|body:a6d6933cfe74d7b9",
+      "identity": "style|body:41921a23467aa97f",
       "count": 1,
       "builds": [
         "production",
@@ -117609,7 +117609,7 @@
       "slotId": "src:components/ArticleCard.astro:L39:C1:style",
       "route": "/statyi/vyhod-iz-dramaticheskogo-treugolnika-s-pozicii-psihoterapevticheskoj-kineziologii",
       "placement": "doc-order:6:style",
-      "identity": "style|body:a6d6933cfe74d7b9",
+      "identity": "style|body:41921a23467aa97f",
       "count": 1,
       "builds": [
         "production",
@@ -117859,7 +117859,7 @@
       "slotId": "src:components/ArticleCard.astro:L39:C1:style",
       "route": "/statyi/vzglyad-na-hiropraktiku-s-tochki-zreniya-protomorfologii",
       "placement": "doc-order:6:style",
-      "identity": "style|body:a6d6933cfe74d7b9",
+      "identity": "style|body:41921a23467aa97f",
       "count": 1,
       "builds": [
         "production",
@@ -118109,7 +118109,7 @@
       "slotId": "src:components/ArticleCard.astro:L39:C1:style",
       "route": "/statyi/zabolevaniya-zheludochno-kishechnogo-trakta-1",
       "placement": "doc-order:6:style",
-      "identity": "style|body:a6d6933cfe74d7b9",
+      "identity": "style|body:41921a23467aa97f",
       "count": 1,
       "builds": [
         "production",
@@ -118359,7 +118359,7 @@
       "slotId": "src:components/ArticleCard.astro:L39:C1:style",
       "route": "/statyi/zabolevaniya-zheludochno-kishechnogo-trakta-2",
       "placement": "doc-order:6:style",
-      "identity": "style|body:a6d6933cfe74d7b9",
+      "identity": "style|body:41921a23467aa97f",
       "count": 1,
       "builds": [
         "production",
@@ -118609,7 +118609,7 @@
       "slotId": "src:components/ArticleCard.astro:L39:C1:style",
       "route": "/statyi/zabolevaniya-zheludochno-kishechnogo-trakta-3",
       "placement": "doc-order:6:style",
-      "identity": "style|body:a6d6933cfe74d7b9",
+      "identity": "style|body:41921a23467aa97f",
       "count": 1,
       "builds": [
         "production",
@@ -118859,7 +118859,7 @@
       "slotId": "src:components/ArticleCard.astro:L39:C1:style",
       "route": "/statyi/zabolevaniya-zheludochno-kishechnogo-trakta-4",
       "placement": "doc-order:6:style",
-      "identity": "style|body:a6d6933cfe74d7b9",
+      "identity": "style|body:41921a23467aa97f",
       "count": 1,
       "builds": [
         "production",
@@ -119109,7 +119109,7 @@
       "slotId": "src:components/ArticleCard.astro:L39:C1:style",
       "route": "/statyi/zadnij-ilium-i-nejrolimfaticheskij-refleks",
       "placement": "doc-order:6:style",
-      "identity": "style|body:a6d6933cfe74d7b9",
+      "identity": "style|body:41921a23467aa97f",
       "count": 1,
       "builds": [
         "production",
@@ -119359,7 +119359,7 @@
       "slotId": "src:components/ArticleCard.astro:L39:C1:style",
       "route": "/statyi/zhir-i-ego-utilizaciya-pod-kontrolem-holesterina",
       "placement": "doc-order:6:style",
-      "identity": "style|body:a6d6933cfe74d7b9",
+      "identity": "style|body:41921a23467aa97f",
       "count": 1,
       "builds": [
         "production",
@@ -119609,7 +119609,7 @@
       "slotId": "src:components/ArticleCard.astro:L39:C1:style",
       "route": "/statyi/znachenie-tyazhelyh-metallov-v-razvitii-sindroma-hronicheskoj-ustalosti",
       "placement": "doc-order:6:style",
-      "identity": "style|body:a6d6933cfe74d7b9",
+      "identity": "style|body:41921a23467aa97f",
       "count": 1,
       "builds": [
         "production",

@@ -6,6 +6,8 @@ import AsideCard from '../../components/ui/AsideCard.astro';
 import MetaLabel from '../../components/ui/MetaLabel.astro';
 import PageHeader from '../../components/ui/PageHeader.astro';
 import { getArticles, formatDate, cleanBodyHtml } from '../../lib/data';
+import { prepareArticleImages } from '../../lib/article-images';
+import { renderArticleBody } from '../../lib/article-body-render';
 import RichContent from '../../components/RichContent.astro';
 import type { Article } from '../../lib/data';
 import type { GetStaticPaths } from 'astro';
@@ -19,6 +21,7 @@ export const getStaticPaths: GetStaticPaths = () => {
 };
 
 const { article } = Astro.props as { article: Article };
+const articleImages = prepareArticleImages(article.body_html, article.image);
 
 // До 4 «других статей». Подбор ДЕТЕРМИНИРОВАННЫЙ: раньше здесь был
 // sort(() => Math.random() - 0.5), но это frontmatter статической сборки —
@@ -90,7 +93,13 @@ const articleSchema = {
     {/* Hero image — full width above the 2-column layout */}
     {article.image && (
       <div class="article-hero">
-        <img src={article.image} alt={article.title} loading="eager" width="1200" height="500" />
+        <img
+          src={article.image}
+          alt={article.title}
+          loading="eager"
+          width={articleImages.coverDimensions?.width}
+          height={articleImages.coverDimensions?.height}
+        />
       </div>
     )}
 
@@ -106,7 +115,7 @@ const articleSchema = {
         </PageHeader>
 
         <div class="article-body rich-content">
-          <RichContent html={cleanBodyHtml(article.body_html, { type: 'article', id: article.slug })} sinkId="article-body" />
+          <RichContent html={cleanBodyHtml(renderArticleBody(articleImages.bodyHtml), { type: 'article', id: article.slug })} sinkId="article-body" />
         </div>
       </article>
 
@@ -158,14 +167,17 @@ const articleSchema = {
     margin-bottom: 2rem;
     border-radius: var(--radius-m);
     overflow: hidden;
-    aspect-ratio: 21 / 9;
     background: var(--color-light-300);
   }
 
   .article-hero img {
+    display: block;
     width: 100%;
-    height: 100%;
-    object-fit: cover;
+    height: auto;
+  }
+
+  :global(.article-body img) {
+    height: auto;
   }
 
   :global(.article-header) {
