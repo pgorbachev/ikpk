@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { parse, parseFragment } from 'parse5';
+import { renderArticleBody } from '../src/lib/article-body-render.js';
 import { prepareArticleImages } from '../src/lib/article-images.js';
+import { cleanBodyHtml } from '../src/lib/data.js';
 import { localizeAssetUrls } from '../src/lib/media.js';
 import { dist } from './helpers/dist-pages.js';
 import { CONTENT_JSON_DIR, FIXTURES_DIR } from './helpers/rich-content-safety/paths.js';
@@ -59,6 +61,7 @@ describe('rich-content contract: migration classes in production output', () => 
         .map((row) => row.route),
     );
     const safelyRelocatedCoverRoutes = new Set<string>();
+    const routesWithRetainedDistinctImages = new Set<string>();
     for (const route of coverStyleRoutes) {
       const slug = route.slice('/statyi/'.length);
       const article = articlesBySlug.get(slug);
@@ -92,6 +95,19 @@ describe('rich-content contract: migration classes in production output', () => 
             .map(localizeAssetUrls)
             .filter((src) => src !== localizeAssetUrls(article.image ?? ''))
         : [];
+      const expectedBody = article && prepared
+        ? cleanBodyHtml(
+            renderArticleBody(localizeAssetUrls(prepared.bodyHtml)),
+            { type: 'article', id: article.slug },
+          ).html
+        : '';
+      const expectedBodyImageSources = descendants(
+        parseFragment(expectedBody) as unknown as HtmlNode,
+      )
+        .filter((node) => node.tagName === 'img')
+        .map((node) => attr(node, 'src'))
+        .filter((src): src is string => Boolean(src));
+      if (expectedBodyImageSources.length > 0) routesWithRetainedDistinctImages.add(route);
 
       if (
         article?.image &&
@@ -102,12 +118,15 @@ describe('rich-content contract: migration classes in production output', () => 
         heroImage === localizeAssetUrls(article.image) &&
         bodySink &&
         !bodyImageSources.includes(localizeAssetUrls(sourceImage)) &&
-        distinctSourceImages.every((src) => bodyImageSources.includes(src))
+        distinctSourceImages.every((src) => bodyImageSources.includes(src)) &&
+        bodyImageSources.length === expectedBodyImageSources.length &&
+        bodyImageSources.every((src, index) => src === expectedBodyImageSources[index])
       ) {
         safelyRelocatedCoverRoutes.add(route);
       }
     }
     expect(safelyRelocatedCoverRoutes).toEqual(coverStyleRoutes);
+    expect(routesWithRetainedDistinctImages.size).toBeGreaterThan(0);
 
     const migrationPagesWithoutRemovedCoverMappings = report.pagesWithMissingClasses
       .map((page) => ({
