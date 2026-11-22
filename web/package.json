@@ -58,7 +58,7 @@
   "dependencies": {
     "@astrojs/sitemap": "^3.7.4",
     "astro": "^7.4.2",
-    "markdown-it": "14.3.2",
+    "markdown-it": "14.3.3",
     "parse5": "^8.1.0"
   },
   "devDependencies": {
