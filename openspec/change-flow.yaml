@@ -387,3 +387,11 @@ transitions:
     reason: >-
       Владелец поручил реализацию. База сверена с origin/main@1da3579e8a24a39417bff7f8e1e8efa3964fd53a.
       Допуск payments в таблицу не входит: это решение ревью, а не расширение поставки.
+
+  - change: dependabot-toolchain-auto-merge
+    to: archived
+    at: 2026-11-22T10:10:00Z
+    reason: >-
+      Реализация слита squash-коммитом 9109476850d7c040b6c0119873bedc970bdae183
+      (PR #518). Pin dispatcher переведён на этот SHA, требования перенесены в
+      openspec/specs/dependency-update-automation, каталог change заархивирован.

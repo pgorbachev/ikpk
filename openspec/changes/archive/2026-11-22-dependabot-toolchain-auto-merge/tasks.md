@@ -13,7 +13,7 @@
 
 - [x] 2.1 Сравнивать зарегистрированный узел проекцией идентичности в `web/scripts/check-dependabot-auto-merge.ts`, а не сериализацией всей записи.
 - [x] 2.2 В `web/scripts/lib/dependabot-auto-merge.ts` пускать `cms` только для patch/minor закрытого списка из шести имён. `payments`, имя вне списка и major остаются отказом. Наименее разрешающий член группы сохраняется.
-- [ ] 2.3 Не менять `.github/dependabot.yml`, матрицу статусов и branch protection. Не слать команды Dependabot. После появления коммита с новым классификатором в `main` перевести `uses` в `.github/workflows/dependabot-auto-merge.yml` с `31fab247adc91d49deb1e45c58f0bc7cf5439b65` на SHA этого коммита. До этой замены прод продолжает старый движок.
+- [x] 2.3 Не менять `.github/dependabot.yml`, матрицу статусов и branch protection. Не слать команды Dependabot. Коммит классификатора в `main` — `9109476850d7c040b6c0119873bedc970bdae183`. `uses` в `.github/workflows/dependabot-auto-merge.yml` указывает на него вместо `31fab247adc91d49deb1e45c58f0bc7cf5439b65`.
 
 ## 3. Проверка
 
