@@ -58,6 +58,7 @@
   "dependencies": {
     "@astrojs/sitemap": "^3.7.4",
     "astro": "^7.4.2",
+    "markdown-it": "14.3.2",
     "parse5": "^8.1.0"
   },
   "devDependencies": {
@@ -69,6 +70,7 @@
     "@eslint/js": "^10.0.1",
     "@lhci/cli": "^0.16.0",
     "@playwright/test": "^1.65.0",
+    "@types/markdown-it": "14.2.0",
     "eslint": "^10.14.0",
     "eslint-plugin-astro": "^3.2.1",
     "globals": "^17.14.0",
