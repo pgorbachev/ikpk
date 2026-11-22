@@ -1128,11 +1128,11 @@
     "identity": "style|body:3d9cb93488cb493f"
   },
   {
-    "slotId": "src:pages/statyi/[slug].astro:L156:C1:style",
+    "slotId": "src:pages/statyi/[slug].astro:L155:C1:style",
     "file": "pages/statyi/[slug].astro",
     "nodeKind": "element",
-    "locator": "pages/statyi/[slug].astro:L156:C1:style",
-    "fingerprint": "c0346d748d54c7b0c5244ce4ff2d0b0291b718e2fe543eb38ba49732253febfb",
+    "locator": "pages/statyi/[slug].astro:L155:C1:style",
+    "fingerprint": "8770c145377547cf56525abe0f7bfa9bead1799622ea437aeea8d4379ffc5c01",
     "identity": "style|body:ca3b9642dc9938fe"
   },
   {
