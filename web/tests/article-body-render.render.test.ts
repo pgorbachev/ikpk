@@ -1,8 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
 import { experimental_AstroContainer as AstroContainer } from 'astro/container';
 import { parse } from 'parse5';
 import * as data from '../src/lib/data';
 import ArticlePage from '../src/pages/statyi/[slug].astro';
+import { CONTENT_JSON_DIR } from './helpers/rich-content-safety/paths.js';
 
 type Node = {
   nodeName: string;
@@ -85,5 +87,42 @@ describe('article page body rendering at the RichContent sink', () => {
     expect(textOf(sink)).toContain('Опасная ссылка');
     expect(nodes.some((node) => attr(node, 'onclick') !== undefined)).toBe(false);
     expect(nodes.some((node) => (attr(node, 'href') ?? '').startsWith('javascript:'))).toBe(false);
+  });
+
+  it('removes a real legacy cover before Markdown rendering and keeps separate body images', async () => {
+    const records = JSON.parse(
+      readFileSync(`${CONTENT_JSON_DIR}/articles.json`, 'utf8'),
+    ) as data.Article[];
+    const source = records.find((record) => record.slug === '90percent-narushenij-v-skeletno-myshechnoj-sisteme');
+    expect(source, 'audited article with a real legacy cover').toBeDefined();
+    const wrapper = source!.body_html.match(
+      /<div class="articles-form_imageWrapper__[^"]+"><div class="articles-form_articleImageSkeleton__[^"]+"><img\b[\s\S]*?<\/div><\/div>/,
+    )?.[0];
+    expect(wrapper, 'actual nested legacy cover wrapper').toBeDefined();
+
+    const body = [
+      wrapper!,
+      'Первый абзац новой статьи.',
+      'Второй абзац новой статьи.',
+      'Третий абзац новой статьи.',
+      '<figure><img src="/media/users/1/images/1-1737366054033.webp" alt="Отдельная иллюстрация"></figure>',
+    ].join('\n\n');
+    const record = { ...source!, body_html: body, body_text: body };
+    const root = await renderArticlePage(record);
+    const sink = articleSink(root);
+    const nodes = descendants(sink);
+    const paragraphs = nodes.filter((node) => node.tagName === 'p');
+    const bodyImages = nodes.filter((node) => node.tagName === 'img');
+    const hero = descendants(root).find((node) =>
+      (attr(node, 'class') ?? '').split(/\s+/).includes('article-hero'),
+    );
+    const heroImage = descendants(hero!).find((node) => node.tagName === 'img');
+
+    expect(paragraphs).toHaveLength(3);
+    expect(bodyImages).toHaveLength(1);
+    expect(attr(bodyImages[0], 'src')).toBe('/media/users/1/images/1-1737366054033.webp');
+    expect(attr(heroImage!, 'src')).toBe(source!.image);
+    expect(attr(heroImage!, 'width')).toBe('1200');
+    expect(attr(heroImage!, 'height')).toBe('675');
   });
 });
