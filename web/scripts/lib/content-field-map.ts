@@ -214,7 +214,11 @@ const UNSHOWN = 'сайт ещё не показывает: заполненно
 const OLD_SCHEMA = 'только в прежней схеме; цена и длительность берутся из проведений, статус сайт не читает';
 export const UNMAPPED_SCHEMA_FIELDS: Readonly<Record<string, Readonly<Record<string, string>>>> = {
   institutes: { course_groups: REVERSE },
-  course_groups: { seminars: REVERSE, is_article_category: NOT_YET },
+  course_groups: {
+    seminars: REVERSE,
+    is_article_category: NOT_YET,
+    editor_label: 'служебная подпись для редактора, на сайт не выводится',
+  },
   seminars: {
     schedule_entries: REVERSE,
     seminar_status: OLD_SCHEMA,

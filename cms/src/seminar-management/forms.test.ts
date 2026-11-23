@@ -21,7 +21,16 @@ const SCHEMAS = {
   'api::article.article': 'article',
   'api::seminar.seminar': 'seminar',
   'api::schedule-entry.schedule-entry': 'schedule-entry',
+  'api::course-group.course-group': 'course-group',
+  'api::institute.institute': 'institute',
 } as const;
+
+const OWNED_LAYOUTS = new Set([
+  'api::article.article',
+  'api::seminar.seminar',
+  'api::schedule-entry.schedule-entry',
+  'api::course-group.course-group',
+]);
 
 const ARTICLE_EXISTING_CONFIGURATION = {
   settings: { mainField: 'title', defaultSortBy: 'published_date', defaultSortOrder: 'DESC' },
@@ -48,7 +57,7 @@ function attributesOf(name: string): string[] {
 interface Configuration {
   settings?: Record<string, unknown>;
   metadatas: Record<string, {
-    edit?: { visible?: boolean; editable?: boolean; label?: string; description?: string };
+    edit?: { visible?: boolean; editable?: boolean; label?: string; description?: string; mainField?: string };
     list?: { label?: string };
   }>;
   layouts: { edit: { name: string; size?: number }[][]; [key: string]: unknown };
@@ -145,9 +154,9 @@ function auditArticleConfiguration(sourcePath: string, candidatePath: string) {
   });
 }
 
-test('каждое поле схемы семинара и проведения либо в форме редактора, либо скрыто явно', async () => {
+test('каждое поле схемы статьи, семинара, проведения и программы либо в форме редактора, либо скрыто явно', async () => {
   const saved = await configurations();
-  for (const [uid, name] of Object.entries(SCHEMAS)) {
+  for (const [uid, name] of Object.entries(SCHEMAS).filter(([uid]) => OWNED_LAYOUTS.has(uid))) {
     const config = saved.get(uid);
     assert.ok(config, `форма ${uid} не настроена — проверять нечего`);
     const inForm = new Set(config.layouts.edit.flat().map((cell) => cell.name));
@@ -280,6 +289,20 @@ test('подсказки говорят, где поле видно на сай�
   assert.match(hint(entry, 'description'), /не выводится/);
   assert.match(hint(entry, 'additionalText'), /Начало в ЧЧ:ММ/);
   assert.match(hint(entry, 'isFree'), /Бесплатно/);
+});
+
+test('программа называется по-русски, её адрес закрыт, а в выборе виден институт', async () => {
+  const saved = await configurations();
+  const program = saved.get('api::course-group.course-group');
+  const seminar = saved.get('api::seminar.seminar');
+  const institute = saved.get('api::institute.institute');
+  assert.ok(program && seminar && institute);
+  assert.equal(program.metadatas.slug?.edit?.editable, false);
+  assert.equal(program.metadatas.editor_label?.edit?.visible, false);
+  assert.equal(program.settings?.mainField, 'editor_label');
+  assert.equal(seminar.metadatas.course_group?.edit?.mainField, 'editor_label');
+  assert.equal(institute.metadatas.course_groups?.edit?.label, 'Программы');
+  assert.equal(institute.metadatas.course_groups?.edit?.mainField, 'editor_label');
 });
 
 test('редактор может выбрать преподавателей конкретного проведения в форме', async () => {

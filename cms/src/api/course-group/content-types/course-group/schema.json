@@ -4,8 +4,8 @@
   "info": {
     "singularName": "course-group",
     "pluralName": "course-groups",
-    "displayName": "Course Group",
-    "description": "Group of courses/seminars within an institute"
+    "displayName": "Программа",
+    "description": "Программа одного института"
   },
   "options": {
     "draftAndPublish": true
@@ -15,6 +15,9 @@
     "name": {
       "type": "string",
       "required": false
+    },
+    "editor_label": {
+      "type": "string"
     },
     "slug": {
       "type": "uid",

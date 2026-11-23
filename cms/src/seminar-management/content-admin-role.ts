@@ -69,10 +69,9 @@ export async function ensureContentAdminRole(strapi) {
 // Explicit data migration: do not broaden customized roles on ordinary startup.
 // Knex's transaction is supplied by Strapi, while tests provide a transactional mock.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export async function migrateContentAdminSchemaPermissions(strapi, { onApplied }: { onApplied?: (trx: any, result: { updatedRows: number }) => Promise<void> | void } = {}) {
+export async function migrateContentAdminSchemaPermissions(strapi, { onApplied, additions: only }: { onApplied?: (trx: any, result: { updatedRows: number }) => Promise<void> | void; additions?: Record<string, string[]> } = {}) {
   if (onApplied !== undefined && typeof onApplied !== 'function') throw new Error('onApplied must be a function');
-  const role = await strapi.service('admin::role').findOne({ code: ROLE_CODE });
-  const additions = {
+  const additions = only ?? {
     'api::seminar.seminar': [
       'duration', 'audience', 'documents.document_type_unspecified', 'documents.issuer_unknown', 'documents.completion_scope', 'documents.completion_cycle_name', 'documents.completion_required', 'documents.completion_after_seminar_number', 'documents.other_seminar_href', 'documents.other_seminar_label',
       'documents.signed_by', 'documents.qualification_topic', 'documents.hours_mode', 'documents.hours_may_vary', 'documents.regulation_url', 'documents.regulation_issuer', 'documents.document_on_template', 'documents.includes_completed_level',
@@ -81,7 +80,9 @@ export async function migrateContentAdminSchemaPermissions(strapi, { onApplied }
       'nmo.status', 'nmo.audience', 'nmo.awarded_for', 'nmo.completion_required', 'nmo.purpose', 'nmo.url', 'documents_owner_verified',
     ],
     'api::schedule-entry.schedule-entry': ['isOnline'],
+    'api::course-group.course-group': ['editor_label'],
   };
+  const role = await strapi.service('admin::role').findOne({ code: ROLE_CODE });
   return strapi.db.transaction(async ({ trx }) => {
     let updatedRows = 0;
     const query = strapi.db.query('admin::permission');

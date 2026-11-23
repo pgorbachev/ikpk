@@ -47,6 +47,18 @@ const ENTRY_FIELDS = [
   ['additionalText', 'Примечание', 12, true, 'Текст на карточке расписания. Фраза «Начало в ЧЧ:ММ» показывается как время начала.'],
 ];
 
+const PROGRAM_FIELDS = [
+  ['name', 'Название', 6, true, ''],
+  ['slug', 'Адрес', 6, false, 'Создаётся из названия. Уже заданный адрес сам не меняется.'],
+  ['description', 'Описание', 12, true, ''],
+  ['image', 'Изображение', 6, true, ''],
+  ['institute', 'Институт', 6, true, ''],
+  ['seminars', 'Семинары', 12, true, ''],
+  ['seo', 'SEO', 12, true, ''],
+  ['order', 'Порядок', 4, true, ''],
+  ['is_article_category', 'Категория статей', 6, true, ''],
+];
+
 const ARTICLE_FIELD_LABELS = [
   ['title', 'Заголовок', 'Заголовок статьи.'],
   ['slug', 'Адрес страницы', 'Формируется из заголовка при первом сохранении. После сохранения адрес не меняется.'],
@@ -97,6 +109,12 @@ function overlay(configuration, fields, settings, list, hidden) {
     metadatas.schedule_entries = {
       ...metadatas.schedule_entries,
       edit: { ...metadatas.schedule_entries.edit, mainField: 'admin_label' },
+    };
+  }
+  if (metadatas.course_group?.edit) {
+    metadatas.course_group = {
+      ...metadatas.course_group,
+      edit: { ...metadatas.course_group.edit, mainField: 'editor_label' },
     };
   }
   for (const name of hidden) {
@@ -186,5 +204,31 @@ export async function applyEditorForms(strapi) {
     ['admin_label', 'city', 'entry_status', 'startAt'],
     HIDDEN,
   );
+  await applyOne(
+    strapi,
+    'api::course-group.course-group',
+    PROGRAM_FIELDS,
+    {
+      mainField: 'editor_label',
+      defaultSortBy: 'name',
+      defaultSortOrder: 'ASC',
+    },
+    ['editor_label', 'name'],
+    new Set(['editor_label', 'legacy_id']),
+  );
+  await applyInstituteProgramField(strapi);
   await applyArticleFieldLabels(strapi);
+}
+
+async function applyInstituteProgramField(strapi) {
+  const contentTypes = strapi.plugin('content-manager').service('content-types');
+  const contentType = strapi.contentType('api::institute.institute');
+  const current = await contentTypes.findConfiguration(contentType);
+  const groups = current.metadatas.course_groups ?? { edit: {}, list: {} };
+  current.metadatas.course_groups = {
+    ...groups,
+    edit: { ...groups.edit, label: 'Программы', mainField: 'editor_label' },
+    list: { ...groups.list, label: 'Программы' },
+  };
+  await contentTypes.updateConfiguration(contentType, current);
 }

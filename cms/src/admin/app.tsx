@@ -68,6 +68,9 @@ export default {
     void import('./admin-localization').then(({ ensureDefaultAdminLocale }) =>
       ensureDefaultAdminLocale(window.localStorage),
     );
+    void import('./relation-menu').then(({ installRelationMenuWidth }) =>
+      installRelationMenuWidth(document),
+    );
     app.addMenuLink({
       to: '/site-refresh',
       icon: SiteRefreshIcon,
