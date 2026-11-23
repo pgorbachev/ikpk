@@ -56,7 +56,7 @@ test('у программы редактор меняет только приз�
 });
 
 test('программы и преподаватели доступны для выбора связей только на чтение', () => {
-  assert.ok(find('api::course-group.course-group', 'read'));
+  assert.ok(find('api::course-group.course-group', 'read')?.properties?.fields.includes('editor_label'));
   assert.ok(find('api::teacher.teacher', 'read'));
   assert.equal(find('api::teacher.teacher', 'update'), undefined);
 });

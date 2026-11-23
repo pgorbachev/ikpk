@@ -1,3 +1,4 @@
+import './relation-menu.css';
 import type { ComponentType } from 'react';
 import type { StrapiApp } from '@strapi/strapi/admin';
 import { contentManagerHomeRoute } from './content-home';

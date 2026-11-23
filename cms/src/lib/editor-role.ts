@@ -129,7 +129,7 @@ export const EDITOR_PERMISSIONS: EditorPermission[] = [
   {
     action: contentAction('read'),
     subject: 'api::course-group.course-group',
-    properties: { fields: ['name', 'slug', 'is_article_category'] },
+    properties: { fields: ['name', 'slug', 'editor_label', 'is_article_category'] },
   },
   {
     action: contentAction('update'),

@@ -588,7 +588,7 @@ export function registerSeminarUid(strapi) {
   const uid = strapi.plugin('content-manager').service('uid');
   const original = uid.generateUIDField.bind(uid);
   uid.generateUIDField = async (args) => {
-    if (args?.contentTypeUID === SEMINAR_UID && args?.field === 'slug') {
+    if ((args?.contentTypeUID === SEMINAR_UID || args?.contentTypeUID === COURSE_GROUP_UID) && args?.field === 'slug') {
       const name = args.data?.name;
       if (typeof name !== 'string' || name.trim() === '') return '';
     }

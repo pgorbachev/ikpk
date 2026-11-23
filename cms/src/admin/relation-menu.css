@@ -1,0 +1,17 @@
+/* Длинная подпись «институт — программа» не помещается в ширину поля. */
+[data-radix-popper-content-wrapper]:has([style*='--radix-combobox-trigger-width']) {
+  width: min(56rem, 94vw) !important;
+  min-width: min(56rem, 94vw) !important;
+}
+
+[style*='--radix-combobox-trigger-width'] {
+  width: min(56rem, 94vw) !important;
+  max-width: 94vw !important;
+}
+
+[style*='--radix-combobox-trigger-width'] span {
+  overflow: visible !important;
+  text-overflow: unset !important;
+  white-space: nowrap !important;
+  max-width: none !important;
+}
