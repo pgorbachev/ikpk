@@ -1,4 +1,3 @@
-import './relation-menu.css';
 import type { ComponentType } from 'react';
 import type { StrapiApp } from '@strapi/strapi/admin';
 import { contentManagerHomeRoute } from './content-home';
@@ -68,6 +67,9 @@ export default {
     // (cms/tests/admin-locale.test.js читает `config.locales` без `require`).
     void import('./admin-localization').then(({ ensureDefaultAdminLocale }) =>
       ensureDefaultAdminLocale(window.localStorage),
+    );
+    void import('./relation-menu').then(({ installRelationMenuWidth }) =>
+      installRelationMenuWidth(document),
     );
     app.addMenuLink({
       to: '/site-refresh',
