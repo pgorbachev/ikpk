@@ -1430,7 +1430,7 @@ describe('site phones through live capture and offline Astro build', () => {
     const records = dataset().pages.records;
     const contact = records[0]!;
     const organization = records[1]!;
-    Object.assign(organization, { slug: organizationSlug, legacy_id: organizationSlug });
+    Object.assign(organization, { slug: organizationSlug, legacy_id: organizationSlug, center_phone: '', manager_phone: null });
     const sections = ['Основные сведения', 'Структура и органы управления'];
     const sourcePanels = JSON.parse(readFileSync(join(WEB_ROOT, '../fixtures/content-snapshot/collapsible_panels.json'), 'utf8'))['/' + organizationSlug];
     const makeBody = (embedded: boolean) => sections.map((title) =>

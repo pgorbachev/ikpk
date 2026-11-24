@@ -344,7 +344,7 @@ function mapRecord(type: string, record: Record<string, unknown>): Record<string
     if (entry.type === type) applyEntry(record, entry, out);
   }
   if (type === 'static_pages' && record.slug !== 'kontakty') {
-    if (out.center_phone != null || out.manager_phone != null) {
+    if ([out.center_phone, out.manager_phone].some((value) => value != null && value !== '')) {
       throw new Error(`Поля телефонов заполнены вне Page /kontakty: ${recordKey(record)}`);
     }
     delete out.center_phone;

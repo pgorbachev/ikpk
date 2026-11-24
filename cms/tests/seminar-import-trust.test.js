@@ -882,9 +882,11 @@ describe('доверенный перенос в собранном Strapi', { t
         ok(await write('draft', first.revision, { center_phone: edited.center_phone }), 'save center');
         assert.deepEqual(numbers(await getVersion(documentId, 'draft')), { ...initial, center_phone: edited.center_phone });
         assert.deepEqual(numbers(await getVersion(documentId, 'published')), initial);
+        ok(await write('draft', (await state()).revision, { manager_phone: edited.manager_phone }), 'stage independent mobile draft');
         const draft = await state();
         ok(await write('publish', draft.revision, { center_phone: edited.center_phone }), 'publish center');
         assert.deepEqual(numbers(await getVersion(documentId, 'published')), { ...initial, center_phone: edited.center_phone });
+        assert.deepEqual(numbers(await getVersion(documentId, 'draft')), edited);
         assert.equal((await write('publish', first.revision, { center_phone: initial.center_phone })).status, 409);
         const current = await state();
         ok(await write('publish', current.revision, { manager_phone: edited.manager_phone }), 'publish mobile');

@@ -6,7 +6,7 @@ interface ContactPage {
 }
 
 function formattedPhone(value: unknown, field: 'center_phone' | 'manager_phone') {
-  const digits = typeof value === 'string' ? value.replace(/[\s()-]/g, '') : '';
+  const digits = typeof value === 'string' ? value.replace(/[ ()-]/g, '') : '';
   const parts = /^\+7([0-9]{3})([0-9]{3})([0-9]{2})([0-9]{2})$/.exec(digits);
   if (!parts) throw new Error(`Page /kontakty: некорректное поле ${field}, нужен +7 и десять цифр`);
   const [, code, prefix, first, last] = parts;
@@ -19,8 +19,8 @@ function formattedPhone(value: unknown, field: 'center_phone' | 'manager_phone')
 }
 
 export function siteContactPhones(pages: ContactPage[]) {
-  const contacts = pages.filter((page) => page.slug === 'kontakty');
-  if (contacts.length !== 1 || contacts[0].legacy_id !== 'kontakty') {
+  const contacts = pages.filter((page) => page.slug === 'kontakty' || page.legacy_id === 'kontakty');
+  if (contacts.length !== 1 || contacts[0].slug !== 'kontakty' || contacts[0].legacy_id !== 'kontakty') {
     throw new Error('В снимке должна быть одна опубликованная Page /kontakty с legacy_id kontakty');
   }
   return {
