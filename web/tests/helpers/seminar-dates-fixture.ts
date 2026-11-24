@@ -89,6 +89,7 @@ export function buildSeminarDatesFixture(options: {
   const fixtureTypes: Record<string, unknown[]> = Object.fromEntries(
     Object.keys(types).map((name) => [name, []]),
   );
+  fixtureTypes.static_pages = types.static_pages.filter((page) => page.slug === 'kontakty');
   fixtureTypes.institutes = [pages.institute];
   fixtureTypes.course_groups = [pages.group];
   fixtureTypes.seminars = [pages.planned, pages.empty, pages.nextYear];

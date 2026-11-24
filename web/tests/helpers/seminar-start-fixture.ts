@@ -65,6 +65,7 @@ export async function serveSeminarStartFixture(mode: 'start' | 'month' | 'layout
   const types = mode === 'layout'
     ? { ...sourceTypes, schedule_entries: entries }
     : { ...Object.fromEntries(Object.keys(sourceTypes).map((name) => [name, []])),
+        static_pages: sourceTypes.static_pages.filter((page) => page.slug === 'kontakty'),
         institutes: [{ ...institute, images: [] }], course_groups: [{ ...group, images: [] }],
         seminars, schedule_entries: entries,
         news: sourceTypes.news.filter((item) => homeOfferIds.has(Number(item.id))) };
