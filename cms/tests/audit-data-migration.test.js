@@ -1018,10 +1018,10 @@ test('program editor configuration, institute relation and schema display name a
       nextCourseGroup.metadatas.slug.list.label = 'Адрес';
       nextCourseGroup.metadatas.legacy_id.edit = { ...nextCourseGroup.metadatas.legacy_id.edit, label: 'Старый идентификатор', visible: false, editable: false };
       nextCourseGroup.metadatas.legacy_id.list.label = 'Старый идентификатор';
-      for (const [name, label, size, editable, description] of [
-        ['description', 'Описание', 12, true, ''], ['image', 'Изображение', 6, true, ''], ['institute', 'Институт', 6, true, ''],
-        ['seminars', 'Семинары', 12, true, ''], ['seo', 'SEO', 12, true, ''], ['order', 'Порядок', 4, true, ''],
-        ['is_article_category', 'Категория статей', 6, true, ''],
+      for (const [name, label, editable, description] of [
+        ['description', 'Описание', true, ''], ['image', 'Изображение', true, ''], ['institute', 'Институт', true, ''],
+        ['seminars', 'Семинары', true, ''], ['seo', 'SEO', true, ''], ['order', 'Порядок', true, ''],
+        ['is_article_category', 'Категория статей', true, ''],
       ]) {
         nextCourseGroup.metadatas[name] = { edit: { label, description, visible: true, editable }, list: { label } };
       }
