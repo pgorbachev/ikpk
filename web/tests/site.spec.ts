@@ -1,3 +1,4 @@
+import { CITY_PHONE, CITY_TEL, MOBILE_TEL } from './helpers/expected-site-phones';
 import { test, expect } from '@playwright/test';
 import { installThirdPartyGuard } from './helpers/third-party-guard';
 
@@ -44,7 +45,7 @@ test.describe('Homepage', () => {
 
   test('has footer with correct phone', async ({ page }) => {
     await page.goto('/');
-    await expect(page.locator('footer')).toContainText('646-54-50');
+    await expect(page.locator('footer')).toContainText(CITY_PHONE);
   });
 
   test('has Yandex.Metrika counter', async ({ page }) => {
@@ -159,7 +160,7 @@ test.describe('Content quality', () => {
 
   test('kontakty page shows correct phone', async ({ page }) => {
     await page.goto('/kontakty');
-    await expect(page.locator('.contact-shell-link').first()).toContainText('646-54-50');
+    await expect(page.locator('.contact-shell-link').first()).toContainText(CITY_PHONE);
   });
 
   test('schedule page shows eligible events or its empty state', async ({ page }) => {
@@ -640,8 +641,8 @@ test.describe('Телефон в шапке', () => {
       expect(response?.status(), 'страница не отдалась — измерять нечего').toBe(200);
 
       const bar = page.locator('.topnav-phones');
-      const cityLink = bar.locator('a[href="tel:+78126465450"]');
-      const mobileLink = bar.locator('a[href="tel:+79810387797"]');
+      const cityLink = bar.locator(`a[href="${CITY_TEL}"]`);
+      const mobileLink = bar.locator(`a[href="${MOBILE_TEL}"]`);
 
       expect(await cityLink.isVisible(), `${width}px: городской номер`).toBe(city);
       expect(await mobileLink.isVisible(), `${width}px: мобильный номер`).toBe(mobile);

@@ -1,3 +1,4 @@
+import { MOBILE_TEL as MOBILE_HREF, CITY_TEL as MAIN_HREF } from './helpers/expected-site-phones';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -7,8 +8,6 @@ import { buildSeminarDatesFixture } from './helpers/seminar-dates-fixture';
 import { getCourseGroups, getInstitutes, getScheduleEntries, getSeminars, getSeminarBuildNow } from '../src/lib/data';
 import { isBeforeStart } from '../src/lib/schedule-window';
 
-const MOBILE_HREF = 'tel:+79810387797';
-const MAIN_HREF = 'tel:+78126465450';
 const norm = (value: unknown): string => textOf(value).replace(/\s+/g, ' ').trim();
 const inCard = (card: Parameters<typeof textOf>[0], testid: string) =>
   [...walk(card)].filter((el) => attr(el, 'data-testid') === testid && attr(el, 'hidden') === null);

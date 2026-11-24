@@ -10,6 +10,7 @@ import { ensureContentAdminRole, migrateContentAdminSchemaPermissions } from './
 import { backfillAdminLabels, registerSeminarDocuments, registerSeminarUid } from './seminar-management/documents';
 import { backfillProgramEditorLabels, registerProgramEditor } from './lib/program-editor';
 import { applyEditorForms } from './seminar-management/forms';
+import { registerSitePhones } from './api/page/site-phones';
 import { registerSiteRefresh } from './seminar-management/site-refresh';
 
 export default {
@@ -23,6 +24,7 @@ export default {
     registerSeminarDocuments(strapi);
     registerUnlinkedEntryList(strapi);
     registerSiteRefresh(strapi);
+    registerSitePhones(strapi);
   },
 
   /**

@@ -11,6 +11,7 @@ import {
   type DocumentsState,
 } from '../lib/publication-validation';
 import { isTrustedImport } from '../seminar-management/rules.js';
+import { checkPagePhones } from '../lib/site-phones';
 import { articleSlug, moscowCalendarDateISO, todayInMoscow } from '../lib/article-publication';
 const sourceEmptyFields = createRequire(`${process.cwd()}/src/lifecycles/publication.ts`)('../lib/demo193-source-empty-fields.json') as {
   sourceSqlSha256: string;
@@ -247,7 +248,10 @@ function buildPublicationRecord(type: PublicationType, entity: Record<string, un
       // здесь, а не переименованием поля схемы (переименование — предмет отдельного change).
       return { title: entity.name, identifier: entity.slug };
     case 'static-page':
-      return { title: entity.title, identifier: entity.slug, body: entity.body, seo_title, seo_description };
+      return {
+        title: entity.title, identifier: entity.slug, body: entity.body, seo_title, seo_description,
+        center_phone: entity.center_phone, manager_phone: entity.manager_phone,
+      };
     case 'schedule-entry':
       return {
         seminar: entity.seminar,
@@ -513,6 +517,17 @@ export function registerPublicationLifecycle(strapi: Core.Strapi): void {
     const publishedWrite: boolean =
       context.action === 'publish' ||
       ((context.action === 'create' || context.action === 'update') && params.status === 'published');
+
+    if (type === 'static-page' && !publishedWrite && ['create', 'update', 'clone'].includes(context.action)) {
+      const existing = params.documentId ? await strapi.documents(context.uid as never).findOne({
+        documentId: params.documentId,
+        status: 'draft',
+        fields: ['slug', 'center_phone', 'manager_phone'],
+      }) as Record<string, unknown> | null : null;
+      const page = { ...existing, ...params.data };
+      const error = checkPagePhones(page.slug, page, false);
+      if (error) throw new ApplicationError(error.message);
+    }
 
     if (type === 'article' && context.action === 'clone' && !isTrustedImport(strapi)) {
       const source = params.documentId

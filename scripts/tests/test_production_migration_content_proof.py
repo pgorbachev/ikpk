@@ -378,9 +378,10 @@ class ProductionPublicationProofTests(unittest.TestCase):
         self.sidecar.pop("oldProjectorContractSha256")
         self.assert_refused()
 
-    def ordinary_candidate_archive(self, *, content=None, schema_digest="a" * 64,
+    def ordinary_candidate_archive(self, *, content=None, schema_digest="a" * 64, identity=None,
                                    target_sha="7b4548d234710e0f0daacc2c8a46787b1e822e2f"):
         manifest = {
+            "capturedAt": "2026-11-21T23:59:59.000Z",
             "operationId": OPERATION, "sourceSha": target_sha,
             "profile": "production-static", "databaseSha256": sha(self.final_db.read_bytes()),
             "schemaDigest": schema_digest,
@@ -392,7 +393,7 @@ class ProductionPublicationProofTests(unittest.TestCase):
             "contractVersion": 2, "fingerprint": snapshot_fingerprint(self.original),
             "referenceDate": "2026-11-21", "snapshotId": "snap:test",
             "sourcePolicy": "production-static", "sourceAge": "source-bound",
-            "origin": {"kind": "server-db", "sourceId": "initial-prod-server-db", "capturedAt": "2026-11-21T10:00:00Z"},
+            "origin": {"kind": "server-db", "sourceId": "initial-prod-server-db", "capturedAt": manifest["capturedAt"]},
             "skippedUploads": [], "content": content or self.public_content(self.original),
             "captureProof": {
                 "version": 1, "method": "quiesced-sqlite-backup", "targetHost": "89.111.184.196",
@@ -403,6 +404,8 @@ class ProductionPublicationProofTests(unittest.TestCase):
                 "bundleDigest": sha(manifest_bytes),
             },
         }
+        if identity:
+            snapshot.update(identity)
         output = io.BytesIO()
         with tarfile.open(fileobj=output, mode="w:") as archive:
             for name, value in (("snapshot/capture-manifest.json", manifest),
@@ -419,7 +422,8 @@ class ProductionPublicationProofTests(unittest.TestCase):
                                     target_sha="7b4548d234710e0f0daacc2c8a46787b1e822e2f",
                                     old_contract="3928819713b00cfbf982186d67ed2e29f47b913c9a9ba019ee0106b7255904b9",
                                     target_contract="cf536b99bc5815a8b5a76f8315f07c60200c0d1d5728960e9a9593b1c113bcf0",
-                                    old_schema="a" * 64, candidate_schema="a" * 64):
+                                    old_schema="a" * 64, candidate_schema="a" * 64, original_content=None, identity=None,
+                                    original_reference_date="2026-11-21"):
         backup = {
             **self.sidecar, "sourceSha": target_sha, "oldCmsSourceSha": old_sha,
             "oldCmsSchemaSha256": old_schema, "oldProjectorSourceSha": old_sha,
@@ -436,15 +440,16 @@ class ProductionPublicationProofTests(unittest.TestCase):
         def old_projection(*_args, projection_output, **_kwargs):
             snapshot = {
                 "contractVersion": 2, "fingerprint": snapshot_fingerprint(self.original),
-                "referenceDate": "2026-11-21", "snapshotId": "snap:test",
+                "referenceDate": original_reference_date, "snapshotId": "snap:test",
                 "sourcePolicy": "production-static", "sourceAge": "source-bound",
                 "origin": {"kind": "server-db", "sourceId": "initial-prod-server-db", "capturedAt": "2026-11-21T09:00:00Z"},
-                "skippedUploads": [], "content": self.public_content(self.original),
+                "skippedUploads": [], "content": original_content or self.public_content(self.original),
                 "captureProof": {
                     "version": 1, "method": "quiesced-sqlite-backup", "targetHost": "89.111.184.196",
                     "siteUrl": "https://ikpk.su", "sourceSha": target_sha, "runId": ADMISSION["runId"],
                     "attempt": ADMISSION["attempt"], "captureId": OPERATION, "schemaDigest": "a" * 64,
-                    "databaseDigest": self.source_digest, "mediaManifestDigest": "e" * 64,
+                    "databaseDigest": self.source_digest,
+                    "mediaManifestDigest": json.loads((self.capture_backup / "manifest.json").read_bytes())["mediaManifestSha256"],
                     "bundleDigest": "f" * 64,
                 },
             }
@@ -456,8 +461,10 @@ class ProductionPublicationProofTests(unittest.TestCase):
              patch.object(operator, "production_projector_node_version", return_value="v22-test"), \
              patch.object(operator, "production_paired_backup_fingerprint", side_effect=old_projection):
             operator.validate_production_content_acceptance(
-                self.ordinary_candidate_archive(content=content, schema_digest=schema_digest, target_sha=target_sha), "d" * 64,
-                snapshot_fingerprint(self.original), self.backup, backup, OPERATION, target_sha, ADMISSION,
+                self.ordinary_candidate_archive(content=content, schema_digest=schema_digest, target_sha=target_sha,
+                                                identity=identity), "d" * 64,
+                identity["fingerprint"] if identity else snapshot_fingerprint(self.original),
+                self.backup, backup, OPERATION, target_sha, ADMISSION,
             )
 
     def test_ordinary_release_accepts_reviewed_changed_projector_with_identical_projection(self):
@@ -496,6 +503,37 @@ class ProductionPublicationProofTests(unittest.TestCase):
                 target_sha="a9ab7c823950490b5a1b5e8d7ede134efa138a0f",
                 old_contract=old_contract, target_contract=target_contract,
                 old_schema=old_schema, candidate_schema=candidate_schema)
+
+    def test_contacts_release_derives_whole_candidate_and_snapshot_identity_from_backup(self):
+        old_schema, candidate_schema = operator.PHONE_SCHEMA_TRANSITION
+        original = {"types": {"static_pages": [
+            {"slug": "kontakty", "legacy_id": "kontakty", "title": "Contacts"},
+            {"slug": "other", "legacy_id": "other", "title": "Other"},
+        ]}, "media": []}
+        expected = copy.deepcopy(original)
+        expected["types"]["static_pages"][0].update(center_phone="+7 (812) 646-54-50", manager_phone="+7 981 038-77-97")
+        # The fingerprint sorts rows by the canonical, key-sorted JSON of each record.
+        rows = sorted(json.dumps(row, sort_keys=True, separators=(",", ":")) for row in expected["types"]["static_pages"])
+        canonical = '{"types":{"static_pages":[' + ",".join(rows) + ']},"media":[]}'
+        fingerprint = "sha256:" + sha(canonical.encode())
+        identity = {"fingerprint": fingerprint,
+                    "snapshotId": "snap:" + sha((fingerprint + "\n2026-11-21\ncontractVersion=2").encode())}
+        options = dict(old_schema=old_schema, candidate_schema=candidate_schema, original_content=original,
+                       original_reference_date="2026-11-22")  # backup reprojected after UTC midnight
+        # The fixture supplies the admitted old projector implementation without requiring CI history.
+        module = (operator.ROOT / "web/scripts/lib/content-snapshot.ts").read_bytes()
+        with patch.object(operator, "capture_bytes", return_value=module):
+            self.validate_ordinary_candidate(**options, content=expected, identity=identity)
+            changed = copy.deepcopy(expected)
+            changed["types"]["static_pages"][1]["title"] = "Unrelated change"
+            wrong_date = {**identity, "referenceDate": "2026-11-22",
+                          "snapshotId": "snap:" + sha((fingerprint + "\n2026-11-22\ncontractVersion=2").encode())}
+            wrong_origin = {"kind": "server-db", "sourceId": "initial-prod-server-db", "capturedAt": "2026-11-21T10:00:00.000Z"}
+            for candidate, declared in [(changed, identity), (expected, wrong_date),
+                                        (expected, {**identity, "origin": wrong_origin}), (expected, {**identity, "fingerprint": "sha256:" + "7"*64}),
+                                        (expected, {**identity, "snapshotId": "snap:" + "7"*64})]:
+                with self.assertRaises(operator.Refusal):
+                    self.validate_ordinary_candidate(**options, content=candidate, identity=declared)
 
     def test_ordinary_release_refuses_backup_bytes_that_do_not_match_sidecar(self):
         old_sha = "62744c31283e2c9b31e84512d3b8cfc793e8d5f7"

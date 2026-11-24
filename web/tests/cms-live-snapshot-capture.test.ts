@@ -15,6 +15,7 @@ import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { parseFragment } from 'parse5';
+import { assertSitePhoneOutput, editorialPhone, organizationSlug } from './helpers/site-phone-output';
 import { cleanBodyHtml } from '../src/lib/data';
 import {
   SNAPSHOT_ORIGIN_FIELD,
@@ -137,7 +138,11 @@ function dataset(over: Record<string, StubCollection> = {}): Record<string, Stub
     'schedule-entries': { records: scheduleEntries },
     'news-items': { records: Array.from({ length: 2 }, (_, i) => ({ ...without(base('news', i + 1, `Новость ${i + 1}`), 'slug'), date: '2026-01-01T00:00:00.000Z', description: '<p>Новость</p>', image: media(i + 1), link: 'https://example.invalid', priority: i })) },
     promotions: { records: Array.from({ length: 2 }, (_, i) => ({ ...without(base('promo', i + 1, `Акция ${i + 1}`), 'slug'), date: '2026-01-01T00:00:00.000Z', description: '<p>Акция</p>', type: 'SHOP', image: media(i + 1), link: 'https://example.invalid', priority: i, active: true })) },
-    pages: { records: Array.from({ length: 2 }, (_, i) => ({ ...without(base('page', i + 1, `Страница ${i + 1}`), 'name'), title: `Страница ${i + 1}`, body: '<p>Тело страницы</p>', seo: seo(`Страница ${i + 1}`) })) },
+    pages: { records: ['kontakty', 'page-002'].map((slug, i) => ({
+      ...without(base('page', i + 1, slug), 'name'), slug, legacy_id: slug,
+      title: `Страница ${i + 1}`, body: '<p>Тело страницы</p>', seo: seo(slug),
+      center_phone: i === 0 ? '+78125550101' : null, manager_phone: i === 0 ? '+79815550202' : null,
+    })) },
     'video-playlists': { records: Array.from({ length: 2 }, (_, i) => ({ ...base('vp', i + 1, `Плейлист ${i + 1}`), videos: [{ url: 'https://example.invalid/v' }], seo: seo(`Плейлист ${i + 1}`) })) },
     ...over,
   };
@@ -1417,5 +1422,71 @@ describe('семинар проведения: идентичность сним
     const violations = contract.validateSnapshotContract(snapshot as never).violations;
     expect(violations.some((v) => v.type === 'schedule' && v.rule === 'broken-relation')).toBe(true);
     expect(violations.some((v) => v.type === 'seminars' && v.rule === 'duplicate-identifier')).toBe(true);
+  });
+});
+
+describe('site phones through live capture and offline Astro build', () => {
+  it('each independent edit changes the fingerprint and reaches its own HTML sections', async () => {
+    const records = dataset().pages.records;
+    const contact = records[0]!;
+    const organization = records[1]!;
+    Object.assign(organization, { slug: organizationSlug, legacy_id: organizationSlug, center_phone: '', manager_phone: null });
+    const sections = ['Основные сведения', 'Структура и органы управления'];
+    const sourcePanels = JSON.parse(readFileSync(join(WEB_ROOT, '../fixtures/content-snapshot/collapsible_panels.json'), 'utf8'))['/' + organizationSlug];
+    const makeBody = (embedded: boolean) => sections.map((title) =>
+      '<div data-state="closed"><button class="collapsible_trigger"><h2 data-collapsible-title="true">' +
+      title + '</h2></button>' + (embedded ? '<div class="collapsible_content">' + sourcePanels[title] + '</div>' : '') + '</div>'
+    ).join('') + '<p>' + editorialPhone + '</p>';
+
+    const states = [
+      { center: '+78125550101', manager: '+79815550202', centerText: '+7 (812) 555-01-01', managerText: '+7 981 555-02-02' },
+      { center: '+78125550303', manager: '+79815550202', centerText: '+7 (812) 555-03-03', managerText: '+7 981 555-02-02' },
+      { center: '+78125550303', manager: '+79815550404', centerText: '+7 (812) 555-03-03', managerText: '+7 981 555-04-04' },
+    ];
+    const fingerprints = [];
+    for (const [index, state] of [...states, states[2]!].entries()) {
+      Object.assign(contact, { center_phone: state.center, manager_phone: state.manager });
+      organization.body = makeBody(index === 3);
+      const cms = await stub({ pages: { records } });
+      const dir = outDir();
+      try {
+        const result = await runCapture({ CMS_URL: cms.url, CONTENT_SNAPSHOT_DIR: dir });
+        expect(result.status, result.output).toBe(0);
+        const snapshot = readSnapshot(dir);
+        if (index < states.length) fingerprints.push(snapshot.fingerprint);
+        expect(typesOf(snapshot).static_pages!.find((page) => page.slug === 'kontakty'))
+          .toMatchObject({ center_phone: state.center, manager_phone: state.manager });
+        if (index === 1) continue;
+
+        await cms.close();
+        const dist = join(dir, 'dist');
+        const build = () => execFileSync(join(WEB_ROOT, 'node_modules/.bin/astro'), ['build', '--outDir', dist], {
+          cwd: WEB_ROOT, env: { ...process.env, CONTENT_SNAPSHOT_DIR: dir, CMS_URL: cms.url }, timeout: 120_000, stdio: 'pipe',
+        });
+        build();
+        assertSitePhoneOutput(dist, [state.center, state.centerText], [state.manager, state.managerText]);
+        if (index === 2) {
+          // A second build from the same captured artifact works after the CMS stops.
+          build();
+          assertSitePhoneOutput(dist, [state.center, state.centerText], [state.manager, state.managerText]);
+        }
+      } finally { rmSync(dir, { recursive: true, force: true }); }
+    }
+    expect(new Set(fingerprints).size).toBe(states.length);
+  }, 420_000);
+
+  it.each(['missing', 'duplicate', 'invalid'])('refuses %s published contacts before writing a snapshot', async (failure) => {
+    const records = dataset().pages.records;
+    if (failure === 'missing') records.shift();
+    if (failure === 'duplicate') records.push({ ...records[0], id: 8, documentId: 'another-contact' });
+    if (failure === 'invalid') records[0]!.manager_phone = '8 (981) 555-02-02';
+    const cms = await stub({ pages: { records } });
+    const dir = outDir();
+    try {
+      const result = await runCapture({ CMS_URL: cms.url, CONTENT_SNAPSHOT_DIR: dir });
+      expect(result.status, result.output).not.toBe(0);
+      expect(result.output).toMatch(failure === 'invalid' ? /manager_phone|менеджер/i : /kontakty|контакт/i);
+      expect(existsSync(join(dir, 'snapshot.json'))).toBe(false);
+    } finally { rmSync(dir, { recursive: true, force: true }); }
   });
 });

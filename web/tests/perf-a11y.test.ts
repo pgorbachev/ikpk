@@ -1,3 +1,4 @@
+import { CITY_TEL } from './helpers/expected-site-phones';
 import { describe, it, expect, beforeAll } from 'vitest';
 import { readFileSync, existsSync, readdirSync, statSync } from 'fs';
 import { join } from 'path';
@@ -156,7 +157,8 @@ describe('CSS media query syntax', () => {
 // ─── Accessibility ──────────────────────────────────────────────────────────
 describe('Accessibility', () => {
   it('phone link has aria-label', () => {
-    expect(homepage).toMatch(/href="tel:\+78126465450"[^>]*aria-label/);
+    expect(homepage.match(/<a\b[^>]*>/g)?.some((link) =>
+      link.includes(`href="${CITY_TEL}"`) && link.includes('aria-label='))).toBe(true);
   });
 
   it('footer logo link has aria-label', () => {

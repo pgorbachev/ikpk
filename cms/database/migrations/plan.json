@@ -388,13 +388,45 @@
       "readback": {
         "kind": "independent-content-and-ledger-audit"
       }
+    },
+    {
+      "id": "site-contact-phones-v1",
+      "phase": "after-sync",
+      "kind": "data",
+      "handler": "site-phones",
+      "path": "data-steps/site-phones.mjs",
+      "sha256": "73f7dbe7c06c41ff8e8016ed0fb404d53371b81c4a55c9597b6cd239a9b1d6f5",
+      "source": {
+        "strapiVersion": "5.51.2",
+        "schema": {
+          "engine": "sqlite",
+          "requiredColumns": {
+            "pages": [
+              "id",
+              "document_id",
+              "slug",
+              "legacy_id",
+              "published_at"
+            ]
+          }
+        }
+      },
+      "preconditions": {
+        "identity": "One contacts document with exactly one published version and one draft."
+      },
+      "postconditions": {
+        "data": "Seed missing phones on existing physical versions only."
+      },
+      "readback": {
+        "kind": "independent-page-and-ledger-audit"
+      }
     }
   ],
   "integrity": {
     "files": [
       {
         "path": "scripts/run-data-migrations.mjs",
-        "sha256": "a37886599cbda1f3bf5f3b6026dc81bddd4ef55e78208c5515f7ec89014d103a"
+        "sha256": "71a4bf8a4ba02b21728d42c33a506815e0070453b2f728c0ac60b5005b5fe8fd"
       },
       {
         "path": "scripts/seminar-migration-snapshot.mjs",
@@ -466,11 +498,11 @@
       },
       {
         "path": "scripts/audit-data-migration.mjs",
-        "sha256": "318ea2297ab466c0fd35ea47125fd6b6c97a4f6696cc6daa9f5d9f7f5b8958de"
+        "sha256": "a5884ed23f8f05d8f0e781f18381229331f9a8e585e85d17d4b521ddf7df16ae"
       },
       {
         "path": "scripts/audit-schema-snapshot.mjs",
-        "sha256": "ab6d6246b3d3b5b812797466a6d643d501c8a69d01390724ce4ffabc39a43032"
+        "sha256": "487bf7a31a575b537f896ca0500ec79431785231c0408d449288cdce3fe27707"
       },
       {
         "path": "scripts/institute-method-author-classification.mjs",

@@ -1,3 +1,4 @@
+import { Phone } from '@strapi/icons';
 import type { ComponentType } from 'react';
 import type { StrapiApp } from '@strapi/strapi/admin';
 import { contentManagerHomeRoute } from './content-home';
@@ -71,6 +72,13 @@ export default {
     void import('./relation-menu').then(({ installRelationMenuWidth }) =>
       installRelationMenuWidth(document),
     );
+    app.addMenuLink({
+      to: '/site-contact-phones',
+      icon: Phone,
+      intlLabel: { id: 'site-phones.menu', defaultMessage: 'Page → Контакты сайта' },
+      permissions: [],
+      Component: () => import('./pages/SitePhones'),
+    });
     app.addMenuLink({
       to: '/site-refresh',
       icon: SiteRefreshIcon,

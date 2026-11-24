@@ -1056,3 +1056,64 @@ test('program editor configuration, institute relation and schema display name a
   assert.equal(report.differences.some(({ table, kind }) => table === 'strapi_core_store_settings' && kind.startsWith('core-store-')), false,
     'the program picker label is the only accepted content-manager and schema change');
 });
+
+test('first contacts release preserves every other value on a copy of the previous database', async () => {
+  const { apply } = await import('../database/migrations/data-steps/site-phones.mjs');
+  const step = JSON.parse(readFileSync(new URL('../database/migrations/plan.json', import.meta.url)))
+    .steps.find(item => item.handler === 'site-phones');
+  assert.equal(step.phase, 'after-sync');
+  const manifestPath = join(directory, 'site-phones-plan.json');
+  writeFileSync(manifestPath, JSON.stringify({ version: 1, steps: [step] }));
+  const plan = { manifestPath, planSha256: sha256(readFileSync(manifestPath)), steps: [step] };
+  const sourceDbPath = join(directory, 'old-contacts.db');
+  const candidateDbPath = join(directory, 'new-contacts.db');
+  const old = new Database(sourceDbPath);
+  old.exec(`CREATE TABLE pages (id integer PRIMARY KEY, document_id text, slug text, legacy_id text, published_at text, body text);
+    INSERT INTO pages VALUES
+      (3, 'contact-id', 'kontakty', 'kontakty', NULL, 'Unpublished draft'),
+      (9, 'contact-id', 'kontakty', 'kontakty', '2026-01-01', 'Published body'),
+      (7, 'other-doc', 'elsewhere', 'elsewhere', '2026-01-01', 'Other page');`);
+  old.close();
+  copyFileSync(sourceDbPath, candidateDbPath);
+  const lineage = addEmptyMigrationLineage(candidateDbPath, 'contacts-release');
+  const db = new Database(candidateDbPath);
+  db.exec('ALTER TABLE pages ADD COLUMN center_phone varchar(255); ALTER TABLE pages ADD COLUMN manager_phone varchar(255)');
+  assert.throws(() => apply(db, { onApplied() { throw new Error('interrupted ledger'); } }), /interrupted ledger/);
+  assert.equal(db.prepare('SELECT count(*) AS n FROM pages WHERE center_phone IS NOT NULL').get().n, 0);
+  const result = apply(db, { onApplied(tx, receipt) {
+    tx.prepare('INSERT INTO ikpk_data_migration_history VALUES (?, ?, ?, ?, ?, 1)')
+      .run(lineage.lineageId, lineage.operationId, step.id, step.sha256, JSON.stringify(receipt));
+  } });
+  assert.deepEqual(result, { updatedRows: 2 });
+  db.close();
+  const audit = () => {
+    const receipt = { ...boundReceipt(sourceDbPath, candidateDbPath, plan), operationId: lineage.operationId, steps: [step] };
+    Object.assign(receipt.source, { snapshotSha256: lineage.sourceSnapshotSha256, schemaFingerprint: lineage.sourceSchemaSha256 });
+    return auditMigration({ sourceDbPath, candidateDbPath, plan, receipt });
+  };
+  const success = audit();
+  assert.equal(success.passed, true, JSON.stringify(success.differences));
+  for (const [id, field, value] of [[3, 'body', 'Leaked draft'], [9, 'center_phone', '123'], [7, 'manager_phone', 'wrong']]) {
+    const changed = new Database(candidateDbPath);
+    const { original } = changed.prepare(`SELECT ${field} AS original FROM pages WHERE id = ?`).get(id);
+    const update = changed.prepare(`UPDATE pages SET ${field} = ? WHERE id = ?`);
+    update.run(value, id);
+    assert.equal(audit().passed, false, `accepted ${field} change on row ${id}`);
+    update.run(original, id);
+    changed.close();
+  }
+  const repeat = new Database(candidateDbPath);
+  repeat.prepare('UPDATE pages SET center_phone = ? WHERE id = 3').run('+78125550101');
+  assert.deepEqual(apply(repeat), { updatedRows: 0 });
+  assert.equal(repeat.prepare('SELECT center_phone FROM pages WHERE id = 3').get().center_phone, '+78125550101');
+  repeat.exec("UPDATE pages SET manager_phone = NULL WHERE id = 3");
+  assert.deepEqual(apply(repeat), { updatedRows: 1 });
+  assert.equal(repeat.prepare('SELECT center_phone FROM pages WHERE id = 3').get().center_phone, '+78125550101');
+  repeat.exec("UPDATE pages SET slug = 'elsewhere' WHERE id = 3");
+  assert.throws(() => apply(repeat), /contacts|kontakty/i);
+  repeat.exec("DELETE FROM pages WHERE document_id = 'contact-id' AND published_at IS NULL");
+  assert.throws(() => apply(repeat), /one published version and one matching draft/);
+  repeat.exec("DELETE FROM pages WHERE document_id = 'contact-id'");
+  assert.throws(() => apply(repeat), /contacts|kontakty/i);
+  repeat.close();
+});

@@ -590,7 +590,13 @@ async function importPages(): Promise<void> {
     };
     const s = buildSeo(e);
     if (s) data.seo = s;
-    await upsert("pages", e.legacy_id as string, data, report);
+    if (e.legacy_id === "kontakty" && e.slug === "kontakty") {
+      data.center_phone = "+7 (812) 646-54-50";
+      data.manager_phone = "+7 981 038-77-97";
+    }
+    await upsert("pages", e.legacy_id as string, data, report, {
+      updateIfEmptyFields: ["center_phone", "manager_phone"],
+    });
   }
 }
 

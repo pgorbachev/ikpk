@@ -1,3 +1,4 @@
+import { CITY_TEL } from './helpers/expected-site-phones';
 import { describe, it, expect } from 'vitest';
 import { allDemoPages, readDemoPage } from './helpers/demo-dist';
 import { attr, findAll, textOf } from './helpers/dom';
@@ -56,7 +57,7 @@ describe('прототипы каркаса', () => {
     { name: 'три института', match: /Институт Апледжера/ },
     { name: 'преподаватели', match: /teacher-card|Преподаватели/i },
     { name: 'итоговый CTA', match: /cta-band|Записаться/i },
-    { name: 'футер с контактами', match: /646-54-50/ },
+    { name: 'футер с контактами', match: new RegExp(CITY_TEL.replace('+', '\\+')) },
   ];
   const UPCOMING_BLOCK = { name: 'ближайшие семинары', match: /Ближайшие семинары|upcoming/i };
 

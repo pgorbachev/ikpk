@@ -1,6 +1,10 @@
 import { createHash } from 'node:crypto';
 
 const ALLOWED = new Map([
+  ...['center_phone', 'manager_phone'].map(name => [`pages.${name}`, {
+    table: 'pages', name, sqlType: /^varchar\s*\(\s*255\s*\)$/i,
+    expected: { name, type: 'string', args: [], defaultTo: null, notNullable: false, unsigned: false },
+  }]),
   ['promotions.type', {
     table: 'promotions', name: 'type', sqlType: /^varchar\s*\(\s*255\s*\)$/i,
     expected: { name: 'type', type: 'string', args: [], defaultTo: null, notNullable: false, unsigned: false },

@@ -1,3 +1,4 @@
+import { CITY_PHONE, CITY_TEL } from './helpers/expected-site-phones';
 /**
  * Site comparison test: original ikpk.su vs new build (localhost:4322)
  *
@@ -59,7 +60,7 @@ async function extractPageData(page: Page, url: string) {
   const hasJsonLd = (await page.locator('script[type="application/ld+json"]').count()) > 0;
 
   const bodyText = await page.locator('body').textContent() ?? '';
-  const phone = bodyText.includes('646-54-50');
+  const phone = bodyText.includes(CITY_PHONE);
 
   // Get all internal nav links
   const links = await page.locator('a[href^="/"]').evaluateAll(
@@ -160,7 +161,7 @@ test.describe('Footer parity', () => {
   test('footer has phone number', async ({ page }) => {
     await page.goto(NEW_SITE + '/');
     const footerText = await page.locator('footer').textContent() ?? '';
-    expect(footerText).toContain('646-54-50');
+    expect(footerText).toContain(CITY_PHONE);
   });
 
   test('footer has email', async ({ page }) => {
@@ -200,7 +201,7 @@ test.describe('Contact info parity', () => {
   test('kontakty page has correct phone', async ({ page }) => {
     await page.goto(NEW_SITE + '/kontakty');
     const text = await page.locator('body').textContent() ?? '';
-    expect(text).toContain('646-54-50');
+    expect(text).toContain(CITY_PHONE);
   });
 
   test('kontakty page has email', async ({ page }) => {
@@ -212,7 +213,7 @@ test.describe('Contact info parity', () => {
   test('phone in header or visible on homepage', async ({ page }) => {
     await page.goto(NEW_SITE + '/');
     const text = await page.locator('body').textContent() ?? '';
-    expect(text).toContain('646-54-50');
+    expect(text).toContain(CITY_PHONE);
   });
 });
 
@@ -241,8 +242,8 @@ test.describe('SEO parity', () => {
   test('JSON-LD has correct phone', async ({ page }) => {
     await page.goto(NEW_SITE + '/');
     const ldScripts = await page.locator('script[type="application/ld+json"]').allTextContents();
-    const hasCorrectPhone = ldScripts.some(s => s.includes('6465450'));
-    expect(hasCorrectPhone, 'JSON-LD should have phone 646-54-50').toBe(true);
+    const hasCorrectPhone = ldScripts.some(s => s.includes(CITY_TEL.slice(4)));
+    expect(hasCorrectPhone, 'JSON-LD should contain the published center phone').toBe(true);
   });
 
   test('article pages have Article JSON-LD', async ({ page }) => {

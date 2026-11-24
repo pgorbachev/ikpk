@@ -1,3 +1,4 @@
+import { siteContactPhones } from '../src/lib/site-contact-phones.ts';
 import { resolveSeminar } from '../src/lib/seminar-identity.ts';
 import { articleSeoDescriptionFallback } from './lib/article-seo-fallback.ts';
 /**
@@ -341,6 +342,13 @@ function mapRecord(type: string, record: Record<string, unknown>): Record<string
   }
   for (const entry of FIELD_MAP) {
     if (entry.type === type) applyEntry(record, entry, out);
+  }
+  if (type === 'static_pages' && record.slug !== 'kontakty') {
+    if ([out.center_phone, out.manager_phone].some((value) => value != null && value !== '')) {
+      throw new Error(`Поля телефонов заполнены вне Page /kontakty: ${recordKey(record)}`);
+    }
+    delete out.center_phone;
+    delete out.manager_phone;
   }
   if (type === 'articles') normalizeArticleSeo(record, out);
   return out;
@@ -706,7 +714,10 @@ async function liveCapture(): Promise<void> {
   const activeHistory = activeHistoricalExceptions(content, history.entries);
   if (activeHistory.length) content.historicalExceptions = activeHistory;
   const fingerprint = contentFingerprint(content);
-  const referenceDate = new Date().toISOString().slice(0, 10);
+  // A paired capture may be sealed before UTC midnight and projected afterwards.
+  const referenceInstant = serverCapture?.profile === 'production-static'
+    ? new Date(serverCapture.manifest.capturedAt) : new Date();
+  const referenceDate = referenceInstant.toISOString().slice(0, 10);
   const snapshotBase = {
     contractVersion: 2 as const,
     content,
@@ -754,6 +765,8 @@ async function liveCapture(): Promise<void> {
         'предупреждение; снимок не записан',
     );
   }
+  siteContactPhones(types.static_pages);
+
   if (emptyTypes.length > 0) {
     console.warn(`snapshot:capture: пустые типы (${emptyTypes.length}): ${emptyTypes.join(', ')}`);
   }

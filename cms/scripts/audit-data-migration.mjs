@@ -12,10 +12,16 @@ const RUNNER_TABLES = new Set(['ikpk_migration_lineage', 'ikpk_migration_operati
 const PERMISSION_CHANGE_TABLES = new Set(['admin_permissions', 'admin_permissions_role_lnk']);
 const PERMISSION_TIMESTAMP_COLUMNS = ['created_at', 'updated_at', 'published_at'];
 const CORE_STORE_TABLE = 'strapi_core_store_settings';
+const PAGE_CONFIG_KEY = 'plugin_content_manager_configuration_content_types::api::page.page';
+const PHONE_LABELS = {
+  center_phone: { label: 'Телефон центра', description: 'Телефоны для сайта задаются в этих двух полях. Текст Body на странице /kontakty не выводится.' },
+  manager_phone: { label: 'Мобильный телефон менеджера' },
+};
 const ARTICLE_CONFIG_KEY = 'plugin_content_manager_configuration_content_types::api::article.article';
 const COURSE_GROUP_CONFIG_KEY = 'plugin_content_manager_configuration_content_types::api::course-group.course-group';
 const INSTITUTE_CONFIG_KEY = 'plugin_content_manager_configuration_content_types::api::institute.institute';
 const CORE_STORE_KEYS = new Set([
+  PAGE_CONFIG_KEY,
   'plugin_content_manager_configuration_content_types::api::promotion.promotion',
   'plugin_content_manager_configuration_content_types::api::schedule-entry.schedule-entry',
   'plugin_content_manager_configuration_content_types::api::seminar.seminar',
@@ -45,12 +51,16 @@ const KNOWN_RENAMES = new Map([
   ['seminars', ['status', 'seminar_status']],
   ['schedule_entries', ['status', 'entry_status']],
 ]);
+const CONTACT_PHONES = { center_phone: '+7 (812) 646-54-50', manager_phone: '+7 981 038-77-97' };
 const CURRENT_CONTENT_ADDITIONS = {
   promotions: { name: 'type', type: 'varchar(255)' },
   schedule_entries: { name: 'is_event_collection', type: 'boolean' },
   course_groups: { name: 'editor_label', type: 'varchar(255)' },
 };
 const PERMISSION_FIELD_ADDITIONS = new Map([
+  ...['create', 'read', 'update'].map(action => [
+    `strapi-super-admin\0plugin::content-manager.explorer.${action}\0api::page.page`, Object.keys(CONTACT_PHONES),
+  ]),
   ['strapi-super-admin\0plugin::content-manager.explorer.create\0api::promotion.promotion', ['type']],
   ['strapi-super-admin\0plugin::content-manager.explorer.read\0api::promotion.promotion', ['type']],
   ['strapi-super-admin\0plugin::content-manager.explorer.update\0api::promotion.promotion', ['type']],
@@ -265,6 +275,19 @@ function deriveKnownTransforms(sourceDb, plan, receipt) {
       const derived = { blocked, candidateRows, logicalDocuments: blocked ? 0 : ids.length };
       if (derived.blocked) throw new Error('documents-state normalization source has contradictory component or identity evidence');
       transforms.documentsState = derived;
+    } else if (step.kind === 'data' && step.id === 'site-contact-phones-v1' && step.handler === 'site-phones'
+      && step.path === 'data-steps/site-phones.mjs' && step.sha256 === '73f7dbe7c06c41ff8e8016ed0fb404d53371b81c4a55c9597b6cd239a9b1d6f5') {
+      const rows = sourceDb.prepare('SELECT * FROM pages').all();
+      const contacts = rows.filter(row => row.slug === 'kontakty' || row.legacy_id === 'kontakty');
+      const ids = new Set(contacts.map(row => row.document_id));
+      if (ids.size !== 1 || contacts.length !== 2 || contacts.filter(row => row.published_at !== null).length !== 1
+        || rows.filter(row => ids.has(row.document_id)).some(row => !row.document_id || row.slug !== 'kontakty' || row.legacy_id !== 'kontakty')) {
+        throw new Error('invalid source contacts identity for phone migration');
+      }
+      // An inherited, completed backfill must never repair or overwrite a later draft.
+      const recorded = tableNames(sourceDb).includes('ikpk_data_migration_history') &&
+        sourceDb.prepare('SELECT 1 FROM ikpk_data_migration_history WHERE step_id = ? AND payload_sha256 = ?').get(step.id, step.sha256);
+      transforms.sitePhones = { pending: !recorded, updatedRows: contacts.filter(row => Object.keys(CONTACT_PHONES).some(key => row[key] == null)).length };
     } else if (receipt?.inheritedCohort && ['content-admin-permissions', 'reviewed-schedule', 'reviewed-documents', 'reviewed-content'].includes(step.handler)) {
       const row = sourceDb.prepare('SELECT operation_id,step_id,payload_sha256,result_json,completed_at FROM ikpk_data_migration_history WHERE lineage_id=? AND step_id=?').get(receipt.seminarLineageId, step.id);
       const sealed = receipt.seminarStepHistory?.find(item => item.step_id === step.id);
@@ -279,6 +302,13 @@ function deriveKnownTransforms(sourceDb, plan, receipt) {
 }
 function expectedTableRows(sourceDb, sourceTable, columns, transforms) {
   const rows = collectRows(sourceDb, sourceTable, columns).map(({ keyed }) => ({ ...keyed }));
+  if (sourceTable === 'pages' && transforms.sitePhones) {
+    for (const row of rows) {
+      for (const [key, seed] of Object.entries(CONTACT_PHONES)) {
+        row[key] ??= row.slug === 'kontakty' && transforms.sitePhones.pending ? seed : null;
+      }
+    }
+  }
   if (sourceTable === 'teachers' && transforms.classification) {
     const ids = new Set(transforms.classification.changes.flatMap(({ rows: changed }) => changed.map(({ rowId }) => String(rowId))));
     for (const row of rows) if (ids.has(String(row.id?.integer ?? row.id))) row.trait = 'method-author';
@@ -647,6 +677,18 @@ function expectedCoreStoreValue(key, sourceValue) {
   let expected;
   try { expected = JSON.parse(sourceValue); } catch { return null; }
   if (!expected || typeof expected !== 'object' || Array.isArray(expected)) return null;
+  if (key === PAGE_CONFIG_KEY) {
+    if (!expected.metadatas || !Array.isArray(expected.layouts?.edit)) return null;
+    for (const [name, labels] of Object.entries(PHONE_LABELS)) {
+      if (Object.hasOwn(expected.metadatas, name)) return null;
+      expected.metadatas[name] = {
+        edit: { description: '', placeholder: '', visible: true, editable: true, ...labels },
+        list: { label: name, searchable: true, sortable: true },
+      };
+    }
+    expected.layouts.edit.push(Object.keys(PHONE_LABELS).map(name => ({ name, size: 6 })));
+    return expected;
+  }
   if (key === ARTICLE_CONFIG_KEY) {
     if (!expected.metadatas || typeof expected.metadatas !== 'object' || Array.isArray(expected.metadatas)) return null;
     const metadatas = { ...expected.metadatas };
@@ -779,6 +821,18 @@ function expectedCoreStoreValue(key, sourceValue) {
       contentType.attributes[field] = structuredClone(definition);
       contentType.__schema__.attributes[field] = structuredClone(definition);
     }
+    const page = expected['api::page.page'];
+    if (page && !Object.hasOwn(page.attributes ?? {}, 'center_phone')) {
+      if (!page.attributes || !page.__schema__?.attributes || Object.hasOwn(page, 'config')) return null;
+      for (const name of Object.keys(PHONE_LABELS)) {
+        if (Object.hasOwn(page.attributes, name) || Object.hasOwn(page.__schema__.attributes, name)) return null;
+        const attribute = { type: 'string', conditions: { visible: { '==': [{ var: 'slug' }, 'kontakty'] } } };
+        page.attributes[name] = attribute;
+        page.__schema__.attributes[name] = attribute;
+      }
+      page.config = { metadatas: Object.fromEntries(Object.entries(PHONE_LABELS)
+        .map(([name, edit]) => [name, { edit }])) };
+    }
     const courseGroup = expected['api::course-group.course-group'];
     if (courseGroup) {
       if (!courseGroup.attributes || !courseGroup.__schema__?.attributes || !courseGroup.info || !courseGroup.__schema__?.info) return null;
@@ -874,6 +928,8 @@ function validateSchemaHistory(sourceDb, candidateDb, candidateSchema, differenc
       expectedColumns: {
         'promotions.type': { name: 'type', type: 'string', args: [], defaultTo: null, notNullable: false, unsigned: false },
         'schedule_entries.is_event_collection': { name: 'is_event_collection', type: 'boolean', args: [], defaultTo: null, notNullable: false, unsigned: false },
+        ...Object.fromEntries(Object.keys(CONTACT_PHONES).map(name => [`pages.${name}`,
+          { name, type: 'string', args: [], defaultTo: null, notNullable: false, unsigned: false }])),
         'course_groups.editor_label': { name: 'editor_label', type: 'string', args: [], defaultTo: null, notNullable: false, unsigned: false },
       },
     });
@@ -929,12 +985,14 @@ function allowRunnerRows(sourceDb, candidateDb, plan, receipt, transforms, diffe
     }
     let result;
     try { result = JSON.parse(row.result_json); } catch { result = null; }
-    const expectedResult = step.handler === 'classification' && transforms.classification
+    const expectedResult = step.handler === 'site-phones' ? { updatedRows: transforms.sitePhones.updatedRows }
+      : step.handler === 'classification' && transforms.classification
       ? { updatedRows: transforms.classification.changes.reduce((sum, person) => sum + person.rows.length, 0), noops: transforms.classification.noops.length }
       : step.handler === 'normalize-documents-state' && transforms.documentsState
         ? { updatedRows: transforms.documentsState.candidateRows.length, logicalDocuments: transforms.documentsState.logicalDocuments }
         : null;
-    const validHistoricalResult = step.handler === 'classification'
+    const validHistoricalResult = step.handler === 'site-phones' ? Number.isInteger(result?.updatedRows) && result.updatedRows >= 0 && result.updatedRows <= 2
+      : step.handler === 'classification'
       ? Number.isSafeInteger(result?.updatedRows) && result.updatedRows >= 0 && Number.isSafeInteger(result?.noops) && result.noops >= 0
         && result.updatedRows + result.noops <= 24
       : step.handler === 'normalize-documents-state'
@@ -1035,6 +1093,10 @@ export function auditMigration({ sourceDbPath, candidateDbPath, plan, receipt })
       const before = sourceSchema[table]; const after = candidateSchema[table];
       if (!before || !after) { differences.push({ table, kind: before ? 'table-removed' : 'table-added' }); continue; }
       const expected = expectedColumns(before, table, transforms);
+      const phoneAdditions = table === 'pages' && transforms.sitePhones
+        ? Object.keys(CONTACT_PHONES).filter(name => !before.some(column => column.name === name))
+          .map(name => ({ name, type: 'varchar(255)' })) : [];
+      for (const column of phoneAdditions) expected.push({ ...column, notnull: 0, defaultValue: null, pk: 0 });
       const addition = CURRENT_CONTENT_ADDITIONS[table];
       const sourceHasAddition = addition && before.some(({ name }) => name === addition.name);
       const candidateHasAddition = addition && after.some(({ name }) => name === addition.name);
@@ -1055,6 +1117,9 @@ export function auditMigration({ sourceDbPath, candidateDbPath, plan, receipt })
       }
       const beforeRelations = normalizeRelationalSchema(relationalSchema(source, table), table, transforms);
       let afterRelations = relationalSchema(candidate, table);
+      for (const column of phoneAdditions) {
+        afterRelations.definitions = afterRelations.definitions.map(item => normalizeAddedTableDefinition(item, table, column));
+      }
       if (acceptedAddition) afterRelations = {
         ...afterRelations,
         definitions: afterRelations.definitions.map((item) => normalizeAddedTableDefinition(item, table, addition)),
@@ -1078,7 +1143,7 @@ export function auditMigration({ sourceDbPath, candidateDbPath, plan, receipt })
       const before = sourceSchema[table]; const after = candidateSchema[table];
       const expectedNames = new Set(expectedColumns(before, table, transforms).map(({ name }) => name));
       const rename = KNOWN_RENAMES.get(table);
-      const changed = (transforms.classification && table === 'teachers')
+      const changed = (table === 'pages' && transforms.sitePhones) || (transforms.classification && table === 'teachers')
         || (transforms.documentsState && table === 'seminars')
         || (transforms.nativeRenameTables.has(table) && rename);
       if (changed) compareExpectedRows(source, candidate, table, before, after, transforms, differences);
