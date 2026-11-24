@@ -714,7 +714,10 @@ async function liveCapture(): Promise<void> {
   const activeHistory = activeHistoricalExceptions(content, history.entries);
   if (activeHistory.length) content.historicalExceptions = activeHistory;
   const fingerprint = contentFingerprint(content);
-  const referenceDate = new Date().toISOString().slice(0, 10);
+  // A paired capture may be sealed before UTC midnight and projected afterwards.
+  const referenceInstant = serverCapture?.profile === 'production-static'
+    ? new Date(serverCapture.manifest.capturedAt) : new Date();
+  const referenceDate = referenceInstant.toISOString().slice(0, 10);
   const snapshotBase = {
     contractVersion: 2 as const,
     content,

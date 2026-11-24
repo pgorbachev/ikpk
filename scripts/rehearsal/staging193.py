@@ -21,6 +21,7 @@ import tarfile
 import tempfile
 import threading
 import zipfile
+from datetime import datetime
 from pathlib import Path, PurePosixPath
 from typing import Optional
 
@@ -1239,9 +1240,18 @@ PHONE_SCHEMA_TRANSITION = (
 )
 
 
-def validate_phone_projection(original: dict, candidate: dict, projector_sha: str) -> None:
+def validate_phone_projection(original: dict, candidate: dict, projector_sha: str, captured_at: str) -> None:
     """Build the only permitted new snapshot from the historical projection."""
     expected = copy.deepcopy(original)
+    # The historical projector runs during acceptance. Only the candidate's
+    # sealed capture determines the UTC reference date and hence its snapshotId.
+    if not isinstance(captured_at, str):
+        raise Refusal("contacts release lacks the sealed production capture time")
+    try:
+        expected["referenceDate"] = datetime.strptime(captured_at, "%Y-%m-%dT%H:%M:%S.%fZ").date().isoformat()
+    except ValueError as error:
+        raise Refusal("invalid UTC capture time in the contacts release manifest") from error
+    expected["origin"]["capturedAt"] = captured_at
     pages = expected["content"]["types"].get("static_pages")
     if not isinstance(pages, list) or any(not isinstance(page, dict) for page in pages):
         raise Refusal("verified backup has no static page inventory")
@@ -1273,7 +1283,6 @@ process.stdout.write(JSON.stringify({fingerprint, snapshotId: snapshotId({...sna
     for snapshot in (expected, actual):
         for key in ("databaseDigest", "schemaDigest", "bundleDigest"):
             snapshot["captureProof"].pop(key, None)
-        snapshot["origin"].pop("capturedAt", None)
     if json.dumps(expected, sort_keys=True, allow_nan=False) != json.dumps(actual, sort_keys=True, allow_nan=False):
         raise Refusal("production candidate differs from the independent contacts migration projection")
 
@@ -1775,7 +1784,7 @@ def validate_production_content_acceptance(candidate_archive: bytes, static_dige
                 if phone_transition:
                     if projected.get("fingerprint") != snapshot_fingerprint:
                         raise Refusal("contacts projection differs from the browser-checked snapshot")
-                    validate_phone_projection(original, projected, projector_sha)
+                    validate_phone_projection(original, projected, projector_sha, capture.get("capturedAt"))
                     return
                 validate_ordinary_projector_equivalence(
                     original, projected,
