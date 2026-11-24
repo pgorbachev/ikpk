@@ -250,6 +250,11 @@ describe('семинар из админки доходит до опублик�
     // Каркас, который на проде уже есть и который content-admin создавать не может: институт,
     // группа курсов, преподаватель. Статья — потому что съём отказывает на пустых каркасных типах.
     const publish = (uid, data) => app.documents(uid).create({ status: 'published', data });
+    await publish('api::page.page', {
+      slug: 'kontakty', legacy_id: 'kontakty', title: 'Контакты сайта', body: '<p>Контакты</p>',
+      center_phone: '+78125550101', manager_phone: '+79815550202',
+      seo: { seo_title: 'Контакты сайта', seo_description: 'Контакты для сквозной проверки.' },
+    });
     const inst = await publish('api::institute.institute', {
       ...institute, legacy_id: institute.slug, description: 'Описание института для проверки.', order: 1,
       seo: { seo_title: institute.name, seo_description: 'Институт сквозной проверки.' },
