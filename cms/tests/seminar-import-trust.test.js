@@ -42,6 +42,21 @@ function freePort() {
   });
 }
 
+function bundleImporter(directory) {
+  // import.ts ищет каталог материала по `<корень>/migration/legacy-transfer-dir.json`, где
+  // корень — родитель каталога скрипта. Собранный файл кладётся в `<work>/scripts/`.
+  fs.mkdirSync(path.join(directory, 'migration'), { recursive: true });
+  fs.writeFileSync(path.join(directory, 'migration', 'legacy-transfer-dir.json'), JSON.stringify({ relativeDir: 'transfer' }));
+  const bundle = path.join(directory, 'scripts', 'import.mjs');
+  execFileSync(path.join(cmsRoot, 'node_modules/.bin/esbuild'), [
+    path.join(repoRoot, 'scripts', 'import.ts'),
+    '--bundle', '--platform=node', '--format=esm', '--packages=external', `--outfile=${bundle}`,
+  ]);
+  // Внешние пакеты (form-data) — из node_modules CMS.
+  fs.symlinkSync(path.join(cmsRoot, 'node_modules'), path.join(directory, 'node_modules'));
+  return bundle;
+}
+
 describe('доверенный перенос в собранном Strapi', { timeout: 600000 }, () => {
   /** @type {import('@strapi/strapi').Core.Strapi} */
   let app;
@@ -69,17 +84,18 @@ describe('доверенный перенос в собранном Strapi', { t
   });
 
   // Заголовок авторизации по виду запрашивающего; null — без заголовка.
-  const call = async (method, url, auth, body) => {
+  const call = async (method, url, auth, body, headers = {}) => {
     const response = await fetch(`${base}${url}`, {
       method,
       headers: {
         ...(auth ? { authorization: `Bearer ${auth}` } : {}),
         ...(body ? { 'content-type': 'application/json' } : {}),
+        ...headers,
       },
       body: body && JSON.stringify(body),
     });
     const text = await response.text();
-    return { status: response.status, body: text ? JSON.parse(text) : null, text };
+    return { status: response.status, body: text && response.headers.get('content-type')?.includes('application/json') ? JSON.parse(text) : null, text };
   };
   const ok = (result, what) => {
     assert.ok(result.status >= 200 && result.status < 300, `${what}: ${result.status} ${result.text}`);
@@ -707,17 +723,7 @@ describe('доверенный перенос в собранном Strapi', { t
       ].map((row) => ({ ...row, duration: '16 часов', teachers: [{ id: 987654 }] }))),
     );
 
-    // import.ts ищет каталог материала по `<корень>/migration/legacy-transfer-dir.json`, где
-    // корень — родитель каталога скрипта. Собранный файл кладётся в `<work>/scripts/`.
-    fs.mkdirSync(path.join(work, 'migration'), { recursive: true });
-    fs.writeFileSync(path.join(work, 'migration', 'legacy-transfer-dir.json'), JSON.stringify({ relativeDir: 'transfer' }));
-    const bundle = path.join(work, 'scripts', 'import.mjs');
-    execFileSync(path.join(cmsRoot, 'node_modules/.bin/esbuild'), [
-      path.join(repoRoot, 'scripts', 'import.ts'),
-      '--bundle', '--platform=node', '--format=esm', '--packages=external', `--outfile=${bundle}`,
-    ]);
-    // Внешние пакеты (form-data) — из node_modules CMS.
-    fs.symlinkSync(path.join(cmsRoot, 'node_modules'), path.join(work, 'node_modules'));
+    const bundle = bundleImporter(work);
 
     // Асинхронно: синхронный запуск остановил бы цикл событий, на котором отвечает этот же Strapi.
     try {
@@ -808,5 +814,103 @@ describe('доверенный перенос в собранном Strapi', { t
       populate: ['seminar'],
     });
     assert.equal(draft.seminar?.documentId, fixtures.hidden.documentId);
+  });
+  describe('site phones in the real CMS', () => {
+    const uid = 'api::page.page';
+    const initial = { center_phone: '+78126465450', manager_phone: '+79810387797' };
+    const edited = { center_phone: '+78125550101', manager_phone: '+79815550202' };
+    const content = { title: 'Контакты под новым заголовком', body: '<p>Публичный адрес</p>', seo: { seo_title: 'Адрес', seo_description: 'Публичное описание' } };
+    const numbers = (value) => Object.fromEntries(Object.keys(initial).map((field) => [field, String(value[field]).replace(/[ ()-]/g, '')]));
+    const getVersion = (documentId, status) => app.documents(uid).findOne({ documentId, status, populate: ['seo'] });
+
+    test('initial import supplies both defaults and reimport preserves editorial numbers', async () => {
+      const directory = fs.mkdtempSync(path.join(work, 'phones-import-'));
+      const transfer = path.join(directory, 'transfer');
+      fs.mkdirSync(transfer);
+      for (const type of ['institutes', 'teachers', 'articles', 'video_playlists', 'news', 'promotions', 'course_groups', 'seminars', 'schedule_entries']) {
+        fs.writeFileSync(path.join(transfer, type + '.json'), '[]');
+      }
+      fs.writeFileSync(path.join(transfer, 'static_pages.json'), JSON.stringify([{
+        title: content.title, body_html: content.body, slug: 'kontakty', legacy_id: 'kontakty', ...content.seo,
+      }]));
+      const bundle = bundleImporter(directory);
+      const run = () => promisify(execFile)(process.execPath, [bundle, '--skip-media'], {
+        env: { ...process.env, STRAPI_URL: base, STRAPI_API_TOKEN: fullToken },
+      });
+      const pages = app.documents(uid);
+      await run();
+      const published = await pages.findFirst({ status: 'published', filters: { slug: 'kontakty' } });
+      assert.ok(published, 'first import must publish contacts');
+      assert.deepEqual(numbers(published), initial);
+      await pages.update({ documentId: published.documentId, status: 'published', data: edited });
+      await run();
+      assert.deepEqual(numbers(await getVersion(published.documentId, 'published')), edited);
+    });
+
+    test('ordinary fields of a draft survive narrow save and publication by content-admin', async () => {
+      const pages = app.documents(uid);
+      const stored = await pages.findFirst({ status: 'published', filters: { slug: 'kontakty' } });
+      const data = { ...content, slug: 'kontakty', legacy_id: 'kontakty', ...initial };
+      const { documentId } = stored
+        ? await pages.update({ documentId: stored.documentId, status: 'published', data })
+        : await pages.create({ status: 'published', data });
+      try {
+        await pages.update({ documentId, data: { body: '<p>Чужой черновик</p>', seo: { seo_title: 'Черновик', seo_description: 'Черновое описание' } } });
+        const state = async () => {
+          const result = await call('GET', '/admin/site-phones', adminJwt);
+          assert.equal(result.status, 200);
+          assert.ok(result.body?.revision, 'contacts endpoint must return its data and revision as JSON');
+          return result.body;
+        };
+        const write = (action, revision, patch, token = adminJwt) => call(action === 'draft' ? 'PUT' : 'POST', '/admin/site-phones/' + action, token, patch, { 'if-match': '"' + revision + '"' });
+        const first = await state();
+        assert.deepEqual(numbers(first.published), initial);
+        const excluded = await app.service('admin::role').create({ code: 'phone-observer', name: 'Observer' });
+        const email = 'phone-observer@example.invalid';
+        const password = 'Observer-only-password-2026';
+        await app.service('admin::user').create({ email, password, firstname: 'Test', lastname: 'Observer', isActive: true, roles: [excluded.id] });
+        const outsider = ok(await call('POST', '/admin/login', null, { email, password }), 'observer login').data.accessToken;
+        assert.equal((await call('GET', '/admin/site-phones', outsider)).status, 403);
+        for (const op of ['draft', 'publish']) {
+          assert.equal((await write(op, first.revision, edited, outsider)).status, 403);
+          for (const extra of [{ body: 'чужое' }, { documentId: 'another-page' }]) {
+            assert.equal((await write(op, first.revision, { ...edited, ...extra })).status, 400);
+          }
+        }
+        const permissions = ok(await call('GET', '/admin/users/me/permissions', adminJwt), 'role permissions').data;
+        assert.deepEqual(permissions.filter((row) => row.subject === uid && row.action.startsWith('plugin::content-manager.explorer.')), []);
+        ok(await write('draft', first.revision, { center_phone: edited.center_phone }), 'save center');
+        assert.deepEqual(numbers(await getVersion(documentId, 'draft')), { ...initial, center_phone: edited.center_phone });
+        assert.deepEqual(numbers(await getVersion(documentId, 'published')), initial);
+        const draft = await state();
+        ok(await write('publish', draft.revision, { center_phone: edited.center_phone }), 'publish center');
+        assert.deepEqual(numbers(await getVersion(documentId, 'published')), { ...initial, center_phone: edited.center_phone });
+        assert.equal((await write('publish', first.revision, { center_phone: initial.center_phone })).status, 409);
+        const current = await state();
+        ok(await write('publish', current.revision, { manager_phone: edited.manager_phone }), 'publish mobile');
+        const invalid = await write('publish', (await state()).revision, { center_phone: '8 (812) 555-01-01' });
+        assert.equal(invalid.status, 400);
+        assert.match(invalid.text, /центр|center_phone/i);
+        for (const status of ['draft', 'published']) {
+          const version = await getVersion(documentId, status);
+          assert.deepEqual(numbers(version), edited);
+          assert.equal(version.body, status === 'draft' ? '<p>Чужой черновик</p>' : content.body);
+          assert.equal(version.seo.seo_title, status === 'draft' ? 'Черновик' : content.seo.seo_title);
+          assert.equal(version.seo.seo_description, status === 'draft' ? 'Черновое описание' : content.seo.seo_description);
+        }
+        await pages.update({ documentId, data: { manager_phone: null } });
+        await assert.rejects(pages.publish({ documentId }), /менеджер|manager_phone/i);
+        assert.deepEqual(numbers(await getVersion(documentId, 'published')), edited);
+      } finally { await pages.delete({ documentId }); }
+    });
+
+    test('another Page cannot receive phone fields on create or partial update', async () => {
+      const pages = app.documents(uid);
+      const data = { ...content, slug: 'ordinary-page', legacy_id: 'ordinary-page' };
+      await assert.rejects(pages.create({ data: { ...data, center_phone: edited.center_phone } }));
+      const { documentId } = await pages.create({ status: 'published', data });
+      await assert.rejects(pages.update({ documentId, data: { manager_phone: edited.manager_phone } }));
+      assert.equal((await getVersion(documentId, 'published')).manager_phone ?? null, null);
+    });
   });
 });
