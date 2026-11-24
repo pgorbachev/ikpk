@@ -378,8 +378,8 @@ class ProductionPublicationProofTests(unittest.TestCase):
         self.sidecar.pop("oldProjectorContractSha256")
         self.assert_refused()
 
-    def ordinary_candidate_archive(self, *, content=None, schema_digest="a" * 64):
-        target_sha = "7b4548d234710e0f0daacc2c8a46787b1e822e2f"
+    def ordinary_candidate_archive(self, *, content=None, schema_digest="a" * 64,
+                                   target_sha="7b4548d234710e0f0daacc2c8a46787b1e822e2f"):
         manifest = {
             "operationId": OPERATION, "sourceSha": target_sha,
             "profile": "production-static", "databaseSha256": sha(self.final_db.read_bytes()),
@@ -414,14 +414,15 @@ class ProductionPublicationProofTests(unittest.TestCase):
                 archive.addfile(member, io.BytesIO(payload))
         return output.getvalue()
 
-    def validate_ordinary_candidate(self, *, content=None, schema_digest="a" * 64):
-        old_sha = "62744c31283e2c9b31e84512d3b8cfc793e8d5f7"
-        target_sha = "7b4548d234710e0f0daacc2c8a46787b1e822e2f"
-        old_contract = "3928819713b00cfbf982186d67ed2e29f47b913c9a9ba019ee0106b7255904b9"
-        target_contract = "cf536b99bc5815a8b5a76f8315f07c60200c0d1d5728960e9a9593b1c113bcf0"
+    def validate_ordinary_candidate(self, *, content=None, schema_digest="a" * 64,
+                                    old_sha="62744c31283e2c9b31e84512d3b8cfc793e8d5f7",
+                                    target_sha="7b4548d234710e0f0daacc2c8a46787b1e822e2f",
+                                    old_contract="3928819713b00cfbf982186d67ed2e29f47b913c9a9ba019ee0106b7255904b9",
+                                    target_contract="cf536b99bc5815a8b5a76f8315f07c60200c0d1d5728960e9a9593b1c113bcf0",
+                                    old_schema="a" * 64, candidate_schema="a" * 64):
         backup = {
             **self.sidecar, "sourceSha": target_sha, "oldCmsSourceSha": old_sha,
-            "oldCmsSchemaSha256": "a" * 64, "oldProjectorSourceSha": old_sha,
+            "oldCmsSchemaSha256": old_schema, "oldProjectorSourceSha": old_sha,
             "oldProjectorContractSha256": old_contract, "oldProjectorNodeVersion": "v22-test",
         }
 
@@ -451,11 +452,11 @@ class ProductionPublicationProofTests(unittest.TestCase):
             return snapshot["fingerprint"]
 
         with patch.object(operator, "production_projector_contract", side_effect=contract), \
-             patch.object(operator, "production_paired_schema_from_commit", return_value="a" * 64), \
+             patch.object(operator, "production_paired_schema_from_commit", return_value=candidate_schema), \
              patch.object(operator, "production_projector_node_version", return_value="v22-test"), \
              patch.object(operator, "production_paired_backup_fingerprint", side_effect=old_projection):
             operator.validate_production_content_acceptance(
-                self.ordinary_candidate_archive(content=content, schema_digest=schema_digest), "d" * 64,
+                self.ordinary_candidate_archive(content=content, schema_digest=schema_digest, target_sha=target_sha), "d" * 64,
                 snapshot_fingerprint(self.original), self.backup, backup, OPERATION, target_sha, ADMISSION,
             )
 
@@ -471,6 +472,30 @@ class ProductionPublicationProofTests(unittest.TestCase):
     def test_ordinary_release_refuses_changed_schema_with_identical_projection(self):
         with self.assertRaises(operator.Refusal):
             self.validate_ordinary_candidate(schema_digest="c" * 64)
+
+    def test_program_editor_schema_pair_accepts_identical_public_projection(self):
+        old_schema, candidate_schema = next(iter(operator.REVIEWED_ADDITIVE_SCHEMA_PAIRS))
+        old_sha, old_contract, target_contract = next(
+            pair for pair in operator.REVIEWED_ORDINARY_PROJECTOR_PAIRS
+            if pair[0] == "1da3579e8a24a39417bff7f8e1e8efa3964fd53a")
+        self.validate_ordinary_candidate(
+            schema_digest="c" * 64, old_sha=old_sha, target_sha="a9ab7c823950490b5a1b5e8d7ede134efa138a0f",
+            old_contract=old_contract, target_contract=target_contract,
+            old_schema=old_schema, candidate_schema=candidate_schema)
+
+    def test_program_editor_schema_pair_refuses_public_content_change(self):
+        old_schema, candidate_schema = next(iter(operator.REVIEWED_ADDITIVE_SCHEMA_PAIRS))
+        old_sha, old_contract, target_contract = next(
+            pair for pair in operator.REVIEWED_ORDINARY_PROJECTOR_PAIRS
+            if pair[0] == "1da3579e8a24a39417bff7f8e1e8efa3964fd53a")
+        candidate_content = self.public_content(self.original)
+        candidate_content["types"]["schedule_entries"][0]["newUnknownField"] = "changed"
+        with self.assertRaises(operator.Refusal):
+            self.validate_ordinary_candidate(
+                content=candidate_content, schema_digest="c" * 64, old_sha=old_sha,
+                target_sha="a9ab7c823950490b5a1b5e8d7ede134efa138a0f",
+                old_contract=old_contract, target_contract=target_contract,
+                old_schema=old_schema, candidate_schema=candidate_schema)
 
     def test_ordinary_release_refuses_backup_bytes_that_do_not_match_sidecar(self):
         old_sha = "62744c31283e2c9b31e84512d3b8cfc793e8d5f7"
@@ -857,6 +882,18 @@ class OrdinaryProjectorEquivalenceTests(unittest.TestCase):
                          self.OLD_CONTRACT_SHA256)
         self.assertEqual(operator.production_projector_contract(
             self.CANDIDATE_PROJECTOR_SHA, self.CANDIDATE_PROJECTOR_SHA), self.CANDIDATE_CONTRACT_SHA256)
+
+    def test_program_editor_pair_matches_the_exact_git_trees(self):
+        old = "1da3579e8a24a39417bff7f8e1e8efa3964fd53a"
+        new = "a9ab7c823950490b5a1b5e8d7ede134efa138a0f"
+        self.assertIn((old, operator.production_projector_contract(old, old),
+                       operator.production_projector_contract(new, new)),
+                      operator.REVIEWED_ORDINARY_PROJECTOR_PAIRS)
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            pair = (operator.production_paired_schema_from_commit(old, root / "old"),
+                    operator.production_paired_schema_from_commit(new, root / "new"))
+        self.assertIn(pair, operator.REVIEWED_ADDITIVE_SCHEMA_PAIRS)
 
     def test_historical_projector_offline_install_timeout_is_a_clear_refusal(self):
         original_run = subprocess.run
