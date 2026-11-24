@@ -1,3 +1,4 @@
+import { Phone } from '@strapi/icons';
 import type { ComponentType } from 'react';
 import type { StrapiApp } from '@strapi/strapi/admin';
 import { contentManagerHomeRoute } from './content-home';
@@ -10,14 +11,6 @@ function SiteRefreshIcon(props: SiteRefreshIconProps) {
   return (
     <svg {...siteRefreshIconProps(props)}>
       <path fill="currentColor" d={SITE_REFRESH_ICON_PATH} />
-    </svg>
-  );
-}
-
-function PhoneIcon(props: SiteRefreshIconProps) {
-  return (
-    <svg {...siteRefreshIconProps(props)} viewBox="0 0 24 24" aria-hidden="true">
-      <path fill="currentColor" d="M6.6 10.8a15.5 15.5 0 006.6 6.6l2.2-2.2a1 1 0 011-.24c1.12.37 2.33.57 3.6.57a1 1 0 011 1V20a1 1 0 01-1 1C10.6 21 3 13.4 3 4a1 1 0 011-1h3.5a1 1 0 011 1c0 1.27.2 2.48.57 3.6a1 1 0 01-.25 1z" />
     </svg>
   );
 }
@@ -81,7 +74,7 @@ export default {
     );
     app.addMenuLink({
       to: '/site-contact-phones',
-      icon: PhoneIcon,
+      icon: Phone,
       intlLabel: { id: 'site-phones.menu', defaultMessage: 'Page → Контакты сайта' },
       permissions: [],
       Component: () => import('./pages/SitePhones'),

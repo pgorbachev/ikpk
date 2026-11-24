@@ -24,10 +24,11 @@ function rewriteNumbers(node: Parent, phones: ContactPhones['center'][]) {
         child.value = child.value.replace(number, (original) => phones[position++]?.text ?? original);
       } else if (tree.isElementNode(child)) {
         const href = child.attrs.find((attr) => attr.name === 'href');
-        if (child.tagName === 'a' && href?.value.startsWith('tel:') && phones[position]) {
-          href.value = phones[position].href;
-        }
+        const start = position;
+        const phoneLink = child.tagName === 'a' && href?.value.startsWith('tel:') ? href : undefined;
+        if (phoneLink && phones[start]) phoneLink.value = phones[start].href;
         visit(child);
+        if (phoneLink && position === start) position++;
       }
     }
   }

@@ -50,10 +50,8 @@ export function registerSitePhones(strapi) {
       method, path,
       config: { policies: ['admin::isAuthenticatedAdmin'] },
       handler: async (ctx) => {
-        const actor = await strapi.db.query('admin::user').findOne({
-          where: { id: ctx.state.user.id }, populate: ['roles'],
-        });
-        if (!actor?.roles.some(({ code }) => code === 'content-admin' || code === 'strapi-super-admin')) {
+        const actor = ctx.state.user;
+        if (!actor.roles.some(({ code }) => code === 'content-admin' || code === 'strapi-super-admin')) {
           return ctx.forbidden('Недостаточно прав для изменения телефонов сайта.');
         }
         if (Object.keys(ctx.query).length) return ctx.badRequest('Страницу контактов выбирает сервер.');

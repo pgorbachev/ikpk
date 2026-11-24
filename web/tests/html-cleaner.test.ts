@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { cleanBodyHtml as cleanRaw, stripH1, stripLegacySeminarTail } from '../src/lib/html-cleaner.js';
+import { withOrganizationContactPhones } from '../src/lib/organization-contact-phones';
 import { htmlOf } from './helpers/rich-content-safety/html-of.js';
 
 function cleanBodyHtml(
@@ -517,4 +518,14 @@ describe('cleanBodyHtml не выдумывает адрес назначени�
     const input = '<p><a href="/kontakty">Контакты</a></p><button>Произвести оплату</button>';
     expect(hrefs(cleanBodyHtml(input))).toEqual(['/kontakty']);
   });
+});
+
+
+it('keeps the next phone in sequence after a call link with a text label', () => {
+  const html = '<table><tr><td>Контактный телефон</td><td><a href="tel:+78126465450">Позвонить</a>, +7 981 038-77-97</td></tr></table>';
+  const result = withOrganizationContactPhones(html, {
+    center: { text: '+7 (812) 555-01-01', href: 'tel:+78125550101' },
+    manager: { text: '+7 981 555-02-02', href: 'tel:+79815550202' },
+  });
+  expect(result).toContain('<a href="tel:+78125550101">Позвонить</a>, +7 981 555-02-02');
 });

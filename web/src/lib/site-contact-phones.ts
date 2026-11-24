@@ -6,6 +6,7 @@ interface ContactPage {
 }
 
 function formattedPhone(value: unknown, field: 'center_phone' | 'manager_phone') {
+  if (value == null) throw new Error(`Page /kontakty: поле ${field} отсутствует, нужен новый снимок опубликованных контактов`);
   const digits = typeof value === 'string' ? value.replace(/[ ()-]/g, '') : '';
   const parts = /^\+7([0-9]{3})([0-9]{3})([0-9]{2})([0-9]{2})$/.exec(digits);
   if (!parts) throw new Error(`Page /kontakty: некорректное поле ${field}, нужен +7 и десять цифр`);
