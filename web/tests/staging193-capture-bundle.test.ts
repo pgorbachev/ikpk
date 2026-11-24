@@ -88,6 +88,10 @@ function fixtureDatabase(
     INSERT INTO files VALUES (20,'photo','/uploads/photo.jpg');
     INSERT INTO files_related_mph VALUES (1,20,5,'api::seminar.seminar','image',1), (2,20,7,'api::article.article','image',1);
   `);
+  if (schemas['api::page.page']?.attributes.center_phone) {
+    db.exec(`INSERT INTO pages (id, document_id, slug, legacy_id, title, center_phone, manager_phone, published_at)
+      VALUES (1, 'contacts', 'kontakty', 'kontakty', 'Контакты сайта', '+78125550101', '+79815550202', '2026-10-01')`);
+  }
   if (includeUnshownDocument) {
     db.exec(`INSERT INTO components_seminar_document_records (id, document, issuer) VALUES (12,'Certificate','Issuer');
       INSERT INTO seminars_cmps VALUES (3,5,12,'seminar.document-record','documents',1);`);

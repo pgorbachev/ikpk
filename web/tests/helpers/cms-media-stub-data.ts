@@ -219,6 +219,8 @@ export function mediaDataset(over: Record<string, StubCollection> = {}): Record<
       records: [
         {
           ...without(base('page', 'Page'), 'name'),
+          slug: 'kontakty', legacy_id: 'kontakty',
+          center_phone: '+78125550101', manager_phone: '+79815550202',
           title: 'Page',
           body: '<p>page body</p>',
           seo: seo('Page'),

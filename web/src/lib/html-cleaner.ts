@@ -16,7 +16,7 @@
  *  9. Clean up orphaned closing tags and excess whitespace
  */
 
-import { withOrganizationContactPhones } from './organization-contact-phones';
+import { withOrganizationContactPhones } from './organization-contact-phones.ts';
 import type { siteContactPhones } from './site-contact-phones';
 import { injectImgDimensions } from './media.ts';
 import { registrationHref, isDemoForms } from './forms.ts';
