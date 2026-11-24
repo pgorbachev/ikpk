@@ -1711,6 +1711,10 @@ def validate_production_content_acceptance(candidate_archive: bytes, static_dige
                 capture_bytes = archive.extractfile("snapshot/capture-manifest.json").read()
                 projected = json.load(archive.extractfile("snapshot/snapshot.json"))
             else:
+                if (snapshot_fingerprint != backup.get("snapshotFingerprint") and
+                        (backup.get("oldCmsSchemaSha256") != PHONE_SCHEMA_TRANSITION[0]
+                         or backup.get("oldCmsSourceSha") == source_sha)):
+                    raise Refusal("built production snapshot differs from the fingerprint captured in the verified backup")
                 candidate_manifest, capture_bytes = _strict_archive_json(archive, "snapshot/capture-manifest.json")
                 projected, _ = _strict_archive_json(archive, "snapshot/snapshot.json")
         projector_sha = backup.get("oldProjectorSourceSha", backup.get("sourceSha"))

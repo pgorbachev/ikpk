@@ -23,6 +23,7 @@ test('панель Content Manager включает русские действ�
   // Песочница читает только `config.locales`, поэтому соседний модуль
   // транслируется так же и наружу не отдаётся.
   const require = (id) => {
+    if (id === '@strapi/icons') return { Phone: () => null };
     if (id === './components/OccurrenceRelations') return { OccurrenceRelations: () => null };
     if (id === './components/OccurrencePrice') return { default: () => null };
     if (id === './components/ArticleCalendarDate') return { default: () => null };
