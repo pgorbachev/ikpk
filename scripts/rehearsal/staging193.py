@@ -1213,6 +1213,21 @@ REVIEWED_ORDINARY_PROJECTOR_PAIRS = {
         "3928819713b00cfbf982186d67ed2e29f47b913c9a9ba019ee0106b7255904b9",
         "cf536b99bc5815a8b5a76f8315f07c60200c0d1d5728960e9a9593b1c113bcf0",
     ),
+    (
+        "1da3579e8a24a39417bff7f8e1e8efa3964fd53a",
+        "cf536b99bc5815a8b5a76f8315f07c60200c0d1d5728960e9a9593b1c113bcf0",
+        "158644b4ad1848a0cab2cb78663b8cee1443f0e248a3741bea6600201b2dddd7",
+    ),
+}
+
+# The second schema digest adds course_groups.editor_label. That column is not
+# part of the public snapshot; the capture schema digest still changes because
+# it covers SQLite DDL.
+REVIEWED_ADDITIVE_SCHEMA_PAIRS = {
+    (
+        "7263a258d8858e6f736ff15aaa3ee81bcf7769cb526a00a1cf6dfec70994c6b3",
+        "bbc4995580b4c6dd1b3784d6b8c478fc186388882dd2f0ec36f71034a454bdf6",
+    ),
 }
 
 
@@ -1221,13 +1236,18 @@ def validate_ordinary_projector_equivalence(original: dict, candidate: dict, *,
                                              old_projector_contract_sha256: str,
                                              candidate_projector_contract_sha256: str,
                                              old_schema_sha256: str, candidate_schema_sha256: str) -> None:
-    """Permit only a reviewed projector-contract pair with identical full snapshot semantics."""
+    """Permit a reviewed projector pair whose public snapshot is unchanged.
+
+    One reviewed pair adds a non-public course-group column. Its capture schema
+    digest covers the new DDL and is not part of the public comparison.
+    """
     pair = (old_projector_sha, old_projector_contract_sha256, candidate_projector_contract_sha256)
+    additive_schema = (old_schema_sha256, candidate_schema_sha256) in REVIEWED_ADDITIVE_SCHEMA_PAIRS
     if (not SHA.fullmatch(candidate_projector_sha) or pair not in REVIEWED_ORDINARY_PROJECTOR_PAIRS):
         raise Refusal("ordinary production projector pair has no reviewed equivalence binding")
     if (not re.fullmatch(r"[a-f0-9]{64}", old_schema_sha256)
             or not re.fullmatch(r"[a-f0-9]{64}", candidate_schema_sha256)
-            or old_schema_sha256 != candidate_schema_sha256):
+            or (old_schema_sha256 != candidate_schema_sha256 and not additive_schema)):
         raise Refusal("ordinary production projector schema contract changed")
 
     def semantic_snapshot(snapshot: dict) -> str:
@@ -1262,6 +1282,8 @@ def validate_ordinary_projector_equivalence(original: dict, candidate: dict, *,
         stable["captureProof"].pop("databaseDigest", None)
         stable["captureProof"].pop("mediaManifestDigest", None)
         stable["captureProof"].pop("bundleDigest", None)
+        if additive_schema:
+            stable["captureProof"].pop("schemaDigest", None)
         origin = stable.get("origin")
         if isinstance(origin, dict):
             origin.pop("capturedAt", None)
@@ -1684,7 +1706,9 @@ def validate_production_content_acceptance(candidate_archive: bytes, static_dige
                                for key in ("runId", "attempt"))
                         or not re.fullmatch(r"[a-f0-9]{64}", str(capture.get("databaseSha256", "")))
                         or not re.fullmatch(r"[a-f0-9]{64}", str(capture.get("mediaManifestSha256", "")))
-                        or actual_candidate_schema != backup.get("oldCmsSchemaSha256")):
+                        or (actual_candidate_schema != backup.get("oldCmsSchemaSha256")
+                            and (backup.get("oldCmsSchemaSha256"), actual_candidate_schema)
+                            not in REVIEWED_ADDITIVE_SCHEMA_PAIRS)):
                     raise Refusal("ordinary production candidate capture is not bound to the exact release and schema")
                 candidate_proof = projected.get("captureProof") if isinstance(projected, dict) else None
                 if (not isinstance(candidate_proof, dict)
