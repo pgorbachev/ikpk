@@ -604,8 +604,6 @@ async function liveCapture(): Promise<void> {
     types[st.type] = rawByType[st.type]!.map((record) => mapRecord(st.type, record));
   }
 
-  siteContactPhones(types.static_pages);
-
   const teacherDocumentIdCounts = new Map<string, number>();
   for (const teacher of types.teachers ?? []) {
     const documentId = typeof teacher.documentId === 'string' ? teacher.documentId.trim() : '';
@@ -764,6 +762,8 @@ async function liveCapture(): Promise<void> {
         'предупреждение; снимок не записан',
     );
   }
+  siteContactPhones(types.static_pages);
+
   if (emptyTypes.length > 0) {
     console.warn(`snapshot:capture: пустые типы (${emptyTypes.length}): ${emptyTypes.join(', ')}`);
   }
