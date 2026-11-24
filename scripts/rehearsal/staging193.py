@@ -1231,6 +1231,53 @@ REVIEWED_ADDITIVE_SCHEMA_PAIRS = {
 }
 
 
+# Digests cover exactly the admitted CMS schema files, independently of the
+# candidate commit or the projector's own claims about its output.
+PHONE_SCHEMA_TRANSITION = (
+    "bbc4995580b4c6dd1b3784d6b8c478fc186388882dd2f0ec36f71034a454bdf6",
+    "974abb10127748e47b552edb9c6cc1204ef8b2b2affe9ba876c76728aeee2a90",
+)
+
+
+def validate_phone_projection(original: dict, candidate: dict, projector_sha: str) -> None:
+    """Build the only permitted new snapshot from the historical projection."""
+    expected = copy.deepcopy(original)
+    pages = expected["content"]["types"].get("static_pages")
+    if not isinstance(pages, list) or any(not isinstance(page, dict) for page in pages):
+        raise Refusal("verified backup has no static page inventory")
+    contacts = [page for page in pages if page.get("slug") == "kontakty" or page.get("legacy_id") == "kontakty"]
+    if (len(contacts) != 1 or contacts[0].get("slug") != "kontakty" or contacts[0].get("legacy_id") != "kontakty"
+            or any("center_phone" in page or "manager_phone" in page for page in pages)):
+        raise Refusal("verified backup has missing, ambiguous, or previously migrated contacts")
+    contacts[0].update(center_phone="+7 (812) 646-54-50", manager_phone="+7 981 038-77-97")
+    # Use the verified historical implementation. JS number/string ordering
+    # and serialization are part of the fingerprint contract.
+    identity_source = capture_bytes(["git", "show", f"{projector_sha}:web/scripts/lib/content-snapshot.ts"])
+    with tempfile.TemporaryDirectory(prefix="ikpk-phone-projection-") as directory:
+        module = Path(directory) / "identity.mts"
+        module.write_bytes(identity_source)
+        script = """
+import {contentFingerprint, snapshotId} from './identity.mts';
+import {readFileSync} from 'node:fs';
+const snapshot = JSON.parse(readFileSync(0, 'utf8'));
+const fingerprint = contentFingerprint(snapshot.content);
+process.stdout.write(JSON.stringify({fingerprint, snapshotId: snapshotId({...snapshot, fingerprint})}));
+"""
+        result = subprocess.run(["node", "--experimental-strip-types", "--input-type=module", "-e", script],
+                                cwd=directory, input=json.dumps(expected).encode(), capture_output=True, check=False,
+                                env={"PATH": os.environ.get("PATH", os.defpath)})
+    if result.returncode:
+        raise Refusal("cannot derive migrated contacts identity with the verified historical projector")
+    expected.update(json.loads(result.stdout))
+    actual = copy.deepcopy(candidate)
+    for snapshot in (expected, actual):
+        for key in ("databaseDigest", "schemaDigest", "bundleDigest"):
+            snapshot["captureProof"].pop(key, None)
+        snapshot["origin"].pop("capturedAt", None)
+    if json.dumps(expected, sort_keys=True, allow_nan=False) != json.dumps(actual, sort_keys=True, allow_nan=False):
+        raise Refusal("production candidate differs from the independent contacts migration projection")
+
+
 def validate_ordinary_projector_equivalence(original: dict, candidate: dict, *,
                                              old_projector_sha: str, candidate_projector_sha: str,
                                              old_projector_contract_sha256: str,
@@ -1655,8 +1702,6 @@ def validate_production_content_acceptance(candidate_archive: bytes, static_dige
                 capture_bytes = archive.extractfile("snapshot/capture-manifest.json").read()
                 projected = json.load(archive.extractfile("snapshot/snapshot.json"))
             else:
-                if snapshot_fingerprint != backup.get("snapshotFingerprint"):
-                    raise Refusal("built production snapshot differs from the fingerprint captured in the verified backup")
                 candidate_manifest, capture_bytes = _strict_archive_json(archive, "snapshot/capture-manifest.json")
                 projected, _ = _strict_archive_json(archive, "snapshot/snapshot.json")
         projector_sha = backup.get("oldProjectorSourceSha", backup.get("sourceSha"))
@@ -1699,6 +1744,7 @@ def validate_production_content_acceptance(candidate_archive: bytes, static_dige
                             or original_proof.get("attempt") != admitted_run["attempt"]
                             or not re.fullmatch(r"[a-f0-9]{64}", str(original_proof.get("schemaDigest", "")))):
                         raise Refusal("original production projection is not bound to the verified backup and release")
+                phone_transition = (backup["oldCmsSchemaSha256"], actual_candidate_schema) == PHONE_SCHEMA_TRANSITION
                 capture = candidate_manifest
                 if (capture.get("operationId") != operation_id or capture.get("sourceSha") != source_sha
                         or capture.get("profile") != "production-static"
@@ -1706,7 +1752,7 @@ def validate_production_content_acceptance(candidate_archive: bytes, static_dige
                                for key in ("runId", "attempt"))
                         or not re.fullmatch(r"[a-f0-9]{64}", str(capture.get("databaseSha256", "")))
                         or not re.fullmatch(r"[a-f0-9]{64}", str(capture.get("mediaManifestSha256", "")))
-                        or (actual_candidate_schema != backup.get("oldCmsSchemaSha256")
+                        or (not phone_transition and actual_candidate_schema != backup.get("oldCmsSchemaSha256")
                             and (backup.get("oldCmsSchemaSha256"), actual_candidate_schema)
                             not in REVIEWED_ADDITIVE_SCHEMA_PAIRS)):
                     raise Refusal("ordinary production candidate capture is not bound to the exact release and schema")
@@ -1726,6 +1772,11 @@ def validate_production_content_acceptance(candidate_archive: bytes, static_dige
                         or type(candidate_proof.get("attempt")) is not int
                         or candidate_proof.get("attempt") != admitted_run["attempt"]):
                     raise Refusal("ordinary production candidate projection differs from its browser-checked capture")
+                if phone_transition:
+                    if projected.get("fingerprint") != snapshot_fingerprint:
+                        raise Refusal("contacts projection differs from the browser-checked snapshot")
+                    validate_phone_projection(original, projected, projector_sha)
+                    return
                 validate_ordinary_projector_equivalence(
                     original, projected,
                     old_projector_sha=projector_sha,
