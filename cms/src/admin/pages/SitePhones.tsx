@@ -34,20 +34,27 @@ export default function SitePhones() {
 
   useEffect(() => { void load(); }, []);
 
-  async function write(publish: boolean) {
+  const pending = PHONE_FIELDS.filter((field) => view && values[field] !== view.published[field]);
+
+  async function write(publish: boolean, fields: PhoneField[]) {
     if (!view || busy) return;
     setBusy(true);
     setError('');
     setMessage('');
     try {
-      const changes = Object.fromEntries(PHONE_FIELDS.filter((field) => values[field] !== view.draft[field])
-        .map((field) => [field, values[field]]));
+      const changes = Object.fromEntries(fields.map((field) => [field, values[field]]));
       const options = { headers: { 'If-Match': `"${view.revision}"` } };
       const response = publish
         ? await client.post<ContactView>('/admin/site-phones/publish', changes, options)
         : await client.put<ContactView>('/admin/site-phones/draft', changes, options);
-      show(response.data);
-      setMessage(publish ? 'Телефоны опубликованы. Чтобы применить их на сайте, нажмите «Обновить сайт».' : 'Черновик сохранён.');
+      setView(response.data);
+      // The form keeps unsent edits when only one number is published.
+      if (publish) {
+        const result = fields.length === 1 ? `${SITE_PHONE_LABELS[fields[0]]} опубликован.` : 'Оба телефона опубликованы.';
+        setMessage(`${result} Чтобы применить изменения на сайте, нажмите «Обновить сайт».`);
+      } else {
+        setMessage('Черновик сохранён.');
+      }
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Не удалось сохранить телефоны.');
     } finally {
@@ -69,9 +76,18 @@ export default function SitePhones() {
               <Field.Hint />
             </Field.Root>
           ))}
-          <Flex gap={3}>
-            <Button variant="secondary" onClick={() => write(false)} disabled={busy}>Сохранить</Button>
-            <Button onClick={() => write(true)} disabled={busy}>Опубликовать</Button>
+          <Flex gap={3} wrap="wrap">
+            <Button variant="secondary" onClick={() => write(false, PHONE_FIELDS.filter((field) => values[field] !== view.draft[field]))} disabled={busy}>
+              Сохранить
+            </Button>
+            {pending.length === 2 && pending.map((field) => (
+              <Button key={field} variant="secondary" onClick={() => write(true, [field])} disabled={busy}>
+                Опубликовать {SITE_PHONE_LABELS[field].toLowerCase()}
+              </Button>
+            ))}
+            <Button onClick={() => write(true, pending)} disabled={busy || !pending.length}>
+              {pending.length === 2 ? 'Опубликовать оба телефона' : 'Опубликовать'}
+            </Button>
           </Flex>
         </>}
         {message && <Typography role="status">{message}</Typography>}

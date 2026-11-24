@@ -284,6 +284,51 @@ describe('доверенный перенос в собранном Strapi', { t
     });
   };
 
+  test('native Page status follows scoped phone drafts, publication and separate SEO edits', async () => {
+    const uid = 'api::page.page';
+    const pages = app.documents(uid);
+    const { documentId } = await pages.create({ status: 'published', data: {
+      slug: 'kontakty', legacy_id: 'kontakty', title: 'Контакты', body: 'Адрес',
+      center_phone: '+78126465450', manager_phone: '+79810387797',
+      seo: { seo_title: 'Адрес', seo_description: 'Как найти' },
+    } });
+    const status = async () => {
+      const draft = await pages.findOne({ documentId, status: 'draft' });
+      const metadata = await app.plugin('content-manager').service('document-metadata').formatDocumentWithMetadata(uid, draft);
+      return metadata.data.status;
+    };
+    const write = async (action, patch) => {
+      const state = ok(await call('GET', '/admin/site-phones', adminJwt), 'read phones');
+      const response = await fetch(base + '/admin/site-phones/' + action, {
+        method: action === 'draft' ? 'PUT' : 'POST',
+        headers: { Authorization: 'Bearer ' + adminJwt, 'Content-Type': 'application/json', 'If-Match': '"' + state.revision + '"' },
+        body: JSON.stringify(patch),
+      });
+      assert.equal(response.status, 200, await response.text());
+    };
+    try {
+      assert.equal(await status(), 'published');
+      await write('draft', { manager_phone: '+79815550202' });
+      assert.equal(await status(), 'modified');
+      await write('publish', { center_phone: '+78125550101' });
+      assert.equal(await status(), 'modified');
+      assert.equal((await pages.findOne({ documentId, status: 'published' })).manager_phone, '+79810387797');
+      await write('publish', { manager_phone: '+79815550202' });
+      assert.equal(await status(), 'published');
+
+      await pages.update({ documentId, data: { seo: { seo_title: 'Черновое SEO', seo_description: 'Как найти' } } });
+      await write('publish', { center_phone: '+78125550102' });
+      assert.equal(await status(), 'modified');
+      assert.equal((await pages.findOne({ documentId, status: 'draft', populate: ['seo'] })).seo.seo_title, 'Черновое SEO');
+      assert.equal((await pages.findOne({ documentId, status: 'published', populate: ['seo'] })).seo.seo_title, 'Адрес');
+    } finally {
+      await pages.delete({ documentId });
+      await app.db.query('api::address-history.address-history').deleteMany({
+        where: { owner_id: documentId, address: '/kontakty' },
+      });
+    }
+  });
+
   test('Document Service отклоняет create published без признака персоны', async () => {
     await assert.rejects(
       () => app.documents(TEACHER).create({

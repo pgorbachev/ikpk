@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from 'node:util';
 import { createHash } from 'node:crypto';
 import { checkPagePhones, PHONE_FIELDS, type PhoneField } from '../../lib/site-phones';
 
@@ -8,6 +9,7 @@ type PageRow = Phones & {
   slug: string;
   legacy_id: string;
   published_at: string | null;
+  updated_at: string | number | Date | null;
 };
 
 function phonePair({ center_phone, manager_phone }: Phones): Phones {
@@ -21,6 +23,20 @@ function view(draftRow: PageRow, publishedRow: PageRow) {
     .update(JSON.stringify([draftRow.id, publishedRow.id, draft, published]))
     .digest('hex');
   return { draft, published, revision };
+}
+
+// Strapi copies SEO components into a new row on publish. Their row IDs differ even
+// when their content (including the linked social image) is identical.
+async function hasOtherDraftChanges(strapi, draft: PageRow, published: PageRow) {
+  const rows = await strapi.db.query('api::page.page').findMany({
+    where: { id: { $in: [draft.id, published.id] } },
+    select: ['title', 'body'],
+    populate: { seo: { populate: { og_image: { select: ['id'] } } } },
+  });
+  const [first, second] = rows.map(({ title, body, seo }) => ({
+    title, body, seo: seo && { ...seo, id: undefined },
+  }));
+  return !isDeepStrictEqual(first, second);
 }
 
 export function registerSitePhones(strapi) {
@@ -51,7 +67,7 @@ export function registerSitePhones(strapi) {
 
         try {
           await strapi.db.transaction(async ({ trx }) => {
-            const query = trx('pages').select('id', 'document_id', 'slug', 'legacy_id', 'published_at', ...PHONE_FIELDS)
+            const query = trx('pages').select('id', 'document_id', 'slug', 'legacy_id', 'published_at', 'updated_at', ...PHONE_FIELDS)
               .where('slug', 'kontakty').orWhere('legacy_id', 'kontakty').orderBy('id');
             const rows: PageRow[] = await (writing ? query.forUpdate() : query);
             const draft = rows.find((row) => row.published_at === null);
@@ -68,15 +84,42 @@ export function registerSitePhones(strapi) {
             if (ctx.get('If-Match') !== `"${current.revision}"`) {
               return ctx.conflict('Телефоны уже изменились. Откройте актуальные значения и повторите правку.');
             }
-            const next = { ...current.draft, ...changes };
-            if (action === 'publish') {
-              const error = checkPagePhones('kontakty', next, true);
-              if (error) return ctx.badRequest(error.message);
-              await trx('pages').where({ id: published.id }).update(next);
-              Object.assign(published, next);
+            if (action === 'publish' && !Object.keys(changes).length) {
+              return ctx.badRequest('Выберите хотя бы один телефон для публикации.');
             }
-            if (Object.keys(changes).length) await trx('pages').where({ id: draft.id }).update(changes);
-            ctx.body = view({ ...draft, ...changes }, published);
+            const nextDraft = { ...current.draft, ...changes };
+            const nextPublished = action === 'publish' ? { ...current.published, ...changes } : current.published;
+            if (action === 'publish') {
+              const error = checkPagePhones('kontakty', nextPublished, true);
+              if (error) return ctx.badRequest(error.message);
+            }
+            const draftChanged = !isDeepStrictEqual(current.draft, nextDraft);
+            const publishedChanged = !isDeepStrictEqual(current.published, nextPublished);
+            if (!draftChanged && !publishedChanged) {
+              ctx.body = current;
+              return;
+            }
+
+            // Content Manager marks the document modified exactly when draft.updatedAt
+            // is later than published.updatedAt. Keep that ordering for outstanding
+            // phones and editorial changes without replacing either version.
+            const pending = !isDeepStrictEqual(nextDraft, nextPublished)
+              || await hasOtherDraftChanges(strapi, draft, published);
+            const previousPublication = new Date(published.updated_at ?? 0).getTime();
+            const now = Math.max(Date.now(), previousPublication + 1);
+            const publishedTime = publishedChanged ? now : previousPublication;
+            const draftTime = pending ? Math.max(now, publishedTime + 1) : publishedTime;
+
+            if (publishedChanged) {
+              await trx('pages').where({ id: published.id }).update({
+                ...changes, updated_at: new Date(publishedTime), updated_by_id: actor.id,
+              });
+            }
+            await trx('pages').where({ id: draft.id }).update({
+              ...changes, updated_at: new Date(draftTime),
+              ...(draftChanged ? { updated_by_id: actor.id } : {}),
+            });
+            ctx.body = view({ ...draft, ...changes }, { ...published, ...nextPublished });
           });
         } catch (error) {
           if (String(error?.code).startsWith('SQLITE_BUSY')) {
