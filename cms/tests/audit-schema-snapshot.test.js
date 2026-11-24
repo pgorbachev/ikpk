@@ -58,6 +58,29 @@ test('rejects a change to an existing column, index, or foreign key', () => {
   }
 });
 
+test('accepts editor_label when the earlier additive columns are already in the source', () => {
+  const previous = sourceTables();
+  previous[0].columns.push({ name: 'type', type: 'string', args: [], defaultTo: null, notNullable: false, unsigned: false });
+  previous[1].columns.push({ name: 'is_event_collection', type: 'boolean', args: [], defaultTo: null, notNullable: false, unsigned: false });
+  previous.push(table('course_groups', [{ name: 'id', type: 'increments', unsigned: true }, { name: 'name', type: 'string' }]));
+  const next = structuredClone(previous);
+  next.find(({ name }) => name === 'course_groups').columns.push({ name: 'editor_label', type: 'string', args: [], defaultTo: null, notNullable: false, unsigned: false });
+  const physical = structuredClone(actualColumns);
+  physical.course_groups = [
+    { name: 'id', type: 'INTEGER', notnull: 0, defaultValue: null, pk: 1 },
+    { name: 'name', type: 'varchar(255)', notnull: 0, defaultValue: null, pk: 0 },
+    { name: 'editor_label', type: 'varchar(255)', notnull: 0, defaultValue: null, pk: 0 },
+  ];
+  const columns = {
+    ...expectedColumns,
+    'course_groups.editor_label': { name: 'editor_label', type: 'string', args: [], defaultTo: null, notNullable: false, unsigned: false },
+  };
+  assert.deepEqual(validateSchemaSnapshot({ sourceRows: [snapshot(previous)], candidateRows: [snapshot(next)], actualColumns: physical, expectedColumns: columns }), {
+    valid: true,
+    addedColumns: ['course_groups.editor_label'],
+  });
+});
+
 test('rejects unexpected additions, incorrect physical metadata, and invalid stored hashes', () => {
   const unexpected = candidateTables();
   unexpected[0].columns.push({ name: 'extra', type: 'string' });

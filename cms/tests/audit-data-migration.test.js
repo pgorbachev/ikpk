@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { copyFileSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createRequire } from 'node:module';
@@ -861,4 +861,198 @@ test('core-store table presence and schema constraints remain part of preservati
     assert.equal(report.passed, false, `core-store ${name} drift must block acceptance`);
     assert.ok(report.differences.some(({ table }) => table === 'strapi_core_store_settings'));
   }
+});
+
+function createProgramLabelShape(path, { added = false, label = 'Институт — Специализированные' } = {}) {
+  const db = new Database(path);
+  const column = added ? ', editor_label varchar(255)' : '';
+  const value = added ? `, '${label}'` : '';
+  db.exec(`
+    CREATE TABLE institutes (id INTEGER PRIMARY KEY, name varchar(255) NOT NULL);
+    CREATE TABLE course_groups (id INTEGER PRIMARY KEY, name varchar(255) NOT NULL${column});
+    CREATE TABLE course_groups_institute_lnk (id INTEGER PRIMARY KEY, course_group_id INTEGER NOT NULL, institute_id INTEGER NOT NULL);
+    INSERT INTO institutes VALUES (1, 'Институт');
+    INSERT INTO course_groups VALUES (1, 'Специализированные'${value});
+    INSERT INTO course_groups_institute_lnk VALUES (1, 1, 1);
+  `);
+  db.close();
+}
+
+test('program editor labels are accepted only when they name the institute and the program', () => {
+  const sourceDbPath = join(directory, 'program-label-source.db');
+  const candidateDbPath = join(directory, 'program-label-candidate.db');
+  createProgramLabelShape(sourceDbPath);
+  createProgramLabelShape(candidateDbPath, { added: true });
+  const plan = emptyBoundPlan();
+  const report = auditMigration({ sourceDbPath, candidateDbPath, plan, receipt: boundReceipt(sourceDbPath, candidateDbPath, plan) });
+  assert.equal(report.differences.some(({ table, kind }) => table === 'course_groups' && ['column-set-mismatch', 'added-column-value-mismatch', 'row-content'].includes(kind)), false,
+    'the nullable editor label filled from the institute and program name is the accepted addition');
+
+  const wrongPath = join(directory, 'program-label-wrong.db');
+  createProgramLabelShape(wrongPath, { added: true, label: 'Специализированные' });
+  const wrong = auditMigration({ sourceDbPath, candidateDbPath: wrongPath, plan, receipt: boundReceipt(sourceDbPath, wrongPath, plan) });
+  assert.equal(wrong.passed, false);
+  assert.ok(wrong.differences.some(({ table, kind, column }) => table === 'course_groups' && kind === 'added-column-value-mismatch' && column === 'editor_label'));
+});
+
+function insertProgramPermission(db, { id, documentId, roleId, action, fields, ordinal, timestamp, linkId }) {
+  db.prepare('INSERT INTO admin_permissions VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(
+    id, documentId, action, 'api::course-group.course-group',
+    JSON.stringify({ fields }), '[]', null, timestamp, timestamp, timestamp,
+  );
+  db.prepare('INSERT INTO admin_permissions_role_lnk VALUES (?, ?, ?, ?)').run(linkId, id, roleId, ordinal);
+}
+
+test('program editor label recreates the four full-list permissions and updates content-admin in place', () => {
+  const sourceDbPath = join(directory, 'program-permission-source.db');
+  const candidateDbPath = join(directory, 'program-permission-candidate.db');
+  const baseFields = ['name', 'slug'];
+  const editorFields = ['name', 'slug', 'is_article_category'];
+  for (const [path, candidate] of [[sourceDbPath, false], [candidateDbPath, true]]) {
+    const db = new Database(path);
+    db.exec(`CREATE TABLE admin_roles (id INTEGER PRIMARY KEY, code TEXT NOT NULL);
+      CREATE TABLE admin_permissions (id INTEGER PRIMARY KEY, document_id TEXT, action TEXT NOT NULL, subject TEXT, properties TEXT, conditions TEXT, action_parameters TEXT, created_at INTEGER, updated_at INTEGER, published_at INTEGER);
+      CREATE TABLE admin_permissions_role_lnk (id INTEGER PRIMARY KEY, permission_id INTEGER NOT NULL, role_id INTEGER NOT NULL, permission_ord INTEGER);
+      INSERT INTO admin_roles VALUES (1, 'strapi-editor'), (2, 'content-admin'), (3, 'strapi-super-admin');`);
+    const stamp = candidate ? 1792101826000 : 1700000000000;
+    insertProgramPermission(db, {
+      id: 1, documentId: 'content-admin-read', roleId: 2, linkId: 1, ordinal: 0, timestamp: candidate ? stamp : 1700000000000,
+      action: 'plugin::content-manager.explorer.read',
+      fields: [...baseFields, ...(candidate ? ['editor_label'] : [])],
+    });
+    if (candidate) db.prepare('UPDATE admin_permissions SET created_at = ?, published_at = ? WHERE id = 1').run(1700000000000, 1700000000000);
+    const verbs = [
+      ['strapi-editor', 1, 'plugin::content-manager.explorer.read', editorFields],
+      ['strapi-super-admin', 3, 'plugin::content-manager.explorer.create', baseFields],
+      ['strapi-super-admin', 3, 'plugin::content-manager.explorer.read', baseFields],
+      ['strapi-super-admin', 3, 'plugin::content-manager.explorer.update', baseFields],
+    ];
+    verbs.forEach(([role, roleId, action, fields], index) => {
+      const sourceOrdinal = role === 'strapi-editor' ? 0 : index - 1;
+      insertProgramPermission(db, {
+        id: candidate ? 20 + index : 2 + index,
+        documentId: `${candidate ? 'next' : 'source'}-${index}`,
+        roleId, linkId: candidate ? 20 + index : 2 + index,
+        ordinal: candidate ? (role === 'strapi-editor' ? 1 : 2 + index) : sourceOrdinal,
+        timestamp: stamp + index,
+        action,
+        fields: [...fields, ...(candidate ? ['editor_label'] : [])],
+      });
+    });
+    db.close();
+  }
+  const plan = emptyBoundPlan();
+  const report = auditMigration({ sourceDbPath, candidateDbPath, plan, receipt: boundReceipt(sourceDbPath, candidateDbPath, plan) });
+  assert.equal(report.differences.some(({ table }) => table === 'admin_permissions' || table === 'admin_permissions_role_lnk'), false,
+    'editor and super-admin rows may be recreated, while content-admin keeps its id');
+  assert.equal(report.transformations.permissionRowsRecreated, 4);
+
+  const movedPath = join(directory, 'program-permission-moved.db');
+  copyFileSync(candidateDbPath, movedPath);
+  const movedDb = new Database(movedPath);
+  movedDb.prepare('UPDATE admin_permissions SET id = 99 WHERE id = 1').run();
+  movedDb.prepare('UPDATE admin_permissions_role_lnk SET permission_id = 99 WHERE permission_id = 1').run();
+  movedDb.close();
+  const movedReport = auditMigration({ sourceDbPath, candidateDbPath: movedPath, plan, receipt: boundReceipt(sourceDbPath, movedPath, plan) });
+  assert.ok(movedReport.differences.some(({ kind }) => kind === 'in-place-permission-identity-changed' || kind === 'logical-permission-removed'));
+});
+
+test('program editor configuration, institute relation and schema display name are the accepted core-store changes', () => {
+  const courseGroup = {
+    uid: 'api::course-group.course-group',
+    settings: { mainField: 'name', defaultSortBy: 'name', defaultSortOrder: 'ASC', pageSize: 10 },
+    layouts: { list: ['id', 'name'], edit: [[{ name: 'name', size: 6 }]] },
+    metadatas: {
+      name: { edit: { label: 'name', description: '', placeholder: '', visible: true, editable: true }, list: { label: 'name', searchable: true, sortable: true } },
+      slug: { edit: { label: 'slug', description: '', placeholder: '', visible: true, editable: true }, list: { label: 'slug', searchable: true, sortable: true } },
+      legacy_id: { edit: { label: 'legacy_id', description: '', placeholder: '', visible: true, editable: true }, list: { label: 'legacy_id', searchable: true, sortable: true } },
+    },
+  };
+  const institute = {
+    uid: 'api::institute.institute',
+    settings: { mainField: 'name' },
+    layouts: { list: ['name'], edit: [[{ name: 'course_groups', size: 6 }]] },
+    metadatas: {
+      course_groups: { edit: { label: 'course_groups', description: '', mainField: 'name', visible: true, editable: true }, list: { label: 'course_groups', searchable: false, sortable: false } },
+    },
+  };
+  const seminar = {
+    settings: { mainField: 'name' },
+    layouts: { list: ['name'], edit: [[{ name: 'course_group', size: 6 }]] },
+    metadatas: {
+      seo: { edit: { label: 'SEO', description: SEMINAR_SEO_DESCRIPTION, placeholder: '', visible: true, editable: true }, list: { label: 'SEO', searchable: false, sortable: false } },
+      course_group: { edit: { label: 'Программа', description: '', placeholder: '', visible: true, editable: true, mainField: 'name' }, list: { label: 'Программа', searchable: true, sortable: true } },
+    },
+  };
+  const schema = {
+    'api::course-group.course-group': {
+      info: { displayName: 'Course Group', description: 'Group of courses/seminars within an institute' },
+      attributes: { name: { type: 'string', required: false } },
+      __schema__: {
+        info: { displayName: 'Course Group', description: 'Group of courses/seminars within an institute' },
+        attributes: { name: { type: 'string', required: false } },
+      },
+    },
+  };
+  const courseGroupKey = 'plugin_content_manager_configuration_content_types::api::course-group.course-group';
+  const instituteKey = 'plugin_content_manager_configuration_content_types::api::institute.institute';
+  const write = (path, candidate) => {
+    const db = new Database(path);
+    db.exec('CREATE TABLE strapi_core_store_settings (id INTEGER PRIMARY KEY, key TEXT NOT NULL, value TEXT, type TEXT, environment TEXT, tag TEXT)');
+    const insert = db.prepare('INSERT INTO strapi_core_store_settings VALUES (?, ?, ?, ?, ?, ?)');
+    const nextCourseGroup = structuredClone(courseGroup);
+    const nextInstitute = structuredClone(institute);
+    const nextSeminar = structuredClone(seminar);
+    const nextSchema = structuredClone(schema);
+    if (candidate) {
+      nextCourseGroup.settings.mainField = 'editor_label';
+      nextCourseGroup.layouts.list = ['editor_label', 'name'];
+      nextCourseGroup.layouts.edit = [
+        [{ name: 'name', size: 6 }], [{ name: 'slug', size: 6 }], [{ name: 'description', size: 12 }],
+        [{ name: 'image', size: 6 }], [{ name: 'institute', size: 6 }], [{ name: 'seminars', size: 12 }],
+        [{ name: 'seo', size: 12 }], [{ name: 'order', size: 4 }], [{ name: 'is_article_category', size: 6 }],
+      ];
+      nextCourseGroup.metadatas.name.edit.label = 'Название';
+      nextCourseGroup.metadatas.name.list.label = 'Название';
+      nextCourseGroup.metadatas.slug.edit = { ...nextCourseGroup.metadatas.slug.edit, label: 'Адрес', description: 'Создаётся из названия. Уже заданный адрес сам не меняется.', editable: false };
+      nextCourseGroup.metadatas.slug.list.label = 'Адрес';
+      nextCourseGroup.metadatas.legacy_id.edit = { ...nextCourseGroup.metadatas.legacy_id.edit, label: 'Старый идентификатор', visible: false, editable: false };
+      nextCourseGroup.metadatas.legacy_id.list.label = 'Старый идентификатор';
+      for (const [name, label, size, editable, description] of [
+        ['description', 'Описание', 12, true, ''], ['image', 'Изображение', 6, true, ''], ['institute', 'Институт', 6, true, ''],
+        ['seminars', 'Семинары', 12, true, ''], ['seo', 'SEO', 12, true, ''], ['order', 'Порядок', 4, true, ''],
+        ['is_article_category', 'Категория статей', 6, true, ''],
+      ]) {
+        nextCourseGroup.metadatas[name] = { edit: { label, description, visible: true, editable }, list: { label } };
+      }
+      nextCourseGroup.metadatas.editor_label = {
+        edit: { label: 'editor_label', description: '', placeholder: '', visible: false, editable: false },
+        list: { label: 'editor_label', searchable: true, sortable: true },
+      };
+      nextInstitute.metadatas.course_groups.edit.label = 'Программы';
+      nextInstitute.metadatas.course_groups.edit.mainField = 'editor_label';
+      nextInstitute.metadatas.course_groups.list.label = 'Программы';
+      nextSeminar.metadatas.course_group.edit.mainField = 'editor_label';
+      const contentType = nextSchema['api::course-group.course-group'];
+      contentType.info.displayName = 'Программа';
+      contentType.info.description = 'Программа одного института';
+      contentType.__schema__.info.displayName = 'Программа';
+      contentType.__schema__.info.description = 'Программа одного института';
+      contentType.attributes.editor_label = { type: 'string' };
+      contentType.__schema__.attributes.editor_label = { type: 'string' };
+    }
+    insert.run(1, courseGroupKey, JSON.stringify(nextCourseGroup), 'object', null, null);
+    insert.run(2, instituteKey, JSON.stringify(nextInstitute), 'object', null, null);
+    insert.run(3, SEMINAR_CONFIG_KEY, JSON.stringify(nextSeminar), 'object', null, null);
+    insert.run(4, CONTENT_SCHEMA_KEY, JSON.stringify(nextSchema), 'object', null, null);
+    db.close();
+  };
+  const sourceDbPath = join(directory, 'program-config-source.db');
+  const candidateDbPath = join(directory, 'program-config-candidate.db');
+  write(sourceDbPath, false);
+  write(candidateDbPath, true);
+  const plan = emptyBoundPlan();
+  const report = auditMigration({ sourceDbPath, candidateDbPath, plan, receipt: boundReceipt(sourceDbPath, candidateDbPath, plan) });
+  assert.equal(report.differences.some(({ table, kind }) => table === 'strapi_core_store_settings' && kind.startsWith('core-store-')), false,
+    'the program picker label is the only accepted content-manager and schema change');
 });
