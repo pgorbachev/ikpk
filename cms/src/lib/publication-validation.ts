@@ -8,6 +8,8 @@
  * стороны сборки (`web`), не lifecycle-хуков, и здесь не дублируются.
  */
 
+import { checkPagePhones } from './site-phones';
+
 export type DocumentsState = 'issued' | 'not-issued' | 'unconfirmed';
 export type PriorEducation = 'unspecified' | 'none' | 'medical' | 'physical-or-pedagogical' | 'other';
 export type LearningOutcome = 'completed' | 'assessment-failed' | 'assessment-not-completed' | 'partially-completed' | 'expelled';
@@ -72,6 +74,11 @@ export function checkPublication({
   const missing = requiredFields(type).filter((field) =>
     !(type === 'schedule-entry' && field === 'city' && record.isOnline === true) && isEmpty(record[field]),
   );
+
+  if (type === 'static-page') {
+    const error = checkPagePhones(record.identifier, record, true);
+    if (error) return { ok: false, missing: [...missing, error.field], message: error.message };
+  }
 
   if (type === 'person' && !isEmpty(record.trait)) {
     const trait = record.trait;

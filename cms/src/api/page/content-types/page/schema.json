@@ -34,6 +34,47 @@
       "component": "shared.seo",
       "repeatable": false,
       "required": false
+    },
+    "center_phone": {
+      "type": "string",
+      "conditions": {
+        "visible": {
+          "==": [
+            {
+              "var": "slug"
+            },
+            "kontakty"
+          ]
+        }
+      }
+    },
+    "manager_phone": {
+      "type": "string",
+      "conditions": {
+        "visible": {
+          "==": [
+            {
+              "var": "slug"
+            },
+            "kontakty"
+          ]
+        }
+      }
+    }
+  },
+  "config": {
+    "metadatas": {
+      "center_phone": {
+        "edit": {
+          "label": "Телефон центра",
+          "description": "Телефоны для сайта задаются в этих двух полях. Текст Body на странице /kontakty не выводится."
+        }
+      },
+      "manager_phone": {
+        "edit": {
+          "label": "Мобильный телефон менеджера"
+        }
+      }
     }
   }
 }

@@ -39,6 +39,27 @@ function isEmpty(value: unknown): boolean {
   return false;
 }
 
+const SITE_PHONE_LABELS = {
+  center_phone: 'Телефон центра',
+  manager_phone: 'Мобильный телефон менеджера',
+} as const;
+
+type PhoneField = keyof typeof SITE_PHONE_LABELS;
+const PHONE_FIELDS = Object.keys(SITE_PHONE_LABELS) as PhoneField[];
+
+function checkPagePhones(identifier: unknown, values: Record<string, unknown>, publishing: boolean) {
+  for (const field of PHONE_FIELDS) {
+    const value = values[field];
+    if (identifier !== 'kontakty') {
+      if (value != null && value !== '') {
+        return { field, message: `«${SITE_PHONE_LABELS[field]}» можно задать только на странице контактов.` };
+      }
+    } else if (publishing && (typeof value !== 'string' || !/^\+7[0-9]{10}$/.test(value.replace(/[ ()-]/g, '')))) {
+      return { field, message: `«${SITE_PHONE_LABELS[field]}» — введите +7 и десять цифр. Допустимы пробелы, скобки и дефисы.` };
+    }
+  }
+}
+
 function requiredFields(type: string): string[] {
   return REQUIRED_FIELDS[type] ?? [];
 }
@@ -53,6 +74,11 @@ function checkPublication({
   const missing = requiredFields(type).filter((field) =>
     !(type === 'schedule-entry' && field === 'city' && record.isOnline === true) && isEmpty(record[field]),
   );
+
+  if (type === 'static-page') {
+    const error = checkPagePhones(record.identifier, record, true);
+    if (error) return { ok: false, missing: [...missing, error.field], message: error.message };
+  }
 
   if (type === 'person' && !isEmpty(record.trait)) {
     const trait = record.trait;
@@ -76,14 +102,15 @@ function checkPublication({
 }
 
 function checkDraftSave({
-  record,
+  type, record,
 }: {
   type: string;
   record: Record<string, unknown>;
 }): { saved: boolean; warnings: string[] } {
-  // Черновик сохраняется всегда: отказ на сохранении стоит дороже
-  // предупреждения — введённый текст важнее незаполненного обязательного поля.
-  void record;
+  if (type === 'static-page') {
+    const error = checkPagePhones(record.identifier, record, false);
+    if (error) return { saved: false, warnings: [error.message] };
+  }
   return { saved: true, warnings: [] };
 }
 
