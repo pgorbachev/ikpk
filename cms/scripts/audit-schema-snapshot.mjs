@@ -9,6 +9,10 @@ const ALLOWED = new Map([
     table: 'schedule_entries', name: 'is_event_collection', sqlType: /^boolean$/i,
     expected: { name: 'is_event_collection', type: 'boolean', args: [], defaultTo: null, notNullable: false, unsigned: false },
   }],
+  ['course_groups.editor_label', {
+    table: 'course_groups', name: 'editor_label', sqlType: /^varchar\s*\(\s*255\s*\)$/i,
+    expected: { name: 'editor_label', type: 'string', args: [], defaultTo: null, notNullable: false, unsigned: false },
+  }],
 ]);
 
 const json = (value) => JSON.stringify(value);
@@ -88,7 +92,7 @@ function validateDefinition(key, definition, physicalColumns, expectedColumns) {
 
 /**
  * Verifies that Strapi's current snapshot differs from its source only by the
- * two approved additive fields, with valid Strapi storage hashes and matching
+ * approved additive fields, with valid Strapi storage hashes and matching
  * SQLite PRAGMA facts. It is deliberately synchronous and has no DB access.
  */
 export function validateSchemaSnapshot({ sourceRows, candidateRows, actualColumns, expectedColumns }) {
@@ -120,8 +124,13 @@ export function validateSchemaSnapshot({ sourceRows, candidateRows, actualColumn
       additions.push(key);
     }
   }
-  const expected = [...ALLOWED.keys()].sort();
-  if (json(additions.sort()) !== json(expected)) fail('does not contain exactly the two approved column additions');
+  const pending = [];
+  for (const [key, meta] of ALLOWED) {
+    const table = sourceTables.get(meta.table);
+    if (!table) continue;
+    if (!columnsByName(table, `source ${meta.table}`).has(meta.name)) pending.push(key);
+  }
+  if (json(additions.sort()) !== json(pending.sort())) fail('does not contain exactly the approved column additions missing from the source');
   if (json(withoutAllowedColumns(candidate.schema)) !== json(withoutAllowedColumns(source.schema))) {
     fail('non-column schema metadata changed, including indexes or foreign keys');
   }

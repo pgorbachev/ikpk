@@ -13,10 +13,14 @@ const PERMISSION_CHANGE_TABLES = new Set(['admin_permissions', 'admin_permission
 const PERMISSION_TIMESTAMP_COLUMNS = ['created_at', 'updated_at', 'published_at'];
 const CORE_STORE_TABLE = 'strapi_core_store_settings';
 const ARTICLE_CONFIG_KEY = 'plugin_content_manager_configuration_content_types::api::article.article';
+const COURSE_GROUP_CONFIG_KEY = 'plugin_content_manager_configuration_content_types::api::course-group.course-group';
+const INSTITUTE_CONFIG_KEY = 'plugin_content_manager_configuration_content_types::api::institute.institute';
 const CORE_STORE_KEYS = new Set([
   'plugin_content_manager_configuration_content_types::api::promotion.promotion',
   'plugin_content_manager_configuration_content_types::api::schedule-entry.schedule-entry',
   'plugin_content_manager_configuration_content_types::api::seminar.seminar',
+  COURSE_GROUP_CONFIG_KEY,
+  INSTITUTE_CONFIG_KEY,
   ARTICLE_CONFIG_KEY,
   'plugin_upload_metrics',
   'strapi_content_types_schema',
@@ -44,6 +48,7 @@ const KNOWN_RENAMES = new Map([
 const CURRENT_CONTENT_ADDITIONS = {
   promotions: { name: 'type', type: 'varchar(255)' },
   schedule_entries: { name: 'is_event_collection', type: 'boolean' },
+  course_groups: { name: 'editor_label', type: 'varchar(255)' },
 };
 const PERMISSION_FIELD_ADDITIONS = new Map([
   ['strapi-super-admin\0plugin::content-manager.explorer.create\0api::promotion.promotion', ['type']],
@@ -55,7 +60,29 @@ const PERMISSION_FIELD_ADDITIONS = new Map([
   ...['content-admin', 'strapi-super-admin'].flatMap((role) => ['create', 'read', 'update'].map((action) => [
     `${role}\0plugin::content-manager.explorer.${action}\0api::schedule-entry.schedule-entry`, ['image', 'isEventCollection'],
   ])),
+  ['strapi-editor\0plugin::content-manager.explorer.read\0api::course-group.course-group', ['editor_label']],
+  ...['create', 'read', 'update'].map((action) => [
+    `strapi-super-admin\0plugin::content-manager.explorer.${action}\0api::course-group.course-group`, ['editor_label'],
+  ]),
 ]);
+// content-admin получает поле тем же id: bootstrap обновляет строку, а не создаёт её заново.
+const IN_PLACE_PERMISSION_FIELD_ADDITIONS = new Map([
+  ['content-admin\0plugin::content-manager.explorer.read\0api::course-group.course-group', ['editor_label']],
+]);
+// Тот же набор, что PROGRAM_FIELDS и скрытые поля в forms.ts.
+const PROGRAM_EDITOR_FIELDS = [
+  ['name', 'Название', 6, true, ''],
+  ['slug', 'Адрес', 6, false, 'Создаётся из названия. Уже заданный адрес сам не меняется.'],
+  ['description', 'Описание', 12, true, ''],
+  ['image', 'Изображение', 6, true, ''],
+  ['institute', 'Институт', 6, true, ''],
+  ['seminars', 'Семинары', 12, true, ''],
+  ['seo', 'SEO', 12, true, ''],
+  ['order', 'Порядок', 4, true, ''],
+  ['is_article_category', 'Категория статей', 6, true, ''],
+];
+const PROGRAM_EDITOR_HIDDEN = new Set(['editor_label', 'legacy_id']);
+const PROGRAM_HIDDEN_LABELS = { legacy_id: 'Старый идентификатор' };
 const RUNNER_SCHEMAS = {
   ikpk_migration_lineage: ['singleton', 'lineage_id', 'source_snapshot_sha256', 'source_schema_sha256', 'created_at'],
   ikpk_migration_operations: ['operation_id', 'lineage_id', 'source_snapshot_sha256', 'source_schema_sha256', 'created_at'],
@@ -372,42 +399,131 @@ function permissionGraph(db, differences, label) {
   }
   return descriptors;
 }
+function permissionIdentity(permission) {
+  return `${permission.role}\0${permission.action}\0${permission.subject}`;
+}
+function pendingFieldAdditions(additions, sourceValues) {
+  return [...additions].filter(([identity, fields]) => {
+    const [role, action, subject] = identity.split('\0');
+    const row = sourceValues.find((value) => value.role === role && value.action === action && value.subject === subject);
+    return Boolean(row?.fields && fields.some((field) => !row.fields.includes(field)));
+  });
+}
+function samePermissionStorage(before, after) {
+  return before.id === after.id && before.documentId === after.documentId && before.linkId === after.linkId
+    && json(valueKey(before.permissionOrd)) === json(valueKey(after.permissionOrd));
+}
+function programEditorLabel(instituteName, programName) {
+  const text = (value) => typeof value === 'string' ? value.trim() : '';
+  const institute = text(instituteName);
+  const program = text(programName);
+  if (institute && program) return `${institute} — ${program}`;
+  return program || institute;
+}
+function acceptProgramEditorLabels(candidateDb, differences) {
+  const groups = candidateDb.prepare('SELECT id, name, editor_label FROM course_groups').all();
+  const links = candidateDb.prepare('SELECT course_group_id, institute_id FROM course_groups_institute_lnk').all();
+  const institutes = candidateDb.prepare('SELECT id, name FROM institutes').all();
+  const nameById = new Map(institutes.map((row) => [String(row.id), row.name]));
+  const linksByGroup = new Map();
+  for (const link of links) {
+    const key = String(link.course_group_id);
+    const list = linksByGroup.get(key) ?? [];
+    list.push(String(link.institute_id));
+    linksByGroup.set(key, list);
+  }
+  let mismatched = 0;
+  for (const group of groups) {
+    const instituteIds = linksByGroup.get(String(group.id)) ?? [];
+    const instituteName = instituteIds.length === 1 ? nameById.get(instituteIds[0]) : null;
+    const expected = instituteIds.length === 1 ? programEditorLabel(instituteName, group.name) : null;
+    if (instituteIds.length !== 1 || group.editor_label !== expected) mismatched += 1;
+  }
+  if (mismatched !== 0) differences.push({ table: 'course_groups', kind: 'added-column-value-mismatch', column: 'editor_label', nonNullCount: String(mismatched) });
+}
+function overlayProgramEditorConfiguration(configuration) {
+  if (!configuration?.metadatas || typeof configuration.metadatas !== 'object' || Array.isArray(configuration.metadatas)
+    || !configuration.layouts || typeof configuration.layouts !== 'object' || Array.isArray(configuration.layouts)
+    || !configuration.settings || typeof configuration.settings !== 'object' || Array.isArray(configuration.settings)
+    || Object.hasOwn(configuration.metadatas, 'editor_label')) return null;
+  const metadatas = {
+    ...configuration.metadatas,
+    editor_label: {
+      edit: { label: 'editor_label', description: '', placeholder: '', visible: true, editable: true },
+      list: { label: 'editor_label', searchable: true, sortable: true },
+    },
+  };
+  for (const [name, label, , editable, description] of PROGRAM_EDITOR_FIELDS) {
+    const current = metadatas[name] ?? { edit: {}, list: {} };
+    if (!current || typeof current !== 'object' || Array.isArray(current)) return null;
+    metadatas[name] = {
+      ...current,
+      edit: { ...current.edit, label, description, visible: true, editable },
+      list: { ...current.list, label },
+    };
+  }
+  for (const name of PROGRAM_EDITOR_HIDDEN) {
+    if (!metadatas[name]) continue;
+    const found = PROGRAM_EDITOR_FIELDS.find((field) => field[0] === name);
+    const label = PROGRAM_HIDDEN_LABELS[name] ?? (found ? found[1] : name);
+    metadatas[name] = {
+      ...metadatas[name],
+      edit: { ...metadatas[name].edit, label, visible: false, editable: false },
+      list: { ...metadatas[name].list, label },
+    };
+  }
+  const visible = PROGRAM_EDITOR_FIELDS.filter((field) => !PROGRAM_EDITOR_HIDDEN.has(field[0]));
+  return {
+    ...configuration,
+    settings: { ...configuration.settings, mainField: 'editor_label', defaultSortBy: 'name', defaultSortOrder: 'ASC' },
+    metadatas,
+    layouts: {
+      ...configuration.layouts,
+      list: ['editor_label', 'name'],
+      edit: visible.map(([name, , size]) => [{ name, size }]),
+    },
+  };
+}
 function comparePermissionGraphs(sourceDb, candidateDb, receipt, differences) {
   const source = permissionGraph(sourceDb, differences, 'source');
   const candidate = permissionGraph(candidateDb, differences, 'candidate');
   if (!source || !candidate) return;
   if (source.size !== candidate.size) differences.push({ table: 'admin_permissions', kind: 'logical-permission-count-mismatch' });
   const recreated = [];
+  const inPlace = [];
   const sourcePermissionIds = new Set([...source.values()].map(({ id }) => id));
   const sourceDocumentIds = new Set([...source.values()].map(({ documentId }) => documentId).filter((id) => id !== null && id !== undefined));
   const sourcePermissionLinkIds = new Set([...source.values()].map(({ linkId }) => linkId));
   for (const [key, before] of source) {
     const after = candidate.get(key);
     if (!after) { differences.push({ table: 'admin_permissions', kind: 'logical-permission-removed', keySha256: sha(Buffer.from(key)) }); continue; }
-    const allowed = PERMISSION_FIELD_ADDITIONS.get(`${before.role}\0${before.action}\0${before.subject}`) ?? [];
+    const identity = permissionIdentity(before);
+    const recreatedAllowed = PERMISSION_FIELD_ADDITIONS.get(identity) ?? [];
+    const inPlaceAllowed = IN_PLACE_PERMISSION_FIELD_ADDITIONS.get(identity) ?? [];
+    const allowed = [...recreatedAllowed, ...inPlaceAllowed];
     const expectedFields = before.fields === null ? null : [...new Set([...before.fields, ...allowed])].sort();
     if (json(expectedFields) !== json(after.fields)) differences.push({ table: 'admin_permissions', kind: 'logical-permission-fields-mismatch', keySha256: sha(Buffer.from(key)) });
-    if (json(expectedFields) !== json(before.fields)) recreated.push({
+    const fieldsChange = json(expectedFields) !== json(before.fields);
+    if (fieldsChange && inPlaceAllowed.length > 0 && recreatedAllowed.length === 0) {
+      inPlace.push({ before, after });
+      if (!samePermissionStorage(before, after)) differences.push({ table: 'admin_permissions', kind: 'in-place-permission-identity-changed', keySha256: sha(Buffer.from(key)) });
+    } else if (fieldsChange) recreated.push({
       role: before.role, id: after.id, documentId: after.documentId, ordinal: after.permissionOrd,
       linkId: after.linkId, sourceId: before.id, sourceDocumentId: before.documentId,
       timestamps: after.timestamps,
     });
-    else if (before.id !== after.id || before.documentId !== after.documentId || before.linkId !== after.linkId
-      || json(valueKey(before.permissionOrd)) !== json(valueKey(after.permissionOrd))
-      || json(valueKey(before.timestamps)) !== json(valueKey(after.timestamps))) {
+    else if (!samePermissionStorage(before, after) || json(valueKey(before.timestamps)) !== json(valueKey(after.timestamps))) {
       differences.push({ table: 'admin_permissions', kind: 'unchanged-permission-storage-identity-changed', keySha256: sha(Buffer.from(key)) });
     }
   }
   for (const key of candidate.keys()) if (!source.has(key)) {
     differences.push({ table: 'admin_permissions', kind: 'logical-permission-added', keySha256: sha(Buffer.from(key)) });
   }
-  const sourceIsCurrent = [...PERMISSION_FIELD_ADDITIONS].every(([identity, fields]) => {
-    const [role, action, subject] = identity.split('\0');
-    const row = [...source.values()].find((value) => value.role === role && value.action === action && value.subject === subject);
-    return row?.fields && fields.every((field) => row.fields.includes(field));
-  });
-  if (recreated.length !== 0 && recreated.length !== PERMISSION_FIELD_ADDITIONS.size) differences.push({ table: 'admin_permissions', kind: 'recreated-permission-count-mismatch' });
-  if (recreated.length === 0 && !sourceIsCurrent) differences.push({ table: 'admin_permissions', kind: 'recreated-permission-count-mismatch' });
+  const sourceValues = [...source.values()];
+  if (recreated.length !== pendingFieldAdditions(PERMISSION_FIELD_ADDITIONS, sourceValues).length
+    || inPlace.length !== pendingFieldAdditions(IN_PLACE_PERMISSION_FIELD_ADDITIONS, sourceValues).length) {
+    differences.push({ table: 'admin_permissions', kind: 'recreated-permission-count-mismatch' });
+  }
   const candidateDocumentIds = [...candidate.values()].map(({ documentId }) => documentId).filter((id) => id !== null && id !== undefined);
   if (new Set(candidateDocumentIds).size !== candidateDocumentIds.length) differences.push({ table: 'admin_permissions', kind: 'duplicate-permission-document-id' });
   const window = lifecycleWindow(receipt);
@@ -448,6 +564,19 @@ function comparePermissionGraphs(sourceDb, candidateDb, receipt, differences) {
     const roleRows = recreated.filter((row) => row.role === role).sort((a, b) => String(a.id).localeCompare(String(b.id), undefined, { numeric: true }));
     const candidateOrdinals = roleRows.map(({ ordinal }) => typeof ordinal === 'bigint' ? Number(ordinal) : ordinal);
     if (candidateOrdinals.some((value, index) => value !== start + index)) differences.push({ table: 'admin_permissions_role_lnk', kind: 'recreated-permission-order-not-appended' });
+  }
+  const asMillis = (value) => typeof value === 'bigint' ? Number(value) : value;
+  for (const { before, after } of inPlace) {
+    if (json(valueKey(before.timestamps.created_at)) !== json(valueKey(after.timestamps.created_at))) {
+      differences.push({ table: 'admin_permissions', kind: 'invalid-in-place-permission-timestamp' });
+    }
+    for (const column of ['updated_at', 'published_at']) {
+      if (json(valueKey(before.timestamps[column])) === json(valueKey(after.timestamps[column]))) continue;
+      const millis = asMillis(after.timestamps[column]);
+      if (!Number.isSafeInteger(millis) || !window || millis < window.start || millis > window.end || millis < asMillis(after.timestamps.created_at)) {
+        differences.push({ table: 'admin_permissions', kind: 'invalid-in-place-permission-timestamp' });
+      }
+    }
   }
   return { recreatedCount: recreated.length };
 }
@@ -609,6 +738,28 @@ function expectedCoreStoreValue(key, sourceValue) {
         list: { ...seo.list, label: 'SEO' },
       },
     };
+    const courseGroup = expected.metadatas?.course_group;
+    if (courseGroup?.edit && typeof courseGroup.edit === 'object') {
+      expected.metadatas.course_group = {
+        ...courseGroup,
+        edit: { ...courseGroup.edit, mainField: 'editor_label' },
+      };
+    }
+    return expected;
+  }
+  if (key === COURSE_GROUP_CONFIG_KEY) return overlayProgramEditorConfiguration(expected);
+  if (key === INSTITUTE_CONFIG_KEY) {
+    const groups = expected.metadatas?.course_groups;
+    if (!groups?.edit || typeof groups.edit !== 'object' || !groups.list || typeof groups.list !== 'object') return null;
+    if (groups.edit.label === 'Программы' && groups.edit.mainField === 'editor_label' && groups.list.label === 'Программы') return null;
+    expected.metadatas = {
+      ...expected.metadatas,
+      course_groups: {
+        ...groups,
+        edit: { ...groups.edit, label: 'Программы', mainField: 'editor_label' },
+        list: { ...groups.list, label: 'Программы' },
+      },
+    };
     return expected;
   }
   if (key === 'strapi_content_types_schema') {
@@ -619,10 +770,30 @@ function expectedCoreStoreValue(key, sourceValue) {
     ];
     for (const [uid, field, definition] of definitions) {
       const contentType = expected[uid];
-      if (!contentType?.attributes || !contentType.__schema__?.attributes
-        || Object.hasOwn(contentType.attributes, field) || Object.hasOwn(contentType.__schema__.attributes, field)) return null;
+      if (!contentType) continue;
+      if (!contentType.attributes || !contentType.__schema__?.attributes) return null;
+      const inAttributes = Object.hasOwn(contentType.attributes, field);
+      const inSchema = Object.hasOwn(contentType.__schema__.attributes, field);
+      if (inAttributes !== inSchema) return null;
+      if (inAttributes) continue;
       contentType.attributes[field] = structuredClone(definition);
       contentType.__schema__.attributes[field] = structuredClone(definition);
+    }
+    const courseGroup = expected['api::course-group.course-group'];
+    if (courseGroup) {
+      if (!courseGroup.attributes || !courseGroup.__schema__?.attributes || !courseGroup.info || !courseGroup.__schema__?.info) return null;
+      const inAttributes = Object.hasOwn(courseGroup.attributes, 'editor_label');
+      const inSchema = Object.hasOwn(courseGroup.__schema__.attributes, 'editor_label');
+      if (inAttributes !== inSchema) return null;
+      if (!inAttributes) {
+        for (const info of [courseGroup.info, courseGroup.__schema__.info]) {
+          if (info.displayName !== 'Course Group' || info.description !== 'Group of courses/seminars within an institute') return null;
+          info.displayName = 'Программа';
+          info.description = 'Программа одного института';
+        }
+        courseGroup.attributes.editor_label = { type: 'string' };
+        courseGroup.__schema__.attributes.editor_label = { type: 'string' };
+      }
     }
     return expected;
   }
@@ -703,6 +874,7 @@ function validateSchemaHistory(sourceDb, candidateDb, candidateSchema, differenc
       expectedColumns: {
         'promotions.type': { name: 'type', type: 'string', args: [], defaultTo: null, notNullable: false, unsigned: false },
         'schedule_entries.is_event_collection': { name: 'is_event_collection', type: 'boolean', args: [], defaultTo: null, notNullable: false, unsigned: false },
+        'course_groups.editor_label': { name: 'editor_label', type: 'string', args: [], defaultTo: null, notNullable: false, unsigned: false },
       },
     });
     return true;
@@ -888,7 +1060,8 @@ export function auditMigration({ sourceDbPath, candidateDbPath, plan, receipt })
         definitions: afterRelations.definitions.map((item) => normalizeAddedTableDefinition(item, table, addition)),
       };
       if (json(beforeRelations) !== json(afterRelations)) differences.push({ table, kind: 'relation-schema-mismatch', sourceSha256: sha(Buffer.from(json(beforeRelations))), candidateSha256: sha(Buffer.from(json(afterRelations))) });
-      if (acceptedAddition) {
+      if (acceptedAddition && table === 'course_groups') acceptProgramEditorLabels(candidate, differences);
+      else if (acceptedAddition) {
         const nonNull = candidate.prepare(`SELECT COUNT(*) AS count FROM ${quote(table)} WHERE ${quote(addition.name)} IS NOT NULL`).get().count;
         if (nonNull !== 0n) differences.push({ table, kind: 'added-column-value-mismatch', column: addition.name, nonNullCount: nonNull.toString() });
       }

@@ -466,11 +466,11 @@
       },
       {
         "path": "scripts/audit-data-migration.mjs",
-        "sha256": "fd7abaf805adb5cbf2c660e55a1a3aab81a33360242c07aaeb2aba7ab46bd73a"
+        "sha256": "318ea2297ab466c0fd35ea47125fd6b6c97a4f6696cc6daa9f5d9f7f5b8958de"
       },
       {
         "path": "scripts/audit-schema-snapshot.mjs",
-        "sha256": "953145610fcb03814a7d29ce6c476af201266924ae3e12220b71d1ab903129ea"
+        "sha256": "ab6d6246b3d3b5b812797466a6d643d501c8a69d01390724ce4ffabc39a43032"
       },
       {
         "path": "scripts/institute-method-author-classification.mjs",
