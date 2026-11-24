@@ -1,3 +1,4 @@
+import { CITY_PHONE } from './helpers/expected-site-phones';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { existsSync, readFileSync } from 'fs';
 import { join } from 'path';
@@ -205,7 +206,7 @@ describe('Parity audit against original site', () => {
 
   it('homepage footer keeps contacts and social links', () => {
     const html = readLocal('/').html;
-    expect(html).toContain('646-54-50');
+    expect(html).toContain(CITY_PHONE);
     expect(html).toContain('info@ikpk.su');
     // Ужесточено change social-accounts, задача 2.10: «хоть что-нибудь из четырёх
     // хостов» оставалось зелёным после снятия трёх сетей. Проверяем все четыре

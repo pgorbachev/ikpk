@@ -185,6 +185,8 @@ export const FIELD_MAP: readonly FieldMapEntry[] = [
   { type: 'promotions', field: 'active', source: 'active' },
 
   // static_pages
+  { type: 'static_pages', field: 'center_phone', source: 'center_phone' },
+  { type: 'static_pages', field: 'manager_phone', source: 'manager_phone' },
   { type: 'static_pages', field: 'legacy_id', source: 'legacy_id' },
   { type: 'static_pages', field: 'legacy_url', source: 'legacy_id', transform: 'legacyUrlFromId' },
   { type: 'static_pages', field: 'title', source: 'title' },

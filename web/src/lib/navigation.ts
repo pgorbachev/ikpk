@@ -1,3 +1,6 @@
+import { getPages } from './data';
+import { siteContactPhones } from './site-contact-phones';
+
 // Информационная архитектура навигации — единый источник для TopNavLayout
 // и мобильного меню. Все ссылки — реальные роуты (или внешние с external:true),
 // чтобы не терять внутреннюю перелинковку при верхнем меню.
@@ -44,13 +47,11 @@ export const primaryNav: NavItem[] = [
 ];
 
 export const CTA_HREF = '/raspisanie-i-tseny';
-export const PHONE = '+7 (812) 646-54-50';
-export const PHONE_HREF = 'tel:+78126465450';
-// Второй номер — мобильный менеджера. Заказчик просил показывать оба везде, где
-// сайт даёт свой телефон (D12 списка после демо 2026-08-19): городской не всегда
-// отвечает, и посетитель без второго номера остаётся без связи.
-export const MANAGER_PHONE = '+7 981 038-77-97';
-export const MANAGER_PHONE_HREF = 'tel:+79810387797';
+const phones = siteContactPhones(getPages());
+export const PHONE = phones.center.text;
+export const PHONE_HREF = phones.center.href;
+export const MANAGER_PHONE = phones.manager.text;
+export const MANAGER_PHONE_HREF = phones.manager.href;
 // Выходные — у менеджера, а не у института: семинары в эти дни идут (D14). Без
 // оговорки часы читаются как расписание занятий.
 export const MANAGER_HOURS_NOTE =

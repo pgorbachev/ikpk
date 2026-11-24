@@ -22,7 +22,8 @@ async function render(override: string | null, publishedDefault: string | null, 
       institute: { id: 1, name: 'Институт', shortname: 'ИКПК' }, program: { id: 1, slug: 'program', name: 'Программа' },
       city: 'Москва', isOnline: false, isFree: true, teachers: [{ id: 2, fullName: 'Ведущий семинара' }], registrationFormLink: '/registration', additionalText: '' }],
     seminars: [{ id: 10, slug: 'seminar', name: 'Семинар', course_group_legacy_id: 'program', duration: publishedDefault }],
-    institutes: [{ id: 1, slug: 'institute', name: 'Институт' }], course_groups: [{ id: 1, slug: 'program', legacy_id: 'program', name: 'Программа', institute_legacy_id: 'institute' }], teachers: [], articles: [], static_pages: [],
+    institutes: [{ id: 1, slug: 'institute', name: 'Институт' }], course_groups: [{ id: 1, slug: 'program', legacy_id: 'program', name: 'Программа', institute_legacy_id: 'institute' }], teachers: [], articles: [],
+    static_pages: [{ slug: 'kontakty', legacy_id: 'kontakty', center_phone: '+78125550101', manager_phone: '+79815550202' }],
   } } }));
   process.env.CONTENT_SNAPSHOT_DIR = directory;
   vi.resetModules();

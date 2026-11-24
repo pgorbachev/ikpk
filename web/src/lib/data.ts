@@ -1,3 +1,4 @@
+import { siteContactPhones } from './site-contact-phones';
 import { resolveSeminar } from './seminar-identity';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -40,6 +41,8 @@ export function cleanBodyHtml(
   const path = source.path ?? (typeof pathOrSource === 'string' ? pathOrSource : undefined);
   return cleanHtml(html, {
     panels: panelsFor(path),
+    organizationPhones: path?.replace(/\/+$/, '') === '/svedeniya-ob-obrazovatelnoy-organizatsii'
+      ? siteContactPhones(getPages()) : undefined,
     legacyCtaHref,
     sourceType: source.type,
     sourceId: source.id,
@@ -350,6 +353,8 @@ export interface VideoPlaylist {
 }
 
 export interface StaticPage {
+  center_phone?: string | null;
+  manager_phone?: string | null;
   legacy_id: string;
   legacy_url: string;
   title: string;

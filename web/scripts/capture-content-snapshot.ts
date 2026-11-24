@@ -1,3 +1,4 @@
+import { siteContactPhones } from '../src/lib/site-contact-phones.ts';
 import { resolveSeminar } from '../src/lib/seminar-identity.ts';
 import { articleSeoDescriptionFallback } from './lib/article-seo-fallback.ts';
 /**
@@ -342,6 +343,13 @@ function mapRecord(type: string, record: Record<string, unknown>): Record<string
   for (const entry of FIELD_MAP) {
     if (entry.type === type) applyEntry(record, entry, out);
   }
+  if (type === 'static_pages' && record.slug !== 'kontakty') {
+    if (out.center_phone != null || out.manager_phone != null) {
+      throw new Error(`Поля телефонов заполнены вне Page /kontakty: ${recordKey(record)}`);
+    }
+    delete out.center_phone;
+    delete out.manager_phone;
+  }
   if (type === 'articles') normalizeArticleSeo(record, out);
   return out;
 }
@@ -595,6 +603,8 @@ async function liveCapture(): Promise<void> {
   for (const st of SOURCE_TYPES) {
     types[st.type] = rawByType[st.type]!.map((record) => mapRecord(st.type, record));
   }
+
+  siteContactPhones(types.static_pages);
 
   const teacherDocumentIdCounts = new Map<string, number>();
   for (const teacher of types.teachers ?? []) {

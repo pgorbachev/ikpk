@@ -16,6 +16,8 @@
  *  9. Clean up orphaned closing tags and excess whitespace
  */
 
+import { withOrganizationContactPhones } from './organization-contact-phones';
+import type { siteContactPhones } from './site-contact-phones';
 import { injectImgDimensions } from './media.ts';
 import { registrationHref, isDemoForms } from './forms.ts';
 import {
@@ -795,6 +797,7 @@ export const LEGACY_CTA_ATTR = 'data-legacy-cta';
 export const LEGACY_CTA_UNRESOLVED_ATTR = 'data-legacy-cta-unresolved';
 
 export interface CleanOptions {
+  organizationPhones?: ReturnType<typeof siteContactPhones>;
   /**
    * Контент свёрнутых секций, восстановленный с живого сайта
    * (см. web/scripts/recover-collapsibles.mjs), в виде {заголовок: html}.
@@ -845,6 +848,7 @@ export function cleanBodyHtml(html: string, opts: CleanOptions = {}): SafeRichHt
   result = normalizeLegacyControls(result, opts.legacyCtaHref);
   result = redirectFormLinksInDemo(result);
   result = removeResidualBrokenTagText(result);
+  if (opts.organizationPhones) result = withOrganizationContactPhones(result, opts.organizationPhones);
   result = terminalSanitize(result, 'authenticated', ctx);
 
   return authenticate(result, ctx);

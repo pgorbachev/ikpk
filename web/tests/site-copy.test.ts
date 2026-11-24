@@ -1,3 +1,4 @@
+import { CITY_PHONE, MOBILE_PHONE, CITY_TEL, MOBILE_TEL } from './helpers/expected-site-phones';
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { dist, walkHtml, readPage, allPages } from './helpers/dist-pages';
@@ -20,10 +21,6 @@ import { isBeforeStart } from '../src/lib/schedule-window.js';
 // видит посетитель. Разбор деревом (parse5), а не регулярками: приблизительный
 // разбор в этом репозитории уже дважды давал обход гейта.
 
-const CITY_PHONE = '646-54-50';
-const CITY_TEL = 'tel:+78126465450';
-const MOBILE_PHONE = '038-77-97';
-const MOBILE_TEL = 'tel:+79810387797';
 const offeredEntries = () => getScheduleEntries().filter(
   (entry) => entry.status === 'active' && entry.startAt && isBeforeStart(entry, getSeminarBuildNow()),
 );
@@ -233,7 +230,7 @@ describe('D12 — сайт показывает оба номера телефо
           declared += 1;
           const list = (Array.isArray(node.telephone) ? node.telephone : [node.telephone]).map(String);
           const digits = list.map((v) => v.replace(/[^\d+]/g, ''));
-          if (!digits.includes('+78126465450') || !digits.includes('+79810387797')) {
+          if (!digits.includes(CITY_TEL.slice(4)) || !digits.includes(MOBILE_TEL.slice(4))) {
             offenders.push(`${path}: telephone=${JSON.stringify(node.telephone)}`);
           }
         }
