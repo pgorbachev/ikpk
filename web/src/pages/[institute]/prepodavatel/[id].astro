@@ -37,7 +37,7 @@ const role = personRoleLabels(teacher.trait);
     <Breadcrumbs
       items={[
         { label: institute.name, href: `/${institute.slug}` },
-        { label: role.breadcrumb },
+        { label: role.breadcrumb, schema: false },
         { label: teacher.name },
       ]}
     />

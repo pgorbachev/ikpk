@@ -275,6 +275,65 @@ describe('собранный сайт: сегмент каталога отве�
     },
   );
 
+  it.each(['teacher', 'method-author'] as const)(
+    '%s profile emits the complete JSON-LD breadcrumb trail while retaining the visible role',
+    (trait) => {
+      const person = entity<{ legacy_id: string | number; slug: string; name: string; trait?: 'teacher' | 'method-author'; institute_legacy_id?: string }[]>('teachers.json')
+        .find((candidate) => candidate.trait === trait);
+      expect(person, `в выбранном снимке отсутствует персона с trait=${trait}`).toBeDefined();
+      if (!person) throw new Error(`в выбранном снимке отсутствует персона с trait=${trait}`);
+      const institute = person!.institute_legacy_id!;
+      const html = page(`${institute}/prepodavatel/${person!.slug}`);
+      expect(html, `собранная страница trait=${trait}, slug=${person.slug} отсутствует`).toBeDefined();
+      if (!html) throw new Error(`собранная страница trait=${trait}, slug=${person.slug} отсутствует`);
+      const root = parse(html) as unknown as HtmlNode;
+      const scripts = descendants(root, (node) => node.tagName === 'script' && attribute(node, 'type') === 'application/ld+json');
+      const breadcrumb = scripts.map((script) => JSON.parse(textOf(script)) as { '@type'?: string; itemListElement?: { position: number; name: string; item?: string }[] })
+        .find((schema) => schema['@type'] === 'BreadcrumbList');
+      expect(breadcrumb?.itemListElement).toEqual([
+        { '@type': 'ListItem', position: 1, name: 'Главная', item: 'https://ikpk.su/' },
+        { '@type': 'ListItem', position: 2, name: entity<{ slug: string; name: string }[]>('institutes.json').find((item) => item.slug === institute)!.name, item: `https://ikpk.su/${institute}` },
+        { '@type': 'ListItem', position: 3, name: person!.name },
+      ]);
+      expect(html).toContain(personRoleLabels(person.trait).breadcrumb);
+    },
+  );
+
+  it('all built institute specialist pages have three-item JSON-LD trails and keep visible role labels', () => {
+    const people = entity<{ slug: string; name: string; trait?: 'teacher' | 'method-author'; institute_legacy_id?: string }[]>('teachers.json');
+    const problems: string[] = [];
+    const builtPages = [...walkHtml()].filter((file) => /[\\/]prepodavatel[\\/][^\\/]+[\\/]index\.html$/.test(file));
+    for (const file of builtPages) {
+      const html = readFileSync(file, 'utf-8');
+      const route = relative(dist, file).split(/[\\/]/);
+      const [instituteSlug, , personSlug] = route;
+      const person = people.find((candidate) => candidate.slug === personSlug && candidate.institute_legacy_id === instituteSlug);
+      if (!person) {
+        problems.push(`${relative(dist, file)}: маршрут отсутствует в снимке персон`);
+        continue;
+      }
+      const root = parse(html) as unknown as HtmlNode;
+      const scripts = descendants(root, (node) => node.tagName === 'script' && attribute(node, 'type') === 'application/ld+json');
+      const breadcrumb = scripts.map((script) => JSON.parse(textOf(script)) as { '@type'?: string; itemListElement?: { position: number; name: string; item?: string }[] })
+        .find((schema) => schema['@type'] === 'BreadcrumbList');
+      const items = breadcrumb?.itemListElement ?? [];
+      const institute = entity<{ slug: string; name: string }[]>('institutes.json').find((candidate) => candidate.slug === instituteSlug);
+      const expected = [
+        { position: 1, name: 'Главная', item: 'https://ikpk.su/' },
+        { position: 2, name: institute?.name, item: `https://ikpk.su/${instituteSlug}` },
+        { position: 3, name: person.name },
+      ];
+      if (!institute || items.length !== 3 || items.some((item, index) => item.position !== expected[index]?.position || item.name !== expected[index]?.name || item.item !== expected[index]?.item)) {
+        problems.push(`${relative(dist, file)}: неверный BreadcrumbList (${items.length} пунктов)`);
+      }
+      const nav = descendants(root, (node) => node.tagName === 'nav' && (attribute(node, 'class') ?? '').split(/\s+/).includes('breadcrumbs'))[0];
+      const expectedRole = personRoleLabels(person.trait).breadcrumb;
+      if (!nav || !textOf(nav).includes(expectedRole)) problems.push(`${relative(dist, file)}: роль «${expectedRole}» отсутствует в nav хлебных крошек`);
+    }
+    expect(builtPages.length, 'в dist нет собранных маршрутов /<институт>/prepodavatel/<id>/').toBeGreaterThan(0);
+    expect(problems, problems.slice(0, 12).join('\n')).toEqual([]);
+  });
+
 });
 
 describe('собранный сайт: адреса записей плоские', () => {
