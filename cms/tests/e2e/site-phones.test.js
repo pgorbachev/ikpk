@@ -36,11 +36,21 @@ describe('site phone fields in the Strapi admin', { timeout: 360_000 }, () => {
     base = 'http://127.0.0.1:' + app.server.httpServer.address().port;
     pages = app.documents(uid);
     const page = (slug, extra) => pages.create({ status: 'published', data: {
-      title: 'Тест ' + slug, slug, legacy_id: slug, body: 'Публичный текст',
+      title: 'Тест ' + slug, slug, legacy_id: slug, body: 'Публичный текст с телефоном +7 981 038-77-97',
       seo: { seo_title: slug, seo_description: 'Описание' }, ...extra,
     } });
     contacts = await page('kontakty', { center_phone: '+78126465450', manager_phone: '+79810387797' });
     another = await page('another-page', {});
+    const editor = await app.service('admin::role').findOne({ code: 'strapi-editor' });
+    for (const action of ['read', 'update']) {
+      await app.db.query('admin::permission').create({ data: {
+        action: 'plugin::content-manager.explorer.' + action,
+        subject: uid,
+        properties: { fields: ['title', 'slug', 'body', 'center_phone', 'manager_phone'] },
+        conditions: [],
+        role: editor.id,
+      } });
+    }
     browser = await chromium.launch();
   });
 
@@ -79,47 +89,79 @@ describe('site phone fields in the Strapi admin', { timeout: 360_000 }, () => {
     } finally { await page.close(); }
   });
 
-  test('полная карточка контактов показывает телефоны первыми и защищает адрес от правок', async () => {
+  test('другая роль с доступом к Page сохраняет свою карточку без доступа к форме телефонов', async () => {
+    const page = await login('strapi-editor');
+    try {
+      const form = base + '/admin/content-manager/collection-types/' + uid + '/';
+      const denied = page.waitForResponse(r => r.url().endsWith('/admin/site-phones'));
+      await page.goto(form + contacts.documentId);
+      assert.equal((await denied).status(), 403);
+      await page.locator('input[name="slug"]').waitFor();
+      assert.equal(await page.locator('input[name="slug"]').inputValue(), 'kontakty');
+      assert.equal(await page.locator('input[name="slug"]').isEditable(), false);
+      assert.ok(await page.getByText('Текст страницы', { exact: true }).isVisible());
+      assert.ok(await page.getByRole('textbox', { name: center }).isVisible());
+      assert.ok(await page.getByRole('textbox', { name: manager }).isVisible());
+      await page.goto(form + another.documentId);
+      await page.locator('input[name="slug"]').waitFor();
+      assert.ok(await page.locator('input[name="slug"]').isEditable());
+
+      assert.match(page.url(), new RegExp(another.documentId));
+      await page.route('**/admin/site-phones', route => route.fulfill({
+        status: 500, contentType: 'application/json', body: '{"error":{"status":500}}',
+      }));
+      await page.goto(form + contacts.documentId);
+      await page.getByText(/Что-то пошло не так|Something went wrong/i).first().waitFor();
+      assert.equal(await page.locator('input[name="slug"]').isVisible(), false);
+      assert.match(page.url(), new RegExp(contacts.documentId));
+      await page.unroute('**/admin/site-phones');
+
+    } finally { await page.close(); }
+  });
+
+  test('старая ссылка и список страниц ведут супер-администратора в единую форму', async () => {
     const page = await login('strapi-super-admin');
     try {
       const form = base + '/admin/content-manager/collection-types/' + uid + '/';
-      await page.goto(form + contacts.documentId);
       const phone = page.getByRole('textbox', { name: center });
       const mobile = page.getByRole('textbox', { name: manager });
-      const slug = page.locator('input[name="slug"]');
-      const body = page.getByText('Текст страницы', { exact: true });
+
+      await page.goto(form + contacts.documentId);
+      await page.waitForURL('**/admin/site-contact-phones');
       await phone.waitFor();
-      assert.ok(await page.getByRole('link', { name: 'Страницы', exact: true }).isVisible());
       assert.ok(await mobile.isVisible());
-      assert.equal(await slug.inputValue(), 'kontakty');
-      assert.equal(await slug.isEditable(), false);
-      assert.ok(await page.getByLabel('Адрес страницы', { exact: true }).isVisible());
-      const publicLink = page.getByRole('link', { name: 'Открыть страницу', exact: true });
-      assert.equal(await publicLink.evaluate((link) => link.href), base + '/kontakty');
-      assert.ok(await body.isVisible());
-      const hint = /на странице .Контакты. этот текст не отображается/i;
-      assert.ok(await page.getByText(hint).isVisible());
-      const title = await page.locator('input[name="title"]').boundingBox();
-      const address = await slug.boundingBox();
-      const text = await body.boundingBox();
-      for (const field of [phone, mobile]) {
-        const box = await field.boundingBox();
-        assert.ok(title && address && text && box);
-        assert.ok(box.y >= title.y + title.height && box.y + box.height <= Math.min(address.y, text.y),
-          'оба телефона должны находиться между заголовком и полями адреса и текста');
-      }
+      assert.equal(await page.getByText('Текст страницы', { exact: true }).isVisible(), false);
+      assert.equal(await page.getByText('Публичный текст с телефоном +7 981 038-77-97').isVisible(), false);
+
+      await phone.fill('+78125550303');
+      const completed = page.waitForResponse(r => r.url().endsWith('/site-phones/publish') && r.request().method() === 'POST');
+      await page.getByRole('button', { name: /опубликовать/i }).click();
+      assert.ok((await completed).ok());
+      const published = await pages.findOne({ documentId: contacts.documentId, status: 'published' });
+      assert.equal(published.center_phone.replace(/[ ()-]/g, ''), '+78125550303');
+      assert.equal(published.body, 'Публичный текст с телефоном +7 981 038-77-97');
+
+      await page.goto(form.slice(0, -1));
+      await page.getByText('Тест kontakty', { exact: true }).click();
+      await page.waitForURL('**/admin/site-contact-phones');
+      await phone.waitFor();
+      assert.ok(await phone.isVisible());
 
       for (const [path, expectedSlug] of [[another.documentId, 'another-page'], ['create', '']]) {
         await page.goto(form + path);
+        const slug = page.locator('input[name="slug"]');
         await slug.waitFor();
         assert.equal(await slug.inputValue(), expectedSlug);
         assert.ok(await slug.isEditable());
-        assert.ok(await body.isVisible());
-        assert.equal(await page.getByText(hint).isVisible(), false);
-        assert.equal(await publicLink.isVisible(), false);
+        assert.ok(await page.getByText('Текст страницы', { exact: true }).isVisible());
         assert.equal(await phone.isVisible(), false);
         assert.equal(await mobile.isVisible(), false);
       }
+
+      await page.goto(form + 'clone/' + contacts.documentId);
+      await page.locator('input[name="slug"]').waitFor();
+      assert.ok(await page.getByText('Текст страницы', { exact: true }).isVisible());
+      assert.match(page.url(), /\/clone\//);
     } finally { await page.close(); }
   });
 });

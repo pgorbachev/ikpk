@@ -60,12 +60,61 @@ function occurrenceBackButton(): Plugin {
   };
 }
 
+function contactEditorRedirect(): Plugin {
+  let transformed = false;
+  return {
+    name: 'ikpk-contact-editor-redirect',
+    enforce: 'pre',
+    transform(code, id) {
+      if (!id.endsWith('/@strapi/content-manager/dist/admin/pages/EditView/EditViewPage.mjs')) return;
+      const routerImport = "import { useParams, useLocation } from 'react-router-dom';";
+      const hookMarker = '    const location = useLocation();';
+      const documentMarker = '    const hasDraftAndPublished = schema?.options?.draftAndPublish ?? false;';
+      const renderMarker = '    const handleTabChange = (status)=>{';
+      if (!code.includes(routerImport) || !code.includes(hookMarker) || !code.includes(documentMarker) || !code.includes(renderMarker)) {
+        throw new Error('Strapi EditView changed; update the contacts editor integration');
+      }
+      transformed = true;
+      return code.replace("useRBAC, Page,", "useRBAC, useFetchClient, Page,")
+        .replace(routerImport, "import { useParams, useLocation, Navigate } from 'react-router-dom';")
+        .replace(hookMarker, hookMarker + "\n    const { origin } = useParams();\n    const { get } = useFetchClient();")
+        .replace(documentMarker, `    const isContact = model === 'api::page.page' && id && !origin && document?.slug === 'kontakty';
+    const contactRef = React.useRef(null);
+    if (!isContact) contactRef.current = null;
+    else if (!contactRef.current || contactRef.current.id !== id) contactRef.current = { id };
+    const contact = contactRef.current;
+    const [access, setAccess] = React.useState(null);
+    React.useEffect(() => {
+        if (!contact) return;
+        let current = true;
+        get('/admin/site-phones').then(() => {
+            if (current) setAccess({ contact, value: 'allowed' });
+        }).catch(error => {
+            if (current) setAccess({ contact, value: error?.status === 403 ? 'denied' : 'error' });
+        });
+        return () => { current = false; };
+    }, [get, contact]);
+` + documentMarker)
+        .replace(renderMarker, `    if (isContact) {
+        if (!access || access.contact !== contact) return /*#__PURE__*/ jsx(Page.Loading, {});
+        if (access.value === 'error') return /*#__PURE__*/ jsx(Page.Error, {});
+        if (access.value === 'allowed') return /*#__PURE__*/ jsx(Navigate, { to: '/site-contact-phones', replace: true });
+    }
+` + renderMarker);
+    },
+    generateBundle() {
+      if (!transformed) throw new Error('Strapi EditView not found; update the contacts editor integration');
+    },
+  };
+}
+
 export default (config: UserConfig) => {
   // Important: always return the modified config
   return mergeConfig(config, {
     cacheDir: resolve(process.cwd(), '.vite-cache/admin'),
     plugins: [
       createAdminLoginRedirectPlugin(), occurrenceBackButton(), occurrenceCreateUrl(),
+      contactEditorRedirect(),
       {
         name: 'ikpk-page-edit-form',
         enforce: 'pre',
