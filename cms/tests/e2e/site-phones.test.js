@@ -109,15 +109,17 @@ describe('site phone fields in the Strapi admin', { timeout: 360_000 }, () => {
           'оба телефона должны находиться между заголовком и полями адреса и текста');
       }
 
-      await page.goto(form + another.documentId);
-      await slug.waitFor();
-      assert.equal(await slug.inputValue(), 'another-page');
-      assert.ok(await slug.isEditable());
-      assert.ok(await body.isVisible());
-      assert.equal(await page.getByText(hint).isVisible(), false);
-      assert.equal(await publicLink.isVisible(), false);
-      assert.equal(await phone.isVisible(), false);
-      assert.equal(await mobile.isVisible(), false);
+      for (const [path, expectedSlug] of [[another.documentId, 'another-page'], ['create', '']]) {
+        await page.goto(form + path);
+        await slug.waitFor();
+        assert.equal(await slug.inputValue(), expectedSlug);
+        assert.ok(await slug.isEditable());
+        assert.ok(await body.isVisible());
+        assert.equal(await page.getByText(hint).isVisible(), false);
+        assert.equal(await publicLink.isVisible(), false);
+        assert.equal(await phone.isVisible(), false);
+        assert.equal(await mobile.isVisible(), false);
+      }
     } finally { await page.close(); }
   });
 });
