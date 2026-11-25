@@ -64,10 +64,23 @@ export default (config: UserConfig) => {
   // Important: always return the modified config
   return mergeConfig(config, {
     cacheDir: resolve(process.cwd(), '.vite-cache/admin'),
-    plugins: [createAdminLoginRedirectPlugin(), occurrenceBackButton(), occurrenceCreateUrl()],
+    plugins: [
+      createAdminLoginRedirectPlugin(), occurrenceBackButton(), occurrenceCreateUrl(),
+      {
+        name: 'ikpk-page-edit-form',
+        enforce: 'pre',
+        resolveId(source: string, importer?: string) {
+          if (source === './components/FormLayout.mjs' &&
+            importer?.endsWith('/@strapi/content-manager/dist/admin/pages/EditView/EditViewPage.mjs')) {
+            return resolve(process.cwd(), 'src/admin/components/PageEditForm.tsx');
+          }
+        },
+      },
+    ],
     resolve: {
       alias: {
         '@': '/src',
+        '@ikpk/native-form-layout': resolve(process.cwd(), 'node_modules/@strapi/content-manager/dist/admin/pages/EditView/components/FormLayout.mjs'),
         '@ikpk/native-relations': resolve(process.cwd(), 'node_modules/@strapi/content-manager/dist/admin/pages/EditView/components/FormInputs/Relations/Relations.mjs'),
         '@ikpk/document-context': resolve(process.cwd(), 'node_modules/@strapi/content-manager/dist/admin/hooks/useDocumentContext.mjs'),
         '@ikpk/strapi-date-time-input': resolve(process.cwd(), 'node_modules/@strapi/admin/dist/admin/admin/src/components/FormInputs/DateTime.mjs'),

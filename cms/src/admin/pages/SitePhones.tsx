@@ -67,7 +67,7 @@ export default function SitePhones() {
       <Flex direction="column" alignItems="stretch" gap={4} maxWidth="640px">
         <Typography variant="alpha" tag="h1">Контакты сайта</Typography>
         {view && <>
-          <Typography>Телефоны для сайта задаются в этих двух полях. Текст Body на странице /kontakty не выводится.</Typography>
+          <Typography>Здесь можно изменить телефон центра и мобильный телефон менеджера.</Typography>
           {PHONE_FIELDS.map((field) => (
             <Field.Root key={field} name={field} hint={`Опубликовано: ${view.published[field] || 'не заполнено'}`}>
               <Field.Label>{SITE_PHONE_LABELS[field]}</Field.Label>

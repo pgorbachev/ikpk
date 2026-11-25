@@ -15,9 +15,17 @@ function SiteRefreshIcon(props: SiteRefreshIconProps) {
   );
 }
 
+type CollectionLinks = { ctLinks: { uid: string; title: string }[] };
+
+const pageTranslations = {
+  Page: 'Страницы',
+  'content-manager.content-types.api::page.page.body': 'Текст страницы',
+};
+
 export default {
   config: {
     locales: ['ru'],
+    translations: { ru: pageTranslations, en: pageTranslations },
   },
   register(app: StrapiApp) {
     app.router.addRoute(contentManagerHomeRoute());
@@ -72,10 +80,16 @@ export default {
     void import('./relation-menu').then(({ installRelationMenuWidth }) =>
       installRelationMenuWidth(document),
     );
+    // The sidebar searches and sorts these titles before translating them.
+    app.registerHook('Admin/CM/pages/App/mutate-collection-types-links', (input: CollectionLinks) => ({
+      ...input,
+      ctLinks: input.ctLinks.map(link =>
+        link.uid === 'api::page.page' ? { ...link, title: pageTranslations.Page } : link),
+    }));
     app.addMenuLink({
       to: '/site-contact-phones',
       icon: Phone,
-      intlLabel: { id: 'site-phones.menu', defaultMessage: 'Page → Контакты сайта' },
+      intlLabel: { id: 'site-phones.menu', defaultMessage: 'Страницы → Контакты сайта' },
       permissions: [],
       Component: () => import('./pages/SitePhones'),
     });
