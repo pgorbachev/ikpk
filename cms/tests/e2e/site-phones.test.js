@@ -67,7 +67,7 @@ describe('site phone fields in the Strapi admin', { timeout: 360_000 }, () => {
   test('content-admin finds and publishes each independent field', async () => {
     const page = await login('content-admin');
     try {
-      await page.getByRole('link', { name: /Контакты сайта/i }).click({ timeout: 15_000 });
+      await page.getByRole('link', { name: 'Страницы → Контакты сайта', exact: true }).click({ timeout: 15_000 });
       for (const [label, number, field] of [[center, '+78125550101', 'center_phone'], [manager, '+79815550202', 'manager_phone']]) {
         await page.getByRole('textbox', { name: label }).fill(number);
         const completed = page.waitForResponse((r) => r.url().endsWith('/site-phones/publish') && r.request().method() === 'POST');
@@ -79,18 +79,47 @@ describe('site phone fields in the Strapi admin', { timeout: 360_000 }, () => {
     } finally { await page.close(); }
   });
 
-  test('super-admin sees both fields and the Body hint only on the canonical page', async () => {
+  test('полная карточка контактов показывает телефоны первыми и защищает адрес от правок', async () => {
     const page = await login('strapi-super-admin');
     try {
       const form = base + '/admin/content-manager/collection-types/' + uid + '/';
       await page.goto(form + contacts.documentId);
-      await page.getByRole('textbox', { name: center }).waitFor();
-      assert.ok(await page.getByRole('textbox', { name: manager }).isVisible());
-      assert.match(await page.locator('main').innerText(), /body/i);
-      await page.goto(form + another.documentId);
-      await page.locator('input[name="title"]').waitFor();
-      assert.equal(await page.getByRole('textbox', { name: center }).isVisible(), false);
-      assert.equal(await page.getByRole('textbox', { name: manager }).isVisible(), false);
+      const phone = page.getByRole('textbox', { name: center });
+      const mobile = page.getByRole('textbox', { name: manager });
+      const slug = page.locator('input[name="slug"]');
+      const body = page.getByText('Текст страницы', { exact: true });
+      await phone.waitFor();
+      assert.ok(await page.getByRole('link', { name: 'Страницы', exact: true }).isVisible());
+      assert.ok(await mobile.isVisible());
+      assert.equal(await slug.inputValue(), 'kontakty');
+      assert.equal(await slug.isEditable(), false);
+      assert.ok(await page.getByLabel('Адрес страницы', { exact: true }).isVisible());
+      const publicLink = page.getByRole('link', { name: 'Открыть страницу', exact: true });
+      assert.equal(await publicLink.evaluate((link) => link.href), base + '/kontakty');
+      assert.ok(await body.isVisible());
+      const hint = /на странице .Контакты. этот текст не отображается/i;
+      assert.ok(await page.getByText(hint).isVisible());
+      const title = await page.locator('input[name="title"]').boundingBox();
+      const address = await slug.boundingBox();
+      const text = await body.boundingBox();
+      for (const field of [phone, mobile]) {
+        const box = await field.boundingBox();
+        assert.ok(title && address && text && box);
+        assert.ok(box.y >= title.y + title.height && box.y + box.height <= Math.min(address.y, text.y),
+          'оба телефона должны находиться между заголовком и полями адреса и текста');
+      }
+
+      for (const [path, expectedSlug] of [[another.documentId, 'another-page'], ['create', '']]) {
+        await page.goto(form + path);
+        await slug.waitFor();
+        assert.equal(await slug.inputValue(), expectedSlug);
+        assert.ok(await slug.isEditable());
+        assert.ok(await body.isVisible());
+        assert.equal(await page.getByText(hint).isVisible(), false);
+        assert.equal(await publicLink.isVisible(), false);
+        assert.equal(await phone.isVisible(), false);
+        assert.equal(await mobile.isVisible(), false);
+      }
     } finally { await page.close(); }
   });
 });
