@@ -42,13 +42,15 @@ describe('site phone fields in the Strapi admin', { timeout: 360_000 }, () => {
     contacts = await page('kontakty', { center_phone: '+78126465450', manager_phone: '+79810387797' });
     another = await page('another-page', {});
     const editor = await app.service('admin::role').findOne({ code: 'strapi-editor' });
-    await app.db.query('admin::permission').create({ data: {
-      action: 'plugin::content-manager.explorer.read',
-      subject: uid,
-      properties: { fields: ['title', 'slug', 'body', 'center_phone', 'manager_phone'] },
-      conditions: [],
-      role: editor.id,
-    } });
+    for (const action of ['read', 'update']) {
+      await app.db.query('admin::permission').create({ data: {
+        action: 'plugin::content-manager.explorer.' + action,
+        subject: uid,
+        properties: { fields: ['title', 'slug', 'body', 'center_phone', 'manager_phone'] },
+        conditions: [],
+        role: editor.id,
+      } });
+    }
     browser = await chromium.launch();
   });
 
@@ -96,7 +98,24 @@ describe('site phone fields in the Strapi admin', { timeout: 360_000 }, () => {
       assert.equal((await denied).status(), 403);
       await page.locator('input[name="slug"]').waitFor();
       assert.equal(await page.locator('input[name="slug"]').inputValue(), 'kontakty');
+      assert.equal(await page.locator('input[name="slug"]').isEditable(), false);
+      assert.ok(await page.getByText('Текст страницы', { exact: true }).isVisible());
+      assert.ok(await page.getByRole('textbox', { name: center }).isVisible());
+      assert.ok(await page.getByRole('textbox', { name: manager }).isVisible());
+      await page.goto(form + another.documentId);
+      await page.locator('input[name="slug"]').waitFor();
+      assert.ok(await page.locator('input[name="slug"]').isEditable());
+
+      assert.match(page.url(), new RegExp(another.documentId));
+      await page.route('**/admin/site-phones', route => route.fulfill({
+        status: 500, contentType: 'application/json', body: '{"error":{"status":500}}',
+      }));
+      await page.goto(form + contacts.documentId);
+      await page.getByText(/Что-то пошло не так|Something went wrong/i).first().waitFor();
+      assert.equal(await page.locator('input[name="slug"]').isVisible(), false);
       assert.match(page.url(), new RegExp(contacts.documentId));
+      await page.unroute('**/admin/site-phones');
+
     } finally { await page.close(); }
   });
 

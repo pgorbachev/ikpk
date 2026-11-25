@@ -79,21 +79,24 @@ function contactEditorRedirect(): Plugin {
         .replace(routerImport, "import { useParams, useLocation, Navigate } from 'react-router-dom';")
         .replace(hookMarker, hookMarker + "\n    const { origin } = useParams();\n    const { get } = useFetchClient();")
         .replace(documentMarker, `    const isContact = model === 'api::page.page' && id && !origin && document?.slug === 'kontakty';
+    const contactRef = React.useRef(null);
+    if (!isContact) contactRef.current = null;
+    else if (!contactRef.current || contactRef.current.id !== id) contactRef.current = { id };
+    const contact = contactRef.current;
     const [access, setAccess] = React.useState(null);
     React.useEffect(() => {
-        if (!isContact) return;
+        if (!contact) return;
         let current = true;
-        setAccess(null);
         get('/admin/site-phones').then(() => {
-            if (current) setAccess({ id, value: 'allowed' });
+            if (current) setAccess({ contact, value: 'allowed' });
         }).catch(error => {
-            if (current) setAccess({ id, value: error?.status === 403 ? 'denied' : 'error' });
+            if (current) setAccess({ contact, value: error?.status === 403 ? 'denied' : 'error' });
         });
         return () => { current = false; };
-    }, [get, id, isContact]);
+    }, [get, contact]);
 ` + documentMarker)
         .replace(renderMarker, `    if (isContact) {
-        if (!access || access.id !== id) return /*#__PURE__*/ jsx(Page.Loading, {});
+        if (!access || access.contact !== contact) return /*#__PURE__*/ jsx(Page.Loading, {});
         if (access.value === 'error') return /*#__PURE__*/ jsx(Page.Error, {});
         if (access.value === 'allowed') return /*#__PURE__*/ jsx(Navigate, { to: '/site-contact-phones', replace: true });
     }
@@ -112,10 +115,21 @@ export default (config: UserConfig) => {
     plugins: [
       createAdminLoginRedirectPlugin(), occurrenceBackButton(), occurrenceCreateUrl(),
       contactEditorRedirect(),
+      {
+        name: 'ikpk-page-edit-form',
+        enforce: 'pre',
+        resolveId(source: string, importer?: string) {
+          if (source === './components/FormLayout.mjs' &&
+            importer?.endsWith('/@strapi/content-manager/dist/admin/pages/EditView/EditViewPage.mjs')) {
+            return resolve(process.cwd(), 'src/admin/components/PageEditForm.tsx');
+          }
+        },
+      },
     ],
     resolve: {
       alias: {
         '@': '/src',
+        '@ikpk/native-form-layout': resolve(process.cwd(), 'node_modules/@strapi/content-manager/dist/admin/pages/EditView/components/FormLayout.mjs'),
         '@ikpk/native-relations': resolve(process.cwd(), 'node_modules/@strapi/content-manager/dist/admin/pages/EditView/components/FormInputs/Relations/Relations.mjs'),
         '@ikpk/document-context': resolve(process.cwd(), 'node_modules/@strapi/content-manager/dist/admin/hooks/useDocumentContext.mjs'),
         '@ikpk/strapi-date-time-input': resolve(process.cwd(), 'node_modules/@strapi/admin/dist/admin/admin/src/components/FormInputs/DateTime.mjs'),
