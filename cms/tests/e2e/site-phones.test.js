@@ -77,7 +77,26 @@ describe('site phone fields in the Strapi admin', { timeout: 360_000 }, () => {
   test('content-admin finds and publishes each independent field', async () => {
     const page = await login('content-admin');
     try {
-      await page.getByRole('link', { name: 'Страницы → Контакты сайта', exact: true }).click({ timeout: 15_000 });
+      await page.getByRole('link', { name: 'Редактор контента', exact: true }).click();
+      assert.equal(await page.getByRole('link', { name: 'Страницы → Контакты сайта', exact: true }).count(), 0);
+      const authorized = page.waitForRequest(request => request.url().endsWith('/admin/site-phones'));
+      await page.getByRole('link', { name: 'Страницы', exact: true }).click({ timeout: 15_000 });
+      await page.waitForURL('**/admin/content-manager/collection-types/site-contact-phones');
+      await page.getByRole('heading', { name: 'Контакты сайта' }).waitFor();
+      const authorization = (await authorized).headers().authorization;
+      const response = await page.request.get(base + '/content-manager/collection-types/' + uid, { headers: { authorization } });
+      assert.equal(response.status(), 403);
+      await page.goto(base + '/admin/site-contact-phones');
+      await page.waitForURL('**/admin/content-manager/collection-types/site-contact-phones');
+      await page.reload();
+      await page.getByRole('heading', { name: 'Контакты сайта' }).waitFor();
+      await page.route('**/admin/site-phones', route => route.fulfill({ status: 500, contentType: 'application/json', body: '{}' }));
+      await page.goto(base + '/admin/content-manager');
+      await page.getByRole('link', { name: 'Страницы', exact: true }).click();
+      await page.getByRole('button', { name: 'Загрузить актуальные значения' }).waitFor();
+      await page.unroute('**/admin/site-phones');
+      await page.getByRole('button', { name: 'Загрузить актуальные значения' }).click();
+      await page.getByRole('textbox', { name: center }).waitFor();
       for (const [label, number, field] of [[center, '+78125550101', 'center_phone'], [manager, '+79815550202', 'manager_phone']]) {
         await page.getByRole('textbox', { name: label }).fill(number);
         const completed = page.waitForResponse((r) => r.url().endsWith('/site-phones/publish') && r.request().method() === 'POST');
@@ -92,6 +111,13 @@ describe('site phone fields in the Strapi admin', { timeout: 360_000 }, () => {
   test('другая роль с доступом к Page сохраняет свою карточку без доступа к форме телефонов', async () => {
     const page = await login('strapi-editor');
     try {
+      await page.goto(base + '/admin/content-manager');
+      await page.getByRole('link', { name: 'Страницы', exact: true }).waitFor();
+      assert.equal(await page.getByRole('link', { name: 'Страницы → Контакты сайта' }).count(), 0);
+      const deniedForm = page.waitForResponse(r => r.url().endsWith('/admin/site-phones') && r.status() === 403);
+      await page.goto(base + '/admin/site-contact-phones');
+      await deniedForm;
+      assert.equal(await page.getByRole('textbox', { name: center }).count(), 0);
       const form = base + '/admin/content-manager/collection-types/' + uid + '/';
       const denied = page.waitForResponse(r => r.url().endsWith('/admin/site-phones'));
       await page.goto(form + contacts.documentId);
@@ -127,7 +153,7 @@ describe('site phone fields in the Strapi admin', { timeout: 360_000 }, () => {
       const mobile = page.getByRole('textbox', { name: manager });
 
       await page.goto(form + contacts.documentId);
-      await page.waitForURL('**/admin/site-contact-phones');
+      await page.waitForURL('**/admin/content-manager/collection-types/site-contact-phones');
       await phone.waitFor();
       assert.ok(await mobile.isVisible());
       assert.equal(await page.getByText('Текст страницы', { exact: true }).isVisible(), false);
@@ -143,7 +169,7 @@ describe('site phone fields in the Strapi admin', { timeout: 360_000 }, () => {
 
       await page.goto(form.slice(0, -1));
       await page.getByText('Тест kontakty', { exact: true }).click();
-      await page.waitForURL('**/admin/site-contact-phones');
+      await page.waitForURL('**/admin/content-manager/collection-types/site-contact-phones');
       await phone.waitFor();
       assert.ok(await phone.isVisible());
 

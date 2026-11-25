@@ -98,12 +98,48 @@ function contactEditorRedirect(): Plugin {
         .replace(renderMarker, `    if (isContact) {
         if (!access || access.contact !== contact) return /*#__PURE__*/ jsx(Page.Loading, {});
         if (access.value === 'error') return /*#__PURE__*/ jsx(Page.Error, {});
-        if (access.value === 'allowed') return /*#__PURE__*/ jsx(Navigate, { to: '/site-contact-phones', replace: true });
+        if (access.value === 'allowed') return /*#__PURE__*/ jsx(Navigate, { to: '/content-manager/collection-types/site-contact-phones', replace: true });
     }
 ` + renderMarker);
     },
     generateBundle() {
       if (!transformed) throw new Error('Strapi EditView not found; update the contacts editor integration');
+    },
+  };
+}
+
+function contactMenuLink(): Plugin {
+  let transformed = false;
+  return {
+    name: 'ikpk-contact-menu-link',
+    enforce: 'pre',
+    transform(code, id) {
+      if (!id.endsWith('/@strapi/content-manager/dist/admin/components/LeftMenu.mjs')) return;
+      const importMarker = "import { SubNav } from '@strapi/admin/strapi-admin';";
+      const linkMarker = "    const collectionTypeLinks = useTypedSelector((state)=>state['content-manager'].app.collectionTypeLinks);";
+      if (!code.includes(importMarker) || !code.includes(linkMarker)) {
+        throw new Error('Strapi LeftMenu changed; update the contacts menu integration');
+      }
+      transformed = true;
+      return code.replace(importMarker, "import { SubNav, useFetchClient } from '@strapi/admin/strapi-admin';")
+        .replace(linkMarker, `    const nativeCollectionTypeLinks = useTypedSelector((state)=>state['content-manager'].app.collectionTypeLinks);
+    const { get } = useFetchClient();
+    const [canEditPhones, setCanEditPhones] = React.useState(false);
+    React.useEffect(() => {
+        let current = true;
+        get('/admin/site-phones').then(() => {
+            if (current) setCanEditPhones(true);
+        }).catch(error => {
+            if (current) setCanEditPhones(error?.status !== 403);
+        });
+        return () => { current = false; };
+    }, [get]);
+    const collectionTypeLinks = canEditPhones && !nativeCollectionTypeLinks.some(link => link.uid === 'api::page.page')
+        ? [...nativeCollectionTypeLinks, { uid: 'ikpk-site-contacts', title: 'Страницы', to: '/content-manager/collection-types/site-contact-phones' }]
+        : nativeCollectionTypeLinks;`);
+    },
+    generateBundle() {
+      if (!transformed) throw new Error('Strapi LeftMenu not found; update the contacts menu integration');
     },
   };
 }
@@ -114,7 +150,7 @@ export default (config: UserConfig) => {
     cacheDir: resolve(process.cwd(), '.vite-cache/admin'),
     plugins: [
       createAdminLoginRedirectPlugin(), occurrenceBackButton(), occurrenceCreateUrl(),
-      contactEditorRedirect(),
+      contactEditorRedirect(), contactMenuLink(),
       {
         name: 'ikpk-page-edit-form',
         enforce: 'pre',

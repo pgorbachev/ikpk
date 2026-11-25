@@ -1,4 +1,3 @@
-import { Phone } from '@strapi/icons';
 import type { ComponentType } from 'react';
 import type { StrapiApp } from '@strapi/strapi/admin';
 import { contentManagerHomeRoute } from './content-home';
@@ -29,6 +28,26 @@ export default {
   },
   register(app: StrapiApp) {
     app.router.addRoute(contentManagerHomeRoute());
+    app.router.addRoute({
+      path: 'site-contact-phones',
+      loader: () => new Response(null, {
+        status: 302,
+        headers: { Location: '/content-manager/collection-types/site-contact-phones' },
+      }),
+    });
+    app.router.addRoute((routes) => routes.map((route) => {
+      if (route.path !== 'content-manager/*') return route;
+      return {
+        ...route,
+        children: [
+          ...(route.children ?? []),
+          {
+            path: 'collection-types/site-contact-phones',
+            lazy: async () => ({ Component: (await import('./pages/SitePhones')).default }),
+          },
+        ],
+      };
+    }));
     app.addFields({ type: 'relation', Component: OccurrenceRelations });
     app.addFields({ type: 'datetime', Component: ArticleCalendarDate });
     app.customFields.register({
@@ -86,13 +105,6 @@ export default {
       ctLinks: input.ctLinks.map(link =>
         link.uid === 'api::page.page' ? { ...link, title: pageTranslations.Page } : link),
     }));
-    app.addMenuLink({
-      to: '/site-contact-phones',
-      icon: Phone,
-      intlLabel: { id: 'site-phones.menu', defaultMessage: 'Страницы → Контакты сайта' },
-      permissions: [],
-      Component: () => import('./pages/SitePhones'),
-    });
     app.addMenuLink({
       to: '/site-refresh',
       icon: SiteRefreshIcon,
