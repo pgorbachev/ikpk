@@ -95,7 +95,7 @@ describe('site phone fields in the Strapi admin', { timeout: 360_000 }, () => {
       assert.equal(await slug.isEditable(), false);
       assert.ok(await page.getByLabel('Адрес страницы', { exact: true }).isVisible());
       const publicLink = page.getByRole('link', { name: 'Открыть страницу', exact: true });
-      assert.equal(await publicLink.getAttribute('href'), 'https://ikpk.su/kontakty');
+      assert.equal(await publicLink.evaluate((link) => link.href), base + '/kontakty');
       assert.ok(await body.isVisible());
       const hint = /на странице .Контакты. этот текст не отображается/i;
       assert.ok(await page.getByText(hint).isVisible());
@@ -115,6 +115,7 @@ describe('site phone fields in the Strapi admin', { timeout: 360_000 }, () => {
       assert.ok(await slug.isEditable());
       assert.ok(await body.isVisible());
       assert.equal(await page.getByText(hint).isVisible(), false);
+      assert.equal(await publicLink.isVisible(), false);
       assert.equal(await phone.isVisible(), false);
       assert.equal(await mobile.isVisible(), false);
     } finally { await page.close(); }
