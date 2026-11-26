@@ -1,10 +1,11 @@
 // @ts-check
-import { existsSync, readFileSync, rmSync } from 'node:fs';
+import { rmSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'astro/config';
 import sitemap from '@astrojs/sitemap';
 import { DEMO193_ORIGIN } from './scripts/demo193-profile.mjs';
+import { serializeSitemapEntry, omitSitemapIndexLastmod } from './src/lib/sitemap-lastmod-serializer.mjs';
 
 const demoOutput = process.env.DEMO_OUTPUT === '1';
 const demoProfile = String(process.env.DEMO_PROFILE ?? '').trim();
@@ -60,26 +61,7 @@ if (initialProdProfile) {
   }
 }
 
-// lastmod для sitemap: из снимка контента, которым идёт сборка (не из материала переноса).
 const webRoot = dirname(fileURLToPath(import.meta.url));
-const repoRoot = join(webRoot, '..');
-const snapshotCandidates = [
-  process.env.CONTENT_SNAPSHOT_DIR,
-  join(webRoot, '.snapshot'),
-  join(repoRoot, 'fixtures', 'content-snapshot'),
-].filter(Boolean);
-const snapshotDir = snapshotCandidates.find((dir) => existsSync(join(/** @type {string} */ (dir), 'snapshot.json')));
-if (!snapshotDir) {
-  throw new Error('astro.config: снимок контента не найден');
-}
-/** @type {{ content: { types: { articles?: Array<{ slug: string; published_at?: string }> } } }} */
-const snapshot = JSON.parse(readFileSync(join(snapshotDir, 'snapshot.json'), 'utf-8'));
-/** @type {Array<{ slug: string; published_at?: string }>} */
-const articles = snapshot.content.types.articles ?? [];
-const articleDates = new Map(
-  articles.filter((a) => a.published_at).map((a) => [a.slug, /** @type {string} */ (a.published_at)])
-);
-const snapshotDate = [...articleDates.values()].sort().at(-1) ?? new Date(0).toISOString();
 
 // Сборка без оплаты (роль `ci`, в том числе обычный `npm run build`) форму не
 // рисует, и ссылки на экземпляр с печатью в ней нет. Файл при этом копируется
@@ -142,14 +124,9 @@ export default defineConfig({
         !page.includes('/demo-zayavka') &&
         !page.includes('/rich-content-canary') &&
         !isNoindexFlatDetail(page),
-      serialize(item) {
-        const slugMatch = item.url.match(/\/statyi\/([^/]+)\/?$/);
-        const lastmod = (slugMatch && articleDates.get(slugMatch[1])) || snapshotDate;
-        // адреса в карте — как на старом сайте, без завершающего слэша
-        const url = item.url.replace(/(.)\/+$/, '$1');
-        return { ...item, url, lastmod };
-      },
+      serialize: (item) => serializeSitemapEntry(item),
     }),
+    omitSitemapIndexLastmod(),
   ],
   // Astro's own cache defaults to node_modules/.astro, read-only on production
   // refresh. Since 7.4 `astro sync` writes its `vite-sync/` deps there, ignoring

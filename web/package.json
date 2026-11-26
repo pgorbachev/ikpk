@@ -75,6 +75,7 @@
     "eslint-plugin-astro": "^3.2.1",
     "globals": "^17.14.0",
     "pagefind": "^1.6.0",
+    "saxes": "^6.0.0",
     "sharp": "^0.35.5",
     "tsx": "^4.23.15",
     "typescript": "^5.9.3",
