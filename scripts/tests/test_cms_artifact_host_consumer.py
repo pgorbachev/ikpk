@@ -195,7 +195,7 @@ class CmsArtifactHostConsumerTests(unittest.TestCase):
                 activate.assert_not_called()
 
     def test_candidate_changed_after_runner_audit_is_refused_by_root_installer(self):
-        with tempfile.TemporaryDirectory(prefix="ikpk-cms-schema-binding-drift-") as temporary:
+        with tempfile.TemporaryDirectory(prefix="ikpk-cms-schema-binding-drift-", dir=Path.cwd()) as temporary:
             root = Path(temporary)
             f = prepared_artifact(root, "schema-binding-drift")
             live = root / "live.sqlite"
