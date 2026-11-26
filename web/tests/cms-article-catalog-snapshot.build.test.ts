@@ -35,7 +35,7 @@ function saveSnapshot(dir: string, snapshot: BuiltSnapshot): void {
 
 function buildSnapshot(snapshotDir: string, name: string): string {
   const outDir = join(scratchDir(), name);
-  const env = { ...process.env, CONTENT_SNAPSHOT_DIR: snapshotDir, PAYMENT_ROLE: 'ci' };
+  const env: NodeJS.ProcessEnv = { ...process.env, CONTENT_SNAPSHOT_DIR: snapshotDir, PAYMENT_ROLE: 'ci' };
   delete env.DEMO_PROFILE;
   delete env.DEMO_OUTPUT;
   delete env.DEMO_FORMS;
