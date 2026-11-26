@@ -115,7 +115,7 @@ test('CMS release artifact contains the manifest and every packaged data-step he
   // Satisfy only the CMS build boundary; the real artifact script copies and validates
   // repository outputs. This avoids installing or building Strapi just to test packaging.
   const fakeNpm = join(fakeBin, 'npm');
-  writeFileSync(fakeNpm, '#!/bin/sh\nmkdir -p dist/config\nprintf "%s\\n" "module.exports = { default: ({ env }) => ({ connection: { connection: { filename: env(\\"DATABASE_FILENAME\\") } } }) };" > dist/config/database.js\n', 'utf8');
+  writeFileSync(fakeNpm, '#!/bin/sh\nmkdir -p dist/config dist/src/api/course-group/content-types/course-group\nprintf "%s\\n" "module.exports = { default: ({ env }) => ({ connection: { connection: { filename: env(\\"DATABASE_FILENAME\\") } } }) };" > dist/config/database.js\ncp src/api/course-group/content-types/course-group/schema.json dist/src/api/course-group/content-types/course-group/schema.json\n', 'utf8');
   chmodSync(fakeNpm, 0o700);
 
   const built = spawnSync('/bin/bash', [artifactBuilder, artifact], {
@@ -140,6 +140,33 @@ test('CMS release artifact contains the manifest and every packaged data-step he
   assert.equal(manifest.integrity.files.find(({ path }) => path === runtimeAsset)?.sha256, sha256(readFileSync(join(artifact, runtimeAsset))), 'runtime lifecycle data asset is not hash-bound by the migration plan');
   const snapshotHelper = 'scripts/audit-schema-snapshot.mjs';
   assert.equal(manifest.integrity.files.find(({ path }) => path === snapshotHelper)?.sha256, sha256(readFileSync(join(artifact, snapshotHelper))), 'serialized schema auditor bytes are not hash-bound by the migration plan');
+  const programSchema = 'src/api/course-group/content-types/course-group/schema.json';
+  assert.deepEqual(JSON.parse(readFileSync(join(artifact, programSchema), 'utf8')),
+    JSON.parse(readFileSync(join(repoRoot, 'cms', programSchema), 'utf8')),
+    'the exact course-group source schema must be packaged');
+  assert.equal(manifest.integrity.files.find(({ path }) => path === programSchema)?.sha256,
+    sha256(readFileSync(join(artifact, programSchema))), 'course-group source schema must be plan-integrity bound');
+  const compiledProgramSchema = 'dist/src/api/course-group/content-types/course-group/schema.json';
+  assert.deepEqual(JSON.parse(readFileSync(join(artifact, compiledProgramSchema), 'utf8')),
+    JSON.parse(readFileSync(join(artifact, programSchema), 'utf8')),
+    'compiled and source course-group schemas must have identical full JSON');
+});
+
+test('CMS artifact builder rejects compiled course-group schema drift', (t) => {
+  const scratch = tempDirectory(t, 'ikpk-course-group-schema-build-');
+  const fakeBin = join(scratch, 'bin');
+  const artifact = join(scratch, 'artifact');
+  mkdirSync(fakeBin);
+  const fakeNpm = join(fakeBin, 'npm');
+  writeFileSync(fakeNpm, '#!/bin/sh\nmkdir -p dist/config dist/src/api/course-group/content-types/course-group\nprintf "%s\\n" "module.exports = { default: ({ env }) => ({ connection: { connection: { filename: env(\\"DATABASE_FILENAME\\") } } }) };" > dist/config/database.js\nprintf \'%s\\n\' \'{"attributes":{"slug":{"type":"uid","required":true}}}\' > dist/src/api/course-group/content-types/course-group/schema.json\n', 'utf8');
+  chmodSync(fakeNpm, 0o700);
+
+  const built = spawnSync('/bin/bash', [artifactBuilder, artifact], {
+    cwd: repoRoot, encoding: 'utf8', timeout: 15000,
+    env: { ...process.env, PATH: `${fakeBin}:${process.env.PATH}` },
+  });
+  assert.notEqual(built.status, 0, 'CMS build must reject a compiled schema that differs from its source schema');
+  assert.match(built.stdout + built.stderr, /course.group|schema/i);
 });
 
 test('release gate rejects a substituted migration even when the declared file count still matches', (t) => {

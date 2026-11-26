@@ -57,8 +57,9 @@ function attributesOf(name: string): string[] {
 interface Configuration {
   settings?: Record<string, unknown>;
   metadatas: Record<string, {
-    edit?: { visible?: boolean; editable?: boolean; label?: string; description?: string; mainField?: string };
-    list?: { label?: string };
+    edit?: { visible?: boolean; editable?: boolean; label?: string; description?: string; mainField?: string; [key: string]: unknown };
+    list?: { label?: string; [key: string]: unknown };
+    [key: string]: unknown;
   }>;
   layouts: { edit: { name: string; size?: number }[][]; [key: string]: unknown };
 }
@@ -327,7 +328,8 @@ test('program bootstrap preserves existing editor_label metadata and the audit a
     if (uid === 'api::course-group.course-group') initial.set(uid, configuration as Configuration);
   }, (uid, configuration) => {
     if (uid !== 'api::course-group.course-group') return;
-    const metadata = configuration.metadatas.editor_label as any;
+    const metadata = configuration.metadatas.editor_label;
+    assert.ok(metadata?.edit && metadata.list);
     metadata.customSetting = 'retain-source-value';
     metadata.edit.customEditorValue = { keep: true };
     metadata.list.customListValue = ['retain', 'source'];
@@ -335,8 +337,9 @@ test('program bootstrap preserves existing editor_label metadata and the audit a
   const source = initial.get('api::course-group.course-group');
   const actual = saved.get('api::course-group.course-group');
   assert.ok(source && actual, 'program configuration must exist before and after the real bootstrap function');
-  const before = source.metadatas.editor_label as any;
-  const after = actual.metadatas.editor_label as any;
+  const before = source.metadatas.editor_label;
+  assert.ok(before?.edit && before.list);
+  const after = actual.metadatas.editor_label;
   assert.deepEqual(after, {
     ...before,
     edit: { ...before.edit, label: 'editor_label', visible: false, editable: false },
@@ -389,7 +392,7 @@ test('program preservation audit rejects malformed editor_label metadata and ret
     if (uid === 'api::course-group.course-group') initial.set(uid, configuration as Configuration);
   }, (uid, configuration) => {
     if (uid === 'api::course-group.course-group') {
-      (configuration.metadatas.editor_label as any).edit = null;
+      Reflect.set(configuration.metadatas.editor_label, 'edit', null);
     }
   });
   const source = initial.get('api::course-group.course-group');
@@ -423,8 +426,8 @@ test('program editor preservation rejects lossy or unrelated postimage mutations
   const generated = saved.get('api::course-group.course-group');
   assert.ok(generated);
   const sourceConfiguration = structuredClone(generated);
-  (sourceConfiguration.metadatas.editor_label as any).edit.customSourceValue = 'retain';
-  (sourceConfiguration.metadatas.editor_label as any).list.customSourceValue = 'retain';
+  sourceConfiguration.metadatas.editor_label.edit!.customSourceValue = 'retain';
+  sourceConfiguration.metadatas.editor_label.list!.customSourceValue = 'retain';
   const key = 'plugin_content_manager_configuration_content_types::api::course-group.course-group';
   const cases: [string, (configuration: Configuration) => void][] = [
     ['replaced-metadata', (configuration) => {
@@ -433,13 +436,13 @@ test('program editor preservation rejects lossy or unrelated postimage mutations
         list: { label: 'editor_label', searchable: true, sortable: true },
       };
     }],
-    ['lost-edit-property', (configuration) => { delete (configuration.metadatas.editor_label as any).edit.customSourceValue; }],
-    ['lost-list-property', (configuration) => { delete (configuration.metadatas.editor_label as any).list.customSourceValue; }],
-    ['wrong-visible-role', (configuration) => { (configuration.metadatas.editor_label as any).edit.visible = true; }],
-    ['wrong-editable-role', (configuration) => { (configuration.metadatas.editor_label as any).edit.editable = true; }],
-    ['null-edit', (configuration) => { (configuration.metadatas.editor_label as any).edit = null; }],
-    ['array-list', (configuration) => { (configuration.metadatas.editor_label as any).list = []; }],
-    ['unrelated-setting', (configuration) => { (configuration.settings as any).unreviewed = true; }],
+    ['lost-edit-property', (configuration) => { delete configuration.metadatas.editor_label.edit!.customSourceValue; }],
+    ['lost-list-property', (configuration) => { delete configuration.metadatas.editor_label.list!.customSourceValue; }],
+    ['wrong-visible-role', (configuration) => { configuration.metadatas.editor_label.edit!.visible = true; }],
+    ['wrong-editable-role', (configuration) => { configuration.metadatas.editor_label.edit!.editable = true; }],
+    ['null-edit', (configuration) => { Reflect.set(configuration.metadatas.editor_label, 'edit', null); }],
+    ['array-list', (configuration) => { Reflect.set(configuration.metadatas.editor_label, 'list', []); }],
+    ['unrelated-setting', (configuration) => { configuration.settings!.unreviewed = true; }],
     ['unrelated-layout', (configuration) => { configuration.layouts.list = ['name']; }],
   ];
   for (const [name, mutate] of cases) {
@@ -448,12 +451,12 @@ test('program editor preservation rejects lossy or unrelated postimage mutations
     const candidatePath = join(auditDirectory, `${operationId}-candidate.db`);
     const candidate = structuredClone(sourceConfiguration);
     candidate.metadatas.editor_label = {
-      ...(candidate.metadatas.editor_label as any),
-      edit: { ...(candidate.metadatas.editor_label as any).edit, visible: false, editable: false },
-      list: { ...(candidate.metadatas.editor_label as any).list },
+      ...candidate.metadatas.editor_label,
+      edit: { ...candidate.metadatas.editor_label.edit, visible: false, editable: false },
+      list: { ...candidate.metadatas.editor_label.list },
     };
     candidate.metadatas.editor_label.list = {
-      ...(candidate.metadatas.editor_label as any).list,
+      ...candidate.metadatas.editor_label.list,
       label: 'editor_label',
     };
     // These unknown properties come from the source and must survive unless

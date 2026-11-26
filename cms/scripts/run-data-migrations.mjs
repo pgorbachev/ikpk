@@ -513,6 +513,10 @@ function resolvePlan(artifactDir, { fingerprint = true } = {}) {
     const digest = hash(readFileSync(fullPath));
     if (digest !== file.sha256) fail(`integrity file SHA-256 mismatch for ${file.path}: expected ${file.sha256}, found ${digest}`);
   }
+  const programSchema = 'src/api/course-group/content-types/course-group/schema.json';
+  if (existsSync(join(root, programSchema)) && !integrityPaths.has(programSchema)) {
+    fail('packaged course-group schema lacks its required plan integrity entry');
+  }
   const strapiVersions = new Set(steps.map(({ source }) => source.strapiVersion));
   if (strapiVersions.size !== 1) fail('all migration steps must target one exact Strapi source version');
   const artifact = fingerprint
@@ -809,6 +813,35 @@ async function recordStepInKnex(trx, { operationId, lineageId, step, result }) {
   return row;
 }
 
+// Only a root-sealed, operation-bound CI artifact may authorize this narrow
+// schema normalization. Legacy and direct writable artifacts retain old rules.
+function hasAdmittedProgramSchema(plan, receipt) {
+  try {
+    const root = realpathSync(plan.root);
+    const generation = dirname(root);
+    if (process.platform !== 'linux' || root !== plan.root || basename(root) !== 'cms-artifact'
+        || basename(dirname(generation)) !== 'migration-code'
+        || !hasExactReadOnlyMount(readFileSync('/proc/self/mountinfo', 'utf8'), root)) return false;
+    const marker = join(generation, '.complete');
+    for (const path of [root, generation, marker, plan.manifestPath]) {
+      if (realpathSync(path) !== path) return false;
+      const info = lstatSync(path);
+      if (info.uid !== 0 || (info.mode & 0o022) || info.isSymbolicLink()
+          || (!info.isFile() && !info.isDirectory()) || (info.isFile() && info.nlink !== 1)) return false;
+    }
+    for (let path = dirname(generation);; path = dirname(path)) {
+      const info = lstatSync(path);
+      if (!info.isDirectory() || info.isSymbolicLink() || info.uid !== 0 || (info.mode & 0o022)) return false;
+      if (dirname(path) === path) break;
+    }
+    const identity = readJson(marker, 'protected migration identity');
+    if (identity.version !== 1 || identity.sourceSha !== receipt.sourceCommitSha
+        || identity.operationId !== receipt.operationId || !HASH.test(identity.payloadSha256 ?? '')
+        || basename(generation) !== `${identity.sourceSha}-${identity.operationId}-${identity.payloadSha256.slice(0, 16)}`) return false;
+    return true;
+  } catch { return false; }
+}
+
 function preservationAudit(receipt, plan) {
   receipt.candidatePostMigrationSha256 = hash(readFileSync(receipt.candidateDbPath));
   receipt.candidatePostMigrationFileFingerprint = sourceFileFingerprint(receipt.candidateDbPath);
@@ -817,6 +850,7 @@ function preservationAudit(receipt, plan) {
     candidateDbPath: receipt.candidateDbPath,
     plan: { ...plan, manifestPath: plan.manifestPath },
     receipt,
+    allowPlanProgramSchema: hasAdmittedProgramSchema(plan, receipt),
   });
   receipt.preservation = {
     private: true,
@@ -1305,6 +1339,7 @@ export async function prepareMigration({ sourceDbPath: rawSourceDbPath, candidat
     }
     receipt.phase = 'prepared';
     receipt.preparedAt = new Date().toISOString();
+    let preservationResult;
     if (!inherited && receipt.compositionAudit?.passed === true) {
       const original = readCandidateState(sourceDbPath);
       for (const step of release.steps.filter(step => step.kind === 'data' && !SEMINAR_HANDLERS.has(step.handler))) {
@@ -1316,9 +1351,11 @@ export async function prepareMigration({ sourceDbPath: rawSourceDbPath, candidat
       receipt.candidatePostMigrationSha256 = hash(readFileSync(candidateDbPath));
       receipt.candidatePostMigrationFileFingerprint = sourceFileFingerprint(candidateDbPath);
       receipt.preservation = { private: true, passed: true, mode: 'reviewed-composition', auditedAt: new Date().toISOString() };
-    } else preservationAudit(receipt, release);
+    } else preservationResult = preservationAudit(receipt, release);
     atomicJson(receiptPath, receipt);
-    return { ...publicStatus(receipt, finalState), ...(inherited ? { inheritedCohortResult: {
+    return { ...publicStatus(receipt, finalState),
+      ...(preservationResult?.transformations?.programSchemaNormalized ? { programSchemaAuditBindings: preservationResult.bindings } : {}),
+      ...(inherited ? { inheritedCohortResult: {
       binding: receipt.registryBinding, receiptSha256: hash(readFileSync(receiptPath)),
     } } : {}) };
   } catch (error) {
