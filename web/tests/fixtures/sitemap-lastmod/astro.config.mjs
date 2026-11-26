@@ -19,6 +19,7 @@ mkdirSync(root, { recursive: true });
 const testDates = new Map([
   ['https://sitemap-lastmod.test/with-date', '2026-11-25T12:34:56.000Z'],
   ['https://sitemap-lastmod.test/invalid-date', '2026-02-30'],
+  ['https://sitemap-lastmod.test/invalid-time', '2026-01-01T24:00:00Z'],
 ]);
 const { serializeSitemapEntry, omitSitemapIndexLastmod } = await import('../../../src/lib/sitemap-lastmod-serializer.mjs');
 

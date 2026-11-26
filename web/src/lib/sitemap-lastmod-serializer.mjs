@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 export function serializeSitemapEntry(item, trustedLastmod) {
   const result = { ...item, url: item.url.replace(/(.)\/+$/, '$1') };
   delete result.lastmod;
-  if (trustedLastmod && /^\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2}))?$/.test(trustedLastmod)) {
+  if (trustedLastmod && /^\d{4}-\d{2}-\d{2}(?:T(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|[+-](?:(?:0\d|1[0-3]):[0-5]\d|14:00)))?$/.test(trustedLastmod)) {
     const day = trustedLastmod.slice(0, 10);
     const parsedDay = new Date(`${day}T00:00:00Z`);
     if (!Number.isNaN(Date.parse(trustedLastmod)) && !Number.isNaN(parsedDay.getTime()) && parsedDay.toISOString().slice(0, 10) === day) {

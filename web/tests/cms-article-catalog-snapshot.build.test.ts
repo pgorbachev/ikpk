@@ -327,6 +327,8 @@ describe('вывод сборки соответствует снимку', () =
     expect(testTree.urls.get(undatedLoc)?.lastmod).toBeUndefined();
     expect(testTree.urls.has('https://sitemap-lastmod.test/invalid-date')).toBe(true);
     expect(testTree.urls.get('https://sitemap-lastmod.test/invalid-date')?.lastmod).toBeUndefined();
+    expect(testTree.urls.has('https://sitemap-lastmod.test/invalid-time')).toBe(true);
+    expect(testTree.urls.get('https://sitemap-lastmod.test/invalid-time')?.lastmod).toBeUndefined();
     expect(testTree.index.every((entry) => entry.lastmod === undefined)).toBe(true);
 
     const productionConfig = readFileSync(join(WEB_ROOT, 'astro.config.mjs'), 'utf8');
