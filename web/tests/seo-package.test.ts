@@ -3,6 +3,7 @@ import { readFileSync, readdirSync, statSync, existsSync } from 'fs';
 import { gunzipSync } from 'zlib';
 import { join } from 'path';
 import { dist, walkHtml, allPages, readPage } from './helpers/dist-pages';
+import { readSitemapTree } from './helpers/sitemap-xml';
 
 // ─── Этап 3 (план 004): SEO-пакет как вечные CI-гейты ───────────────────────
 
@@ -270,13 +271,17 @@ describe('404 and sitemap', () => {
     ).toBeLessThan(limit);
   });
 
-  it('sitemap has lastmod on every url and includes /statyi/*', () => {
-    const xml = readFileSync(join(dist, 'sitemap-0.xml'), 'utf-8');
-    const urls = xml.match(/<url>/g)?.length ?? 0;
-    const lastmods = xml.match(/<lastmod>/g)?.length ?? 0;
-    expect(urls).toBeGreaterThan(200);
-    expect(lastmods).toBe(urls);
-    expect((xml.match(/ikpk\.su\/statyi\//g)?.length ?? 0)).toBeGreaterThan(60);
+  it('sitemap index and child maps preserve URLs without unsupported lastmod dates', () => {
+    const sitemap = readSitemapTree(dist);
+    expect(sitemap.urls.size).toBeGreaterThan(200);
+    expect([...sitemap.urls.keys()].filter((loc) => loc.includes('ikpk.su/statyi/')).length).toBeGreaterThan(60);
+    expect.soft(sitemap.index.every((entry) => entry.lastmod === undefined), 'index has no trusted child-map change date')
+      .toBe(true);
+    const dated = [...sitemap.urls.values()].filter((entry) => entry.lastmod !== undefined);
+    expect.soft(
+      dated.length,
+      `unsupported lastmod values in XML: ${dated.slice(0, 8).map((e) => `${e.loc}: ${e.lastmod}`).join('\n')}`,
+    ).toBe(0);
   });
 
   it('pagefind search index is built (FR-05)', () => {

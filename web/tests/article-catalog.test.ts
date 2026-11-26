@@ -3,6 +3,7 @@ import { readFileSync, existsSync, readdirSync, statSync } from 'fs';
 import { join } from 'path';
 import { dist, allPages, readPage } from './helpers/dist-pages';
 import { loadPinnedType } from './helpers/pinned-snapshot';
+import { readSitemapTree } from './helpers/sitemap-xml';
 
 // ─── Characterization-тесты: каталог статей ──────────────────────────────────
 // Спецификация: openspec/specs/article-catalog/spec.md (основная спека — baseline
@@ -266,19 +267,15 @@ describe('каталог статей: индексные инварианты',
     expect(problems.slice(0, 8), `${problems.length} нарушений:\n${problems.slice(0, 8).join('\n')}`).toEqual([]);
   });
 
-  it('все страницы каталога есть в sitemap с lastmod', () => {
-    const xml = readFileSync(join(dist, 'sitemap-0.xml'), 'utf-8');
-    const entries = new Map<string, boolean>();
-    for (const m of xml.matchAll(/<url>\s*<loc>([^<]+)<\/loc>([\s\S]*?)<\/url>/g)) {
-      entries.set(m[1], m[2].includes('<lastmod>'));
-    }
+  it('все страницы каталога есть в sitemap без недостоверных дат lastmod', () => {
+    const entries = readSitemapTree(dist).urls;
     expect(entries.size, 'sitemap пуст — проверять нечего').toBeGreaterThan(0);
 
     const problems: string[] = [];
     for (const path of catalogPages()) {
       const loc = `${SITE}${path.replace(/\/$/, '')}`;
       if (!entries.has(loc)) problems.push(`${loc}: нет в sitemap`);
-      else if (!entries.get(loc)) problems.push(`${loc}: нет lastmod`);
+      else if (entries.get(loc)?.lastmod !== undefined) problems.push(`${loc}: недостоверный lastmod`);
     }
     expect(problems.slice(0, 8), `${problems.length} нарушений:\n${problems.slice(0, 8).join('\n')}`).toEqual([]);
   });
