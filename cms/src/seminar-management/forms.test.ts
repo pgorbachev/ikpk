@@ -63,7 +63,10 @@ interface Configuration {
   layouts: { edit: { name: string; size?: number }[][]; [key: string]: unknown };
 }
 
-async function configurations(onInitialConfiguration?: (uid: string, configuration: unknown) => void) {
+async function configurations(
+  onInitialConfiguration?: (uid: string, configuration: unknown) => void,
+  prepareInitialConfiguration?: (uid: string, configuration: Configuration) => void,
+) {
   const saved = new Map<string, Configuration>();
   const strapi = {
     contentType: (uid: string) => uid,
@@ -79,6 +82,7 @@ async function configurations(onInitialConfiguration?: (uid: string, configurati
             metadatas,
             layouts: uid === 'api::article.article' ? ARTICLE_EXISTING_CONFIGURATION.layouts : {},
           };
+          prepareInitialConfiguration?.(uid, configuration);
           onInitialConfiguration?.(uid, structuredClone(configuration));
           return configuration;
         },
@@ -107,15 +111,22 @@ function auditFileFingerprint(path: string): string {
   return auditSha256(JSON.stringify(parts));
 }
 
-function createArticleAuditDatabase(path: string, configuration: Configuration) {
+function createCoreStoreAuditDatabase(path: string, key: string, configuration: unknown) {
   const db = new Database(path);
-  db.exec('CREATE TABLE strapi_core_store_settings (id INTEGER PRIMARY KEY, key TEXT NOT NULL, value TEXT, type TEXT, environment TEXT, tag TEXT)');
+  db.exec(`CREATE TABLE strapi_core_store_settings (id INTEGER PRIMARY KEY, key TEXT NOT NULL, value TEXT, type TEXT, environment TEXT, tag TEXT);
+    CREATE TABLE retained_content (id INTEGER PRIMARY KEY, label TEXT NOT NULL);`);
   db.prepare('INSERT INTO strapi_core_store_settings VALUES (1, ?, ?, ?, ?, ?)')
-    .run('plugin_content_manager_configuration_content_types::api::article.article', JSON.stringify(configuration), 'object', null, null);
+    .run(key, JSON.stringify(configuration), 'object', null, null);
+  db.prepare('INSERT INTO retained_content VALUES (1, ?)').run('synthetic retained value');
   db.close();
 }
 
-function addArticleAuditLineage(path: string) {
+function createArticleAuditDatabase(path: string, configuration: Configuration) {
+  createCoreStoreAuditDatabase(path,
+    'plugin_content_manager_configuration_content_types::api::article.article', configuration);
+}
+
+function addArticleAuditLineage(path: string, operationId = 'article-forms-contract') {
   const db = new Database(path);
   db.exec(`
     CREATE TABLE ikpk_migration_lineage (singleton, lineage_id, source_snapshot_sha256, source_schema_sha256, created_at);
@@ -123,19 +134,19 @@ function addArticleAuditLineage(path: string) {
     CREATE TABLE ikpk_data_migration_history (lineage_id, operation_id, step_id, payload_sha256, result_json, completed_at);
   `);
   db.prepare('INSERT INTO ikpk_migration_lineage VALUES (1, ?, ?, ?, ?)').run('a'.repeat(64), 'b'.repeat(64), 'c'.repeat(64), 1);
-  db.prepare('INSERT INTO ikpk_migration_operations VALUES (?, ?, ?, ?, ?)').run('article-forms-contract', 'a'.repeat(64), 'b'.repeat(64), 'c'.repeat(64), 1);
+  db.prepare('INSERT INTO ikpk_migration_operations VALUES (?, ?, ?, ?, ?)').run(operationId, 'a'.repeat(64), 'b'.repeat(64), 'c'.repeat(64), 1);
   db.close();
 }
 
-function auditArticleConfiguration(sourcePath: string, candidatePath: string) {
-  const manifestPath = join(auditDirectory, 'article-forms-plan.json');
+function auditCoreStoreConfiguration(sourcePath: string, candidatePath: string, operationId: string) {
+  const manifestPath = join(auditDirectory, `${operationId}-plan.json`);
   const manifestBytes = Buffer.from('{"version":1,"steps":[]}\n');
   writeFileSync(manifestPath, manifestBytes);
   const planSha256 = auditSha256(manifestBytes);
   const receipt = {
     sourceDbPath: sourcePath,
     candidateDbPath: candidatePath,
-    operationId: 'article-forms-contract',
+    operationId,
     planSha256,
     steps: [],
     source: {
@@ -152,6 +163,10 @@ function auditArticleConfiguration(sourcePath: string, candidatePath: string) {
     plan: { manifestPath, planSha256, steps: [] },
     receipt,
   });
+}
+
+function auditArticleConfiguration(sourcePath: string, candidatePath: string) {
+  return auditCoreStoreConfiguration(sourcePath, candidatePath, 'article-forms-contract');
 }
 
 test('каждое поле схемы статьи, семинара, проведения и программы либо в форме редактора, либо скрыто явно', async () => {
@@ -303,6 +318,153 @@ test('программа называется по-русски, её адрес
   assert.equal(seminar.metadatas.course_group?.edit?.mainField, 'editor_label');
   assert.equal(institute.metadatas.course_groups?.edit?.label, 'Программы');
   assert.equal(institute.metadatas.course_groups?.edit?.mainField, 'editor_label');
+});
+
+test('program bootstrap preserves existing editor_label metadata and the audit accepts its full postimage', async () => {
+  const operationId = 'program-editor-existing-label';
+  const initial = new Map<string, Configuration>();
+  const saved = await configurations((uid, configuration) => {
+    if (uid === 'api::course-group.course-group') initial.set(uid, configuration as Configuration);
+  }, (uid, configuration) => {
+    if (uid !== 'api::course-group.course-group') return;
+    const metadata = configuration.metadatas.editor_label as any;
+    metadata.customSetting = 'retain-source-value';
+    metadata.edit.customEditorValue = { keep: true };
+    metadata.list.customListValue = ['retain', 'source'];
+  });
+  const source = initial.get('api::course-group.course-group');
+  const actual = saved.get('api::course-group.course-group');
+  assert.ok(source && actual, 'program configuration must exist before and after the real bootstrap function');
+  const before = source.metadatas.editor_label as any;
+  const after = actual.metadatas.editor_label as any;
+  assert.deepEqual(after, {
+    ...before,
+    edit: { ...before.edit, label: 'editor_label', visible: false, editable: false },
+    list: { ...before.list, label: 'editor_label' },
+  }, 'full edit/list postimage must retain every unrelated metadata property');
+
+  const sourcePath = join(auditDirectory, `${operationId}-source.db`);
+  const candidatePath = join(auditDirectory, `${operationId}-candidate.db`);
+  const key = 'plugin_content_manager_configuration_content_types::api::course-group.course-group';
+  createCoreStoreAuditDatabase(sourcePath, key, source);
+  createCoreStoreAuditDatabase(candidatePath, key, actual);
+  addArticleAuditLineage(candidatePath, operationId);
+
+  const report = auditCoreStoreConfiguration(sourcePath, candidatePath, operationId);
+
+  assert.equal(report.passed, true, JSON.stringify(report.differences));
+});
+
+test('program bootstrap with no editor_label metadata does not invent it, and the audit uses that exact output', async () => {
+  const operationId = 'program-editor-missing-label';
+  const initial = new Map<string, Configuration>();
+  const saved = await configurations((uid, configuration) => {
+    if (uid === 'api::course-group.course-group') initial.set(uid, configuration as Configuration);
+  }, (uid, configuration) => {
+    if (uid === 'api::course-group.course-group') delete configuration.metadatas.editor_label;
+  });
+  const source = initial.get('api::course-group.course-group');
+  const actual = saved.get('api::course-group.course-group');
+  assert.ok(source && actual);
+  assert.equal(Object.hasOwn(source.metadatas, 'editor_label'), false);
+  assert.equal(Object.hasOwn(actual.metadatas, 'editor_label'), false,
+    'the actual overlay leaves a missing metadata entry absent');
+
+  const sourcePath = join(auditDirectory, `${operationId}-source.db`);
+  const candidatePath = join(auditDirectory, `${operationId}-candidate.db`);
+  const key = 'plugin_content_manager_configuration_content_types::api::course-group.course-group';
+  createCoreStoreAuditDatabase(sourcePath, key, source);
+  createCoreStoreAuditDatabase(candidatePath, key, actual);
+  addArticleAuditLineage(candidatePath, operationId);
+
+  const report = auditCoreStoreConfiguration(sourcePath, candidatePath, operationId);
+
+  assert.equal(report.passed, true, JSON.stringify(report.differences));
+});
+
+test('program preservation audit rejects malformed editor_label metadata and retains other tables', async () => {
+  const operationId = 'program-editor-malformed-label';
+  const initial = new Map<string, Configuration>();
+  const saved = await configurations((uid, configuration) => {
+    if (uid === 'api::course-group.course-group') initial.set(uid, configuration as Configuration);
+  }, (uid, configuration) => {
+    if (uid === 'api::course-group.course-group') {
+      (configuration.metadatas.editor_label as any).edit = null;
+    }
+  });
+  const source = initial.get('api::course-group.course-group');
+  const actual = saved.get('api::course-group.course-group');
+  assert.ok(source && actual);
+
+  const sourcePath = join(auditDirectory, `${operationId}-source.db`);
+  const candidatePath = join(auditDirectory, `${operationId}-candidate.db`);
+  const key = 'plugin_content_manager_configuration_content_types::api::course-group.course-group';
+  createCoreStoreAuditDatabase(sourcePath, key, source);
+  createCoreStoreAuditDatabase(candidatePath, key, actual);
+  addArticleAuditLineage(candidatePath, operationId);
+
+  const report = auditCoreStoreConfiguration(sourcePath, candidatePath, operationId);
+
+  assert.equal(report.passed, false, 'malformed source metadata must not authorize a normalized postimage');
+  assert.ok(report.differences.some(({ table, kind }) => table === 'strapi_core_store_settings' && kind.startsWith('core-store-')));
+  const sourceDb = new Database(sourcePath);
+  const candidateDb = new Database(candidatePath);
+  try {
+    assert.deepEqual(candidateDb.prepare('SELECT * FROM retained_content').all(),
+      sourceDb.prepare('SELECT * FROM retained_content').all(), 'unrelated content rows remain intact');
+  } finally {
+    sourceDb.close();
+    candidateDb.close();
+  }
+});
+
+test('program editor preservation rejects lossy or unrelated postimage mutations', async () => {
+  const saved = await configurations();
+  const generated = saved.get('api::course-group.course-group');
+  assert.ok(generated);
+  const sourceConfiguration = structuredClone(generated);
+  (sourceConfiguration.metadatas.editor_label as any).edit.customSourceValue = 'retain';
+  (sourceConfiguration.metadatas.editor_label as any).list.customSourceValue = 'retain';
+  const key = 'plugin_content_manager_configuration_content_types::api::course-group.course-group';
+  const cases: [string, (configuration: Configuration) => void][] = [
+    ['replaced-metadata', (configuration) => {
+      configuration.metadatas.editor_label = {
+        edit: { label: 'editor_label', description: '', placeholder: '', visible: false, editable: false },
+        list: { label: 'editor_label', searchable: true, sortable: true },
+      };
+    }],
+    ['lost-edit-property', (configuration) => { delete (configuration.metadatas.editor_label as any).edit.customSourceValue; }],
+    ['lost-list-property', (configuration) => { delete (configuration.metadatas.editor_label as any).list.customSourceValue; }],
+    ['wrong-visible-role', (configuration) => { (configuration.metadatas.editor_label as any).edit.visible = true; }],
+    ['wrong-editable-role', (configuration) => { (configuration.metadatas.editor_label as any).edit.editable = true; }],
+    ['null-edit', (configuration) => { (configuration.metadatas.editor_label as any).edit = null; }],
+    ['array-list', (configuration) => { (configuration.metadatas.editor_label as any).list = []; }],
+    ['unrelated-setting', (configuration) => { (configuration.settings as any).unreviewed = true; }],
+    ['unrelated-layout', (configuration) => { configuration.layouts.list = ['name']; }],
+  ];
+  for (const [name, mutate] of cases) {
+    const operationId = `program-editor-negative-${name}`;
+    const sourcePath = join(auditDirectory, `${operationId}-source.db`);
+    const candidatePath = join(auditDirectory, `${operationId}-candidate.db`);
+    const candidate = structuredClone(sourceConfiguration);
+    candidate.metadatas.editor_label = {
+      ...(candidate.metadatas.editor_label as any),
+      edit: { ...(candidate.metadatas.editor_label as any).edit, visible: false, editable: false },
+      list: { ...(candidate.metadatas.editor_label as any).list },
+    };
+    candidate.metadatas.editor_label.list = {
+      ...(candidate.metadatas.editor_label as any).list,
+      label: 'editor_label',
+    };
+    // These unknown properties come from the source and must survive unless
+    // the case deliberately removes or changes one.
+    mutate(candidate);
+    createCoreStoreAuditDatabase(sourcePath, key, sourceConfiguration);
+    createCoreStoreAuditDatabase(candidatePath, key, candidate);
+    addArticleAuditLineage(candidatePath, operationId);
+    const report = auditCoreStoreConfiguration(sourcePath, candidatePath, operationId);
+    assert.equal(report.passed, false, `${name} must remain outside the admitted postimage`);
+  }
 });
 
 test('редактор может выбрать преподавателей конкретного проведения в форме', async () => {

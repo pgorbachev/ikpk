@@ -708,6 +708,45 @@ function createCoreStoreShape(path, { candidate = false, mutate = null } = {}) {
   db.close();
 }
 
+function courseGroupSchema(required) {
+  const info = { displayName: 'Program', description: 'Synthetic fixture' };
+  const attributes = { name: { type: 'string' }, slug: { type: 'uid', required } };
+  return {
+    info: structuredClone(info), attributes: structuredClone(attributes),
+    __schema__: { info: structuredClone(info), attributes: structuredClone(attributes) },
+  };
+}
+
+function writeCourseGroupSchema(values, schemaValue) {
+  const schema = JSON.parse(values.get(CONTENT_SCHEMA_KEY));
+  schema['api::course-group.course-group'] = schemaValue;
+  values.set(CONTENT_SCHEMA_KEY, JSON.stringify(schema));
+}
+
+function auditCourseGroupSchemaTransition(name, { sourceSchema, candidateSchema, verifiedSchemaBinding }) {
+  const sourceDbPath = join(directory, `program-schema-${name}-source.db`);
+  const candidateDbPath = join(directory, `program-schema-${name}-candidate.db`);
+  createCoreStoreShape(sourceDbPath, { mutate: (values) => writeCourseGroupSchema(values, sourceSchema) });
+  createCoreStoreShape(candidateDbPath, {
+    candidate: true,
+    mutate: (values) => writeCourseGroupSchema(values, candidateSchema),
+  });
+  const operationId = `program-schema-${name}`;
+  addEmptyMigrationLineage(sourceDbPath, operationId);
+  addEmptyMigrationLineage(candidateDbPath, operationId);
+  const plan = emptyBoundPlan();
+  const receipt = boundReceipt(sourceDbPath, candidateDbPath, plan);
+  receipt.operationId = operationId;
+  receipt.source.snapshotSha256 = 'b'.repeat(64);
+  receipt.source.schemaFingerprint = 'c'.repeat(64);
+  // Test contract for the value passed by the trusted host/runner after it
+  // binds proof JSON to the protected CI schema and exact operation identity.
+  // This is not operator-supplied configuration or candidate self-report.
+  return auditMigration({
+    sourceDbPath, candidateDbPath, plan, receipt, verifiedSchemaBinding,
+  });
+}
+
 test('core-store accepts only reviewed content-type updates and a stale upload metrics schedule refresh', () => {
   const sourceDbPath = join(directory, 'core-store-source.db');
   const candidateDbPath = join(directory, 'core-store-candidate.db');
@@ -718,6 +757,75 @@ test('core-store accepts only reviewed content-type updates and a stale upload m
 
   assert.equal(report.differences.some(({ table, kind }) => table === 'strapi_core_store_settings' && kind.startsWith('core-store-')), false,
     'only exact metadata, layout, compiled content schema additions, and stale upload schedule refresh are allowed');
+});
+
+test('program slug true-to-false normalization requires the exact verified source schema and both mirrors', () => {
+  const sourceSchema = courseGroupSchema(true);
+  const candidateSchema = courseGroupSchema(false);
+  const approved = JSON.stringify(candidateSchema);
+  const operationId = 'program-schema-approved-transition';
+  const accepted = auditCourseGroupSchemaTransition('approved-transition', {
+    sourceSchema,
+    candidateSchema,
+    verifiedSchemaBinding: {
+      sourceCommitSha: 'a'.repeat(40), operationId,
+      proofSchemaJson: approved, protectedCiSchemaJson: JSON.stringify({
+        __schema__: candidateSchema.__schema__, attributes: candidateSchema.attributes,
+        info: candidateSchema.info,
+      }),
+    },
+  });
+  assert.equal(accepted.passed, true, JSON.stringify(accepted.differences));
+});
+
+test('program schema normalization negatives keep the old fail-closed boundary', () => {
+  const sourceSchema = courseGroupSchema(true);
+  const candidateSchema = courseGroupSchema(false);
+  const falseToTrue = courseGroupSchema(true);
+  const candidateMirrorDivergence = structuredClone(candidateSchema);
+  candidateMirrorDivergence.__schema__.attributes.slug.required = true;
+  const sourceMirrorDivergence = structuredClone(sourceSchema);
+  sourceMirrorDivergence.__schema__.attributes.slug.required = false;
+  const otherAttributeChange = structuredClone(candidateSchema);
+  otherAttributeChange.attributes.name.required = false;
+  otherAttributeChange.__schema__.attributes.name.required = false;
+  const missingSourceRequired = structuredClone(sourceSchema);
+  delete missingSourceRequired.attributes.slug.required;
+  delete missingSourceRequired.__schema__.attributes.slug.required;
+  const nullCandidateRequired = structuredClone(candidateSchema);
+  nullCandidateRequired.attributes.slug.required = null;
+  nullCandidateRequired.__schema__.attributes.slug.required = null;
+  const invalidCases = [
+    { name: 'candidate-self-report-only', sourceSchema, candidateSchema, binding: undefined },
+    { name: 'false-to-true', sourceSchema: candidateSchema, candidateSchema: falseToTrue, target: candidateSchema },
+    { name: 'candidate-mirror-divergence', sourceSchema, candidateSchema: candidateMirrorDivergence, target: candidateSchema },
+    { name: 'source-mirror-divergence', sourceSchema: sourceMirrorDivergence, candidateSchema, target: candidateSchema },
+    { name: 'other-attribute-change', sourceSchema, candidateSchema: otherAttributeChange, target: candidateSchema },
+    { name: 'proof-ci-json-disagree', sourceSchema, candidateSchema, target: candidateSchema, ci: sourceSchema },
+    { name: 'unbound-source-sha', sourceSchema, candidateSchema, target: candidateSchema, sourceCommitSha: 'b'.repeat(40) },
+    { name: 'unbound-operation', sourceSchema, candidateSchema, target: candidateSchema, operationId: 'other-operation' },
+    { name: 'missing-source-required', sourceSchema: missingSourceRequired, candidateSchema, target: candidateSchema },
+    { name: 'null-candidate-required', sourceSchema, candidateSchema: nullCandidateRequired, target: candidateSchema },
+    { name: 'duplicate-proof-json', sourceSchema, candidateSchema, proofSchemaJson: '{"attributes":{"slug":{"required":true,"required":false}}}' },
+    { name: 'malformed-proof-json', sourceSchema, candidateSchema, proofSchemaJson: '{not-json' },
+  ];
+  for (const scenario of invalidCases) {
+    const operationId = `program-schema-${scenario.name}`;
+    const verifiedSchemaBinding = scenario.binding === undefined && scenario.name === 'candidate-self-report-only'
+      ? undefined
+      : {
+        sourceCommitSha: scenario.sourceCommitSha ?? 'a'.repeat(40),
+        operationId: scenario.operationId ?? operationId,
+        proofSchemaJson: scenario.proofSchemaJson ?? JSON.stringify(scenario.target ?? candidateSchema),
+        protectedCiSchemaJson: JSON.stringify(scenario.ci ?? scenario.target ?? candidateSchema),
+      };
+    const report = auditCourseGroupSchemaTransition(scenario.name, {
+      sourceSchema: scenario.sourceSchema,
+      candidateSchema: scenario.candidateSchema,
+      verifiedSchemaBinding,
+    });
+    assert.equal(report.passed, false, `${scenario.name} must fail closed`);
+  }
 });
 
 test('upload metrics refresh preserves the timestamp and accepts only the upstream cron inside a closed-load window', () => {

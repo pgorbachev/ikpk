@@ -41,6 +41,101 @@ class ProtectedMigrationArtifact(unittest.TestCase):
         f=self.f
         return host._protected_cms_migration_artifact(f['config'],f['source'],f['operationId'],f['provenance'],f['dependencies'])
 
+    def bind_source_and_ci_schema(self,source_schema,ci_schema):
+        f=self.f
+        source=f['source']
+        schema_rel='cms/src/api/course-group/content-types/course-group/schema.json'
+        proof_files={name:b'{}\n' for name in host.SEMINAR_PROOF_REQUIRED}
+        source_schema_bytes=(source_schema.encode() if isinstance(source_schema,str)
+                             else json.dumps(source_schema,indent=2).encode()+b'\n')
+        proof_files[schema_rel]=source_schema_bytes
+        proof_files['web/src/index.astro']=b'<main>fixture</main>\n'
+        for name,data in proof_files.items():
+            path=source/name;path.parent.mkdir(parents=True,exist_ok=True);path.write_bytes(data)
+        schema_path=f['artifact']/'dist/src/api/course-group/content-types/course-group/schema.json'
+        schema_path.parent.mkdir(parents=True,exist_ok=True)
+        schema_path.write_text(json.dumps(ci_schema,separators=(',',':')),encoding='utf-8')
+        proof_path=source/'.ikpk-seminar-proof.tar.gz'
+        payload=io.BytesIO()
+        with tarfile.open(fileobj=payload,mode='w:gz') as archive:
+            for name,data in proof_files.items():
+                info=tarfile.TarInfo(name);info.size=len(data);archive.addfile(info,io.BytesIO(data))
+        proof_path.write_bytes(payload.getvalue())
+        f['provenance']['seminarProofArtifact']={
+            'sourceSha':f['provenance']['sourceSha'],
+            'payloadSha256':host.sha256_file_bytes(payload.getvalue()),
+        }
+        (source/'.ikpk-rehearsal-ci.json').write_text(json.dumps(f['provenance']))
+        # The CI file is admitted as an archive member, then checked against
+        # the extracted artifact before the orchestration entrypoint is called.
+        cms_payload_path=source/'.ikpk-cms-artifact.tar.gz'
+        cms_payload=cms_payload_path.read_bytes()
+        next_payload=io.BytesIO()
+        with tarfile.open(fileobj=io.BytesIO(cms_payload),mode='r:gz') as existing, \
+             tarfile.open(fileobj=next_payload,mode='w:gz') as updated:
+            for member in existing.getmembers():
+                raw=existing.extractfile(member).read() if member.isfile() else None
+                if raw is not None:member.size=len(raw)
+                updated.addfile(member,io.BytesIO(raw) if raw is not None else None)
+            raw=json.dumps(ci_schema,separators=(',',':')).encode()
+            member=tarfile.TarInfo('dist/src/api/course-group/content-types/course-group/schema.json')
+            member.size=len(raw);updated.addfile(member,io.BytesIO(raw))
+        cms_payload_path.write_bytes(next_payload.getvalue())
+        f['provenance']['cmsArtifact']['payloadSha256']=host.sha256_file_bytes(next_payload.getvalue())
+        (source/'.ikpk-rehearsal-ci.json').write_text(json.dumps(f['provenance']))
+        self.assertEqual(host._verify_cms_artifact_bytes(source,f['artifact'],f['provenance']['cmsArtifact']),next_payload.getvalue())
+        verifier=f['artifact']/'scripts/verify-seminar-proof-artifact.py'
+        verifier.parent.mkdir(parents=True,exist_ok=True);verifier.write_text('# fixture verifier\n')
+        live=self.root/'live.sqlite';live.write_bytes(b'synthetic source db')
+        config={**f['config'],'cmsDatabase':str(live)}
+        return f,source,config
+
+    def test_migration_entrypoint_rejects_proof_schema_drift_from_protected_ci_schema(self):
+        """A valid admitted source archive cannot disagree with the protected compiled schema."""
+        source_schema={"info":{"displayName":"Program"},"attributes":{"slug":{"type":"uid","required":True}}}
+        ci_schema={"attributes":{"slug":{"required":False,"type":"uid"}},"info":{"displayName":"Program"}}
+        f,source,config=self.bind_source_and_ci_schema(source_schema,ci_schema)
+        with patch.object(host,'_validate_prepared_cms_candidate',return_value=(source,f['artifact'],f['dependencies'])), \
+             patch.object(host,'_protected_cms_migration_artifact',return_value=f['artifact']), \
+             patch.object(host,'_ensure_empty_candidate_upload_directory'), \
+             patch.object(host,'_run_as_cms',side_effect=AssertionError('migration runner reached before schema provenance check')) as runner:
+            with self.assertRaisesRegex(host.HostFailure,'schema.*(proof|source|CI)|proof.*schema'):
+                host._install_migrated_database(config,source,f['operationId'],self.root/'old-cms',provenance=f['provenance'])
+        runner.assert_not_called()
+
+    def test_migration_entrypoint_accepts_semantically_equal_proof_and_ci_schema(self):
+        source_schema={"info":{"displayName":"Program"},"attributes":{"slug":{"type":"uid","required":False}}}
+        ci_schema={"attributes":{"slug":{"required":False,"type":"uid"}},"info":{"displayName":"Program"}}
+        f,source,config=self.bind_source_and_ci_schema(source_schema,ci_schema)
+        with patch.object(host,'_validate_prepared_cms_candidate',return_value=(source,f['artifact'],f['dependencies'])), \
+             patch.object(host,'_protected_cms_migration_artifact',return_value=f['artifact']), \
+             patch.object(host,'_ensure_empty_candidate_upload_directory'), \
+             patch.object(host,'_run_as_cms',side_effect=AssertionError('runner reached after admitted schema equivalence')) as runner:
+            with self.assertRaisesRegex(AssertionError,'runner reached after admitted schema equivalence'):
+                host._install_migrated_database(config,source,f['operationId'],self.root/'old-cms',provenance=f['provenance'])
+        runner.assert_called_once()
+
+    def test_migration_entrypoint_rejects_malformed_or_duplicate_proof_schema_json(self):
+        cases=(
+            ('malformed','{"attributes":'),
+            ('duplicate-keys','{"info":{"displayName":"Program"},"info":{"displayName":"Other"},"attributes":{}}'),
+        )
+        original=self.f
+        for label,proof_schema in cases:
+            with self.subTest(label=label), tempfile.TemporaryDirectory() as temporary:
+                self.f=prepared_artifact(Path(temporary),f'proof-json-{label}')
+                f,source,config=self.bind_source_and_ci_schema(proof_schema,{
+                    'info':{'displayName':'Program'},'attributes':{'slug':{'type':'uid','required':False}},
+                })
+                with patch.object(host,'_validate_prepared_cms_candidate',return_value=(source,f['artifact'],f['dependencies'])), \
+                     patch.object(host,'_protected_cms_migration_artifact',return_value=f['artifact']), \
+                     patch.object(host,'_ensure_empty_candidate_upload_directory'), \
+                     patch.object(host,'_run_as_cms',side_effect=AssertionError('migration runner reached without parsing proof schema')) as runner:
+                    with self.assertRaisesRegex(host.HostFailure,'schema.*(JSON|proof)|proof.*(JSON|schema)|duplicate'):
+                        host._install_migrated_database(config,source,f['operationId'],self.root/'old-cms',provenance=f['provenance'])
+                    runner.assert_not_called()
+        self.f=original
+
     def test_copy_uses_admitted_bytes_and_reuses_immutable_identity(self):
         original=self.f['artifact']/'scripts/run-data-migrations.mjs'
         with original.open('r+b') as handle:
