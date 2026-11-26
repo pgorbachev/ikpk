@@ -3,6 +3,8 @@ import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, 
 import { tmpdir } from 'node:os';
 import { execFileSync } from 'node:child_process';
 import { join } from 'node:path';
+import { createHash } from 'node:crypto';
+import ts from 'typescript';
 import { dist, allPages } from './helpers/dist-pages';
 import { REPO_ROOT, WEB_ROOT, type Snapshot } from './helpers/cms-content-publication-contract';
 import { readSitemapTree } from './helpers/sitemap-xml';
@@ -19,6 +21,29 @@ afterAll(() => {
 function scratchDir(): string {
   sitemapScratch ??= mkdtempSync(join(tmpdir(), 'ikpk-sitemap-lastmod-'));
   return sitemapScratch;
+}
+
+function hasProductionSerializer(source: string): boolean {
+  const file = ts.createSourceFile('astro.config.mjs', source, ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
+  let found = false;
+  function visit(node: ts.Node): void {
+    if (ts.isCallExpression(node) && ts.isIdentifier(node.expression) && node.expression.text === 'sitemap') {
+      const options = node.arguments[0];
+      if (options && ts.isObjectLiteralExpression(options)) {
+        const prop = options.properties.find((p) => ts.isPropertyAssignment(p) && p.name.getText(file) === 'serialize');
+        if (prop && ts.isPropertyAssignment(prop) && ts.isArrowFunction(prop.initializer)) {
+          const fn = prop.initializer;
+          found = fn.parameters.length === 1 && ts.isIdentifier(fn.parameters[0].name)
+            && ts.isCallExpression(fn.body) && ts.isIdentifier(fn.body.expression)
+            && fn.body.expression.text === 'serializeSitemapEntry' && fn.body.arguments.length === 1
+            && ts.isIdentifier(fn.body.arguments[0]) && fn.body.arguments[0].text === fn.parameters[0].name.text;
+        }
+      }
+    }
+    ts.forEachChild(node, visit);
+  }
+  visit(file);
+  return found;
 }
 
 function copySnapshot(name: string): { dir: string; snapshot: BuiltSnapshot } {
@@ -166,8 +191,8 @@ describe('вывод сборки соответствует снимку', () =
   it('XML-проверка отказывает на пустом индексе, отсутствующей карте, пустой карте и повторном URL', () => {
     const root = join(scratchDir(), 'malformed-xml');
     const index = (children: string) =>
-      `<?xml version="1.0"?><sitemapindex>${children}</sitemapindex>`;
-    const sitemap = (urls: string) => `<?xml version="1.0"?><urlset>${urls}</urlset>`;
+      `<?xml version="1.0"?><sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${children}</sitemapindex>`;
+    const sitemap = (urls: string) => `<?xml version="1.0"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${urls}</urlset>`;
     const child = (loc: string) => `<sitemap><loc>https://example.test/${loc}</loc></sitemap>`;
     const url = (loc: string) => `<url><loc>https://example.test/${loc}</loc></url>`;
     const writeTree = (name: string, indexXml: string, childXml?: string) => {
@@ -180,6 +205,9 @@ describe('вывод сборки соответствует снимку', () =
 
     expect(() => readSitemapTree(writeTree('empty-index', index('')))).toThrow(/не перечисляет/);
     expect(() => readSitemapTree(writeTree('missing-child', index(child('sitemap-0.xml'))))).toThrow(/нет перечисленной/);
+    expect(() => readSitemapTree(writeTree('truncated', index(child('sitemap-0.xml')).replace('</sitemapindex>', '')))).toThrow();
+    expect(() => readSitemapTree(writeTree('duplicate-loc', index(child('sitemap-0.xml')), sitemap('<url><loc>https://example.test/a</loc><loc>https://example.test/b</loc></url>')))).toThrow(/повторный loc/);
+    expect(() => readSitemapTree(writeTree('duplicate-lastmod', index(child('sitemap-0.xml')), sitemap('<url><loc>https://example.test/a</loc><lastmod>2025</lastmod><lastmod>2026</lastmod></url>')))).toThrow(/повторный lastmod/);
     expect(() => readSitemapTree(writeTree('empty-child', index(child('sitemap-0.xml')), sitemap('')))).toThrow(/пустая дочерняя/);
     expect(() => readSitemapTree(writeTree(
       'duplicate-url',
@@ -214,7 +242,11 @@ describe('вывод сборки соответствует снимку', () =
     const originalDate = String(selected!.published_at);
     const unchangedArticle = datedArticles.find((article) => article.slug !== slug);
     expect(unchangedArticle, 'в контрольном снимке нет второй статьи для проверки неизменённой страницы').toBeTruthy();
+    const baseline = JSON.parse(readFileSync(join(WEB_ROOT, 'tests/fixtures/sitemap-lastmod/baseline-urls.json'), 'utf8')) as { snapshotSha256: string; urls: string[] };
+    const snapshotHash = createHash('sha256').update(readFileSync(join(first.dir, 'snapshot.json'))).digest('hex');
+    expect(snapshotHash, 'эталон URL относится к другому контрольному снимку').toBe(baseline.snapshotSha256);
     const firstBuild = buildSnapshot(first.dir, 'build-a');
+    const repeatedBuild = buildSnapshot(first.dir, 'build-a-repeat');
 
     const second = copySnapshot('snapshot-b');
     const secondArticles = second.snapshot.content.types.articles as Record<string, unknown>[];
@@ -229,6 +261,10 @@ describe('вывод сборки соответствует снимку', () =
     const secondTree = readSitemapTree(secondBuild);
     const baseTree = readSitemapTree(dist);
     const urls = (tree: ReturnType<typeof readSitemapTree>) => [...tree.urls.keys()].sort();
+    expect.soft(urls(firstTree)).toEqual(baseline.urls);
+    const repeatedTree = readSitemapTree(repeatedBuild);
+    expect.soft([...repeatedTree.urls.values()]).toEqual([...firstTree.urls.values()]);
+    expect.soft(repeatedTree.index).toEqual(firstTree.index);
     expect.soft(urls(firstTree)).toEqual(urls(baseTree));
     expect.soft(urls(secondTree)).toEqual(urls(baseTree));
 
@@ -289,11 +325,17 @@ describe('вывод сборки соответствует снимку', () =
     const undatedLoc = 'https://sitemap-lastmod.test/without-date';
     expect(testTree.urls.get(datedLoc)?.lastmod).toBe('2026-11-25T12:34:56.000Z');
     expect(testTree.urls.get(undatedLoc)?.lastmod).toBeUndefined();
+    expect(testTree.urls.has('https://sitemap-lastmod.test/invalid-date')).toBe(true);
+    expect(testTree.urls.get('https://sitemap-lastmod.test/invalid-date')?.lastmod).toBeUndefined();
     expect(testTree.index.every((entry) => entry.lastmod === undefined)).toBe(true);
 
     const productionConfig = readFileSync(join(WEB_ROOT, 'astro.config.mjs'), 'utf8');
     expect(productionConfig).toContain('sitemap-lastmod-serializer.mjs');
-    expect(productionConfig).toContain('serializeSitemapEntry');
+    const serializerWiring = /serialize:\s*\(item\)\s*=>\s*serializeSitemapEntry\(item\)/;
+    expect(hasProductionSerializer(productionConfig)).toBe(true);
+    const disconnected = productionConfig.replace(serializerWiring, 'serialize: (item) => item');
+    expect(disconnected).not.toBe(productionConfig);
+    expect(hasProductionSerializer(disconnected)).toBe(false);
     expect(productionConfig).not.toContain('SITEMAP_LASTMOD_TEST');
     expect(productionConfig).not.toContain('tests/fixtures/sitemap-lastmod');
   });
