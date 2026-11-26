@@ -86,6 +86,12 @@ The host verifies the externally pinned archive bytes and their correspondence t
 the admitted source. The root journal retains the source/artifact identity across
 resumes. Production-paired retains its stable Release and exact-main gates.
 
+The program schema normalization is permitted only with the root-sealed CI CMS
+artifact and its plan-bound source schema. The builder compares that schema with
+the compiled schema; unprotected legacy artifacts cannot authorize the exception.
+If the audited database or cohort binding changes, stop and recover rather than
+reusing the prior audit result.
+
 The first invocation exports the off-host backup and runs until the next required
 review. A successful pause prints `migrationPaused: true` and the runner's waiting
 reason; the detailed receipt and paths are available through the private export. Writers remain
