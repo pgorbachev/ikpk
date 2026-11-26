@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { copyFileSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { createRequire } from 'node:module';
 import { after, test } from 'node:test';
 import { auditMigration } from '../scripts/audit-data-migration.mjs';
@@ -708,6 +708,65 @@ function createCoreStoreShape(path, { candidate = false, mutate = null } = {}) {
   db.close();
 }
 
+function courseGroupSchema(required, { programEditor = false } = {}) {
+  const info = programEditor
+    ? { displayName: 'Программа', description: 'Программа одного института' }
+    : { displayName: 'Course Group', description: 'Group of courses/seminars within an institute' };
+  const attributes = {
+    name: { type: 'string' },
+    ...(programEditor ? { editor_label: { type: 'string' } } : {}),
+    slug: { type: 'uid', required },
+  };
+  return {
+    info: structuredClone(info), attributes: structuredClone(attributes),
+    __schema__: { info: structuredClone(info), attributes: structuredClone(attributes) },
+  };
+}
+
+function writeCourseGroupSchema(values, schemaValue) {
+  const schema = JSON.parse(values.get(CONTENT_SCHEMA_KEY));
+  schema['api::course-group.course-group'] = schemaValue;
+  values.set(CONTENT_SCHEMA_KEY, JSON.stringify(schema));
+}
+
+function auditCourseGroupSchemaTransition(name, { sourceSchema, candidateSchema, targetSchema, includeIntegrity = true }) {
+  const artifactRoot = join(directory, `program-schema-${name}-artifact`);
+  const sourceSchemaPath = join(artifactRoot, 'src/api/course-group/content-types/course-group/schema.json');
+  const compiledSchemaPath = join(artifactRoot, 'dist/src/api/course-group/content-types/course-group/schema.json');
+  mkdirSync(dirname(sourceSchemaPath), { recursive: true });
+  mkdirSync(dirname(compiledSchemaPath), { recursive: true });
+  const targetBytes = Buffer.from(JSON.stringify(targetSchema));
+  writeFileSync(sourceSchemaPath, targetBytes);
+  writeFileSync(compiledSchemaPath, Buffer.from(JSON.stringify(targetSchema, null, 2)));
+  const manifestPath = join(artifactRoot, 'database/migrations/plan.json');
+  mkdirSync(dirname(manifestPath), { recursive: true });
+  const manifest = {
+    version: 1, steps: [], integrity: { files: includeIntegrity
+      ? [{ path: 'src/api/course-group/content-types/course-group/schema.json', sha256: sha256(targetBytes) }]
+      : [] },
+  };
+  const manifestBytes = Buffer.from(JSON.stringify(manifest));
+  writeFileSync(manifestPath, manifestBytes);
+  const plan = {
+    root: artifactRoot, manifest, manifestPath, planSha256: sha256(manifestBytes), steps: [],
+  };
+  const sourceDbPath = join(directory, `program-schema-${name}-source.db`);
+  const candidateDbPath = join(directory, `program-schema-${name}-candidate.db`);
+  createCoreStoreShape(sourceDbPath, { mutate: (values) => writeCourseGroupSchema(values, sourceSchema) });
+  createCoreStoreShape(candidateDbPath, {
+    candidate: true,
+    mutate: (values) => writeCourseGroupSchema(values, candidateSchema),
+  });
+  const operationId = `program-schema-${name}`;
+  addEmptyMigrationLineage(sourceDbPath, operationId);
+  addEmptyMigrationLineage(candidateDbPath, operationId);
+  const receipt = boundReceipt(sourceDbPath, candidateDbPath, plan);
+  receipt.operationId = operationId;
+  receipt.source.snapshotSha256 = 'b'.repeat(64);
+  receipt.source.schemaFingerprint = 'c'.repeat(64);
+  return auditMigration({ sourceDbPath, candidateDbPath, plan, receipt, allowPlanProgramSchema: includeIntegrity });
+}
+
 test('core-store accepts only reviewed content-type updates and a stale upload metrics schedule refresh', () => {
   const sourceDbPath = join(directory, 'core-store-source.db');
   const candidateDbPath = join(directory, 'core-store-candidate.db');
@@ -718,6 +777,67 @@ test('core-store accepts only reviewed content-type updates and a stale upload m
 
   assert.equal(report.differences.some(({ table, kind }) => table === 'strapi_core_store_settings' && kind.startsWith('core-store-')), false,
     'only exact metadata, layout, compiled content schema additions, and stale upload schedule refresh are allowed');
+});
+
+test('program slug true-to-false normalization requires the plan-bound source schema and both mirrors', () => {
+  const sourceSchema = courseGroupSchema(true);
+  const candidateSchema = courseGroupSchema(false, { programEditor: true });
+  const normalizedSchema = structuredClone(sourceSchema);
+  for (const info of [normalizedSchema.info, normalizedSchema.__schema__.info]) {
+    info.displayName = 'Программа';
+    info.description = 'Программа одного института';
+  }
+  for (const attributes of [normalizedSchema.attributes, normalizedSchema.__schema__.attributes]) {
+    attributes.editor_label = { type: 'string' };
+    attributes.slug.required = false;
+  }
+  assert.deepEqual(candidateSchema, normalizedSchema,
+    'candidate differs from the source only by the audited editor_label localization/addition and the requested slug.required normalization in both mirrors');
+  const accepted = auditCourseGroupSchemaTransition('approved-transition', {
+    sourceSchema,
+    candidateSchema,
+    targetSchema: candidateSchema,
+    includeIntegrity: true,
+  });
+  assert.equal(accepted.passed, true, JSON.stringify(accepted.differences));
+});
+
+test('an unprotected legacy candidate schema cannot authorize the slug exception', () => {
+  const sourceSchema = courseGroupSchema(true);
+  const candidateSchema = courseGroupSchema(false, { programEditor: true });
+  const report = auditCourseGroupSchemaTransition('legacy-fallback', {
+    sourceSchema,
+    candidateSchema,
+    targetSchema: candidateSchema,
+    includeIntegrity: false,
+  });
+  assert.equal(report.passed, false, 'candidate JSON and an unbound schema file cannot authorize the exception');
+});
+
+test('course-group slug normalization requires true in both source schema mirrors', () => {
+  for (const sourceState of ['missing', 'null']) {
+    const sourceSchema = courseGroupSchema(true);
+    for (const attributes of [sourceSchema.attributes, sourceSchema.__schema__.attributes]) {
+      if (sourceState === 'missing') delete attributes.slug.required;
+      else attributes.slug.required = null;
+    }
+    const candidateSchema = courseGroupSchema(false, { programEditor: true });
+    const normalizedSchema = structuredClone(sourceSchema);
+    for (const info of [normalizedSchema.info, normalizedSchema.__schema__.info]) {
+      info.displayName = 'Программа';
+      info.description = 'Программа одного института';
+    }
+    for (const attributes of [normalizedSchema.attributes, normalizedSchema.__schema__.attributes]) {
+      attributes.editor_label = { type: 'string' };
+      attributes.slug.required = false;
+    }
+    assert.deepEqual(candidateSchema, normalizedSchema,
+      'only the approved editor_label normalization and requested slug change differ');
+    const report = auditCourseGroupSchemaTransition(`source-required-${sourceState}`, {
+      sourceSchema, candidateSchema, targetSchema: candidateSchema, includeIntegrity: true,
+    });
+    assert.equal(report.passed, false, `slug.required ${sourceState} in either mirror cannot be normalized`);
+  }
 });
 
 test('upload metrics refresh preserves the timestamp and accepts only the upstream cron inside a closed-load window', () => {
@@ -987,10 +1107,10 @@ test('program editor configuration, institute relation and schema display name a
   const schema = {
     'api::course-group.course-group': {
       info: { displayName: 'Course Group', description: 'Group of courses/seminars within an institute' },
-      attributes: { name: { type: 'string', required: false } },
+      attributes: { name: { type: 'string', required: false }, slug: { type: 'uid', required: false } },
       __schema__: {
         info: { displayName: 'Course Group', description: 'Group of courses/seminars within an institute' },
-        attributes: { name: { type: 'string', required: false } },
+        attributes: { name: { type: 'string', required: false }, slug: { type: 'uid', required: false } },
       },
     },
   };

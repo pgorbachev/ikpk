@@ -4664,17 +4664,34 @@ def _install_migrated_database(config: dict[str, Any], source_root: Path, operat
         if current_review is not None:
             common += _migration_review_arguments(config, operation_root, operation_id, proof["sourceSha"], current_review)
     prepared = _run_as_cms(config, execution_artifact, [config.get("nodeBinary", "/usr/bin/node"), str(runner), "prepare", *common], timeout=3600, read_only_path=[execution_artifact, dependencies])
+    try:
+        preparation = json.loads(prepared)
+    except ValueError as error:
+        if reviewed or (execution_artifact / "src/api/course-group/content-types/course-group/schema.json").exists():
+            raise HostFailure("migration prepare returned malformed JSON") from error
+        preparation = {}
+    audit_binding = preparation.get("programSchemaAuditBindings")
+    if audit_binding is not None:
+        if (not isinstance(audit_binding, dict)
+                or audit_binding.get("operationId") != operation_id
+                or audit_binding.get("sourceDbPath") != str(live)
+                or audit_binding.get("candidateDbPath") != str(candidate)
+                or audit_binding.get("sourceSha256") != sha256_file(live)
+                or audit_binding.get("candidateSha256") != sha256_file(candidate)
+                or audit_binding.get("planSha256") != sha256_file(execution_artifact / "database/migrations/plan.json")):
+            raise HostFailure("program schema audit binding differs from the admitted operation or database")
+        if not reviewed or inherited_cohort is None:
+            raise HostFailure("program schema normalization requires an admitted inherited cohort")
     if reviewed:
         _verify_migration_receipt_admission(receipt, controls, proof, inherited_cohort)
-        try:
-            preparation = json.loads(prepared)
-        except ValueError as error:
-            raise HostFailure("migration prepare returned malformed JSON") from error
         if inherited_cohort is not None and preparation.get("phase") == "prepared":
             result = preparation.get("inheritedCohortResult")
             if not isinstance(result, dict) or not isinstance(inherited_result, dict) or result.get("receiptSha256") != sha256_file(receipt):
                 raise HostFailure("inherited cohort runner result does not seal the exact receipt")
             binding = result.get("binding")
+            if audit_binding is not None and (not isinstance(binding, dict)
+                    or binding.get("candidateDatabaseSha256") != audit_binding.get("candidateSha256")):
+                raise HostFailure("program schema audit candidate differs from the admitted cohort")
             prior = json.loads(_cohort_file(Path(inherited_cohort["manifestPath"])))
             if (not isinstance(binding, dict) or binding.get("operationId") != operation_id
                     or binding.get("sourceCommit") != proof["sourceSha"]

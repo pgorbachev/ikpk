@@ -52,7 +52,9 @@ describe('семинары в собранном Strapi', { timeout: 360000 }, (
       `сборка CMS проверяется на Node из engines (>=20 <=24), сейчас ${process.version}`,
     );
 
-    execFileSync(path.join(cmsRoot, 'node_modules/.bin/tsc'), ['--pretty', 'false'], {
+    // Refresh JSON schemas too; the incremental cache may otherwise leave a
+    // stale schema in dist from another artifact/build test.
+    execFileSync(path.join(cmsRoot, 'node_modules/.bin/tsc'), ['--pretty', 'false', '--incremental', 'false'], {
       cwd: cmsRoot,
       stdio: 'inherit',
     });
@@ -762,5 +764,42 @@ describe('семинары в собранном Strapi', { timeout: 360000 }, (
     await bootstrapCaptureTokenForRehearsal(app);
     delete process.env.IKPK_ENABLE_CAPTURE_TOKEN_BOOTSTRAP;
     assert.equal(createHash('sha256').update(process.env.CMS_TOKEN).digest('hex'), kept);
+  });
+
+  test('bootstrap persists the exact editor_label overlay through Strapi updateConfiguration', async () => {
+    const uid = 'api::course-group.course-group';
+    const key = `plugin_content_manager_configuration_content_types::${uid}`;
+    const contentType = app.contentType(uid);
+    const service = app.plugin('content-manager').service('content-types');
+    const source = await service.findConfiguration(contentType);
+    assert.ok(source.metadatas.editor_label?.edit && source.metadatas.editor_label?.list,
+      'the compiled Strapi schema should expose persisted edit and list metadata');
+
+    source.metadatas.editor_label.customBootstrapProbe = 'preserve-metadata';
+    source.metadatas.editor_label.edit.customBootstrapProbe = { preserve: true };
+    source.metadatas.editor_label.list.customBootstrapProbe = ['preserve'];
+    await service.updateConfiguration(contentType, source);
+    const persistedSource = await service.findConfiguration(contentType);
+    assert.equal(persistedSource.metadatas.editor_label.customBootstrapProbe, 'preserve-metadata');
+    assert.deepEqual(persistedSource.metadatas.editor_label.edit.customBootstrapProbe, { preserve: true });
+    assert.deepEqual(persistedSource.metadatas.editor_label.list.customBootstrapProbe, ['preserve']);
+
+    const { applyEditorForms } = loadCommonjs(path.join(cmsRoot, 'dist/src/seminar-management/forms.js'));
+    await applyEditorForms(app);
+    const actual = await service.findConfiguration(contentType);
+    const expected = structuredClone(persistedSource);
+    expected.metadatas.editor_label.edit = {
+      ...expected.metadatas.editor_label.edit,
+      label: 'editor_label', visible: false, editable: false,
+    };
+    expected.metadatas.editor_label.list = {
+      ...expected.metadatas.editor_label.list, label: 'editor_label',
+    };
+    assert.deepEqual(actual, expected,
+      'the actual Strapi bootstrap must persist its full overlay and retain all other configuration');
+
+    const rows = await app.db.connection('strapi_core_store_settings').select('value').where({ key });
+    assert.equal(rows.length, 1, 'the result must be saved in the real core-store row');
+    assert.deepEqual(JSON.parse(rows[0].value), actual);
   });
 });

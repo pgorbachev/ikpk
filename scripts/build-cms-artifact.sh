@@ -42,6 +42,28 @@ mkdir -p "$OUT/database/migrations"
 # the recorded native rename predates retirement of the seminar status attribute.
 mkdir -p "$OUT/database/migrations/target-schema"
 cp src/api/seminar/content-types/seminar/schema.json "$OUT/database/migrations/target-schema/seminar.json"
+# Keep the admitted source schema inside the hash-bound migration artifact.
+mkdir -p "$OUT/src/api/course-group/content-types/course-group"
+cp src/api/course-group/content-types/course-group/schema.json "$OUT/src/api/course-group/content-types/course-group/schema.json"
+cmp -s src/api/course-group/content-types/course-group/schema.json "$OUT/src/api/course-group/content-types/course-group/schema.json"
+python3 - "$OUT/src/api/course-group/content-types/course-group/schema.json" "$OUT/dist/src/api/course-group/content-types/course-group/schema.json" <<'PY'
+import json, sys
+def unique(pairs):
+    result = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError(f'duplicate schema key: {key}')
+        result[key] = value
+    return result
+def invalid_constant(value):
+    raise ValueError(f'invalid JSON constant: {value}')
+try:
+    with open(sys.argv[1], encoding='utf-8') as source, open(sys.argv[2], encoding='utf-8') as compiled:
+        if json.load(source, object_pairs_hook=unique, parse_constant=invalid_constant) != json.load(compiled, object_pairs_hook=unique, parse_constant=invalid_constant):
+            raise ValueError('source and compiled course-group schema differ')
+except (OSError, ValueError) as error:
+    raise SystemExit(f'course-group schema verification failed: {error}')
+PY
 # Compiled publication lifecycle loads this runtime data file via the release-root cwd.
 mkdir -p "$OUT/src/lib"
 cp src/lib/demo193-source-empty-fields.json "$OUT/src/lib/demo193-source-empty-fields.json"

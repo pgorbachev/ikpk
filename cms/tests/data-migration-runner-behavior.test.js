@@ -296,6 +296,21 @@ async function loadRunner() {
   return import(pathToFileURL(runnerPath).href);
 }
 
+function addCourseGroupSchemaToArtifactPlan(f, { includeIntegrity }) {
+  const relativePath = 'src/api/course-group/content-types/course-group/schema.json';
+  const sourcePath = join(f.artifactDir, relativePath);
+  const compiledPath = join(f.artifactDir, 'dist/src/api/course-group/content-types/course-group/schema.json');
+  mkdirSync(dirname(sourcePath), { recursive: true });
+  mkdirSync(dirname(compiledPath), { recursive: true });
+  const schema = readFileSync(join(repoRoot, 'cms', relativePath));
+  writeFileSync(sourcePath, schema);
+  writeFileSync(compiledPath, schema);
+  f.plan.integrity.files = f.plan.integrity.files.filter(({ path }) => path !== relativePath);
+  if (includeIntegrity) f.plan.integrity.files.push({ path: relativePath, sha256: hash(schema) });
+  writeFileSync(join(f.artifactDir, 'database/migrations/plan.json'), JSON.stringify(f.plan, null, 2));
+  return { sourcePath, compiledPath, relativePath };
+}
+
 function prepareArgs(f) {
   return {
     sourceDbPath: f.sourceDbPath, sourceCmsRoot: f.sourceCmsRoot, candidateDbPath: f.candidateDbPath,
@@ -310,6 +325,29 @@ async function makePrepared(t, opts) {
   await runner.prepareMigration(prepareArgs(f));
   return { ...f, runner };
 }
+
+test('runner refuses a packaged course-group schema without a plan integrity entry', async (t) => {
+  const f = fixture(t, { operationId: 'op-course-group-schema-unbound' });
+  addCourseGroupSchemaToArtifactPlan(f, { includeIntegrity: false });
+  const runner = await loadRunner();
+  const snapshots = join(f.root, 'snapshots');
+  mkdirSync(snapshots, { mode: 0o700 });
+  await assert.rejects(() => runner.prepareMigration({
+    ...prepareArgs(f), stageSnapshotDir: realpathSync(snapshots), stopAfterStage: 'schema',
+  }), /course-group.*schema.*integrity|integrity.*course-group.*schema/i);
+  assert.equal(existsSync(f.candidateDbPath), false, 'unbound source schema must be refused before candidate creation');
+});
+
+test('runner refuses a course-group schema changed after its plan integrity was fixed', async (t) => {
+  const f = fixture(t, { operationId: 'op-course-group-schema-tamper' });
+  const { sourcePath } = addCourseGroupSchemaToArtifactPlan(f, { includeIntegrity: true });
+  const schema = JSON.parse(readFileSync(sourcePath, 'utf8'));
+  schema.attributes.slug.required = !schema.attributes.slug.required;
+  writeFileSync(sourcePath, JSON.stringify(schema));
+  const runner = await loadRunner();
+  await assert.rejects(() => runner.prepareMigration(prepareArgs(f)), /integrity file SHA-256 mismatch.*src\/api\/course-group/);
+  assert.equal(existsSync(f.candidateDbPath), false, 'tampered schema must be refused before candidate creation');
+});
 
 test('stage checkpoints persist schema and committed steps across a crash', async (t) => {
   const f=fixture(t,{operationId:'op-stage-snapshots'}),runner=await loadRunner();

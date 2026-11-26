@@ -426,7 +426,7 @@
     "files": [
       {
         "path": "scripts/run-data-migrations.mjs",
-        "sha256": "71a4bf8a4ba02b21728d42c33a506815e0070453b2f728c0ac60b5005b5fe8fd"
+        "sha256": "ae44a5644d6f6b19c51173b78e99a44d5669ee52df85d31469450a1f274583ce"
       },
       {
         "path": "scripts/seminar-migration-snapshot.mjs",
@@ -498,7 +498,7 @@
       },
       {
         "path": "scripts/audit-data-migration.mjs",
-        "sha256": "a5884ed23f8f05d8f0e781f18381229331f9a8e585e85d17d4b521ddf7df16ae"
+        "sha256": "534acdee601f16800119b82551149a5045471566d8f906646d5b44f679321984"
       },
       {
         "path": "scripts/audit-schema-snapshot.mjs",
@@ -519,6 +519,10 @@
       {
         "path": "scripts/verify-seminar-proof-artifact.py",
         "sha256": "80f0d034c1a82d6f6503070d7774fda4ae8840c599479f6fa15691b902962088"
+      },
+      {
+        "path": "src/api/course-group/content-types/course-group/schema.json",
+        "sha256": "5611bebd34b221ead442b794985bbefdfde6a8037c7d0a99c0aec0c3fe14ef9f"
       }
     ]
   }

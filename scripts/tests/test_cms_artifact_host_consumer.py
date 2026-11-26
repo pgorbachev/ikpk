@@ -194,6 +194,86 @@ class CmsArtifactHostConsumerTests(unittest.TestCase):
                     rehearsal_host._cms_update(f["config"], State(), args)
                 activate.assert_not_called()
 
+    def test_candidate_changed_after_runner_audit_is_refused_by_root_installer(self):
+        with tempfile.TemporaryDirectory(prefix="ikpk-cms-schema-binding-drift-", dir=Path.cwd()) as temporary:
+            root = Path(temporary)
+            f = prepared_artifact(root, "schema-binding-drift")
+            live = root / "live.sqlite"
+            sqlite3.connect(live).close()
+            Path(f["config"]["releaseRoot"]).mkdir(parents=True)
+            archive_path = f["source"] / ".ikpk-cms-artifact.tar.gz"
+            plan_bytes = b'{"version":1,"steps":[],"integrity":{"files":[]}}'
+            archive_data = io.BytesIO()
+            with tarfile.open(fileobj=io.BytesIO(archive_path.read_bytes()), mode="r:gz") as source, \
+                 tarfile.open(fileobj=archive_data, mode="w:gz") as target:
+                for member in source.getmembers():
+                    data = source.extractfile(member).read() if member.isfile() else None
+                    if member.name == "scripts/run-data-migrations.mjs":
+                        data = b"export const ROOT_SEALED_DEPENDENCIES_VERSION = 3;\n"
+                    if data is not None:
+                        member.size = len(data)
+                    target.addfile(member, io.BytesIO(data) if data is not None else None)
+                plan_member = tarfile.TarInfo("database/migrations/plan.json")
+                plan_member.size = len(plan_bytes)
+                target.addfile(plan_member, io.BytesIO(plan_bytes))
+            payload = archive_data.getvalue()
+            archive_path.write_bytes(payload)
+            f["provenance"]["cmsArtifact"]["payloadSha256"] = sha(payload)
+            (f["source"] / ".ikpk-rehearsal-ci.json").write_text(json.dumps(f["provenance"]), encoding="utf-8")
+            plan_sha = sha(plan_bytes)
+            calls = []
+
+            def trusted_runner(_config, _cwd, argv, **_kwargs):
+                action = argv[2]
+                calls.append(action)
+                execution_artifact = Path(_cwd)
+                self.assertTrue(execution_artifact.is_relative_to(root.resolve() / "migration-code"),
+                                f"runner must execute from root-protected generation, got {execution_artifact}")
+                self.assertTrue((execution_artifact / "node_modules").is_symlink())
+                candidate = Path(argv[argv.index("--candidate-db") + 1])
+                if action == "prepare":
+                    sqlite3.connect(candidate).close()
+                    bindings = {
+                        "sourceSha256": sha(live.read_bytes()),
+                        "candidateSha256": sha(candidate.read_bytes()),
+                        "operationId": f["operationId"],
+                        "planSha256": plan_sha,
+                        "sourceDbPath": str(live.resolve()),
+                        "candidateDbPath": str(candidate.resolve()),
+                    }
+                    # Mutate the candidate after trusted prepare reports its
+                    # audited digest, while keeping the SQLite file valid.
+                    db = sqlite3.connect(candidate)
+                    db.execute("CREATE TABLE post_audit_change (value TEXT)")
+                    db.execute("INSERT INTO post_audit_change VALUES ('changed')")
+                    db.commit()
+                    db.close()
+                    return json.dumps({"phase": "prepared", "passed": True,
+                                       "programSchemaAuditBindings": bindings})
+                return json.dumps({"phase": "prepared", "passed": True})
+
+            protected_check = rehearsal_host._protected_dependency_path
+            try:
+                with patch.object(rehearsal_host, "_validate_prepared_cms_candidate",
+                                  return_value=(f["source"], f["artifact"], f["dependencies"])), \
+                     patch.object(rehearsal_host, "_protected_dependency_path",
+                                  side_effect=lambda path, **kwargs: protected_check(path, **{**kwargs, "trusted_uid": os.getuid()})), \
+                     patch.object(rehearsal_host, "_ensure_empty_candidate_upload_directory"), \
+                     patch.object(rehearsal_host, "_configure_candidate_uploads", return_value=root / "uploads"), \
+                     patch.object(rehearsal_host, "_assert_no_database_handles"), \
+                     patch.object(rehearsal_host, "_cms_payload_sha256", return_value="f" * 64), \
+                     patch.object(rehearsal_host, "_run_as_cms", side_effect=trusted_runner):
+                    with self.assertRaisesRegex(rehearsal_host.HostFailure, r"(?i:binding|candidate|changed|digest|hash)"):
+                        rehearsal_host._install_migrated_database(
+                            {**f["config"], "profile": "staging194", "cmsDatabase": str(live)}, f["source"], f["operationId"],
+                            root / "old-cms", provenance=f["provenance"],
+                        )
+            finally:
+                for path in [root, *root.rglob("*")]:
+                    if path.is_dir() and not path.is_symlink():
+                        path.chmod(0o755)
+            self.assertEqual(calls, ["prepare"], "host must reject stale audit bindings before status or activation")
+
     def test_missing_strapi_directory_is_refused_before_live_database_replacement(self):
         with tempfile.TemporaryDirectory(prefix="ikpk-missing-strapi-") as temporary:
             root = Path(temporary).resolve()

@@ -2,7 +2,8 @@
 import { createHash } from 'node:crypto';
 import { createRequire } from 'node:module';
 import { basename } from 'node:path';
-import { readFileSync } from 'node:fs';
+import { lstatSync, readFileSync, realpathSync } from 'node:fs';
+import { join } from 'node:path';
 import { validateSchemaSnapshot } from './audit-schema-snapshot.mjs';
 
 const require = createRequire(import.meta.url);
@@ -471,18 +472,23 @@ function acceptProgramEditorLabels(candidateDb, differences) {
   }
   if (mismatched !== 0) differences.push({ table: 'course_groups', kind: 'added-column-value-mismatch', column: 'editor_label', nonNullCount: String(mismatched) });
 }
-function overlayProgramEditorConfiguration(configuration) {
+function overlayProgramEditorConfiguration(configuration, addMissingLabel = true) {
   if (!configuration?.metadatas || typeof configuration.metadatas !== 'object' || Array.isArray(configuration.metadatas)
     || !configuration.layouts || typeof configuration.layouts !== 'object' || Array.isArray(configuration.layouts)
-    || !configuration.settings || typeof configuration.settings !== 'object' || Array.isArray(configuration.settings)
-    || Object.hasOwn(configuration.metadatas, 'editor_label')) return null;
-  const metadatas = {
-    ...configuration.metadatas,
-    editor_label: {
+    || !configuration.settings || typeof configuration.settings !== 'object' || Array.isArray(configuration.settings)) return null;
+  for (const metadata of Object.values(configuration.metadatas)) {
+    if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) return null;
+    for (const name of ['edit', 'list']) {
+      if (Object.hasOwn(metadata, name) && (!metadata[name] || typeof metadata[name] !== 'object' || Array.isArray(metadata[name]))) return null;
+    }
+  }
+  const metadatas = { ...configuration.metadatas };
+  if (!Object.hasOwn(metadatas, 'editor_label') && addMissingLabel) {
+    metadatas.editor_label = {
       edit: { label: 'editor_label', description: '', placeholder: '', visible: true, editable: true },
       list: { label: 'editor_label', searchable: true, sortable: true },
-    },
-  };
+    };
+  }
   for (const [name, label, , editable, description] of PROGRAM_EDITOR_FIELDS) {
     const current = metadatas[name] ?? { edit: {}, list: {} };
     if (!current || typeof current !== 'object' || Array.isArray(current)) return null;
@@ -673,7 +679,7 @@ function allowedUploadMetricsScheduleRefresh(sourceValue, candidateValue, receip
     && lifecycle.windows.some((window) => lastWeeklyUpdateExpiry < window.start
       && scheduleMatchesWindow(candidate.weeklySchedule, window));
 }
-function expectedCoreStoreValue(key, sourceValue) {
+function expectedCoreStoreValue(key, sourceValue, programSchema) {
   let expected;
   try { expected = JSON.parse(sourceValue); } catch { return null; }
   if (!expected || typeof expected !== 'object' || Array.isArray(expected)) return null;
@@ -839,6 +845,13 @@ function expectedCoreStoreValue(key, sourceValue) {
       const inAttributes = Object.hasOwn(courseGroup.attributes, 'editor_label');
       const inSchema = Object.hasOwn(courseGroup.__schema__.attributes, 'editor_label');
       if (inAttributes !== inSchema) return null;
+      const before = courseGroup.attributes.slug?.required;
+      const mirror = courseGroup.__schema__.attributes.slug?.required;
+      if (typeof before !== 'boolean' || before !== mirror) return null;
+      if (before === true && programSchema?.attributes?.slug?.required === false) {
+        courseGroup.attributes.slug.required = false;
+        courseGroup.__schema__.attributes.slug.required = false;
+      }
       if (!inAttributes) {
         for (const info of [courseGroup.info, courseGroup.__schema__.info]) {
           if (info.displayName !== 'Course Group' || info.description !== 'Group of courses/seminars within an institute') return null;
@@ -853,14 +866,15 @@ function expectedCoreStoreValue(key, sourceValue) {
   }
   return null;
 }
-function compareCoreStore(sourceDb, candidateDb, differences, receipt) {
+function compareCoreStore(sourceDb, candidateDb, differences, receipt, programSchema) {
+  let programSchemaNormalized = false;
   const sourceHasTable = tableNames(sourceDb).includes(CORE_STORE_TABLE);
   const candidateHasTable = tableNames(candidateDb).includes(CORE_STORE_TABLE);
   if (sourceHasTable !== candidateHasTable) {
     differences.push({ table: CORE_STORE_TABLE, kind: 'core-store-table-presence-mismatch' });
     return;
   }
-  if (!sourceHasTable) return;
+  if (!sourceHasTable) return false;
   const rows = (db) => db.prepare(`SELECT * FROM ${quote(CORE_STORE_TABLE)} ORDER BY key`).all();
   const sourceRows = rows(sourceDb); const candidateRows = rows(candidateDb);
   const toMap = (items, side) => {
@@ -899,13 +913,30 @@ function compareCoreStore(sourceDb, candidateDb, differences, receipt) {
       }
       continue;
     }
-    const expected = expectedCoreStoreValue(key, sourceRow.value);
+    const expected = expectedCoreStoreValue(key, sourceRow.value, programSchema);
     let candidateValue;
     try { candidateValue = JSON.parse(candidateRow.value); } catch { candidateValue = null; }
-    if (!expected || !candidateValue || canonicalJson(expected) !== canonicalJson(candidateValue)) {
+    let matches = Boolean(expected && candidateValue && canonicalJson(expected) === canonicalJson(candidateValue));
+    if (!matches && key === COURSE_GROUP_CONFIG_KEY && candidateValue) {
+      let original;
+      try { original = JSON.parse(sourceRow.value); } catch { original = null; }
+      if (original?.metadatas && !Object.hasOwn(original.metadatas, 'editor_label')) {
+        const withoutAddition = overlayProgramEditorConfiguration(original, false);
+        matches = Boolean(withoutAddition && canonicalJson(withoutAddition) === canonicalJson(candidateValue));
+      }
+    }
+    if (!matches) {
       differences.push({ table: CORE_STORE_TABLE, kind: 'core-store-structure-mismatch', keySha256: sha(Buffer.from(key)) });
+    } else if (key === 'strapi_content_types_schema' && programSchema?.attributes?.slug?.required === false) {
+      const beforeSchema = JSON.parse(sourceRow.value)['api::course-group.course-group'];
+      const afterSchema = candidateValue['api::course-group.course-group'];
+      programSchemaNormalized = beforeSchema?.attributes?.slug?.required === true
+        && beforeSchema?.__schema__?.attributes?.slug?.required === true
+        && afterSchema?.attributes?.slug?.required === false
+        && afterSchema?.__schema__?.attributes?.slug?.required === false;
     }
   }
+  return programSchemaNormalized;
 }
 function validateSchemaHistory(sourceDb, candidateDb, candidateSchema, differences) {
   if (!tableNames(sourceDb).includes('strapi_database_schema') || !tableNames(candidateDb).includes('strapi_database_schema')) return false;
@@ -1050,10 +1081,22 @@ function compareNativeHistory(sourceDb, candidateDb, nativeSteps, differences) {
  * Compare a pristine source with its fully prepared candidate. The returned report
  * is private operator evidence: it contains only hashes, counts, and table names.
  */
-export function auditMigration({ sourceDbPath, candidateDbPath, plan, receipt }) {
+export function auditMigration({ sourceDbPath, candidateDbPath, plan, receipt, allowPlanProgramSchema = false }) {
   if (!plan || !Array.isArray(plan.steps) || !HASH.test(plan.planSha256 ?? '')) throw new Error('audit requires a resolved migration plan with planSha256 and steps');
   if (typeof plan.manifestPath !== 'string' || sha(readFileSync(plan.manifestPath)) !== plan.planSha256) throw new Error('migration plan bytes do not match the resolved plan hash');
   const manifest = JSON.parse(readFileSync(plan.manifestPath, 'utf8'));
+  let programSchema;
+  const schemaRelative = 'src/api/course-group/content-types/course-group/schema.json';
+  const entries = manifest.integrity?.files?.filter((entry) => entry.path === schemaRelative) ?? [];
+  if (allowPlanProgramSchema && plan.root && entries.length === 1 && HASH.test(entries[0].sha256 ?? '')) {
+    const schemaPath = join(plan.root, schemaRelative);
+    try {
+      const info = lstatSync(schemaPath);
+      const bytes = readFileSync(schemaPath);
+      if (info.isFile() && !info.isSymbolicLink() && realpathSync(schemaPath) === join(realpathSync(plan.root), schemaRelative)
+          && sha(bytes) === entries[0].sha256) programSchema = JSON.parse(bytes);
+    } catch { /* An unverified schema cannot authorize the exception. */ }
+  }
   const identity = ({ id, phase, kind, handler, path, sha256 }) => [id, phase, kind, handler ?? null, path, sha256];
   const exactSteps=json(plan.steps.map(identity))===json(manifest.steps?.map(identity));
   const manifestVersions=(manifest.steps??[]).filter(step=>step.handler==='reviewed-schedule');
@@ -1155,7 +1198,7 @@ export function auditMigration({ sourceDbPath, candidateDbPath, plan, receipt })
     const runnerCounts = allowRunnerRows(source, candidate, plan, receipt, transforms, differences);
     compareNativeHistory(source, candidate, transforms.nativeSteps, differences);
     const permissionAudit = comparePermissionGraphs(source, candidate, receipt, differences);
-    compareCoreStore(source, candidate, differences, receipt);
+    const programSchemaNormalized = compareCoreStore(source, candidate, differences, receipt, programSchema);
     const sourceCounts = countByTable(source, Object.keys(sourceSchema));
     const candidateCounts = countByTable(candidate, Object.keys(candidateSchema));
     const report = {
@@ -1177,6 +1220,7 @@ export function auditMigration({ sourceDbPath, candidateDbPath, plan, receipt })
         documentsStateRows: transforms.documentsState?.candidateRows.length ?? 0,
         permissionRowsRecreated: permissionAudit?.recreatedCount ?? 0,
         runnerTables: runnerCounts,
+        programSchemaNormalized,
       },
       differences,
     };
