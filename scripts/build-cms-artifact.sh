@@ -45,6 +45,7 @@ cp src/api/seminar/content-types/seminar/schema.json "$OUT/database/migrations/t
 # Keep the admitted source schema inside the hash-bound migration artifact.
 mkdir -p "$OUT/src/api/course-group/content-types/course-group"
 cp src/api/course-group/content-types/course-group/schema.json "$OUT/src/api/course-group/content-types/course-group/schema.json"
+cmp -s src/api/course-group/content-types/course-group/schema.json "$OUT/src/api/course-group/content-types/course-group/schema.json"
 python3 - "$OUT/src/api/course-group/content-types/course-group/schema.json" "$OUT/dist/src/api/course-group/content-types/course-group/schema.json" <<'PY'
 import json, sys
 def unique(pairs):

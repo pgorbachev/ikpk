@@ -141,8 +141,8 @@ test('CMS release artifact contains the manifest and every packaged data-step he
   const snapshotHelper = 'scripts/audit-schema-snapshot.mjs';
   assert.equal(manifest.integrity.files.find(({ path }) => path === snapshotHelper)?.sha256, sha256(readFileSync(join(artifact, snapshotHelper))), 'serialized schema auditor bytes are not hash-bound by the migration plan');
   const programSchema = 'src/api/course-group/content-types/course-group/schema.json';
-  assert.deepEqual(JSON.parse(readFileSync(join(artifact, programSchema), 'utf8')),
-    JSON.parse(readFileSync(join(repoRoot, 'cms', programSchema), 'utf8')),
+  assert.deepEqual(readFileSync(join(artifact, programSchema)),
+    readFileSync(join(repoRoot, 'cms', programSchema)),
     'the exact course-group source schema must be packaged');
   assert.equal(manifest.integrity.files.find(({ path }) => path === programSchema)?.sha256,
     sha256(readFileSync(join(artifact, programSchema))), 'course-group source schema must be plan-integrity bound');
