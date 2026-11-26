@@ -1,7 +1,7 @@
 ---
 interface BreadcrumbItem {
   label: string;
-  href?: string;
+  href?: string; schema?: boolean;
 }
 
 interface Props {
@@ -11,7 +11,7 @@ interface Props {
 const { items } = Astro.props;
 const fullItems: BreadcrumbItem[] = [{ label: 'Главная', href: '/' }, ...items];
 
-const schemaItems = fullItems.map((item, i) => ({
+const schemaItems = fullItems.filter((item) => item.schema !== false).map((item, i) => ({
   '@type': 'ListItem',
   position: i + 1,
   name: item.label,
