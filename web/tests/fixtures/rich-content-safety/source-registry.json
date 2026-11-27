@@ -1,5 +1,5 @@
 {
-  "generatedFromSha": "69d5e4e93c02bd7758d81c99a2642a2518882835",
+  "generatedFromSha": "0e604bc7f782cfbbc7d0af447f4998f70036fbfa",
   "selectors": [
     "articles[*].body_html",
     "course_groups[*].description_html",
@@ -8556,6 +8556,16 @@
       "entityId": "video",
       "jsonPath": "static_pages.json$[8][\"body_html\"]",
       "byteLength": 3784,
+      "empty": false
+    },
+    {
+      "selectorId": "static_pages[*].body_html",
+      "kind": "json-field",
+      "file": "static_pages.json",
+      "field": "body_html",
+      "entityId": "knigi-i-uchebnye-materialy",
+      "jsonPath": "static_pages.json$[9][\"body_html\"]",
+      "byteLength": 165,
       "empty": false
     },
     {

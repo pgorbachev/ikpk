@@ -1,7 +1,7 @@
 {
-  "generatedAt": "2026-08-14T06:18:23.256Z",
+  "generatedAt": "2026-11-27T11:35:44.793Z",
   "compared": "localized-source vs cleaned-pipeline",
-  "records": 870,
+  "records": 871,
   "withLosses": 0,
   "withErrors": 0,
   "comparisons": [
@@ -29231,6 +29231,41 @@
       }
     },
     {
+      "selectorId": "static_pages[*].body_html",
+      "entityId": "knigi-i-uchebnye-materialy",
+      "jsonPath": "static_pages.json$[9][\"body_html\"]",
+      "error": null,
+      "losses": [],
+      "source": {
+        "headings": 0,
+        "headingsNoH1": 0,
+        "lists": 0,
+        "tables": 0,
+        "times": 0,
+        "links": 0,
+        "localImages": 0,
+        "details": 0,
+        "checkboxes": 0,
+        "rutube": 0,
+        "mappedStyles": 0,
+        "mappedClasses": 0
+      },
+      "cleaned": {
+        "headings": 0,
+        "headingsNoH1": 0,
+        "lists": 0,
+        "tables": 0,
+        "times": 0,
+        "links": 0,
+        "localImages": 0,
+        "details": 0,
+        "checkboxes": 0,
+        "rutube": 0,
+        "mappedStyles": 0,
+        "mappedClasses": 0
+      }
+    },
+    {
       "selectorId": "teachers[*].bio_html",
       "entityId": "85",
       "jsonPath": "teachers.json$[0][\"bio_html\"]",
@@ -30457,7 +30492,7 @@
     }
   ],
   "sourceAggregates": {
-    "records": 870,
+    "records": 871,
     "withHeadings": 235,
     "withTables": 6,
     "withRutube": 1,
@@ -30480,6 +30515,26 @@
       "count": 121,
       "paths": 121
     },
+    "seminar-description": {
+      "count": 0,
+      "paths": 0
+    },
+    "seminar-audience": {
+      "count": 0,
+      "paths": 0
+    },
+    "seminar-learning_plan": {
+      "count": 0,
+      "paths": 0
+    },
+    "seminar-learning_mode": {
+      "count": 0,
+      "paths": 0
+    },
+    "seminar-recommendations": {
+      "count": 0,
+      "paths": 0
+    },
     "teacher-bio": {
       "count": 29,
       "paths": 29
@@ -30501,7 +30556,7 @@
       "paths": 1
     },
     "news-description": {
-      "count": 4,
+      "count": 2,
       "paths": 1
     },
     "preview-seminar-body": {
@@ -30523,7 +30578,7 @@
   },
   "distMarkers": {
     "promo-description": 4,
-    "news-description": 4,
+    "news-description": 2,
     "seminar-body": 121,
     "institute-extra": 3,
     "course-group-extra": 1,
@@ -30574,30 +30629,6 @@
     {
       "route": "/aktsii-i-skidki",
       "sinkId": "promo-description",
-      "headings": 0,
-      "lists": 0,
-      "tables": 0,
-      "links": 0,
-      "images": 0,
-      "details": 0,
-      "checkboxes": 0,
-      "rutube": 0
-    },
-    {
-      "route": "/",
-      "sinkId": "news-description",
-      "headings": 0,
-      "lists": 0,
-      "tables": 0,
-      "links": 0,
-      "images": 0,
-      "details": 0,
-      "checkboxes": 0,
-      "rutube": 0
-    },
-    {
-      "route": "/",
-      "sinkId": "news-description",
       "headings": 0,
       "lists": 0,
       "tables": 0,
@@ -32522,7 +32553,7 @@
       "lists": 0,
       "tables": 0,
       "links": 0,
-      "images": 1,
+      "images": 0,
       "details": 0,
       "checkboxes": 0,
       "rutube": 0
@@ -32534,7 +32565,7 @@
       "lists": 0,
       "tables": 0,
       "links": 0,
-      "images": 1,
+      "images": 0,
       "details": 0,
       "checkboxes": 0,
       "rutube": 0
@@ -32546,7 +32577,7 @@
       "lists": 0,
       "tables": 0,
       "links": 0,
-      "images": 1,
+      "images": 0,
       "details": 0,
       "checkboxes": 0,
       "rutube": 0
@@ -32558,7 +32589,7 @@
       "lists": 0,
       "tables": 0,
       "links": 0,
-      "images": 1,
+      "images": 0,
       "details": 0,
       "checkboxes": 0,
       "rutube": 0
@@ -32570,7 +32601,7 @@
       "lists": 0,
       "tables": 0,
       "links": 0,
-      "images": 1,
+      "images": 0,
       "details": 0,
       "checkboxes": 0,
       "rutube": 0
@@ -32582,7 +32613,7 @@
       "lists": 0,
       "tables": 0,
       "links": 0,
-      "images": 1,
+      "images": 0,
       "details": 0,
       "checkboxes": 0,
       "rutube": 0
@@ -32594,7 +32625,7 @@
       "lists": 0,
       "tables": 0,
       "links": 0,
-      "images": 1,
+      "images": 0,
       "details": 0,
       "checkboxes": 0,
       "rutube": 0
@@ -32606,7 +32637,7 @@
       "lists": 0,
       "tables": 0,
       "links": 0,
-      "images": 1,
+      "images": 0,
       "details": 0,
       "checkboxes": 0,
       "rutube": 0
@@ -32618,7 +32649,7 @@
       "lists": 0,
       "tables": 0,
       "links": 0,
-      "images": 1,
+      "images": 0,
       "details": 0,
       "checkboxes": 0,
       "rutube": 0
@@ -32630,7 +32661,7 @@
       "lists": 0,
       "tables": 0,
       "links": 0,
-      "images": 1,
+      "images": 0,
       "details": 0,
       "checkboxes": 0,
       "rutube": 0
@@ -32642,7 +32673,7 @@
       "lists": 0,
       "tables": 0,
       "links": 0,
-      "images": 1,
+      "images": 0,
       "details": 0,
       "checkboxes": 0,
       "rutube": 0
@@ -32654,7 +32685,7 @@
       "lists": 0,
       "tables": 0,
       "links": 0,
-      "images": 1,
+      "images": 0,
       "details": 0,
       "checkboxes": 0,
       "rutube": 0
@@ -32666,7 +32697,7 @@
       "lists": 0,
       "tables": 0,
       "links": 0,
-      "images": 1,
+      "images": 0,
       "details": 0,
       "checkboxes": 0,
       "rutube": 0
@@ -32678,7 +32709,7 @@
       "lists": 0,
       "tables": 0,
       "links": 0,
-      "images": 1,
+      "images": 0,
       "details": 0,
       "checkboxes": 0,
       "rutube": 0
@@ -32690,7 +32721,7 @@
       "lists": 0,
       "tables": 0,
       "links": 0,
-      "images": 1,
+      "images": 0,
       "details": 0,
       "checkboxes": 0,
       "rutube": 0
@@ -32702,7 +32733,7 @@
       "lists": 0,
       "tables": 0,
       "links": 0,
-      "images": 1,
+      "images": 0,
       "details": 0,
       "checkboxes": 0,
       "rutube": 0
@@ -32714,7 +32745,7 @@
       "lists": 0,
       "tables": 0,
       "links": 0,
-      "images": 1,
+      "images": 0,
       "details": 0,
       "checkboxes": 0,
       "rutube": 0
@@ -32726,7 +32757,7 @@
       "lists": 0,
       "tables": 0,
       "links": 0,
-      "images": 1,
+      "images": 0,
       "details": 0,
       "checkboxes": 0,
       "rutube": 0
@@ -32738,7 +32769,7 @@
       "lists": 0,
       "tables": 0,
       "links": 0,
-      "images": 1,
+      "images": 0,
       "details": 0,
       "checkboxes": 0,
       "rutube": 0
@@ -32750,7 +32781,7 @@
       "lists": 0,
       "tables": 0,
       "links": 0,
-      "images": 1,
+      "images": 0,
       "details": 0,
       "checkboxes": 0,
       "rutube": 0
@@ -32762,7 +32793,7 @@
       "lists": 0,
       "tables": 0,
       "links": 0,
-      "images": 1,
+      "images": 0,
       "details": 0,
       "checkboxes": 0,
       "rutube": 0
@@ -32774,7 +32805,7 @@
       "lists": 0,
       "tables": 0,
       "links": 0,
-      "images": 1,
+      "images": 0,
       "details": 0,
       "checkboxes": 0,
       "rutube": 0
@@ -32786,7 +32817,7 @@
       "lists": 0,
       "tables": 0,
       "links": 0,
-      "images": 1,
+      "images": 0,
       "details": 0,
       "checkboxes": 0,
       "rutube": 0
@@ -32798,7 +32829,7 @@
       "lists": 0,
       "tables": 0,
       "links": 0,
-      "images": 1,
+      "images": 0,
       "details": 0,
       "checkboxes": 0,
       "rutube": 0
@@ -32810,7 +32841,7 @@
       "lists": 0,
       "tables": 0,
       "links": 0,
-      "images": 1,
+      "images": 0,
       "details": 0,
       "checkboxes": 0,
       "rutube": 0
@@ -32822,7 +32853,7 @@
       "lists": 0,
       "tables": 0,
       "links": 0,
-      "images": 1,
+      "images": 0,
       "details": 0,
       "checkboxes": 0,
       "rutube": 0
@@ -32834,7 +32865,7 @@
       "lists": 0,
       "tables": 0,
       "links": 0,
-      "images": 1,
+      "images": 0,
       "details": 0,
       "checkboxes": 0,
       "rutube": 0
@@ -32846,7 +32877,7 @@
       "lists": 0,
       "tables": 0,
       "links": 0,
-      "images": 1,
+      "images": 0,
       "details": 0,
       "checkboxes": 0,
       "rutube": 0
@@ -32858,7 +32889,7 @@
       "lists": 0,
       "tables": 0,
       "links": 0,
-      "images": 1,
+      "images": 0,
       "details": 0,
       "checkboxes": 0,
       "rutube": 0
@@ -32870,7 +32901,7 @@
       "lists": 0,
       "tables": 0,
       "links": 0,
-      "images": 1,
+      "images": 0,
       "details": 0,
       "checkboxes": 0,
       "rutube": 0
@@ -32882,7 +32913,7 @@
       "lists": 0,
       "tables": 0,
       "links": 0,
-      "images": 1,
+      "images": 0,
       "details": 0,
       "checkboxes": 0,
       "rutube": 0
@@ -32894,7 +32925,7 @@
       "lists": 0,
       "tables": 0,
       "links": 0,
-      "images": 1,
+      "images": 0,
       "details": 0,
       "checkboxes": 0,
       "rutube": 0
@@ -32906,7 +32937,7 @@
       "lists": 0,
       "tables": 0,
       "links": 0,
-      "images": 1,
+      "images": 0,
       "details": 0,
       "checkboxes": 0,
       "rutube": 0
@@ -32918,7 +32949,7 @@
       "lists": 0,
       "tables": 0,
       "links": 0,
-      "images": 1,
+      "images": 0,
       "details": 0,
       "checkboxes": 0,
       "rutube": 0
@@ -32930,7 +32961,7 @@
       "lists": 0,
       "tables": 0,
       "links": 0,
-      "images": 1,
+      "images": 0,
       "details": 0,
       "checkboxes": 0,
       "rutube": 0
@@ -32942,7 +32973,7 @@
       "lists": 0,
       "tables": 0,
       "links": 0,
-      "images": 1,
+      "images": 0,
       "details": 0,
       "checkboxes": 0,
       "rutube": 0
@@ -32954,7 +32985,7 @@
       "lists": 0,
       "tables": 0,
       "links": 0,
-      "images": 1,
+      "images": 0,
       "details": 0,
       "checkboxes": 0,
       "rutube": 0
@@ -32966,7 +32997,7 @@
       "lists": 0,
       "tables": 0,
       "links": 0,
-      "images": 1,
+      "images": 0,
       "details": 0,
       "checkboxes": 0,
       "rutube": 0
@@ -32978,7 +33009,7 @@
       "lists": 0,
       "tables": 0,
       "links": 0,
-      "images": 1,
+      "images": 0,
       "details": 0,
       "checkboxes": 0,
       "rutube": 0
@@ -32990,7 +33021,7 @@
       "lists": 0,
       "tables": 0,
       "links": 0,
-      "images": 1,
+      "images": 0,
       "details": 0,
       "checkboxes": 0,
       "rutube": 0
@@ -33002,7 +33033,7 @@
       "lists": 0,
       "tables": 0,
       "links": 0,
-      "images": 1,
+      "images": 0,
       "details": 0,
       "checkboxes": 0,
       "rutube": 0
@@ -33014,7 +33045,7 @@
       "lists": 0,
       "tables": 0,
       "links": 0,
-      "images": 1,
+      "images": 0,
       "details": 0,
       "checkboxes": 0,
       "rutube": 0
@@ -33026,7 +33057,7 @@
       "lists": 0,
       "tables": 0,
       "links": 0,
-      "images": 1,
+      "images": 0,
       "details": 0,
       "checkboxes": 0,
       "rutube": 0
@@ -33038,7 +33069,7 @@
       "lists": 0,
       "tables": 0,
       "links": 0,
-      "images": 1,
+      "images": 0,
       "details": 0,
       "checkboxes": 0,
       "rutube": 0
@@ -33050,7 +33081,7 @@
       "lists": 0,
       "tables": 0,
       "links": 0,
-      "images": 1,
+      "images": 0,
       "details": 0,
       "checkboxes": 0,
       "rutube": 0
@@ -33062,7 +33093,7 @@
       "lists": 0,
       "tables": 0,
       "links": 0,
-      "images": 1,
+      "images": 0,
       "details": 0,
       "checkboxes": 0,
       "rutube": 0
@@ -33074,7 +33105,7 @@
       "lists": 0,
       "tables": 0,
       "links": 0,
-      "images": 1,
+      "images": 0,
       "details": 0,
       "checkboxes": 0,
       "rutube": 0
@@ -33086,7 +33117,7 @@
       "lists": 0,
       "tables": 0,
       "links": 0,
-      "images": 1,
+      "images": 0,
       "details": 0,
       "checkboxes": 0,
       "rutube": 0
@@ -33098,7 +33129,7 @@
       "lists": 0,
       "tables": 0,
       "links": 0,
-      "images": 1,
+      "images": 0,
       "details": 0,
       "checkboxes": 0,
       "rutube": 0
@@ -33110,7 +33141,7 @@
       "lists": 0,
       "tables": 0,
       "links": 0,
-      "images": 1,
+      "images": 0,
       "details": 0,
       "checkboxes": 0,
       "rutube": 0
@@ -33122,7 +33153,7 @@
       "lists": 0,
       "tables": 0,
       "links": 0,
-      "images": 1,
+      "images": 0,
       "details": 0,
       "checkboxes": 0,
       "rutube": 0
@@ -33134,7 +33165,7 @@
       "lists": 0,
       "tables": 0,
       "links": 0,
-      "images": 1,
+      "images": 0,
       "details": 0,
       "checkboxes": 0,
       "rutube": 0
@@ -33146,7 +33177,7 @@
       "lists": 0,
       "tables": 0,
       "links": 0,
-      "images": 1,
+      "images": 0,
       "details": 0,
       "checkboxes": 0,
       "rutube": 0
@@ -33158,7 +33189,7 @@
       "lists": 0,
       "tables": 0,
       "links": 0,
-      "images": 1,
+      "images": 0,
       "details": 0,
       "checkboxes": 0,
       "rutube": 0
@@ -33170,7 +33201,7 @@
       "lists": 0,
       "tables": 0,
       "links": 0,
-      "images": 1,
+      "images": 0,
       "details": 0,
       "checkboxes": 0,
       "rutube": 0
@@ -33182,7 +33213,7 @@
       "lists": 0,
       "tables": 0,
       "links": 0,
-      "images": 1,
+      "images": 0,
       "details": 0,
       "checkboxes": 0,
       "rutube": 0
@@ -33194,7 +33225,7 @@
       "lists": 0,
       "tables": 0,
       "links": 0,
-      "images": 1,
+      "images": 0,
       "details": 0,
       "checkboxes": 0,
       "rutube": 0
@@ -33206,7 +33237,7 @@
       "lists": 0,
       "tables": 0,
       "links": 0,
-      "images": 1,
+      "images": 0,
       "details": 0,
       "checkboxes": 0,
       "rutube": 0
@@ -33218,7 +33249,7 @@
       "lists": 0,
       "tables": 0,
       "links": 0,
-      "images": 1,
+      "images": 0,
       "details": 0,
       "checkboxes": 0,
       "rutube": 0
@@ -33230,7 +33261,7 @@
       "lists": 0,
       "tables": 0,
       "links": 0,
-      "images": 1,
+      "images": 0,
       "details": 0,
       "checkboxes": 0,
       "rutube": 0
@@ -33242,7 +33273,7 @@
       "lists": 0,
       "tables": 0,
       "links": 0,
-      "images": 1,
+      "images": 0,
       "details": 0,
       "checkboxes": 0,
       "rutube": 0
@@ -33254,7 +33285,7 @@
       "lists": 0,
       "tables": 0,
       "links": 0,
-      "images": 1,
+      "images": 0,
       "details": 0,
       "checkboxes": 0,
       "rutube": 0
@@ -33266,7 +33297,7 @@
       "lists": 0,
       "tables": 0,
       "links": 0,
-      "images": 1,
+      "images": 0,
       "details": 0,
       "checkboxes": 0,
       "rutube": 0
@@ -33278,7 +33309,7 @@
       "lists": 0,
       "tables": 0,
       "links": 0,
-      "images": 1,
+      "images": 0,
       "details": 0,
       "checkboxes": 0,
       "rutube": 0
@@ -33290,7 +33321,7 @@
       "lists": 0,
       "tables": 0,
       "links": 0,
-      "images": 1,
+      "images": 0,
       "details": 0,
       "checkboxes": 0,
       "rutube": 0
@@ -33302,7 +33333,7 @@
       "lists": 0,
       "tables": 0,
       "links": 0,
-      "images": 1,
+      "images": 0,
       "details": 0,
       "checkboxes": 0,
       "rutube": 0
@@ -33314,7 +33345,7 @@
       "lists": 0,
       "tables": 0,
       "links": 0,
-      "images": 1,
+      "images": 0,
       "details": 0,
       "checkboxes": 0,
       "rutube": 0
@@ -33326,7 +33357,7 @@
       "lists": 0,
       "tables": 0,
       "links": 0,
-      "images": 1,
+      "images": 0,
       "details": 0,
       "checkboxes": 0,
       "rutube": 0

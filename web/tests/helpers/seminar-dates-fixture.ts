@@ -90,7 +90,8 @@ export function buildSeminarDatesFixture(options: {
     Object.keys(types).map((name) => [name, []]),
   );
   fixtureTypes.static_pages = types.static_pages.filter((page) =>
-    typeof page === 'object' && page !== null && 'slug' in page && page.slug === 'kontakty',
+    typeof page === 'object' && page !== null && 'slug' in page &&
+    (page.slug === 'kontakty' || page.slug === 'knigi-i-uchebnye-materialy'),
   );
   fixtureTypes.institutes = [pages.institute];
   fixtureTypes.course_groups = [pages.group];
