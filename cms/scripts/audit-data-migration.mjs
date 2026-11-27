@@ -63,6 +63,11 @@ const BOOK_PAGE = {
   createdAt: 1795766400000,
   publishedAt: 1795766400001,
 };
+const BOOK_SEED_COLUMNS = {
+  pages: ['id', 'document_id', 'title', 'slug', 'body', 'legacy_id', 'created_at', 'updated_at', 'published_at', 'created_by_id', 'updated_by_id', 'locale', 'center_phone', 'manager_phone'],
+  components_shared_seos: ['id', 'seo_title', 'seo_description', 'noindex'],
+  pages_cmps: ['id', 'entity_id', 'cmp_id', 'component_type', 'field', 'order'],
+};
 const CURRENT_CONTENT_ADDITIONS = {
   promotions: { name: 'type', type: 'varchar(255)' },
   schedule_entries: { name: 'is_event_collection', type: 'boolean' },
@@ -122,6 +127,11 @@ function canonicalJson(value) { return json(canonical(value)); }
 function tableNames(db) {
   return db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name")
     .all().map(({ name }) => name);
+}
+function exactColumnSet(actual, expected) {
+  const actualSet = new Set(actual), expectedSet = new Set(expected);
+  return actualSet.size === actual.length && expectedSet.size === expected.length
+    && actualSet.size === expectedSet.size && expected.every((name) => actualSet.has(name));
 }
 function quote(identifier) { return `"${identifier.replaceAll('"', '""')}"`; }
 function sourceFileFingerprint(path) {
@@ -353,7 +363,7 @@ function deriveKnownTransforms(sourceDb, plan, receipt) {
   }
   return transforms;
 }
-function expectedTableRows(sourceDb, sourceTable, columns, transforms) {
+function expectedTableRows(sourceDb, sourceTable, columns, transforms, candidateColumns = columns) {
   const rows = collectRows(sourceDb, sourceTable, columns).map(({ keyed }) => ({ ...keyed }));
   if (sourceTable === 'pages' && transforms.sitePhones) {
     for (const row of rows) {
@@ -365,7 +375,7 @@ function expectedTableRows(sourceDb, sourceTable, columns, transforms) {
   if (transforms.bookSeller?.pending && ['pages', 'components_shared_seos', 'pages_cmps'].includes(sourceTable)) {
     const next = (table) => Number(sourceDb.prepare(`SELECT COALESCE(MAX(id),0) AS id FROM ${quote(table)}`).get().id) + 1;
     const int = (value) => ({ integer: String(value) });
-    const row = (data) => Object.fromEntries(columns.map(({ name }) => [name, data[name] ?? null]));
+    const row = (data, targetColumns = columns) => Object.fromEntries(targetColumns.map(({ name }) => [name, data[name] ?? null]));
     if (sourceTable === 'pages') {
       const id = next('pages');
       for (const [offset, published] of [[0, false], [1, true]]) rows.push(row({
@@ -373,7 +383,7 @@ function expectedTableRows(sourceDb, sourceTable, columns, transforms) {
         body: BOOK_PAGE.body, legacy_id: BOOK_PAGE.slug, created_at: int(BOOK_PAGE.createdAt),
         updated_at: int(published ? BOOK_PAGE.publishedAt : BOOK_PAGE.createdAt),
         published_at: published ? int(BOOK_PAGE.publishedAt) : null,
-      }));
+      }, candidateColumns));
     } else if (sourceTable === 'components_shared_seos') {
       const id = next('components_shared_seos');
       for (const offset of [0, 1]) rows.push(row({ id: int(id + offset), seo_title: BOOK_PAGE.seoTitle,
@@ -403,7 +413,7 @@ function expectedTableRows(sourceDb, sourceTable, columns, transforms) {
   return rows;
 }
 function compareExpectedRows(sourceDb, candidateDb, table, sourceColumns, candidateColumns, transforms, differences) {
-  const expected = expectedTableRows(sourceDb, table, sourceColumns, transforms);
+  const expected = expectedTableRows(sourceDb, table, sourceColumns, transforms, candidateColumns);
   const candidate = collectRows(candidateDb, table, candidateColumns);
   const keys = primaryColumns(sourceColumns).map((name) => {
     const rename = KNOWN_RENAMES.get(table);
@@ -1206,6 +1216,15 @@ export function auditMigration({ sourceDbPath, candidateDbPath, plan, receipt, a
     const sourceSchema = schema(source); const candidateSchema = schema(candidate);
     const transforms = deriveKnownTransforms(source, plan, receipt);
     const differences = [];
+    if (transforms.bookSeller) {
+      for (const [table, expected] of Object.entries(BOOK_SEED_COLUMNS)) {
+        const columns = candidate.prepare(`PRAGMA table_xinfo(${quote(table)})`).all();
+        const actual = columns.map(({ name }) => name);
+        if (!exactColumnSet(actual, expected) || columns.some(({ hidden }) => Number(hidden) !== 0)) {
+          differences.push({ table, kind: 'book-page-schema-mismatch', schemaSha256: sha(Buffer.from(json(actual))) });
+        }
+      }
+    }
     const acceptedSchemaSnapshot = validateSchemaHistory(source, candidate, candidateSchema, differences);
     const sourceIntegrity = integrity(source); const candidateIntegrity = integrity(candidate);
     if (sourceIntegrity.integrityCheck.length !== 1 || sourceIntegrity.integrityCheck[0] !== 'ok' || sourceIntegrity.foreignKeyViolations) differences.push({ table: '*', kind: 'source-integrity-failed' });

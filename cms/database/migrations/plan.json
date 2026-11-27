@@ -427,7 +427,7 @@
       "kind": "data",
       "handler": "book-seller",
       "path": "data-steps/book-seller.mjs",
-      "sha256": "0210579efc7b27f0b325b5c8b3d94abd2775c18d5547df0137aece65e70247e0",
+      "sha256": "645ec7800d64cd531f54c4a24945c6f1fbd31512052165b84f17bbf6427a7f21",
       "source": {
         "strapiVersion": "5.51.2",
         "schema": {
@@ -474,7 +474,7 @@
     "files": [
       {
         "path": "database/migrations/data-steps/book-seller.mjs",
-        "sha256": "0210579efc7b27f0b325b5c8b3d94abd2775c18d5547df0137aece65e70247e0"
+        "sha256": "645ec7800d64cd531f54c4a24945c6f1fbd31512052165b84f17bbf6427a7f21"
       },
       {
         "path": "database/migrations/data-steps/reviewed-schedule-v2.mjs",
@@ -490,7 +490,7 @@
       },
       {
         "path": "scripts/audit-data-migration.mjs",
-        "sha256": "9f3e24f8a35542d575b333e4d0fa32bfa8026a1b4112a428766fcb27d5659668"
+        "sha256": "16760b744154ff4cfcc5393a8ac53a05879acba8906db6ea7d85315aed0195d1"
       },
       {
         "path": "scripts/audit-documents-migration.mjs",

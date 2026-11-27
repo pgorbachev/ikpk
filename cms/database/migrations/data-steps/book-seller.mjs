@@ -17,6 +17,11 @@ const EXPECTED_COLUMNS = {
 
 function fail(message) { throw new Error(`Cannot seed book Page: ${message}`); }
 function maxId(db, table) { return db.prepare(`SELECT COALESCE(MAX(id), 0) AS id FROM "${table}"`).get().id; }
+function exactColumnSet(actual, expected) {
+  const actualSet = new Set(actual), expectedSet = new Set(expected);
+  return actualSet.size === actual.length && expectedSet.size === expected.length
+    && actualSet.size === expectedSet.size && expected.every((name) => actualSet.has(name));
+}
 
 function inspectExisting(db) {
   const rows = db.prepare(`SELECT id, document_id, title, slug, body, legacy_id, published_at
@@ -63,8 +68,11 @@ function insertRows(db) {
 
 export function apply(db, { onApplied } = {}) {
   for (const [table, expected] of Object.entries(EXPECTED_COLUMNS)) {
-    const found = db.prepare(`PRAGMA table_info("${table}")`).all().map(({ name }) => name);
-    if (JSON.stringify(found) !== JSON.stringify(expected)) fail(`unsupported Strapi postimage schema for ${table}`);
+    const columns = db.prepare(`PRAGMA table_xinfo("${table}")`).all();
+    const found = columns.map(({ name }) => name);
+    if (!exactColumnSet(found, expected) || columns.some(({ hidden }) => hidden !== 0)) {
+      fail(`unsupported Strapi postimage schema for ${table}`);
+    }
   }
   return db.transaction(() => {
     const result = inspectExisting(db) ? { createdPages: 0, createdSeoComponents: 0, createdPageLinks: 0 } : insertRows(db);
