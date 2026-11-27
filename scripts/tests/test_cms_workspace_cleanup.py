@@ -194,6 +194,48 @@ class PairedWorkspaceCleanupTests(WorkspaceTestCase):
                                                       cgroups=cgroups, processes=processes)
         self.assertIn(str(retired / "payload"), refs)
 
+    def test_production_preview_reads_legacy_initial_journal_without_loading_its_config(self):
+        production_state_root = self.root / "production-state"
+        initial = production_state_root / "initial-prod"
+        initial.mkdir(mode=0o700, parents=True)
+        initial_state = RehearsalState(initial)
+        with initial_state.lock():
+            pass
+        legacy_config = self.root / "initial-prod.json"
+        legacy_config.write_text(json.dumps({"profile": "initial-prod", "stateDir": str(initial)}), encoding="utf-8")
+        real_fstat = os.fstat
+        legacy_inode = legacy_config.stat().st_ino
+
+        def root_owned_config(fd):
+            info = real_fstat(fd)
+            if info.st_ino == legacy_inode:
+                fields = list(info)
+                fields[4] = 0
+                return os.stat_result(fields)
+            return info
+        original_lstat = Path.lstat
+
+        def root_owned_state(path, *args, **kwargs):
+            info = original_lstat(path, *args, **kwargs)
+            if path == initial:
+                return SimpleNamespace(st_mode=info.st_mode, st_uid=0)
+            return info
+
+        production = {**self.config, "profile": "production-paired"}
+        with self.state.lock(), \
+                patch.object(host, "PRODUCTION_OPERATION_STATE_ROOT", production_state_root), \
+                patch.object(host, "_config_path_for_profile", side_effect=lambda name: self.root / (name + ".json")), \
+                patch.object(host, "_root_config", side_effect=AssertionError("legacy config must not be loaded")), \
+                patch.object(Path, "lstat", root_owned_state), \
+                patch.object(host.os, "fstat", root_owned_config), \
+                patch.object(host, "_cleanup_paired_workspaces", return_value={"workspaceDecisions": []}) as cleanup:
+            self.assertEqual(host._cleanup_workspace_scope(production, self.state, preview=True),
+                             {"workspaceDecisions": []})
+            legacy_config.write_text(json.dumps({"profile": "initial-prod", "stateDir": str(self.root / "different-state")}), encoding="utf-8")
+            with self.assertRaisesRegex(host.HostFailure, "location differs"):
+                host._cleanup_workspace_scope(production, self.state, preview=True)
+        cleanup.assert_called_once_with(production, self.state, preview=True, enabled=False)
+
     def test_unfinished_publication_prohibits_workspace_deletion(self):
         self._append_operation("retired", "a" * 40)
         retired = self._child("retired", "a" * 40)

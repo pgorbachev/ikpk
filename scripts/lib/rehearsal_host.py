@@ -53,6 +53,7 @@ STAGING194_CMS_ENV_FILE = Path("/etc/ikpk-cms/site-build-current194.env")
 PRODUCTION_PUBLICATION_LOCK = Path("/var/www/ikpk/.publication.lock")
 STAGING194_TEMPORARY_ROOT = Path("/var/tmp/ikpk-staging194")
 STAGING194_PAIRED_WORKSPACE_ROOT = Path("/var/lib/ikpk-site-build/staging194-paired")
+PRODUCTION_OPERATION_STATE_ROOT = Path("/var/lib/ikpk-rehearsal")
 PRODUCTION_PAIRED_WORKSPACE_ROOT = Path("/var/lib/ikpk-site-build/production-paired")
 SITE_PUBLICATION_MARKER = "host-publication.json"
 SITE_PUBLICATION_MARKER_DIR = Path("/var/lib/ikpk-rehearsal/site-publication")
@@ -1828,6 +1829,26 @@ def _remove_quarantined_workspace(name: str, directory: int, expected: os.stat_r
     os.fsync(directory)
 
 
+def _assert_production_journal_config(path: Path, expected: Path) -> None:
+    if not os.path.lexists(path):
+        return
+    fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    try:
+        info = os.fstat(fd)
+        if not stat.S_ISREG(info.st_mode) or info.st_uid != 0 or info.st_nlink != 1 or info.st_mode & 0o022:
+            raise HostFailure("production journal configuration is unsafe")
+        with os.fdopen(fd, "rb", closefd=False) as stream:
+            data = json.loads(stream.read(65537))
+        if (not isinstance(data, dict) or data.get("stateDir") != str(expected)
+                or data.get("profile") != expected.name
+                or data.get("publicationLock", str(PRODUCTION_PUBLICATION_LOCK)) != str(PRODUCTION_PUBLICATION_LOCK)):
+            raise HostFailure("production journal location differs from the fixed policy")
+    except (OSError, ValueError) as error:
+        raise HostFailure("cannot validate production journal location") from error
+    finally:
+        os.close(fd)
+
+
 def _cleanup_workspace_scope(config: dict[str, Any], state: RehearsalState, *,
                              preview: bool = False) -> dict[str, Any]:
     profile = config.get("profile", "staging194")
@@ -1842,10 +1863,19 @@ def _cleanup_workspace_scope(config: dict[str, Any], state: RehearsalState, *,
             if other == profile:
                 continue
             path = _config_path_for_profile(other)
-            if not os.path.lexists(path):
+            journal_root = PRODUCTION_OPERATION_STATE_ROOT / other
+            if not os.path.lexists(journal_root) and not os.path.lexists(path):
                 continue
-            other_config = _root_config(path, expected_profile=other, validate_temporary_root=False)
-            other_state = RehearsalState(Path(other_config["stateDir"]))
+            other_config = None
+            if other == "production-paired":
+                other_config = _root_config(path, expected_profile=other, validate_temporary_root=False)
+            else:
+                _assert_production_journal_config(path, journal_root)
+            info = journal_root.lstat()
+            if (not stat.S_ISDIR(info.st_mode) or info.st_uid != 0 or info.st_mode & 0o077
+                    or journal_root.resolve(strict=True) != journal_root):
+                raise HostFailure("production operation journal directory is unsafe")
+            other_state = RehearsalState(journal_root)
             if other_state.root.resolve(strict=True) == state.root.resolve(strict=True):
                 other_state = state
             else:
