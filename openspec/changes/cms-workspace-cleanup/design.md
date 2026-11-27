@@ -1,6 +1,6 @@
 ## Context
 
-At `origin/main@cc03bf9ae84bb07032463f621bc65af8088418f1`, `scripts/lib/rehearsal_host.py:2692` prepares CMS-user-owned workspaces with identity markers and symlinks to web and CMS dependencies. `_cleanup_after_commit` and `cleanup-site` currently remove site and CMS releases; the timer selects a profile from the site marker, and can run with no marker. The shared publication flock serializes cooperating writers, but is released between paired commands. The operation journal and admission state therefore remain essential. The separate unmerged dependency-generation-retention proposal explicitly excludes workspace cleanup and requires retaining dependencies of supported consumers.
+The original paired release helper prepared CMS-user-owned workspaces with identity markers and symlinks to web and CMS dependencies. See `scripts/lib/rehearsal_host.py@cc03bf9ae84bb07032463f621bc65af8088418f1:2692`, `def _prepare_paired_site_workspace`. `_cleanup_after_commit` and `cleanup-site` currently remove site and CMS releases; the timer selects a profile from the site marker, and can run with no marker. The shared publication flock serializes cooperating writers, but is released between paired commands. The operation journal and admission state therefore remain essential. The separate unmerged dependency-generation-retention proposal explicitly excludes workspace cleanup and requires retaining dependencies of supported consumers.
 
 ## Goals / Non-Goals
 
