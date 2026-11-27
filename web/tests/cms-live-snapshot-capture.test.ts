@@ -156,15 +156,7 @@ function dataset(over: Record<string, StubCollection> = {}): Record<string, Stub
     })).concat(defaultBookPage) },
     'video-playlists': { records: Array.from({ length: 2 }, (_, i) => ({ ...base('vp', i + 1, `Плейлист ${i + 1}`), videos: [{ url: 'https://example.invalid/v' }], seo: seo(`Плейлист ${i + 1}`) })) },
   };
-  const merged = { ...collections, ...over };
-  if (over.pages) {
-    const records = over.pages.records;
-    const hasBookPage = records.some((record) =>
-      record.slug === defaultBookPage.slug || record.legacy_id === defaultBookPage.legacy_id,
-    );
-    if (!hasBookPage) merged.pages = { ...over.pages, records: [...records, defaultBookPage] };
-  }
-  return merged;
+  return { ...collections, ...over };
 }
 
 /**
