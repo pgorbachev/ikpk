@@ -85,6 +85,17 @@ const base = (prefix: string, n: number, name: string): Record<string, unknown> 
 const without = (record: Record<string, unknown>, ...keys: string[]): Record<string, unknown> =>
   Object.fromEntries(Object.entries(record).filter(([k]) => !keys.includes(k)));
 
+const defaultBookPage = {
+  ...without(base('page', 3, 'Книги и учебные материалы'), 'name'),
+  slug: 'knigi-i-uchebnye-materialy',
+  legacy_id: 'knigi-i-uchebnye-materialy',
+  title: 'Книги и учебные материалы',
+  body: 'Издательский дом ИКПК выпускает книги и учебные материалы. Продавец книг — ИП Тучанфа В.А.',
+  seo: seo('Книги и учебные материалы'),
+  center_phone: null,
+  manager_phone: null,
+};
+
 const ARTICLE_COUNT = 130;
 
 function article(n: number, over: Record<string, unknown> = {}): Record<string, unknown> {
@@ -129,7 +140,7 @@ function dataset(over: Record<string, StubCollection> = {}): Record<string, Stub
     teachers: [ref('teach', 1, 'Преподаватель 1')],
   }));
 
-  return {
+  const collections: Record<string, StubCollection> = {
     institutes: { records: institutes },
     'course-groups': { records: courseGroups },
     seminars: { records: seminars },
@@ -142,10 +153,18 @@ function dataset(over: Record<string, StubCollection> = {}): Record<string, Stub
       ...without(base('page', i + 1, slug), 'name'), slug, legacy_id: slug,
       title: `Страница ${i + 1}`, body: '<p>Тело страницы</p>', seo: seo(slug),
       center_phone: i === 0 ? '+78125550101' : null, manager_phone: i === 0 ? '+79815550202' : null,
-    })) },
+    })).concat(defaultBookPage) },
     'video-playlists': { records: Array.from({ length: 2 }, (_, i) => ({ ...base('vp', i + 1, `Плейлист ${i + 1}`), videos: [{ url: 'https://example.invalid/v' }], seo: seo(`Плейлист ${i + 1}`) })) },
-    ...over,
   };
+  const merged = { ...collections, ...over };
+  if (over.pages) {
+    const records = over.pages.records;
+    const hasBookPage = records.some((record) =>
+      record.slug === defaultBookPage.slug || record.legacy_id === defaultBookPage.legacy_id,
+    );
+    if (!hasBookPage) merged.pages = { ...over.pages, records: [...records, defaultBookPage] };
+  }
+  return merged;
 }
 
 /**
@@ -162,7 +181,7 @@ const EXPECTED_TYPES: { label: string; match: RegExp; count: number }[] = [
   { label: 'schedule-entries', match: /schedule[-_ ]?entries|schedule/i, count: 3 },
   { label: 'news-items', match: /news([-_ ]?items)?/i, count: 2 },
   { label: 'promotions', match: /promotions?|promos?/i, count: 2 },
-  { label: 'pages', match: /(static[-_ ]?)?pages?/i, count: 2 },
+  { label: 'pages', match: /(static[-_ ]?)?pages?/i, count: 3 },
   { label: 'video-playlists', match: /video[-_ ]?playlists?/i, count: 2 },
 ];
 
