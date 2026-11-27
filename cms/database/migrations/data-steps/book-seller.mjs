@@ -68,8 +68,11 @@ function insertRows(db) {
 
 export function apply(db, { onApplied } = {}) {
   for (const [table, expected] of Object.entries(EXPECTED_COLUMNS)) {
-    const found = db.prepare(`PRAGMA table_info("${table}")`).all().map(({ name }) => name);
-    if (!exactColumnSet(found, expected)) fail(`unsupported Strapi postimage schema for ${table}`);
+    const columns = db.prepare(`PRAGMA table_xinfo("${table}")`).all();
+    const found = columns.map(({ name }) => name);
+    if (!exactColumnSet(found, expected) || columns.some(({ hidden }) => hidden !== 0)) {
+      fail(`unsupported Strapi postimage schema for ${table}`);
+    }
   }
   return db.transaction(() => {
     const result = inspectExisting(db) ? { createdPages: 0, createdSeoComponents: 0, createdPageLinks: 0 } : insertRows(db);

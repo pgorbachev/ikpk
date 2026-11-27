@@ -80,6 +80,11 @@ test('refuses missing or extra page columns without inserting any book records',
   missing.exec('ALTER TABLE pages DROP COLUMN manager_phone');
   assert.throws(() => apply(missing, { onApplied() {} }), /unsupported Strapi postimage schema for pages/);
   assert.equal(missing.prepare("SELECT count(*) AS n FROM pages WHERE slug='knigi-i-uchebnye-materialy'").get().n, 0);
+
+  const generated = database(t);
+  generated.exec('ALTER TABLE pages ADD COLUMN generated_extra TEXT GENERATED ALWAYS AS (id + 1) VIRTUAL');
+  assert.throws(() => apply(generated, { onApplied() {} }), /unsupported Strapi postimage schema for pages/);
+  assert.equal(generated.prepare("SELECT count(*) AS n FROM pages WHERE slug='knigi-i-uchebnye-materialy'").get().n, 0);
 });
 
 test('first run accepts only the current-site pair regardless of documentId', async (t) => {
