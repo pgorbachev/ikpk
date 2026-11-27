@@ -42,8 +42,16 @@ export default {
         children: [
           ...(route.children ?? []),
           {
+            path: 'collection-types/site-pages',
+            lazy: async () => ({ Component: (await import('./pages/SitePages')).default }),
+          },
+          {
             path: 'collection-types/site-contact-phones',
             lazy: async () => ({ Component: (await import('./pages/SitePhones')).default }),
+          },
+          {
+            path: 'collection-types/site-book-intro',
+            lazy: async () => ({ Component: (await import('./pages/SiteBookIntro')).default }),
           },
         ],
       };

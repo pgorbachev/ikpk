@@ -888,11 +888,11 @@
     "identity": "style|body:0368941aea4f7157"
   },
   {
-    "slotId": "src:pages/[slug].astro:L74:C1:style",
+    "slotId": "src:pages/[slug].astro:L75:C1:style",
     "file": "pages/[slug].astro",
     "nodeKind": "element",
-    "locator": "pages/[slug].astro:L74:C1:style",
-    "fingerprint": "1de702013cc16e2f78fb22909a4ed75deccecf76995e037c212f15bbf051cdac",
+    "locator": "pages/[slug].astro:L75:C1:style",
+    "fingerprint": "e33ca24f81d2ef20b7b7e9bb3ba7efcf433e3fa8186241d78de0e2e5c3685d5b",
     "identity": "style|body:42066375604b39ff"
   },
   {
@@ -936,11 +936,11 @@
     "identity": "style|body:aa2b0302ae81eb06"
   },
   {
-    "slotId": "src:pages/knigi-i-uchebnye-materialy.astro:L54:C1:style",
+    "slotId": "src:pages/knigi-i-uchebnye-materialy.astro:L62:C1:style",
     "file": "pages/knigi-i-uchebnye-materialy.astro",
     "nodeKind": "element",
-    "locator": "pages/knigi-i-uchebnye-materialy.astro:L54:C1:style",
-    "fingerprint": "d2511c90d976dfe1a9f186e2bb54376b93084ffde94aa60a7de473607fd9af8f",
+    "locator": "pages/knigi-i-uchebnye-materialy.astro:L62:C1:style",
+    "fingerprint": "11561fa77c7b72146ea2230cbb73a7a629198c8713a6ed2055d3f3cf94ee2fc3",
     "identity": "style|body:1e2a6eff5926afbb"
   },
   {

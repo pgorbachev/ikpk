@@ -81,6 +81,8 @@ export default defineConfig({
       'tests/article-page-date.build.test.ts',
       // Предмет — собранные страницы книг и предложений (vitest.build.config.ts).
       'tests/books-offers.build.test.ts',
+      // Проверяет собранную страницу книги на переданном snapshot fixture.
+      'tests/book-seller-snapshot.build.test.ts',
       // Рендер компонента через Astro Container API — отдельная конфигурация
       // (vitest.render.config.ts), потому что `.astro` требует vite-плагина Astro.
       'tests/schedule-filters.render.test.ts',

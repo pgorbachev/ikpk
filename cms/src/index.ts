@@ -11,6 +11,7 @@ import { backfillAdminLabels, registerSeminarDocuments, registerSeminarUid } fro
 import { backfillProgramEditorLabels, registerProgramEditor } from './lib/program-editor';
 import { applyEditorForms } from './seminar-management/forms';
 import { registerSitePhones } from './api/page/site-phones';
+import { registerSiteBooks } from './api/page/site-books';
 import { registerSiteRefresh } from './seminar-management/site-refresh';
 
 export default {
@@ -25,6 +26,7 @@ export default {
     registerUnlinkedEntryList(strapi);
     registerSiteRefresh(strapi);
     registerSitePhones(strapi);
+    registerSiteBooks(strapi);
   },
 
   /**

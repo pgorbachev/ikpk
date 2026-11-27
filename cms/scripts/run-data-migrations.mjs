@@ -471,7 +471,7 @@ function resolvePlan(artifactDir, { fingerprint = true } = {}) {
     if (!['strapi-native', 'data'].includes(step.kind)) fail(`unsupported migration step kind for ${step.id}`);
     if (step.kind === 'strapi-native' && step.phase !== 'before-sync') fail(`native Strapi migration must be before-sync: ${step.id}`);
     if (step.kind === 'data' && step.phase !== 'after-sync') fail(`explicit data migration must be after-sync: ${step.id}`);
-    if (step.kind === 'data' && !['site-phones', 'classification', 'normalize-documents-state', 'content-admin-permissions', 'reviewed-schedule', 'reviewed-documents', 'reviewed-content'].includes(step.handler)) fail(`unsupported data migration handler for ${step.id}`);
+    if (step.kind === 'data' && !['site-phones', 'book-seller', 'classification', 'normalize-documents-state', 'content-admin-permissions', 'reviewed-schedule', 'reviewed-documents', 'reviewed-content'].includes(step.handler)) fail(`unsupported data migration handler for ${step.id}`);
     if (typeof step.path !== 'string' || !step.path || isAbsolute(step.path) || step.path.split(/[\\/]/).includes('..')) fail(`invalid migration payload path for ${step.id}`);
     if (!HASH.test(step.sha256 ?? '')) fail(`missing SHA-256 for migration payload ${step.id}`);
     if (paths.has(step.path)) fail(`duplicate migration payload path: ${step.path}`);

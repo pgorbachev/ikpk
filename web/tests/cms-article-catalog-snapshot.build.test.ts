@@ -1,6 +1,5 @@
 import { afterAll, describe, it, expect } from 'vitest';
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
 import { execFileSync } from 'node:child_process';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
@@ -19,7 +18,9 @@ afterAll(() => {
 });
 
 function scratchDir(): string {
-  sitemapScratch ??= mkdtempSync(join(tmpdir(), 'ikpk-sitemap-lastmod-'));
+  const buildWorkspace = join(WEB_ROOT, '.astro');
+  mkdirSync(buildWorkspace, { recursive: true });
+  sitemapScratch ??= mkdtempSync(join(buildWorkspace, 'ikpk-sitemap-lastmod-'));
   return sitemapScratch;
 }
 

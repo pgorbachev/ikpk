@@ -6,6 +6,7 @@ import { refreshStatusLines, type RefreshStatusView } from '../../seminar-manage
 type Status = RefreshStatusView & {
   siteUrl?: string | null;
   previousReleaseId?: string | null;
+  canRestore?: boolean;
 };
 
 export function SiteRefreshPage() {
@@ -73,7 +74,7 @@ export function SiteRefreshPage() {
       <Button disabled={running} onClick={() => send()} loading={running}>
         Обновить сайт
       </Button>
-      {status?.previousReleaseId ? (
+      {status?.canRestore && status.previousReleaseId ? (
         <Box paddingTop={4}>
           <Button variant="secondary" disabled={running} onClick={() => send('restore')}>
             Вернуть предыдущий релиз

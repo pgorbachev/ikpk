@@ -41,6 +41,7 @@ describe('site phone fields in the Strapi admin', { timeout: 360_000 }, () => {
     } });
     contacts = await page('kontakty', { center_phone: '+78126465450', manager_phone: '+79810387797' });
     another = await page('another-page', {});
+    await page('knigi-i-uchebnye-materialy', { body: 'Вводный текст книг.' });
     const editor = await app.service('admin::role').findOne({ code: 'strapi-editor' });
     for (const action of ['read', 'update']) {
       await app.db.query('admin::permission').create({ data: {
@@ -81,6 +82,13 @@ describe('site phone fields in the Strapi admin', { timeout: 360_000 }, () => {
       assert.equal(await page.getByRole('link', { name: 'Страницы → Контакты сайта', exact: true }).count(), 0);
       const authorized = page.waitForRequest(request => request.url().endsWith('/admin/site-phones'));
       await page.getByRole('link', { name: 'Страницы', exact: true }).click({ timeout: 15_000 });
+      await page.getByRole('heading', { name: 'Страницы', exact: true }).waitFor();
+      await page.getByRole('button', { name: 'Вводный текст книг', exact: true }).click();
+      await page.waitForURL('**/admin/content-manager/collection-types/site-book-intro');
+      await page.getByRole('heading', { name: 'Вводный текст страницы книг' }).waitFor();
+      assert.ok(await page.getByRole('textbox', { name: 'Вводный текст' }).isVisible());
+      await page.goto(base + '/admin/content-manager/collection-types/site-pages');
+      await page.getByRole('button', { name: 'Контакты сайта', exact: true }).click();
       await page.waitForURL('**/admin/content-manager/collection-types/site-contact-phones');
       await page.getByRole('heading', { name: 'Контакты сайта' }).waitFor();
       const authorization = (await authorized).headers().authorization;
@@ -93,6 +101,7 @@ describe('site phone fields in the Strapi admin', { timeout: 360_000 }, () => {
       await page.route('**/admin/site-phones', route => route.fulfill({ status: 500, contentType: 'application/json', body: '{}' }));
       await page.goto(base + '/admin/content-manager');
       await page.getByRole('link', { name: 'Страницы', exact: true }).click();
+      await page.getByRole('button', { name: 'Контакты сайта', exact: true }).click();
       await page.getByRole('button', { name: 'Загрузить актуальные значения' }).waitFor();
       await page.unroute('**/admin/site-phones');
       await page.getByRole('button', { name: 'Загрузить актуальные значения' }).click();
@@ -172,6 +181,12 @@ describe('site phone fields in the Strapi admin', { timeout: 360_000 }, () => {
       await page.waitForURL('**/admin/content-manager/collection-types/site-contact-phones');
       await phone.waitFor();
       assert.ok(await phone.isVisible());
+
+      await page.goto(form.slice(0, -1));
+      await page.getByText('Тест knigi-i-uchebnye-materialy', { exact: true }).click();
+      await page.waitForURL('**/admin/content-manager/collection-types/site-book-intro');
+      await page.getByRole('heading', { name: 'Вводный текст страницы книг' }).waitFor();
+      assert.ok(await page.getByRole('textbox', { name: 'Вводный текст' }).isVisible());
 
       for (const [path, expectedSlug] of [[another.documentId, 'another-page'], ['create', '']]) {
         await page.goto(form + path);
