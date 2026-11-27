@@ -33914,6 +33914,27 @@
     "mappedClasses": []
   },
   {
+    "jsonPath": "static_pages.json$[9][\"body_html\"]",
+    "selectorId": "static_pages[*].body_html",
+    "entityId": "knigi-i-uchebnye-materialy",
+    "byteLength": 165,
+    "sha256": "64cf6fc270ef9bd59b72d23fbc055b16de48a0f704cd4e93513e62b81f9e50f8",
+    "textHash": "64cf6fc270ef9bd59b72d23fbc055b16de48a0f704cd4e93513e62b81f9e50f8",
+    "headings": [],
+    "lists": [],
+    "tables": [],
+    "times": [],
+    "links": [],
+    "images": [],
+    "details": [],
+    "checkboxes": [],
+    "markers": [],
+    "rutube": [],
+    "svgCount": 0,
+    "mappedStyles": [],
+    "mappedClasses": []
+  },
+  {
     "jsonPath": "teachers.json$[0][\"bio_html\"]",
     "selectorId": "teachers[*].bio_html",
     "entityId": "85",
