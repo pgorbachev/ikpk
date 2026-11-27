@@ -234,6 +234,9 @@ class PairedWorkspaceCleanupTests(WorkspaceTestCase):
             legacy_config.write_text(json.dumps({"profile": "initial-prod", "stateDir": str(self.root / "different-state")}), encoding="utf-8")
             with self.assertRaisesRegex(host.HostFailure, "location differs"):
                 host._cleanup_workspace_scope(production, self.state, preview=True)
+            legacy_config.unlink()
+            with self.assertRaisesRegex(host.HostFailure, "configuration is unavailable"):
+                host._cleanup_workspace_scope(production, self.state, preview=True)
         cleanup.assert_called_once_with(production, self.state, preview=True, enabled=False)
 
     def test_unfinished_publication_prohibits_workspace_deletion(self):

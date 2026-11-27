@@ -1830,9 +1830,10 @@ def _remove_quarantined_workspace(name: str, directory: int, expected: os.stat_r
 
 
 def _assert_production_journal_config(path: Path, expected: Path) -> None:
-    if not os.path.lexists(path):
-        return
-    fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    try:
+        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    except OSError as error:
+        raise HostFailure("production journal configuration is unavailable") from error
     try:
         info = os.fstat(fd)
         if not stat.S_ISREG(info.st_mode) or info.st_uid != 0 or info.st_nlink != 1 or info.st_mode & 0o022:
