@@ -1,6 +1,5 @@
 import { afterAll, describe, expect, it } from 'vitest';
-import { cpSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { join } from 'node:path';
 import { REPO_ROOT, WEB_ROOT } from './helpers/cms-content-publication-contract';
@@ -15,7 +14,9 @@ afterAll(() => {
 });
 
 function root(): string {
-  scratch ??= mkdtempSync(join(tmpdir(), 'ikpk-book-snapshot-'));
+  const buildWorkspace = join(WEB_ROOT, '.astro');
+  mkdirSync(buildWorkspace, { recursive: true });
+  scratch ??= mkdtempSync(join(buildWorkspace, 'ikpk-book-snapshot-'));
   return scratch;
 }
 

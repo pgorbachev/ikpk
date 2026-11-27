@@ -1,6 +1,7 @@
 {
-  "snapshotSha256": "7a8bf43af1d3aeb70d8ba6374f22958b4ecb2578caff6b73579f2f08f9ab255d",
+  "snapshotSha256": "9a0277c4367e18e92bb112d679474e28abe002521d92a7adc1cbc2603e947eb6",
   "sourceCommit": "fc80be1d1705971d2bfe86bc86d6990f853cbeb6",
+  "snapshotSourceCommit": "6597fa551ccfd060227d3212ccb3cc4d6105633c",
   "profile": "default ci",
   "urls": [
     "https://ikpk.su/",
