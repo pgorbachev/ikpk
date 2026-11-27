@@ -371,15 +371,72 @@ PY
 )
   cleanup_profile_state_dirs=
   cleanup_profile_artifact_roots=
+  cleanup_workspace_root=-/var/lib/ikpk-site-build/staging194-paired
   if [[ "$service_profile" == production-static || "$service_profile" == production-paired || \
         "$service_profile" == initial-prod ]]; then
     # A protected marker can belong to another installed production profile.
     # These exact directories let the helper read that profile's journal under
     # systemd; '-' means a profile never provisioned here may be absent.
+    cleanup_workspace_root=-/var/lib/ikpk-site-build/production-paired
     cleanup_profile_state_dirs="-/var/lib/ikpk-rehearsal/initial-prod -/var/lib/ikpk-rehearsal/production-static -/var/lib/ikpk-rehearsal/production-paired"
     # The shared housekeeping unit can be selected by any production marker,
     # even when it was installed from another production profile.
     cleanup_profile_artifact_roots="-/var/lib/ikpk-rehearsal/initial-prod/backups -/var/lib/ikpk-rehearsal/production-static/backups -/var/lib/ikpk-rehearsal/production-paired/backups"
+  fi
+  if [[ "$service_profile" == staging194 ]]; then
+    python3 - "$CONFIG" <<'PYTHON'
+import json
+import os
+import pwd
+import stat
+import subprocess
+import tempfile
+from pathlib import Path
+
+config = json.loads(Path(os.sys.argv[1]).read_text())
+unit = config["cmsUnit"]
+if unit != "ikpk-cms-prototype193.service":
+    raise SystemExit("unexpected staging194 CMS unit")
+user = pwd.getpwnam(config["cmsUser"])
+parent = Path("/var/lib/ikpk-site-build")
+parent.mkdir(mode=0o755, exist_ok=True)
+info = parent.lstat()
+if not stat.S_ISDIR(info.st_mode) or info.st_uid != 0 or info.st_mode & 0o022:
+    raise SystemExit("staging workspace parent is unsafe")
+workspace = parent / "staging194-paired"
+workspace.mkdir(mode=0o750, exist_ok=True)
+info = workspace.lstat()
+if not stat.S_ISDIR(info.st_mode) or info.st_uid not in (0, user.pw_uid) or info.st_mode & 0o022:
+    raise SystemExit("staging paired workspace root is unsafe")
+os.chown(workspace, user.pw_uid, user.pw_gid, follow_symlinks=False)
+directory = Path("/etc/systemd/system") / (unit + ".d")
+directory.mkdir(mode=0o755, exist_ok=True)
+info = directory.lstat()
+if not stat.S_ISDIR(info.st_mode) or info.st_uid != 0 or info.st_mode & 0o022:
+    raise SystemExit("staging CMS drop-in directory is unsafe")
+drop_in = directory / "35-paired-workspace.conf"
+content = f"[Service]\nReadWritePaths={workspace}\n"
+if os.path.lexists(drop_in):
+    info = drop_in.lstat()
+    if (not stat.S_ISREG(info.st_mode) or info.st_uid != 0 or info.st_nlink != 1
+            or info.st_mode & 0o022 or drop_in.read_text() != content):
+        raise SystemExit("unrecognized existing staging CMS workspace drop-in")
+else:
+    fd, temporary = tempfile.mkstemp(dir=directory)
+    try:
+        with os.fdopen(fd, "w") as stream:
+            stream.write(content)
+            os.fchmod(stream.fileno(), 0o644)
+        os.replace(temporary, drop_in)
+        try:
+            subprocess.run(["systemctl", "daemon-reload"], check=True)
+        except Exception:
+            drop_in.unlink()
+            subprocess.run(["systemctl", "daemon-reload"], check=False)
+            raise
+    finally:
+        Path(temporary).unlink(missing_ok=True)
+PYTHON
   fi
   systemd_dir=/etc/systemd/system
   unit_tmp="$systemd_dir/ikpk-site-housekeeping.service.new.$$"
@@ -406,7 +463,7 @@ ProtectControlGroups=yes
 # directory and fsyncs its parent. CMS and the 194 transport serialize through
 # the shared site-refresh reservation; production transport also uses its
 # configured .publication.lock. Do not require that prod-only inode on 194.
-ReadWritePaths=/var/www/ikpk $site_state_dir $state_dir $cleanup_profile_state_dirs /var/lib/ikpk-rehearsal/site-publication $cleanup_backup_root $cleanup_profile_artifact_roots $cleanup_cms_release_root
+ReadWritePaths=/var/www/ikpk $site_state_dir $state_dir $cleanup_profile_state_dirs /var/lib/ikpk-rehearsal/site-publication $cleanup_backup_root $cleanup_profile_artifact_roots $cleanup_cms_release_root $cleanup_workspace_root
 EOF
   chmod 0644 "$unit_tmp"
   mv -f -- "$unit_tmp" "$systemd_dir/ikpk-site-housekeeping.service"

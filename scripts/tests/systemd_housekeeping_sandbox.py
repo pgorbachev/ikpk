@@ -19,7 +19,8 @@ ROOT = Path(__file__).resolve().parents[2]
 INSTALLER = ROOT / "scripts/install-rehearsal-host.sh"
 EXPECTED_READ_WRITE_LINE = (
     "ReadWritePaths=/var/www/ikpk $site_state_dir $state_dir $cleanup_profile_state_dirs "
-    "/var/lib/ikpk-rehearsal/site-publication $cleanup_backup_root $cleanup_profile_artifact_roots"
+    "/var/lib/ikpk-rehearsal/site-publication $cleanup_backup_root $cleanup_profile_artifact_roots "
+    "$cleanup_cms_release_root $cleanup_workspace_root"
 )
 
 
@@ -56,6 +57,8 @@ def main() -> int:
     service = f"ikpk-housekeeping-sandbox-{token}.service"
     scratch = Path("/var/lib") / f"ikpk-sandbox-proof-{token}"
     denied_root = scratch / "denied-sibling"
+    cms_release_root = scratch / "cms-releases"
+    workspace_root = scratch / "paired-workspaces"
     unit_path = Path("/run/systemd/system") / service
     helper_path = Path("/run") / f"ikpk-housekeeping-sandbox-{token}.py"
     if scratch.exists() or denied_root.exists() or unit_path.exists() or helper_path.exists():
@@ -78,7 +81,7 @@ def main() -> int:
         scratch.mkdir(mode=0o700)
         scratch_created = True
         for directory in (selected_backup, *profile_backup_roots, state_dir, site_state, *profile_state_dirs,
-                          denied_root):
+                          denied_root, cms_release_root, workspace_root):
             directory.mkdir(parents=True, mode=0o700, exist_ok=False)
         (state_dir / "site-publication").mkdir(mode=0o700)
 
@@ -91,6 +94,8 @@ def main() -> int:
             "$cleanup_profile_state_dirs": " ".join(f"-{path}" for path in profile_state_dirs),
             "$cleanup_backup_root": str(selected_backup),
             "$cleanup_profile_artifact_roots": " ".join(f"-{path}" for path in profile_backup_roots),
+            "$cleanup_cms_release_root": str(cms_release_root),
+            "$cleanup_workspace_root": f"-{workspace_root}",
         }
         for variable, path in replacements.items():
             expanded_rw = expanded_rw.replace(variable, path)
@@ -98,7 +103,7 @@ def main() -> int:
             raise SystemExit("live service path or unexpanded installer variable in scratch unit")
 
         report_path = selected_backup / "probe-result.json"
-        allowed = [selected_backup, *profile_backup_roots]
+        allowed = [selected_backup, *profile_backup_roots, cms_release_root, workspace_root]
         with helper_path.open("x", encoding="utf-8") as helper_file:
             helper_created = True
             helper_file.write(
@@ -108,7 +113,9 @@ def main() -> int:
             "for index, raw in enumerate(sys.argv[2:-1]):\n"
             "    target = pathlib.Path(raw) / ('probe-' + str(index))\n"
             "    target.write_text('ok', encoding='ascii')\n"
-            "    report['allowed'].append(target.exists())\n"
+            "    created = target.exists()\n"
+            "    target.unlink()\n"
+            "    report['allowed'].append(created and not target.exists())\n"
             "denied = pathlib.Path(sys.argv[-1]) / 'must-not-write'\n"
             "try:\n"
             "    denied.write_text('bad', encoding='ascii')\n"
@@ -137,7 +144,7 @@ def main() -> int:
         report = json.loads(report_path.read_text(encoding="utf-8"))
         if report != {"allowed": [True] * len(allowed), "deniedWriteSucceeded": False}:
             raise RuntimeError("ProtectSystem/ReadWritePaths probe did not enforce expected scratch boundary")
-        print(f"PASS: strict systemd sandbox allowed {len(allowed)} scratch backup roots and denied sibling ({token})")
+        print(f"PASS: strict systemd sandbox allowed {len(allowed)} scratch roots and denied sibling ({token})")
         return 0
     finally:
         if unit_created:
