@@ -10,6 +10,7 @@ import {
   isPidAlive,
   launchPlan,
   mayRefresh,
+  mayRestoreRefresh,
   normalizeReleaseTarget,
   refreshReady,
   reconcile,
@@ -48,6 +49,15 @@ async function actorMayRefresh(strapi, user) {
   return mayRefresh((stored?.roles || []).map((role) => role.code));
 }
 
+async function actorMayRestore(strapi, user) {
+  if (!user?.id) return false;
+  const stored = await strapi.db.query('admin::user').findOne({
+    where: { id: user.id },
+    populate: ['roles'],
+  });
+  return mayRestoreRefresh((stored?.roles || []).map((role) => role.code));
+}
+
 function deny(ctx) {
   ctx.status = 403;
   ctx.body = { message: MESSAGES.forbidden };
@@ -64,7 +74,7 @@ export function registerSiteRefresh(strapi, deps: { hostPublicationStatus?: type
       handler: async (ctx) => {
         if (!(await actorMayRefresh(strapi, ctx.state.user))) return deny(ctx);
         const { state } = locations();
-        ctx.body = publicView(applyDecision(state));
+        ctx.body = { ...publicView(applyDecision(state)), canRestore: await actorMayRestore(strapi, ctx.state.user) };
       },
       config: { policies: ['admin::isAuthenticatedAdmin'] },
     },
@@ -74,20 +84,25 @@ export function registerSiteRefresh(strapi, deps: { hostPublicationStatus?: type
       handler: async (ctx) => {
         if (!(await actorMayRefresh(strapi, ctx.state.user))) return deny(ctx);
         if (ctx.request.body?.action === 'restore') {
+          if (!(await actorMayRestore(strapi, ctx.state.user))) return deny(ctx);
           const result = await restorePrevious({ hostPublicationStatus: readHostPublication });
-          ctx.body = { ...result, detail: publicView(result).detail };
+          ctx.body = { ...result, detail: publicView(result).detail, canRestore: true };
           return;
         }
         if (ctx.request.body?.action === 'cancel-starting') {
-          ctx.body = await cancelStarting(ctx.request.body);
+          if (!(await actorMayRestore(strapi, ctx.state.user))) return deny(ctx);
+          ctx.body = { ...(await cancelStarting(ctx.request.body)), canRestore: true };
           return;
         }
         if (Object.prototype.hasOwnProperty.call(ctx.request.body || {}, 'action')) {
           ctx.status = 400;
-          ctx.body = { status: 'failed', message: MESSAGES.failed };
+          ctx.body = { status: 'failed', message: MESSAGES.failed, canRestore: await actorMayRestore(strapi, ctx.state.user) };
           return;
         }
-        ctx.body = await launchRefresh({ hostPublicationStatus: readHostPublication });
+        const result = await launchRefresh({ hostPublicationStatus: readHostPublication });
+        ctx.body = result && typeof result === 'object'
+          ? { ...result, canRestore: await actorMayRestore(strapi, ctx.state.user) }
+          : { status: 'failed', message: MESSAGES.failed, canRestore: await actorMayRestore(strapi, ctx.state.user) };
       },
       config: { policies: ['admin::isAuthenticatedAdmin'] },
     },

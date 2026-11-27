@@ -343,6 +343,12 @@ function mapRecord(type: string, record: Record<string, unknown>): Record<string
   for (const entry of FIELD_MAP) {
     if (entry.type === type) applyEntry(record, entry, out);
   }
+  // This dedicated Page stores plain text in `body`. Preserve angle brackets and
+  // ampersands verbatim for Astro's escaped text interpolation.
+  if (type === 'static_pages' && record.slug === 'knigi-i-uchebnye-materialy') {
+    if (typeof record.body !== 'string') throw new Error(`Page ${record.slug}: body must be plain text`);
+    out.body_text = record.body;
+  }
   if (type === 'static_pages' && record.slug !== 'kontakty') {
     if ([out.center_phone, out.manager_phone].some((value) => value != null && value !== '')) {
       throw new Error(`Поля телефонов заполнены вне Page /kontakty: ${recordKey(record)}`);

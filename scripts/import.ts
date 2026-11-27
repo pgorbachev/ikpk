@@ -31,6 +31,7 @@ import { relationFileId } from "./lib/strapi-relation-file.js";
 import { createImageUploader } from "./lib/import-media.js";
 import { buildStrapiMediaInventory } from "./lib/strapi-media-inventory.js";
 import { METHOD_AUTHOR_LEGACY_IDS } from "./lib/person-trait.js";
+import { BOOK_PAGE_INTRODUCTION, BOOK_PAGE_SEO_DESCRIPTION, BOOK_PAGE_SEO_TITLE, BOOK_PAGE_SLUG, BOOK_PAGE_TITLE } from "../cms/src/lib/book-seller.js";
 
 // ────────────────────────────────────────────────────────────────
 // Configuration
@@ -582,6 +583,7 @@ async function importPages(): Promise<void> {
   log("📦 Importing pages …");
   const report = newReport("pages");
   for (const e of await loadJSON("static_pages.json")) {
+    if (e.slug === BOOK_PAGE_SLUG || e.legacy_id === BOOK_PAGE_SLUG) continue;
     const data: Record<string, unknown> = {
       title: e.title,
       slug: e.slug,
@@ -598,6 +600,54 @@ async function importPages(): Promise<void> {
       updateIfEmptyFields: ["center_phone", "manager_phone"],
     });
   }
+  await ensureBookIntroduction(report);
+}
+
+async function ensureBookIntroduction(report: EntityReport): Promise<void> {
+  const findAll = async (field: "slug" | "legacy_id", status: "draft" | "published") => {
+    const result = await api<{ data?: StrapiEntry[] }>("GET",
+      `/api/pages?filters[${field}][$eq]=${encodeURIComponent(BOOK_PAGE_SLUG)}&pagination[pageSize]=100&status=${status}`);
+    return Array.isArray(result?.data) ? result.data : [];
+  };
+  if (strapiOffline && DRY_RUN) {
+    log(`  [DRY] Would create or verify pages [${BOOK_PAGE_SLUG}]`);
+    report.created++;
+    return;
+  }
+  const [slugDraft, idDraft, slugPublished, idPublished] = await Promise.all([
+    findAll("slug", "draft"), findAll("legacy_id", "draft"),
+    findAll("slug", "published"), findAll("legacy_id", "published"),
+  ]);
+  const unique = (rows: StrapiEntry[]) => [...new Map(rows.map((row) => [row.documentId || `id:${row.id}`, row])).values()];
+  const drafts = unique([...slugDraft, ...idDraft]);
+  const published = unique([...slugPublished, ...idPublished]);
+  if (!drafts.length && !published.length) {
+    if (DRY_RUN) {
+      log(`  [DRY] Would create initial pages [${BOOK_PAGE_SLUG}]`);
+      report.created++;
+      return;
+    }
+    const data = {
+      title: BOOK_PAGE_TITLE, slug: BOOK_PAGE_SLUG, legacy_id: BOOK_PAGE_SLUG,
+      body: BOOK_PAGE_INTRODUCTION,
+      seo: { seo_title: BOOK_PAGE_SEO_TITLE, seo_description: BOOK_PAGE_SEO_DESCRIPTION, noindex: false },
+    };
+    const created = await api<{ data?: StrapiEntry }>("POST", "/api/pages", { data });
+    if (!created?.data?.documentId) throw new Error(`Page ${BOOK_PAGE_SLUG}: Strapi did not return a documentId for the initial seed`);
+    // In Strapi 5 REST, POST creates the draft. Updating the document with status=published
+    // uses the Document Service publish path and guarantees a usable published version.
+    await api("PUT", `/api/pages/${encodeURIComponent(created.data.documentId)}?status=published`, { data });
+    log(`  ✅ Created initial pages [${BOOK_PAGE_SLUG}]`);
+    report.created++;
+    return;
+  }
+  if (drafts.length !== 1 || published.length !== 1 || !drafts[0].documentId
+      || drafts[0].documentId !== published[0].documentId
+      || [drafts[0], published[0]].some((row) => row.slug !== BOOK_PAGE_SLUG || row.legacy_id !== BOOK_PAGE_SLUG)) {
+    throw new Error(`Page ${BOOK_PAGE_SLUG}: existing draft/published pair is ambiguous; import stopped without changing it`);
+  }
+  log(`  ↷ Preserved existing pages [${BOOK_PAGE_SLUG}]`);
+  report.skipped++;
 }
 
 async function importNewsItems(): Promise<void> {

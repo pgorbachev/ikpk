@@ -33,6 +33,10 @@ export function redact(value) {
 }
 
 export function mayRefresh(roleCodes) {
+  return (roleCodes || []).some((code) => code === 'content-admin' || code === 'strapi-super-admin' || code === 'strapi-editor');
+}
+
+export function mayRestoreRefresh(roleCodes) {
   return (roleCodes || []).some((code) => code === 'content-admin' || code === 'strapi-super-admin');
 }
 

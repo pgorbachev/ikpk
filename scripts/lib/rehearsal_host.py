@@ -5592,6 +5592,137 @@ if (result.partial !== true || result.passed !== false || result.blockedOn !== '
             "publicProjection": public_projection}
 
 
+def _book_seller_step_current(candidate_db: Path, operation_id: str) -> bool:
+    """The runner receipt lists the whole plan; only a ledger row owned by this operation is fresh."""
+    import sqlite3
+    database = sqlite3.connect(candidate_db.as_uri() + "?mode=ro&immutable=1", uri=True)
+    try:
+        tables = {row[0] for row in database.execute("SELECT name FROM sqlite_schema WHERE type='table'")}
+        if "ikpk_data_migration_history" not in tables:
+            raise HostFailure("book seller migration receipt has no durable step ledger")
+        row = database.execute(
+            "SELECT operation_id FROM ikpk_data_migration_history WHERE step_id=?",
+            ("book-seller-page-v1",),
+        ).fetchone()
+        if row is None:
+            raise HostFailure("book seller migration is listed in the receipt but absent from its candidate ledger")
+        return row[0] == operation_id
+    finally:
+        database.close()
+
+
+def _audit_book_seller_seed(config: dict[str, Any], source_root: Path, operation_id: str,
+                            source_sha: str, candidate_db: Path, admission: dict[str, Any]) -> dict[str, Any]:
+    """Independently prove the single seed transform on an inherited production cohort."""
+    receipt_path = Path(admission["receiptPath"])
+    operation_root = _cms_artifact_path(source_root, operation_id).parent
+    live = Path(config["cmsDatabase"]).resolve(strict=True)
+    if receipt_path != operation_root / "receipt.json" or candidate_db != operation_root / "candidate.db":
+        raise HostFailure("book seller audit files differ from their fixed operation paths")
+    receipt_bytes = _cohort_file(receipt_path)
+    if sha256_file_bytes(receipt_bytes) != admission.get("receiptSha256"):
+        raise HostFailure("book seller migration receipt changed before independent audit")
+    receipt = json.loads(receipt_bytes)
+    if (receipt.get("inheritedCohort") is None or receipt.get("phase") != "prepared"
+            or receipt.get("operationId") != operation_id or receipt.get("sourceCommitSha") != source_sha
+            or receipt.get("sourceDbPath") != str(live) or receipt.get("candidateDbPath") != str(candidate_db)
+            or receipt.get("planSha256") != admission.get("binding", {}).get("migrationPlanDigest")
+            or receipt.get("candidatePostMigrationSha256") != sha256_file(candidate_db)):
+        raise HostFailure("inherited book seller receipt does not bind the reviewed source and candidate")
+    source_file_sha = sha256_file(live)
+    candidate_file_sha = sha256_file(candidate_db)
+    provenance = json.loads(_cohort_file(source_root / ".ikpk-rehearsal-ci.json"))
+    _, _, dependencies = _validate_prepared_cms_candidate(config, source_root, operation_id, provenance,
+                                                          allow_runtime_updater=True)
+    artifact = _protected_cms_migration_artifact(config, source_root, operation_id, provenance, dependencies)
+    script = r"""
+import { createHash } from 'node:crypto';
+import { createRequire } from 'node:module';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
+const [artifact, sourcePath, candidatePath, receiptPath] = process.argv.slice(1);
+const require = createRequire(join(artifact, 'scripts/audit-data-migration.mjs'));
+const Database = require('better-sqlite3');
+const planPath = join(artifact, 'database/migrations/plan.json');
+const planBytes = readFileSync(planPath);
+const manifest = JSON.parse(planBytes);
+const plan = { ...manifest, manifestPath: planPath,
+  planSha256: createHash('sha256').update(planBytes).digest('hex'), root: artifact };
+const receipt = JSON.parse(readFileSync(receiptPath));
+const identity = ({ id, phase, kind, handler, path, sha256 }) => JSON.stringify([id, phase, kind, handler ?? null, path, sha256]);
+plan.steps = manifest.steps.filter(step => receipt.steps?.some(item => identity(item) === identity(step)));
+const modulePath = pathToFileURL(join(artifact, 'scripts/audit-data-migration.mjs'));
+const { auditMigration } = await import(modulePath);
+const report = auditMigration({ sourceDbPath: sourcePath, candidateDbPath: candidatePath,
+  plan, receipt, allowPlanProgramSchema: true });
+if (!report.passed) throw new Error(`book seller preservation audit rejected candidate: ${JSON.stringify(report.differences)}`);
+const step = plan.steps.find(item => item.id === 'book-seller-page-v1' && item.handler === 'book-seller'
+  && item.path === 'data-steps/book-seller.mjs');
+if (!step) throw new Error('book seller migration is absent from the hash-bound plan');
+const source = new Database(sourcePath, { readonly: true, fileMustExist: true });
+const candidate = new Database(candidatePath, { readonly: true, fileMustExist: true });
+try {
+  const lineage = candidate.prepare('SELECT lineage_id FROM ikpk_migration_lineage WHERE singleton=1').get();
+  const row = candidate.prepare('SELECT operation_id,payload_sha256,result_json FROM ikpk_data_migration_history WHERE lineage_id=? AND step_id=?')
+    .get(lineage?.lineage_id, step.id);
+  if (!lineage || !row || row.operation_id !== receipt.operationId || row.payload_sha256 !== step.sha256)
+    throw new Error('book seller ledger is not bound to this operation, lineage, and migration hash');
+  const result = JSON.parse(row.result_json);
+  if (![0, 2].includes(result.createdPages) || result.createdSeoComponents !== result.createdPages
+      || result.createdPageLinks !== result.createdPages) throw new Error('book seller ledger result has an unsupported postimage');
+  const maxPageId = Number(source.prepare('SELECT COALESCE(MAX(id),0) AS id FROM pages').get().id);
+  process.stdout.write(JSON.stringify({ lineageId: lineage.lineage_id, stepSha256: step.sha256,
+    planSha256: plan.planSha256, sourceDatabaseSha256: receipt.source.snapshotSha256,
+    candidateDatabaseSha256: receipt.registryBinding?.candidateDatabaseSha256,
+    ledgerResult: result, sourceMaxPageId: maxPageId }));
+} finally { source.close(); candidate.close(); }
+"""
+    try:
+        completed = _run_as_cms(config, artifact, [config.get("nodeBinary", "/usr/bin/node"),
+            "--input-type=module", "-e", script, str(artifact), str(live), str(candidate_db), str(receipt_path)],
+            timeout=300, read_only_path=[artifact, dependencies, operation_root, live])
+        audit = json.loads(completed)
+    except (ValueError, KeyError, TypeError) as error:
+        raise HostFailure("independent book seller migration audit returned malformed evidence") from error
+    after = _cohort_file(receipt_path)
+    if (sha256_file_bytes(after) != admission["receiptSha256"]
+            or sha256_file(live) != source_file_sha or sha256_file(candidate_db) != candidate_file_sha):
+        raise HostFailure("book seller source or receipt changed during independent audit")
+    binding = admission["binding"]
+    if (audit.get("planSha256") != binding.get("migrationPlanDigest")
+            or audit.get("sourceDatabaseSha256") != binding.get("sourceDatabaseSha256")
+            or audit.get("candidateDatabaseSha256") != binding.get("candidateDatabaseSha256")
+            or sha256_file(candidate_db) != binding.get("candidateDatabaseSha256")):
+        raise HostFailure("book seller audit result differs from the independently admitted database digests")
+    readback = _audited_public_sqlite(candidate_db)
+    collections = {
+        "institutes": "institutes", "course_groups": "course-groups", "seminars": "seminars",
+        "teachers": "teachers", "articles": "articles", "schedule_entries": "schedule-entries",
+        "news": "news-items", "promotions": "promotions", "static_pages": "pages",
+        "video_playlists": "video-playlists",
+    }
+    document_ids = {}
+    for target, source_name in collections.items():
+        records = readback[source_name]
+        ids = {str(row["id"]): row["documentId"] for row in records}
+        if len(ids) != len(records) or len(set(ids.values())) != len(ids):
+            raise HostFailure("audited book seller public identity map is ambiguous")
+        document_ids[target] = ids
+    public_projection = {"version": 1, "documentIds": document_ids,
+        "schedule": {key: {} for key in document_ids["schedule_entries"]},
+        "seminars": {key: {} for key in document_ids["seminars"]}}
+    seed = {
+        "version": 1, "stepId": "book-seller-page-v1", "stepSha256": audit["stepSha256"],
+        "planSha256": audit["planSha256"], "receiptSha256": admission["receiptSha256"],
+        "lineageId": audit["lineageId"], "sourceDatabaseSha256": audit["sourceDatabaseSha256"],
+        "candidateDatabaseSha256": audit["candidateDatabaseSha256"], "ledgerResult": audit["ledgerResult"],
+        "sourceMaxPageId": audit["sourceMaxPageId"],
+    }
+    return {"mode": "book-seller-seed-v1", "bookSellerSeed": seed,
+            "publicProjection": public_projection}
+
+
 def _production_uploads_digest(media: list[dict[str, Any]]) -> str:
     uploads = {}
     for item in media:
@@ -5695,14 +5826,20 @@ def _prepare_historical_cohort(config: dict[str, Any], state: RehearsalState, op
     if sha256_file(candidate_db) != binding['candidateDatabaseSha256']:
         raise HostFailure('candidate database differs from approved registry cohort')
     fresh = None
-    if config.get("profile") == "production-paired" and receipt.get("inheritedCohort") is None:
-        fresh = _audit_fresh_production_composition(config, state, operation_id, source_sha, candidate_db, admission)
+    if config.get("profile") == "production-paired":
+        if receipt.get("inheritedCohort") is None:
+            fresh = _audit_fresh_production_composition(config, state, operation_id, source_sha, candidate_db, admission)
+        elif (any(step.get("id") == "book-seller-page-v1" and step.get("handler") == "book-seller"
+                  and step.get("path") == "data-steps/book-seller.mjs" for step in receipt.get("steps", []))
+              and _book_seller_step_current(candidate_db, operation_id)):
+            source_root = _candidate_root(config, source_sha, operation_id)
+            fresh = _audit_book_seller_seed(config, source_root, operation_id, source_sha, candidate_db, admission)
         if sha256_file_bytes(_cohort_file(receipt_path)) != admission["receiptSha256"]:
-            raise HostFailure("fresh production receipt changed after independent audit")
+            raise HostFailure("production receipt changed after independent audit")
         if not isinstance(target_projection, dict) or target_projection.get("databaseSha256") != binding["candidateDatabaseSha256"]:
-            raise HostFailure("fresh production migration lacks independently verified target projection")
+            raise HostFailure("production migration lacks independently verified target projection")
         if target_projection.get("uploadsDigest") != _production_uploads_digest(backup["media"]):
-            raise HostFailure("fresh production migration changes the verified backup upload inventory")
+            raise HostFailure("production migration changes the verified backup upload inventory")
     registry_bytes = _cohort_file(Path(admission['registryPath']))
     if sha256_file_bytes(registry_bytes) != binding['registrySha256'] or not isinstance(json.loads(registry_bytes), list):
         raise HostFailure('historical registry differs from independently approved bytes')
@@ -7563,11 +7700,50 @@ def _production_migration_static_proof(config: dict[str, Any], state: RehearsalS
             or receipt.get("registryBinding") != binding
             or receipt.get("operationId") != operation_id or receipt.get("sourceCommitSha") != source_sha):
         raise HostFailure("selected production migration receipt differs from the journal")
+    backup = _backup_manifest(config, operation_id)
     fresh = intent.get("freshComposition")
     if receipt.get("inheritedCohort") is not None:
-        if fresh is not None or receipt.get("compositionAudit", {}).get("mode") != "inherited-cohort":
-            raise HostFailure("inherited production migration cannot use fresh composition proof")
-        return None
+        if receipt.get("compositionAudit", {}).get("mode") != "inherited-cohort":
+            raise HostFailure("inherited production migration lacks its sealed cohort audit")
+        if fresh is None:
+            return None
+        seed = fresh.get("bookSellerSeed") if isinstance(fresh, dict) else None
+        if (fresh.get("mode") != "book-seller-seed-v1" or not isinstance(seed, dict)
+                or seed.get("stepId") != "book-seller-page-v1"
+                or seed.get("receiptSha256") != intent["receiptSha256"]
+                or seed.get("planSha256") != binding["migrationPlanDigest"]
+                or seed.get("sourceDatabaseSha256") != binding["sourceDatabaseSha256"]
+                or seed.get("candidateDatabaseSha256") != binding["candidateDatabaseSha256"]
+                or not SHA256_RE.fullmatch(str(seed.get("stepSha256", "")))
+                or not SHA256_RE.fullmatch(str(seed.get("lineageId", "")))):
+            raise HostFailure("inherited book seller seed attestation differs from its source, plan, receipt, or candidate")
+        if (fresh.get("backupArchiveSha256") != backup["archiveSha256"]
+                or fresh.get("backupDatabaseSha256") != backup["databaseSha256"]
+                or fresh.get("backupMediaManifestSha256") != backup["mediaManifestSha256"]):
+            raise HostFailure("inherited book seller proof differs from the verified backup")
+        capture_bytes = _cohort_file(capture_manifest)
+        capture = json.loads(capture_bytes)
+        projected = json.loads(_cohort_file(snapshot, maximum=100 * 1024 * 1024))
+        target = fresh.get("targetProjection")
+        if (capture.get("operationId") != operation_id or capture.get("sourceSha") != source_sha
+                or capture.get("profile") != "production-static"
+                or capture.get("databaseSha256") != binding["candidateDatabaseSha256"]
+                or not isinstance(target, dict)
+                or target != _production_target_projection(projected, capture_bytes,
+                    _cohort_file(capture_manifest.with_name("media-manifest.json")))
+                or not isinstance(fresh.get("publicProjection"), dict)):
+            raise HostFailure("inherited seed capture differs from its audited public projection")
+        composition = {**fresh, "backupArchiveSha256": backup["archiveSha256"],
+            "backupDatabaseSha256": backup["databaseSha256"],
+            "backupMediaManifestSha256": backup["mediaManifestSha256"],
+            "targetProjection": target}
+        return {
+            "version": 1, "operationId": operation_id, "sourceSha": source_sha,
+            "runId": capture.get("runId"), "attempt": capture.get("attempt"),
+            "receiptSha256": intent["receiptSha256"], "captureSha256": sha256_file_bytes(capture_bytes),
+            "staticTreeSha256": static_digest, "registrySha256": binding["registrySha256"],
+            "migrationPlanDigest": binding["migrationPlanDigest"], "composition": composition,
+        }
     if not isinstance(fresh, dict) or not isinstance(fresh.get("stageSnapshots"), dict):
         raise HostFailure("fresh production migration has no independent composition proof")
     if (fresh.get("compositionContractDigest") != receipt.get("compositionReview", {}).get("expectedContractDigest")
@@ -7587,7 +7763,6 @@ def _production_migration_static_proof(config: dict[str, Any], state: RehearsalS
         actual = sha256_file_bytes(json.dumps([sha256_file_bytes(raw), None], separators=(",", ":")).encode())
         if actual != accepted:
             raise HostFailure("fresh production stage bytes changed after independent audit")
-    backup = _backup_manifest(config, operation_id)
     if (fresh.get("backupArchiveSha256") != backup["archiveSha256"]
             or fresh.get("backupDatabaseSha256") != backup["databaseSha256"]
             or fresh.get("backupMediaManifestSha256") != backup["mediaManifestSha256"]):

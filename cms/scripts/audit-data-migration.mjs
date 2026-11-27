@@ -53,6 +53,16 @@ const KNOWN_RENAMES = new Map([
   ['schedule_entries', ['status', 'entry_status']],
 ]);
 const CONTACT_PHONES = { center_phone: '+7 (812) 646-54-50', manager_phone: '+7 981 038-77-97' };
+const BOOK_PAGE = {
+  slug: 'knigi-i-uchebnye-materialy',
+  title: 'Книги и учебные материалы',
+  body: 'Издательский дом ИКПК выпускает книги и учебные материалы. Продавец книг — ИП Тучанфа В.А.',
+  seoTitle: 'Книги и учебные материалы — ИКПК',
+  seoDescription: 'Книжные новинки издательского дома ИКПК, акции и ссылки на площадки продавца.',
+  documentId: 'cd7f96fcf41b4721214e6c36',
+  createdAt: 1795766400000,
+  publishedAt: 1795766400001,
+};
 const CURRENT_CONTENT_ADDITIONS = {
   promotions: { name: 'type', type: 'varchar(255)' },
   schedule_entries: { name: 'is_event_collection', type: 'boolean' },
@@ -289,6 +299,48 @@ function deriveKnownTransforms(sourceDb, plan, receipt) {
       const recorded = tableNames(sourceDb).includes('ikpk_data_migration_history') &&
         sourceDb.prepare('SELECT 1 FROM ikpk_data_migration_history WHERE step_id = ? AND payload_sha256 = ?').get(step.id, step.sha256);
       transforms.sitePhones = { pending: !recorded, updatedRows: contacts.filter(row => Object.keys(CONTACT_PHONES).some(key => row[key] == null)).length };
+    } else if (step.kind === 'data' && step.id === 'book-seller-page-v1' && step.handler === 'book-seller'
+      && step.path === 'data-steps/book-seller.mjs') {
+      const names = new Set(tableNames(sourceDb));
+      for (const table of ['pages', 'components_shared_seos', 'pages_cmps']) if (!names.has(table)) throw new Error(`missing Strapi table for book Page: ${table}`);
+      const rows = sourceDb.prepare(`SELECT id, document_id, title, slug, body, legacy_id, published_at FROM pages
+        WHERE slug=? OR legacy_id=? OR document_id IN (SELECT document_id FROM pages WHERE slug=? OR legacy_id=?) ORDER BY id`)
+        .all(BOOK_PAGE.slug, BOOK_PAGE.slug, BOOK_PAGE.slug, BOOK_PAGE.slug);
+      const rawHistory = names.has('ikpk_data_migration_history')
+        ? sourceDb.prepare('SELECT lineage_id,operation_id,payload_sha256 FROM ikpk_data_migration_history WHERE step_id=?').get(step.id)
+        : null;
+      let recorded = false;
+      if (rawHistory) {
+        if (!names.has('ikpk_migration_lineage') || !names.has('ikpk_migration_operations')) {
+          throw new Error('book Page history is missing its migration lineage binding');
+        }
+        const lineage = sourceDb.prepare('SELECT lineage_id,source_snapshot_sha256,source_schema_sha256 FROM ikpk_migration_lineage WHERE singleton=1').get();
+        const operation = sourceDb.prepare('SELECT lineage_id,source_snapshot_sha256,source_schema_sha256 FROM ikpk_migration_operations WHERE operation_id=?').get(rawHistory.operation_id);
+        recorded = Boolean(lineage && operation && rawHistory.lineage_id === lineage.lineage_id
+          && rawHistory.payload_sha256 === step.sha256 && operation.lineage_id === lineage.lineage_id
+          && HASH.test(lineage.lineage_id ?? '')
+          && HASH.test(lineage.source_snapshot_sha256 ?? '') && HASH.test(lineage.source_schema_sha256 ?? '')
+          && HASH.test(operation.source_snapshot_sha256 ?? '') && HASH.test(operation.source_schema_sha256 ?? ''));
+        if (!recorded) throw new Error('book Page migration history is not bound to the verified source lineage');
+      }
+      if (recorded && rows.length === 0) throw new Error('book Page ledger exists but its published/draft rows are absent');
+      if (rows.length) {
+        const draft = rows.find(row => row.published_at === null), published = rows.find(row => row.published_at !== null);
+        if (rows.length !== 2 || !draft || !published || !draft.document_id || draft.document_id !== published.document_id
+          || rows.some(row => row.slug !== BOOK_PAGE.slug || row.legacy_id !== BOOK_PAGE.slug)
+          || (!recorded && (rows.some(row => row.title !== BOOK_PAGE.title) || published.body !== BOOK_PAGE.body))) {
+          throw new Error('existing book Page is ambiguous or does not match the current-site seed');
+        }
+        for (const row of rows) {
+          const links = sourceDb.prepare(`SELECT c.seo_title,c.seo_description,c.noindex,p.component_type,p.field
+            FROM pages_cmps p JOIN components_shared_seos c ON c.id=p.cmp_id
+            WHERE p.entity_id=? AND p.component_type='shared.seo' AND p.field='seo'`).all(row.id);
+          if (links.length !== 1 || (!recorded && (links[0].seo_title !== BOOK_PAGE.seoTitle || links[0].seo_description !== BOOK_PAGE.seoDescription || links[0].noindex !== 0))) {
+            throw new Error('existing book Page SEO component or link does not match the confirmed seed');
+          }
+        }
+      }
+      transforms.bookSeller = { pending: !recorded && rows.length === 0 };
     } else if (receipt?.inheritedCohort && ['content-admin-permissions', 'reviewed-schedule', 'reviewed-documents', 'reviewed-content'].includes(step.handler)) {
       const row = sourceDb.prepare('SELECT operation_id,step_id,payload_sha256,result_json,completed_at FROM ikpk_data_migration_history WHERE lineage_id=? AND step_id=?').get(receipt.seminarLineageId, step.id);
       const sealed = receipt.seminarStepHistory?.find(item => item.step_id === step.id);
@@ -308,6 +360,29 @@ function expectedTableRows(sourceDb, sourceTable, columns, transforms) {
       for (const [key, seed] of Object.entries(CONTACT_PHONES)) {
         row[key] ??= row.slug === 'kontakty' && transforms.sitePhones.pending ? seed : null;
       }
+    }
+  }
+  if (transforms.bookSeller?.pending && ['pages', 'components_shared_seos', 'pages_cmps'].includes(sourceTable)) {
+    const next = (table) => Number(sourceDb.prepare(`SELECT COALESCE(MAX(id),0) AS id FROM ${quote(table)}`).get().id) + 1;
+    const int = (value) => ({ integer: String(value) });
+    const row = (data) => Object.fromEntries(columns.map(({ name }) => [name, data[name] ?? null]));
+    if (sourceTable === 'pages') {
+      const id = next('pages');
+      for (const [offset, published] of [[0, false], [1, true]]) rows.push(row({
+        id: int(id + offset), document_id: BOOK_PAGE.documentId, title: BOOK_PAGE.title, slug: BOOK_PAGE.slug,
+        body: BOOK_PAGE.body, legacy_id: BOOK_PAGE.slug, created_at: int(BOOK_PAGE.createdAt),
+        updated_at: int(published ? BOOK_PAGE.publishedAt : BOOK_PAGE.createdAt),
+        published_at: published ? int(BOOK_PAGE.publishedAt) : null,
+      }));
+    } else if (sourceTable === 'components_shared_seos') {
+      const id = next('components_shared_seos');
+      for (const offset of [0, 1]) rows.push(row({ id: int(id + offset), seo_title: BOOK_PAGE.seoTitle,
+        seo_description: BOOK_PAGE.seoDescription, noindex: int(0) }));
+    } else {
+      const id = next('pages_cmps'), pageId = Number(sourceDb.prepare('SELECT COALESCE(MAX(id),0) AS id FROM pages').get().id) + 1;
+      const seoId = Number(sourceDb.prepare('SELECT COALESCE(MAX(id),0) AS id FROM components_shared_seos').get().id) + 1;
+      for (const offset of [0, 1]) rows.push(row({ id: int(id + offset), entity_id: int(pageId + offset),
+        cmp_id: int(seoId + offset), component_type: 'shared.seo', field: 'seo' }));
     }
   }
   if (sourceTable === 'teachers' && transforms.classification) {
@@ -1017,6 +1092,8 @@ function allowRunnerRows(sourceDb, candidateDb, plan, receipt, transforms, diffe
     let result;
     try { result = JSON.parse(row.result_json); } catch { result = null; }
     const expectedResult = step.handler === 'site-phones' ? { updatedRows: transforms.sitePhones.updatedRows }
+      : step.handler === 'book-seller' ? { createdPages: transforms.bookSeller.pending ? 2 : 0,
+        createdSeoComponents: transforms.bookSeller.pending ? 2 : 0, createdPageLinks: transforms.bookSeller.pending ? 2 : 0 }
       : step.handler === 'classification' && transforms.classification
       ? { updatedRows: transforms.classification.changes.reduce((sum, person) => sum + person.rows.length, 0), noops: transforms.classification.noops.length }
       : step.handler === 'normalize-documents-state' && transforms.documentsState
@@ -1028,7 +1105,10 @@ function allowRunnerRows(sourceDb, candidateDb, plan, receipt, transforms, diffe
         && result.updatedRows + result.noops <= 24
       : step.handler === 'normalize-documents-state'
         ? Number.isSafeInteger(result?.updatedRows) && result.updatedRows >= 0 && Number.isSafeInteger(result?.logicalDocuments) && result.logicalDocuments >= 0
-        : false;
+        : step.handler === 'book-seller'
+          ? Number(result?.createdPages) === 0 && Number(result?.createdSeoComponents) === 0 && Number(result?.createdPageLinks) === 0
+            || Number(result?.createdPages) === 2 && Number(result?.createdSeoComponents) === 2 && Number(result?.createdPageLinks) === 2
+          : false;
     const inheritedSeminar = receipt.inheritedCohort && ['content-admin-permissions', 'reviewed-schedule', 'reviewed-documents', 'reviewed-content'].includes(step.handler)
       && row.operation_id !== receipt.operationId && sourceLedger.some(old => json(valueKey(old)) === json(valueKey(row)));
     if (!inheritedSeminar && (!expectedResult || (row.operation_id === receipt.operationId ? json(result) !== json(expectedResult) : !validHistoricalResult))) {
@@ -1186,7 +1266,9 @@ export function auditMigration({ sourceDbPath, candidateDbPath, plan, receipt, a
       const before = sourceSchema[table]; const after = candidateSchema[table];
       const expectedNames = new Set(expectedColumns(before, table, transforms).map(({ name }) => name));
       const rename = KNOWN_RENAMES.get(table);
-      const changed = (table === 'pages' && transforms.sitePhones) || (transforms.classification && table === 'teachers')
+      const changed = (table === 'pages' && (transforms.sitePhones || transforms.bookSeller))
+        || (transforms.bookSeller && ['components_shared_seos', 'pages_cmps'].includes(table))
+        || (transforms.classification && table === 'teachers')
         || (transforms.documentsState && table === 'seminars')
         || (transforms.nativeRenameTables.has(table) && rename);
       if (changed) compareExpectedRows(source, candidate, table, before, after, transforms, differences);

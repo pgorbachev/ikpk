@@ -2,8 +2,16 @@
 import BaseLayout from '../layouts/BaseLayout.astro';
 import Breadcrumbs from '../components/Breadcrumbs.astro';
 import { getBookMarketplaceLinks } from '../lib/book-offers';
+import { getPages } from '../lib/data';
 
 const marketplaces = getBookMarketplaceLinks();
+const bookCandidates = getPages().filter((page) => page.slug === 'knigi-i-uchebnye-materialy' || page.legacy_id === 'knigi-i-uchebnye-materialy');
+if (bookCandidates.length !== 1 || bookCandidates[0].slug !== 'knigi-i-uchebnye-materialy'
+    || bookCandidates[0].legacy_id !== 'knigi-i-uchebnye-materialy'
+    || typeof bookCandidates[0].body_text !== 'string' || !bookCandidates[0].body_text.trim()) {
+  throw new Error('Опубликованный текст страницы книг отсутствует или неоднозначен; сайт не собран.');
+}
+const introduction = bookCandidates[0].body_text;
 ---
 
 <BaseLayout title="Книги и учебные материалы — ИКПК" description="Книжные новинки издательского дома ИКПК, акции и ссылки на площадки продавца.">
@@ -12,7 +20,7 @@ const marketplaces = getBookMarketplaceLinks();
 
     <section class="section">
       <h1 class="page-title">Книги и учебные материалы</h1>
-      <p>Издательский дом ИКПК выпускает книги и учебные материалы. Продавец книг — ИП Тучанфа В.А.</p>
+      <p>{introduction}</p>
 
       <div class="grid grid-2 book-links">
         <a class="card book-link" href="https://kinezio.shop/novinki/" target="_blank" rel="noopener noreferrer">

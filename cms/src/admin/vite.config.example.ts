@@ -1,6 +1,7 @@
 import { mergeConfig, type Plugin, type UserConfig } from 'vite';
 import { resolve } from 'node:path';
 import { createAdminLoginRedirectPlugin } from './admin-login-redirect-plugin';
+import { bookSellerMenuLinkPlugin } from './book-seller-menu-plugin';
 
 // Strapi 5.51.2's BackButton otherwise depends on transient navigation history.
 // Restrict the override to an occurrence opened explicitly from a seminar.
@@ -79,11 +80,17 @@ function contactEditorRedirect(): Plugin {
         .replace(routerImport, "import { useParams, useLocation, Navigate } from 'react-router-dom';")
         .replace(hookMarker, hookMarker + "\n    const { origin } = useParams();\n    const { get } = useFetchClient();")
         .replace(documentMarker, `    const isContact = model === 'api::page.page' && id && !origin && document?.slug === 'kontakty';
+    const isBookPage = model === 'api::page.page' && id && !origin && document?.slug === 'knigi-i-uchebnye-materialy';
     const contactRef = React.useRef(null);
     if (!isContact) contactRef.current = null;
     else if (!contactRef.current || contactRef.current.id !== id) contactRef.current = { id };
     const contact = contactRef.current;
+    const bookRef = React.useRef(null);
+    if (!isBookPage) bookRef.current = null;
+    else if (!bookRef.current || bookRef.current.id !== id) bookRef.current = { id };
+    const bookPage = bookRef.current;
     const [access, setAccess] = React.useState(null);
+    const [bookAccess, setBookAccess] = React.useState(null);
     React.useEffect(() => {
         if (!contact) return;
         let current = true;
@@ -94,8 +101,22 @@ function contactEditorRedirect(): Plugin {
         });
         return () => { current = false; };
     }, [get, contact]);
+    React.useEffect(() => {
+        if (!bookPage) return;
+        let current = true;
+        get('/admin/site-books').then(() => {
+            if (current) setBookAccess({ bookPage, value: 'allowed' });
+        }).catch(error => {
+            if (current) setBookAccess({ bookPage, value: error?.status === 403 ? 'denied' : 'error' });
+        });
+        return () => { current = false; };
+    }, [get, bookPage]);
 ` + documentMarker)
-        .replace(renderMarker, `    if (isContact) {
+        .replace(renderMarker, `    if (isBookPage && (!bookAccess || bookAccess.bookPage !== bookPage)) return /*#__PURE__*/ jsx(Page.Loading, {});
+    if (isBookPage && bookAccess?.bookPage === bookPage && bookAccess.value === 'allowed') {
+        return /*#__PURE__*/ jsx(Navigate, { to: '/content-manager/collection-types/site-book-intro', replace: true });
+    }
+    if (isContact) {
         if (!access || access.contact !== contact) return /*#__PURE__*/ jsx(Page.Loading, {});
         if (access.value === 'error') return /*#__PURE__*/ jsx(Page.Error, {});
         if (access.value === 'allowed') return /*#__PURE__*/ jsx(Navigate, { to: '/content-manager/collection-types/site-contact-phones', replace: true });
@@ -108,49 +129,13 @@ function contactEditorRedirect(): Plugin {
   };
 }
 
-function contactMenuLink(): Plugin {
-  let transformed = false;
-  return {
-    name: 'ikpk-contact-menu-link',
-    enforce: 'pre',
-    transform(code, id) {
-      if (!id.endsWith('/@strapi/content-manager/dist/admin/components/LeftMenu.mjs')) return;
-      const importMarker = "import { SubNav } from '@strapi/admin/strapi-admin';";
-      const linkMarker = "    const collectionTypeLinks = useTypedSelector((state)=>state['content-manager'].app.collectionTypeLinks);";
-      if (!code.includes(importMarker) || !code.includes(linkMarker)) {
-        throw new Error('Strapi LeftMenu changed; update the contacts menu integration');
-      }
-      transformed = true;
-      return code.replace(importMarker, "import { SubNav, useFetchClient } from '@strapi/admin/strapi-admin';")
-        .replace(linkMarker, `    const nativeCollectionTypeLinks = useTypedSelector((state)=>state['content-manager'].app.collectionTypeLinks);
-    const { get } = useFetchClient();
-    const [canEditPhones, setCanEditPhones] = React.useState(false);
-    React.useEffect(() => {
-        let current = true;
-        get('/admin/site-phones').then(() => {
-            if (current) setCanEditPhones(true);
-        }).catch(error => {
-            if (current) setCanEditPhones(error?.status !== 403);
-        });
-        return () => { current = false; };
-    }, [get]);
-    const collectionTypeLinks = canEditPhones && !nativeCollectionTypeLinks.some(link => link.uid === 'api::page.page')
-        ? [...nativeCollectionTypeLinks, { uid: 'ikpk-site-contacts', title: 'Страницы', to: '/content-manager/collection-types/site-contact-phones' }]
-        : nativeCollectionTypeLinks;`);
-    },
-    generateBundle() {
-      if (!transformed) throw new Error('Strapi LeftMenu not found; update the contacts menu integration');
-    },
-  };
-}
-
 export default (config: UserConfig) => {
   // Important: always return the modified config
   return mergeConfig(config, {
     cacheDir: resolve(process.cwd(), '.vite-cache/admin'),
     plugins: [
       createAdminLoginRedirectPlugin(), occurrenceBackButton(), occurrenceCreateUrl(),
-      contactEditorRedirect(), contactMenuLink(),
+      contactEditorRedirect(), bookSellerMenuLinkPlugin(),
       {
         name: 'ikpk-page-edit-form',
         enforce: 'pre',

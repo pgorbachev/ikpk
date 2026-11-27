@@ -420,101 +420,149 @@
       "readback": {
         "kind": "independent-page-and-ledger-audit"
       }
+    },
+    {
+      "id": "book-seller-page-v1",
+      "phase": "after-sync",
+      "kind": "data",
+      "handler": "book-seller",
+      "path": "data-steps/book-seller.mjs",
+      "sha256": "0210579efc7b27f0b325b5c8b3d94abd2775c18d5547df0137aece65e70247e0",
+      "source": {
+        "strapiVersion": "5.51.2",
+        "schema": {
+          "engine": "sqlite",
+          "requiredColumns": {
+            "pages": [
+              "id",
+              "document_id",
+              "title",
+              "slug",
+              "body",
+              "legacy_id",
+              "published_at"
+            ],
+            "components_shared_seos": [
+              "id",
+              "seo_title",
+              "seo_description",
+              "noindex"
+            ],
+            "pages_cmps": [
+              "id",
+              "entity_id",
+              "cmp_id",
+              "component_type",
+              "field",
+              "order"
+            ]
+          }
+        }
+      },
+      "preconditions": {
+        "identity": "No matching Page exists, or one exact published/draft seed pair exists with current-site published text and SEO."
+      },
+      "postconditions": {
+        "data": "Create only the confirmed Page pair and its SEO components and links; preserve a confirmed existing pair."
+      },
+      "readback": {
+        "kind": "independent-page-component-link-and-ledger-audit"
+      }
     }
   ],
   "integrity": {
     "files": [
       {
-        "path": "scripts/run-data-migrations.mjs",
-        "sha256": "ae44a5644d6f6b19c51173b78e99a44d5669ee52df85d31469450a1f274583ce"
+        "path": "database/migrations/data-steps/book-seller.mjs",
+        "sha256": "0210579efc7b27f0b325b5c8b3d94abd2775c18d5547df0137aece65e70247e0"
       },
       {
-        "path": "scripts/seminar-migration-snapshot.mjs",
-        "sha256": "21bd1f42a09e3be591a4b39914992cac26474b15bd774eccf2308c815a251e44"
-      },
-      {
-        "path": "scripts/audit-seminar-migration-composition.mjs",
-        "sha256": "ab2bf0e27e7e2b3753f1293bd9e341c7cc639788e9d02cddb44c9568cbf4e18b"
-      },
-      {
-        "path": "scripts/migrate-schedule-data-v2.mjs",
-        "sha256": "0471167863d54e929067683757c058e65b24a4775a003632e0ff3903c903cdd8"
-      },
-      {
-        "path": "scripts/audit-schedule-business-rules-v2.mjs",
-        "sha256": "8d124c880a5ca5f352389460c8887c33efb77fb2fdb7201e46520ee2e2213945"
-      },
-      {
-        "path": "scripts/audit-schedule-migration-v2.mjs",
-        "sha256": "620690e0b8d4e36e16e91213ba5bbf53463ab4e066911376048931aa4794bfff"
-      },
-      {
-        "path": "scripts/migration-review-cli.mjs",
-        "sha256": "5d7feb5c20e4812720e53f745293be38bdfe6a599df174c0f3d37dfae74ec864"
-      },
-      {
-        "path": "scripts/audit-migration-stage-ledger.mjs",
-        "sha256": "da45c499ad2e987cd94656bac85d62264a69825f947835a706885de3597357a1"
-      },
-      {
-        "path": "scripts/audit-seminar-schema-sync.mjs",
-        "sha256": "15f2ea58d6b7f3e4dab8c4e906f829e5f0479136168a31ec47ede3479bd3c65a"
-      },
-      {
-        "path": "scripts/audit-schedule-migration.mjs",
-        "sha256": "3ba6ca1bb2ebd465cf89278d0d4f444bd744dfa5e94299f6d8742986fa21a79f"
-      },
-      {
-        "path": "scripts/audit-documents-migration.mjs",
-        "sha256": "70e2c3876bc9b7255fb2087f26a2ba56c16754077199276c39883c19e31f4c50"
-      },
-      {
-        "path": "scripts/migrate-schedule-data.mjs",
-        "sha256": "eee26d5890938a065f6c58aba3cdd3bd99d57532e48ce248455640ae31317821"
-      },
-      {
-        "path": "scripts/audit-schedule-business-rules.mjs",
-        "sha256": "ae6f02d355a4e372f67e507e82915688a301a237f3cca3e1416a18acf1d65c8a"
-      },
-      {
-        "path": "scripts/documents-migration-writer.mjs",
-        "sha256": "6cfa10094b5213adbbbd23f17a95b96bb41e9769e6073f4e022c0072348f84ce"
-      },
-      {
-        "path": "scripts/content-migration-writer.mjs",
-        "sha256": "5965219178cd94e2c5826e267b4a73a2c378fb2b6e41e5263e1f7d1c5095552a"
-      },
-      {
-        "path": "scripts/audit-content-migration.mjs",
-        "sha256": "0eb42866c9dba128a6554da63740906becde1b743be3850d540e5b79c6af8ea6"
+        "path": "database/migrations/data-steps/reviewed-schedule-v2.mjs",
+        "sha256": "f12b5297fe54dc5e35faab4a082bda35e0367992f5307cb0ac42269af073c55b"
       },
       {
         "path": "database/migrations/target-schema/seminar.json",
         "sha256": "34aa09e7ede1643b1514408f1306b245aca0f75a75aec680b664b88032b29b25"
       },
       {
-        "path": "src/lib/demo193-source-empty-fields.json",
-        "sha256": "b6a46a6138157cb77be55ecfbe8b05e962e827be6fc807fc8a34ded92e3916f5"
+        "path": "scripts/audit-content-migration.mjs",
+        "sha256": "0eb42866c9dba128a6554da63740906becde1b743be3850d540e5b79c6af8ea6"
       },
       {
         "path": "scripts/audit-data-migration.mjs",
-        "sha256": "534acdee601f16800119b82551149a5045471566d8f906646d5b44f679321984"
+        "sha256": "9f3e24f8a35542d575b333e4d0fa32bfa8026a1b4112a428766fcb27d5659668"
+      },
+      {
+        "path": "scripts/audit-documents-migration.mjs",
+        "sha256": "70e2c3876bc9b7255fb2087f26a2ba56c16754077199276c39883c19e31f4c50"
+      },
+      {
+        "path": "scripts/audit-migration-stage-ledger.mjs",
+        "sha256": "da45c499ad2e987cd94656bac85d62264a69825f947835a706885de3597357a1"
+      },
+      {
+        "path": "scripts/audit-schedule-business-rules-v2.mjs",
+        "sha256": "8d124c880a5ca5f352389460c8887c33efb77fb2fdb7201e46520ee2e2213945"
+      },
+      {
+        "path": "scripts/audit-schedule-business-rules.mjs",
+        "sha256": "ae6f02d355a4e372f67e507e82915688a301a237f3cca3e1416a18acf1d65c8a"
+      },
+      {
+        "path": "scripts/audit-schedule-migration-v2.mjs",
+        "sha256": "620690e0b8d4e36e16e91213ba5bbf53463ab4e066911376048931aa4794bfff"
+      },
+      {
+        "path": "scripts/audit-schedule-migration.mjs",
+        "sha256": "3ba6ca1bb2ebd465cf89278d0d4f444bd744dfa5e94299f6d8742986fa21a79f"
       },
       {
         "path": "scripts/audit-schema-snapshot.mjs",
         "sha256": "487bf7a31a575b537f896ca0500ec79431785231c0408d449288cdce3fe27707"
       },
       {
+        "path": "scripts/audit-seminar-migration-composition.mjs",
+        "sha256": "ab2bf0e27e7e2b3753f1293bd9e341c7cc639788e9d02cddb44c9568cbf4e18b"
+      },
+      {
+        "path": "scripts/audit-seminar-schema-sync.mjs",
+        "sha256": "15f2ea58d6b7f3e4dab8c4e906f829e5f0479136168a31ec47ede3479bd3c65a"
+      },
+      {
+        "path": "scripts/content-migration-writer.mjs",
+        "sha256": "5965219178cd94e2c5826e267b4a73a2c378fb2b6e41e5263e1f7d1c5095552a"
+      },
+      {
+        "path": "scripts/documents-migration-writer.mjs",
+        "sha256": "6cfa10094b5213adbbbd23f17a95b96bb41e9769e6073f4e022c0072348f84ce"
+      },
+      {
         "path": "scripts/institute-method-author-classification.mjs",
         "sha256": "7eb4dcabbf28f9fd556360653e00a2fd08e144debee6877dd1058621d5f79a5d"
+      },
+      {
+        "path": "scripts/migrate-schedule-data-v2.mjs",
+        "sha256": "0471167863d54e929067683757c058e65b24a4775a003632e0ff3903c903cdd8"
+      },
+      {
+        "path": "scripts/migrate-schedule-data.mjs",
+        "sha256": "eee26d5890938a065f6c58aba3cdd3bd99d57532e48ce248455640ae31317821"
+      },
+      {
+        "path": "scripts/migration-review-cli.mjs",
+        "sha256": "5d7feb5c20e4812720e53f745293be38bdfe6a599df174c0f3d37dfae74ec864"
       },
       {
         "path": "scripts/normalize-null-documents-state.mjs",
         "sha256": "b316c88986bf08585abb4107b77d1a6bfd6b4dcb15cfdda06796cb5d8f5ca875"
       },
       {
-        "path": "database/migrations/data-steps/reviewed-schedule-v2.mjs",
-        "sha256": "f12b5297fe54dc5e35faab4a082bda35e0367992f5307cb0ac42269af073c55b"
+        "path": "scripts/run-data-migrations.mjs",
+        "sha256": "b4b66d5b87a5e6d8d01f3cece06f17e05a29de2a265466a80948427356fc1e09"
+      },
+      {
+        "path": "scripts/seminar-migration-snapshot.mjs",
+        "sha256": "21bd1f42a09e3be591a4b39914992cac26474b15bd774eccf2308c815a251e44"
       },
       {
         "path": "scripts/verify-seminar-proof-artifact.py",
@@ -523,6 +571,10 @@
       {
         "path": "src/api/course-group/content-types/course-group/schema.json",
         "sha256": "5611bebd34b221ead442b794985bbefdfde6a8037c7d0a99c0aec0c3fe14ef9f"
+      },
+      {
+        "path": "src/lib/demo193-source-empty-fields.json",
+        "sha256": "b6a46a6138157cb77be55ecfbe8b05e962e827be6fc807fc8a34ded92e3916f5"
       }
     ]
   }

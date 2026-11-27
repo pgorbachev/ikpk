@@ -1,6 +1,6 @@
 export interface EditorPermission {
   action: string;
-  subject?: string;
+  subject?: string | null;
   properties?: { fields: string[] };
 }
 

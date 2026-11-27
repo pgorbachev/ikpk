@@ -32,7 +32,7 @@ function fixture(t, role = 'strapi-editor') {
 test('strapi-editor can read refresh status', async (t) => {
   const f = fixture(t);
   const succeeded = Buffer.from(JSON.stringify({
-    status: 'succeeded', phase: 'done', releaseId: 'current', previousReleaseId: 'previous', switched: true,
+    status: 'succeeded', phase: 'done', releaseId: 'current', previousReleaseId: 'releases/previous', switched: true,
   }));
   writeFileSync(f.state, succeeded);
   const get = { state: { user: { id: 7 } } };
@@ -53,7 +53,7 @@ test('content-admin retains refresh status access', async (t) => {
 test('strapi-editor cannot restore or cancel a refresh', async (t) => {
   const f = fixture(t);
   const succeeded = Buffer.from(JSON.stringify({
-    status: 'succeeded', phase: 'done', releaseId: 'current', previousReleaseId: 'previous', switched: true,
+    status: 'succeeded', phase: 'done', releaseId: 'current', previousReleaseId: 'releases/previous', switched: true,
   }));
   for (const action of [
     { action: 'restore' },

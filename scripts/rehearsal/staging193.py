@@ -16,12 +16,13 @@ import shlex
 import shutil
 import socketserver
 import subprocess
+import sqlite3
 import sys
 import tarfile
 import tempfile
 import threading
 import zipfile
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
 from typing import Optional
 
@@ -1620,7 +1621,11 @@ process.stdout.write(JSON.stringify(events.map(event => 'sha256:' + createHash('
 
 def validate_migrated_public_projection(original: dict, target: dict, reviewed: dict,
                                        source_media: Optional[list[dict]] = None,
-                                       registry: Optional[list[dict]] = None) -> None:
+                                       registry: Optional[list[dict]] = None,
+                                       book_seller_seed: Optional[dict] = None,
+                                       source_database_bytes: Optional[bytes] = None,
+                                       projector_sha: Optional[str] = None,
+                                       captured_at: Optional[str] = None) -> None:
     """Reconstruct the v2 public result from the v1 backup and reviewed per-record changes."""
     original_version = original.get("contractVersion", 1)
     if (original_version not in (1, 2) or target.get("contractVersion") != 2
@@ -1628,15 +1633,52 @@ def validate_migrated_public_projection(original: dict, target: dict, reviewed: 
         raise Refusal("production public projection versions have no reviewed comparison")
     expected = copy.deepcopy(original["content"])
     actual = target["content"]
+    source_history = copy.deepcopy(expected.get("historicalExceptions"))
     expected.pop("historicalExceptions", None)
     if set(expected) != {"types", "media"} or set(actual) - {"historicalExceptions"} != set(expected):
         raise Refusal("production migration changed unreviewed public content properties")
     pairs = reviewed["documentIds"]
     if expected["types"].keys() != pairs.keys() or actual["types"].keys() != pairs.keys():
         raise Refusal("production migration changes the published collection set")
+    seed_id = None
+    if book_seller_seed is not None:
+        schedule_map, seminar_map = reviewed.get("schedule"), reviewed.get("seminars")
+        if (original_version != target.get("contractVersion")
+                or not isinstance(schedule_map, dict) or set(schedule_map) != pairs.get("schedule_entries", {}).keys()
+                or any(value != {} for value in schedule_map.values())
+                or not isinstance(seminar_map, dict) or set(seminar_map) != pairs.get("seminars", {}).keys()
+                or any(value != {} for value in seminar_map.values())):
+            raise Refusal("book seller seed proof cannot authorize schedule, seminar, or version changes")
+        result = book_seller_seed.get("ledgerResult")
+        if (book_seller_seed.get("version") != 1 or book_seller_seed.get("stepId") != "book-seller-page-v1"
+                or not re.fullmatch(r"[a-f0-9]{64}", str(book_seller_seed.get("stepSha256", "")))
+                or type(book_seller_seed.get("sourceMaxPageId")) is not int
+                or not isinstance(result, dict)
+                or type(result.get("createdPages")) is not int or result["createdPages"] not in (0, 2)
+                or result.get("createdSeoComponents") != result["createdPages"]
+                or result.get("createdPageLinks") != result["createdPages"]):
+            raise Refusal("book seller seed proof or durable ledger result is malformed")
+        if result["createdPages"] == 2:
+            if source_database_bytes is None:
+                raise Refusal("book seller seed proof lacks the verified source database bytes")
+            with tempfile.NamedTemporaryFile(prefix="ikpk-book-source-", suffix=".sqlite") as temporary:
+                temporary.write(source_database_bytes); temporary.flush()
+                try:
+                    source_db = sqlite3.connect(f"file:{temporary.name}?mode=ro", uri=True)
+                    maximum = source_db.execute('SELECT COALESCE(MAX(id),0) FROM pages').fetchone()[0]
+                    source_db.close()
+                except sqlite3.Error as error:
+                    raise Refusal("cannot independently derive the book Page ID from the verified backup") from error
+            if maximum != book_seller_seed["sourceMaxPageId"]:
+                raise Refusal("book seller seed source Page high-water mark differs from the verified backup")
+            seed_id = str(maximum + 2)
+            if (seed_id not in pairs["static_pages"]
+                    or pairs["static_pages"][seed_id] != "cd7f96fcf41b4721214e6c36"):
+                raise Refusal("book seller seed identity differs from the independently bound migration postimage")
     for kind, records in expected["types"].items():
         ids = {str(record["id"]) for record in records}
-        if len(ids) != len(records) or ids != pairs[kind].keys():
+        allowed_ids = ids | ({seed_id} if kind == "static_pages" and seed_id else set())
+        if len(ids) != len(records) or allowed_ids != pairs[kind].keys():
             raise Refusal(f"production migration changes published record identities in {kind}")
         for record in records:
             document_id = pairs[kind][str(record["id"])]
@@ -1645,6 +1687,22 @@ def validate_migrated_public_projection(original: dict, target: dict, reviewed: 
                     or (original_version == 1 and "documentId" in record)):
                 raise Refusal(f"production migration has invalid reviewed document identities in {kind}")
             record["documentId"] = document_id
+    if seed_id:
+        seed_slug = "knigi-i-uchebnye-materialy"
+        pages = expected["types"]["static_pages"]
+        if any(row.get("slug") == seed_slug or row.get("legacy_id") == seed_slug for row in pages):
+            raise Refusal("book seller seed duplicates a route already present in the verified backup")
+        created = datetime.fromtimestamp(1795766400000 / 1000, timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
+        published = datetime.fromtimestamp(1795766400001 / 1000, timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
+        body = "Издательский дом ИКПК выпускает книги и учебные материалы. Продавец книг — ИП Тучанфа В.А."
+        pages.append({
+            "id": int(seed_id), "documentId": "cd7f96fcf41b4721214e6c36",
+            "createdAt": created, "updatedAt": published, "publishedAt": published,
+            "title": "Книги и учебные материалы", "slug": seed_slug, "legacy_id": seed_slug,
+            "legacy_url": f"/{seed_slug}", "body_html": body, "body_text": body,
+            "seo_title": "Книги и учебные материалы — ИКПК",
+            "seo_description": "Книжные новинки издательского дома ИКПК, акции и ссылки на площадки продавца.",
+        })
     if original_version == 1:
         teachers = {}
         for teacher in expected["types"]["teachers"]:
@@ -1686,10 +1744,61 @@ def validate_migrated_public_projection(original: dict, target: dict, reviewed: 
             raise Refusal("production migration changes public media references outside the reviewed content")
     elif canonical(expected["media"]) != canonical(actual["media"]):
         raise Refusal("production migration changes public media references")
-    history = _expected_public_history(expected["types"]["schedule_entries"], registry or [])
-    if (history and canonical(actual.get("historicalExceptions")) != canonical(history)
-            or not history and "historicalExceptions" in actual):
-        raise Refusal("production migration changes the independently approved historical exemptions")
+    if book_seller_seed is not None:
+        if (canonical(original.get("content", {}).get("media")) != canonical(target.get("content", {}).get("media"))
+                or canonical(original.get("content", {}).get("historicalExceptions"))
+                != canonical(target.get("content", {}).get("historicalExceptions"))):
+            raise Refusal("book seller seed changes media or historical exceptions")
+        if source_history is not None:
+            expected["historicalExceptions"] = source_history
+        stable = set(original) - {"content", "fingerprint", "snapshotId", "referenceDate", "origin", "captureProof"}
+        if (not stable.issubset(target) or any(original[key] != target[key] for key in stable)
+                or (set(target) - set(original)) - {"captureProof"}):
+            raise Refusal("book seller seed changes unrelated snapshot envelope fields")
+        source_origin, target_origin = original.get("origin"), target.get("origin")
+        if (not isinstance(source_origin, dict) or not isinstance(target_origin, dict)
+                or {key: value for key, value in source_origin.items() if key != "capturedAt"}
+                != {key: value for key, value in target_origin.items() if key != "capturedAt"}):
+            raise Refusal("book seller seed changes snapshot origin")
+        if not isinstance(projector_sha, str) or not isinstance(captured_at, str):
+            raise Refusal("book seller seed lacks the sealed historical projector and capture time")
+        try:
+            datetime.strptime(captured_at, "%Y-%m-%dT%H:%M:%S.%fZ")
+        except ValueError as error:
+            raise Refusal("book seller capture time is invalid") from error
+        identity_source = capture_bytes(["git", "show", f"{projector_sha}:web/scripts/lib/content-snapshot.ts"])
+        identity_expected = copy.deepcopy(original)
+        identity_expected["content"] = expected
+        identity_expected["captureProof"] = copy.deepcopy(target.get("captureProof"))
+        identity_expected["referenceDate"] = datetime.strptime(captured_at, "%Y-%m-%dT%H:%M:%S.%fZ").date().isoformat()
+        identity_expected["origin"]["capturedAt"] = captured_at
+        with tempfile.TemporaryDirectory(prefix="ikpk-book-projection-") as directory:
+            module = Path(directory) / "identity.mts"
+            module.write_bytes(identity_source)
+            script = """
+import {contentFingerprint, snapshotId} from './identity.mts';
+import {readFileSync} from 'node:fs';
+const snapshot = JSON.parse(readFileSync(0, 'utf8'));
+const fingerprint = contentFingerprint(snapshot.content);
+process.stdout.write(JSON.stringify({fingerprint, snapshotId: snapshotId({...snapshot, fingerprint})}));
+"""
+            result = subprocess.run(["node", "--experimental-strip-types", "--input-type=module", "-e", script],
+                                    cwd=directory, input=json.dumps(identity_expected).encode(),
+                                    capture_output=True, check=False, env={"PATH": os.environ.get("PATH", os.defpath)})
+        if result.returncode:
+            raise Refusal("cannot derive book seller snapshot identity with the verified historical projector")
+        identity_expected.update(json.loads(result.stdout))
+        actual_envelope = copy.deepcopy(target)
+        for snapshot in (identity_expected, actual_envelope):
+            for key in ("databaseDigest", "schemaDigest", "bundleDigest"):
+                snapshot.get("captureProof", {}).pop(key, None)
+        if canonical(identity_expected) != canonical(actual_envelope):
+            raise Refusal("book seller snapshot identity or sealed envelope differs from the exact seed postimage")
+    if book_seller_seed is None:
+        history = _expected_public_history(expected["types"]["schedule_entries"], registry or [])
+        if (history and canonical(actual.get("historicalExceptions")) != canonical(history)
+                or not history and "historicalExceptions" in actual):
+            raise Refusal("production migration changes the independently approved historical exemptions")
 
 
 def validate_production_content_acceptance(candidate_archive: bytes, static_digest: str, snapshot_fingerprint: str,
@@ -1817,6 +1926,17 @@ def validate_production_content_acceptance(candidate_archive: bytes, static_dige
         composition = proof.get("composition")
         if not isinstance(composition, dict) or composition.get("backupArchiveSha256") != backup.get("sha256"):
             raise Refusal("production migration proof belongs to another verified backup")
+        if composition.get("mode") not in (None, "book-seller-seed-v1"):
+            raise Refusal("production migration proof uses an unsupported composition mode")
+        book_seed = composition.get("bookSellerSeed")
+        if composition.get("mode") == "book-seller-seed-v1":
+            binding = composition.get("bookSellerSeed")
+            if (not isinstance(binding, dict) or binding.get("receiptSha256") != proof["receiptSha256"]
+                    or binding.get("planSha256") != proof["migrationPlanDigest"]
+                    or binding.get("candidateDatabaseSha256") != capture.get("databaseSha256")):
+                raise Refusal("inherited book seller proof differs from the bound plan, receipt, or backup")
+        elif book_seed is not None:
+            raise Refusal("book seller seed evidence is present without its dedicated proof mode")
         target = composition.get("targetProjection")
         if (not isinstance(target, dict) or target.get("fingerprint") != snapshot_fingerprint
                 or target.get("captureSha256") != proof["captureSha256"]
@@ -1833,12 +1953,16 @@ def validate_production_content_acceptance(candidate_archive: bytes, static_dige
         with tarfile.open(fileobj=io.BytesIO(backup_bytes), mode="r:") as archive:
             source = json.load(archive.extractfile("manifest.json"))
             source_media_document = json.load(archive.extractfile("media-manifest.json"))
+            source_database_bytes = archive.extractfile("database.sqlite").read()
         source_media = (source_media_document.get("media") if isinstance(source_media_document, dict)
                         else source_media_document)
         if (source.get("operationId") != operation_id
                 or source.get("databaseSha256") != composition.get("backupDatabaseSha256")
                 or source.get("mediaManifestSha256") != composition.get("backupMediaManifestSha256")):
             raise Refusal("production migration proof does not bind the verified source database and media")
+        if (book_seed is not None and composition.get("mode") == "book-seller-seed-v1"
+                and book_seed.get("sourceDatabaseSha256") != source.get("databaseSha256")):
+            raise Refusal("book seller source database digest differs from the verified backup manifest")
         if (not isinstance(composition.get("publicProjection"), dict)
                 or backup.get("oldProjectorNodeVersion") != production_projector_node_version()):
             raise Refusal("production migration has no complete independent public comparison")
@@ -1857,7 +1981,11 @@ def validate_production_content_acceptance(candidate_archive: bytes, static_dige
             if not isinstance(registry, list) or not isinstance(source_media, list):
                 raise Refusal("production source media or target registry has an invalid shape")
             validate_migrated_public_projection(json.loads(original.read_bytes()), projected,
-                                                composition["publicProjection"], source_media, registry)
+                                                composition["publicProjection"], source_media, registry,
+                                                book_seller_seed=book_seed,
+                                                source_database_bytes=source_database_bytes if book_seed else None,
+                                                projector_sha=projector_sha if book_seed else None,
+                                                captured_at=capture.get("capturedAt") if book_seed else None)
     except (OSError, ValueError, tarfile.TarError, AttributeError, KeyError) as error:
         raise Refusal("production content acceptance evidence is unreadable") from error
 

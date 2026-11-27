@@ -19,7 +19,7 @@ function root(): string {
   return scratch;
 }
 
-function snapshotWithBook(texts: string[]): string {
+function snapshotWithBook(texts: string[], conflicts: Array<Partial<Record<string, string>>> = []): string {
   const dir = join(root(), `snapshot-${texts.length}-${Math.random().toString(16).slice(2)}`);
   cpSync(PINNED, dir, { recursive: true });
   const path = join(dir, 'snapshot.json');
@@ -37,6 +37,7 @@ function snapshotWithBook(texts: string[]): string {
   snapshot.content.types.static_pages = [
     ...pages.filter((page) => page.slug !== BOOK_SLUG),
     ...texts.map((body_text) => ({ ...base, body_text })),
+    ...conflicts.map((conflict) => ({ ...base, body_text: 'конфликтующая запись', ...conflict })),
   ];
   writeFileSync(path, `${JSON.stringify(snapshot)}\n`);
   return dir;
@@ -81,6 +82,24 @@ describe('страница книг из опубликованного сним
   ])('отказывает в сборке, если опубликованная Page книг %s', (_case, texts) => {
     const dir = snapshotWithBook(texts);
     const outDir = join(root(), `dist-invalid-${texts.length}-${Math.random().toString(16).slice(2)}`);
+    const env = { ...process.env, CONTENT_SNAPSHOT_DIR: dir, PAYMENT_ROLE: 'ci' };
+    delete env.DEMO_PROFILE;
+    delete env.DEMO_OUTPUT;
+    expect(() => execFileSync(ASTRO, ['--config', 'astro.config.mjs', 'build', '--outDir', outDir], {
+      cwd: WEB_ROOT,
+      env,
+      stdio: 'pipe',
+      maxBuffer: 8 * 1024 * 1024,
+    })).toThrow();
+    expect(existsSync(join(outDir, BOOK_SLUG, 'index.html'))).toBe(false);
+  }, 120_000);
+
+  it.each([
+    ['тот же slug с другим legacy_id', { slug: BOOK_SLUG, legacy_id: 'other' }],
+    ['тот же legacy_id с другим slug', { slug: 'other', legacy_id: BOOK_SLUG }],
+  ])('отказывает, если опубликованная запись совпадает только по %s', (_case, conflict) => {
+    const dir = snapshotWithBook(['единственная валидная запись'], [conflict]);
+    const outDir = join(root(), `dist-conflict-${Math.random().toString(16).slice(2)}`);
     const env = { ...process.env, CONTENT_SNAPSHOT_DIR: dir, PAYMENT_ROLE: 'ci' };
     delete env.DEMO_PROFILE;
     delete env.DEMO_OUTPUT;

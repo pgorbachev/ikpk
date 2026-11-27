@@ -763,6 +763,270 @@ class ProductionStaticProjectorTests(unittest.TestCase):
 
 
 class CrossVersionPublicProjectionTests(unittest.TestCase):
+    def test_only_a_book_ledger_owned_by_current_operation_triggers_seed_proof(self):
+        with tempfile.TemporaryDirectory(prefix="ikpk-book-current-ledger-") as temporary:
+            database = Path(temporary) / "candidate.sqlite"
+            with sqlite3.connect(database) as db:
+                db.execute("CREATE TABLE ikpk_data_migration_history (step_id TEXT, operation_id TEXT)")
+                db.execute("INSERT INTO ikpk_data_migration_history VALUES (?,?)",
+                           ("book-seller-page-v1", "previous-operation"))
+            self.assertFalse(rehearsal_host._book_seller_step_current(database, "next-operation"))
+            with sqlite3.connect(database) as db:
+                db.execute("UPDATE ikpk_data_migration_history SET operation_id='next-operation'")
+            self.assertTrue(rehearsal_host._book_seller_step_current(database, "next-operation"))
+
+    def test_inherited_book_seed_allows_only_exact_backup_derived_page(self):
+        kinds = ("institutes", "course_groups", "seminars", "teachers", "articles",
+                 "schedule_entries", "news", "promotions", "static_pages", "video_playlists")
+        original = {
+            "contractVersion": 2, "fingerprint": "sha256:" + "1" * 64, "snapshotId": "snap:old",
+            "referenceDate": "2026-11-26", "origin": {"kind": "server-db", "sourceId": "verified", "capturedAt": "2026-11-26T00:00:00.000Z"},
+            "sourcePolicy": "production-static", "sourceAge": "source-bound", "skippedUploads": [],
+            "captureProof": {"databaseDigest": "old", "schemaDigest": "old", "bundleDigest": "old"},
+            "content": {"types": {kind: [] for kind in kinds}, "media": []},
+        }
+        original["content"]["types"]["seminars"] = [
+            {"id": 3, "documentId": "seminar-3", "name": "Preserved seminar"}]
+        original["content"]["types"]["schedule_entries"] = [
+            {"id": 4, "documentId": "entry-4", "startAt": "2027-02-10T10:00:00.000Z",
+             "endAt": "2027-02-10T11:00:00.000Z"}]
+        original["content"]["historicalExceptions"] = [{"recordFingerprint": f"sha256:{index:064x}"}
+                                                       for index in range(1, 7)]
+        target = copy.deepcopy(original)
+        target["contractVersion"] = 2
+        reviewed = {
+            "version": 1, "documentIds": {kind: {} for kind in kinds},
+            "schedule": {"4": {}}, "seminars": {"3": {}},
+        }
+        reviewed["documentIds"]["seminars"]["3"] = "seminar-3"
+        reviewed["documentIds"]["schedule_entries"]["4"] = "entry-4"
+        with tempfile.NamedTemporaryFile(suffix=".sqlite") as source:
+            db = sqlite3.connect(source.name)
+            db.execute("CREATE TABLE pages(id INTEGER PRIMARY KEY)")
+            db.executemany("INSERT INTO pages(id) VALUES (?)", [(4,), (7,)])
+            db.commit()
+            db.close()
+            source_bytes = Path(source.name).read_bytes()
+        seed_document = "cd7f96fcf41b4721214e6c36"
+        seed = {
+            "version": 1, "stepId": "book-seller-page-v1", "stepSha256": "a" * 64,
+            "sourceMaxPageId": 7,
+            "ledgerResult": {"createdPages": 2, "createdSeoComponents": 2, "createdPageLinks": 2},
+        }
+        reviewed["documentIds"]["static_pages"]["9"] = seed_document
+        target["content"]["types"]["static_pages"].append({
+            "id": 9, "documentId": seed_document,
+            "createdAt": "2026-11-27T08:00:00.000Z", "updatedAt": "2026-11-27T08:00:00.001Z",
+            "publishedAt": "2026-11-27T08:00:00.001Z",
+            "title": "Книги и учебные материалы", "slug": "knigi-i-uchebnye-materialy",
+            "legacy_id": "knigi-i-uchebnye-materialy", "legacy_url": "/knigi-i-uchebnye-materialy",
+            "body_html": "Издательский дом ИКПК выпускает книги и учебные материалы. Продавец книг — ИП Тучанфа В.А.",
+            "body_text": "Издательский дом ИКПК выпускает книги и учебные материалы. Продавец книг — ИП Тучанфа В.А.",
+            "seo_title": "Книги и учебные материалы — ИКПК",
+            "seo_description": "Книжные новинки издательского дома ИКПК, акции и ссылки на площадки продавца.",
+        })
+        captured_at = "2026-11-27T08:00:00.000Z"
+        target["referenceDate"] = "2026-11-27"
+        target["origin"]["capturedAt"] = captured_at
+        target["captureProof"] = {"databaseDigest": "candidate", "schemaDigest": "schema", "bundleDigest": "capture"}
+        module = operator.ROOT / "web/scripts/lib/content-snapshot.ts"
+        identity_script = """
+import {contentFingerprint, snapshotId} from './identity.mts';
+import {readFileSync} from 'node:fs';
+const snapshot = JSON.parse(readFileSync(0, 'utf8'));
+const fingerprint = contentFingerprint(snapshot.content);
+process.stdout.write(JSON.stringify({fingerprint, snapshotId: snapshotId({...snapshot, fingerprint})}));
+"""
+        with tempfile.TemporaryDirectory(prefix="ikpk-book-test-identity-") as directory:
+            Path(directory, "identity.mts").write_bytes(module.read_bytes())
+            completed = subprocess.run(["node", "--experimental-strip-types", "--input-type=module", "-e", identity_script],
+                                       cwd=directory, input=json.dumps(target).encode(), capture_output=True, check=True)
+        target.update(json.loads(completed.stdout))
+        source_sha = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
+        operator.validate_migrated_public_projection(
+            original, target, reviewed, book_seller_seed=seed, source_database_bytes=source_bytes,
+            projector_sha=source_sha, captured_at=captured_at)
+        # Exercise the complete off-host proof consumer with the real minimal
+        # backup TAR and sidecar format (which deliberately has no DB hash field).
+        source_database_bytes = source_bytes
+        media_bytes = b'{"media": []}\n'
+        source_manifest = {
+            "version": 1, "operationId": OPERATION, "databaseSha256": sha(source_database_bytes),
+            "mediaManifestSha256": sha(media_bytes), "media": [],
+        }
+        archive_buffer = io.BytesIO()
+        with tarfile.open(fileobj=archive_buffer, mode="w:") as archive:
+            for name, payload in (("database.sqlite", source_database_bytes), ("media-manifest.json", media_bytes),
+                                  ("manifest.json", json.dumps(source_manifest, sort_keys=True).encode() + b"\n"),
+                                  ("media/placeholder", b"x")):
+                member = tarfile.TarInfo(name); member.size = len(payload); member.mode = 0o600
+                archive.addfile(member, io.BytesIO(payload))
+        backup_bytes = archive_buffer.getvalue()
+        backup_digest = sha(backup_bytes)
+        backup_dir = Path(tempfile.mkdtemp(prefix="ikpk-book-proof-backup-"))
+        self.addCleanup(lambda: __import__("shutil").rmtree(backup_dir))
+        backup_path = backup_dir / f"{OPERATION}.tar"
+        backup_path.write_bytes(backup_bytes)
+        backup_sidecar = {
+            "operationId": OPERATION, "sourceSha": SOURCE, "sha256": backup_digest,
+            "runId": ADMISSION["runId"], "attempt": ADMISSION["attempt"],
+            "oldCmsSourceSha": OLD_CMS, "oldCmsSchemaSha256": "b" * 64,
+            "oldProjectorSourceSha": OLD_PROJECTOR, "oldProjectorNodeVersion": "v22-test",
+            "oldProjectorContractSha256": "c" * 64,
+            "snapshotFingerprint": "sha256:" + "e" * 64,
+        }
+        capture = {
+            "operationId": OPERATION, "sourceSha": SOURCE, "profile": "production-static",
+            "databaseSha256": "f" * 64, "schemaDigest": "d" * 64,
+            "mediaManifestSha256": source_manifest["mediaManifestSha256"],
+            "capturedAt": captured_at, "runId": ADMISSION["runId"], "attempt": ADMISSION["attempt"],
+        }
+        capture_bytes = json.dumps(capture, sort_keys=True, separators=(",", ":")).encode()
+        target["captureProof"] = {
+            "captureId": OPERATION, "databaseDigest": capture["databaseSha256"],
+            "schemaDigest": capture["schemaDigest"], "mediaManifestDigest": capture["mediaManifestSha256"],
+            "bundleDigest": sha(capture_bytes),
+        }
+        with tempfile.TemporaryDirectory(prefix="ikpk-book-host-proof-") as host_temporary:
+            host_root = Path(host_temporary).resolve()
+            release_root = host_root / "releases"; release_root.mkdir()
+            config = {"profile": "production-paired", "releaseRoot": str(release_root)}
+            source_root = release_root / f"{SOURCE}-{OPERATION}"
+            capture_path = source_root / ".staging193-rehearsal" / OPERATION / "capture/manifest.json"
+            capture_path.parent.mkdir(parents=True)
+            capture_path.write_bytes(capture_bytes)
+            capture_path.with_name("media-manifest.json").write_bytes(media_bytes)
+            snapshot_path = source_root / "web/.snapshot/snapshot.json"
+            snapshot_path.parent.mkdir(parents=True)
+            snapshot_path.write_text(json.dumps(target), encoding="utf-8")
+            binding = {
+                "operationId": OPERATION, "sourceCommit": SOURCE,
+                "candidateDatabaseSha256": capture["databaseSha256"],
+                "sourceDatabaseSha256": source_manifest["databaseSha256"],
+                "registrySha256": sha(b"[]"), "migrationPlanDigest": "7" * 64,
+            }
+            receipt = {
+                "operationId": OPERATION, "sourceCommitSha": SOURCE, "registryBinding": binding,
+                "inheritedCohort": {"priorReceiptSha256": "6" * 64},
+                "compositionAudit": {"mode": "inherited-cohort"},
+            }
+            receipt_path = rehearsal_host._cms_artifact_path(source_root, OPERATION).parent / "receipt.json"
+            receipt_path.parent.mkdir(parents=True)
+            receipt_bytes = json.dumps(receipt, sort_keys=True, separators=(",", ":")).encode()
+            receipt_path.write_bytes(receipt_bytes)
+            receipt_digest = sha(receipt_bytes)
+            fresh = {
+                "mode": "book-seller-seed-v1",
+                "bookSellerSeed": {
+                    **seed, "receiptSha256": receipt_digest, "planSha256": binding["migrationPlanDigest"],
+                    "sourceDatabaseSha256": binding["sourceDatabaseSha256"],
+                    "candidateDatabaseSha256": binding["candidateDatabaseSha256"],
+                    "lineageId": "5" * 64,
+                },
+                "backupArchiveSha256": backup_digest,
+                "backupDatabaseSha256": source_manifest["databaseSha256"],
+                "backupMediaManifestSha256": source_manifest["mediaManifestSha256"],
+                "publicProjection": reviewed,
+                "targetProjection": rehearsal_host._production_target_projection(
+                    target, capture_bytes, media_bytes),
+                "targetRegistryBase64": base64.b64encode(b"[]").decode(),
+            }
+            binding["candidateDatabaseSha256"] = capture["databaseSha256"]
+            rows = [
+                {"record": "historical-cohort-intent", "sourceSha": SOURCE,
+                 "receiptSha256": receipt_digest, "binding": binding, "freshComposition": fresh},
+                {"record": "historical-cohort-selected", "sourceSha": SOURCE,
+                 "manifest": {**binding, "receiptSha256": receipt_digest}},
+            ]
+            class State:
+                def _operation_rows(self, _operation): return rows
+            host_backup = {
+                "archiveSha256": backup_digest, "databaseSha256": source_manifest["databaseSha256"],
+                "mediaManifestSha256": source_manifest["mediaManifestSha256"],
+            }
+            with patch.object(rehearsal_host, "_backup_manifest", return_value=host_backup):
+                proof = rehearsal_host._production_migration_static_proof(
+                    config, State(), OPERATION, SOURCE, snapshot_path, capture_path, "9" * 64)
+            self.assertEqual(proof["composition"]["mode"], "book-seller-seed-v1")
+            self.assertEqual(proof["receiptSha256"], receipt_digest)
+        candidate_buffer = io.BytesIO()
+        with tarfile.open(fileobj=candidate_buffer, mode="w:") as archive:
+            for name, payload in (("snapshot/capture-manifest.json", capture_bytes),
+                                  ("snapshot/snapshot.json", json.dumps(target, sort_keys=True, separators=(",", ":")).encode()),
+                                  ("snapshot/production-migration-proof.json", json.dumps(proof, sort_keys=True, separators=(",", ":")).encode())):
+                member = tarfile.TarInfo(name); member.size = len(payload); member.mode = 0o600
+                archive.addfile(member, io.BytesIO(payload))
+
+        def historical_projection(_payload, _source, _operation, _run, _attempt, _schema, _digest,
+                                  *, projection_output, **_kwargs):
+            projection_output.write_text(json.dumps(original), encoding="utf-8")
+            return backup_sidecar["snapshotFingerprint"]
+
+        with patch.object(operator, "production_projector_contract", return_value=backup_sidecar["oldProjectorContractSha256"]), \
+             patch.object(operator, "production_projector_node_version", return_value="v22-test"), \
+             patch.object(operator, "capture_bytes", return_value=module.read_bytes()), \
+             patch.object(operator, "production_paired_backup_fingerprint", side_effect=historical_projection):
+            operator.validate_production_content_acceptance(
+                candidate_buffer.getvalue(), proof["staticTreeSha256"], target["fingerprint"],
+                backup_path, backup_sidecar, OPERATION, SOURCE, ADMISSION)
+            tampered = copy.deepcopy(target)
+            tampered["content"]["types"]["static_pages"][0]["body_text"] = "editorial mutation"
+            altered_archive = io.BytesIO()
+            with tarfile.open(fileobj=altered_archive, mode="w:") as archive:
+                for name, payload in (("snapshot/capture-manifest.json", capture_bytes),
+                                      ("snapshot/snapshot.json", json.dumps(tampered, sort_keys=True).encode()),
+                                      ("snapshot/production-migration-proof.json", json.dumps(proof, sort_keys=True).encode())):
+                    member = tarfile.TarInfo(name); member.size = len(payload); member.mode = 0o600
+                    archive.addfile(member, io.BytesIO(payload))
+            with self.assertRaises(operator.Refusal):
+                operator.validate_production_content_acceptance(
+                    altered_archive.getvalue(), proof["staticTreeSha256"], target["fingerprint"],
+                    backup_path, backup_sidecar, OPERATION, SOURCE, ADMISSION)
+
+        mutations = [
+            ("extra page", lambda doc: doc["content"]["types"]["static_pages"].append({"id": 11})),
+            ("seed body", lambda doc: doc["content"]["types"]["static_pages"][0].update(body_text="tampered")),
+            ("wrong document", lambda doc: doc["content"]["types"]["static_pages"][0].update(documentId="other")),
+        ]
+        for name, mutate in mutations:
+            with self.subTest(name=name):
+                changed = copy.deepcopy(target)
+                mutate(changed)
+                with self.assertRaises(operator.Refusal):
+                    operator.validate_migrated_public_projection(
+                        original, changed, reviewed, book_seller_seed=seed, source_database_bytes=source_bytes,
+                        projector_sha=source_sha, captured_at=captured_at)
+        altered_envelope = copy.deepcopy(target)
+        altered_envelope["sourcePolicy"] = "unreviewed"
+        with self.assertRaises(operator.Refusal):
+            operator.validate_migrated_public_projection(
+                original, altered_envelope, reviewed, book_seller_seed=seed, source_database_bytes=source_bytes,
+                projector_sha=source_sha, captured_at=captured_at)
+        altered_media = copy.deepcopy(target)
+        altered_media["content"]["media"].append({"ref": "/uploads/extra.webp", "contentId": "extra"})
+        with self.assertRaises(operator.Refusal):
+            operator.validate_migrated_public_projection(
+                original, altered_media, reviewed, book_seller_seed=seed, source_database_bytes=source_bytes,
+                projector_sha=source_sha, captured_at=captured_at)
+        altered_review = copy.deepcopy(reviewed)
+        altered_review["schedule"]["1"] = {"price": 0}
+        with self.assertRaises(operator.Refusal):
+            operator.validate_migrated_public_projection(
+                original, target, altered_review, book_seller_seed=seed, source_database_bytes=source_bytes,
+                projector_sha=source_sha, captured_at=captured_at)
+        wrong_ledger = copy.deepcopy(seed)
+        wrong_ledger["ledgerResult"]["createdPages"] = 0
+        with self.assertRaises(operator.Refusal):
+            operator.validate_migrated_public_projection(
+                original, target, reviewed, book_seller_seed=wrong_ledger, source_database_bytes=source_bytes,
+                projector_sha=source_sha, captured_at=captured_at)
+        wrong_high_water = copy.deepcopy(seed)
+        wrong_high_water["sourceMaxPageId"] = 6
+        with self.assertRaises(operator.Refusal):
+            operator.validate_migrated_public_projection(
+                original, target, reviewed, book_seller_seed=wrong_high_water, source_database_bytes=source_bytes,
+                projector_sha=source_sha, captured_at=captured_at)
+
     def test_expected_v2_result_preserves_untouched_public_content_and_relation_identity(self):
         teacher_a = {"id": 1, "legacy_id": "99", "name": "Teacher A", "order": 1}
         teacher_b = {"id": 2, "legacy_id": "100", "name": "Teacher B", "order": 2}
