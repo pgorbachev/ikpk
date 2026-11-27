@@ -14,7 +14,7 @@ const center = 'Телефон центра';
 const manager = 'Мобильный телефон менеджера';
 
 describe('site phone fields in the Strapi admin', { timeout: 360_000 }, () => {
-  let app, browser, base, pages, contacts, another, books, work;
+  let app, browser, base, pages, contacts, another, work;
 
   before(async () => {
     work = mkdtempSync(join(tmpdir(), 'ikpk-phone-ui-'));
@@ -41,7 +41,7 @@ describe('site phone fields in the Strapi admin', { timeout: 360_000 }, () => {
     } });
     contacts = await page('kontakty', { center_phone: '+78126465450', manager_phone: '+79810387797' });
     another = await page('another-page', {});
-    books = await page('knigi-i-uchebnye-materialy', { body: 'Вводный текст книг.' });
+    await page('knigi-i-uchebnye-materialy', { body: 'Вводный текст книг.' });
     const editor = await app.service('admin::role').findOne({ code: 'strapi-editor' });
     for (const action of ['read', 'update']) {
       await app.db.query('admin::permission').create({ data: {
