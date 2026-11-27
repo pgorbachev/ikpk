@@ -113,9 +113,9 @@ describe('cms-content-authoring: связь персоны с институто
   });
 });
 
-describe('cms-content-authoring: обязательная категория статьи', () => {
-  // Scenario: публикация статьи без категории отклоняется
-  it('статья без категории не публикуется', async () => {
+describe('cms-content-authoring: категории статьи', () => {
+  // Scenario: публикация статьи без категории разрешена
+  it('статья без категории публикуется', async () => {
     const { checkPublication } = await loadContentValidation();
     const verdict = checkPublication({
       type: 'article',
@@ -130,8 +130,8 @@ describe('cms-content-authoring: обязательная категория с�
         categories: [],
       },
     });
-    expect(verdict.ok).toBe(false);
-    expect(verdict.missing).toContain('categories');
+    expect(verdict.ok).toBe(true);
+    expect(verdict.missing).toEqual([]);
   });
 
   // Scenario: у статьи несколько категорий
