@@ -9,13 +9,13 @@ function database(t) {
   const db = new Database(':memory:');
   db.exec(`CREATE TABLE pages (
       id INTEGER PRIMARY KEY, document_id varchar(255), title varchar(255), slug varchar(255), body TEXT,
-      legacy_id varchar(255), center_phone varchar(255), manager_phone varchar(255), created_at datetime,
-      updated_at datetime, published_at datetime, created_by_id integer, updated_by_id integer, locale varchar(255));
+      legacy_id varchar(255), created_at datetime, updated_at datetime, published_at datetime,
+      created_by_id integer, updated_by_id integer, locale varchar(255), center_phone varchar(255), manager_phone varchar(255));
     CREATE TABLE components_shared_seos (
       id INTEGER PRIMARY KEY, seo_title varchar(255), seo_description TEXT, noindex boolean);
     CREATE TABLE pages_cmps (
       id INTEGER PRIMARY KEY, entity_id integer, cmp_id integer, component_type varchar(255), field varchar(255), "order" float);
-    INSERT INTO pages VALUES (71,'other-doc','Контакты','kontakty','Сохранить','kontakty',NULL,NULL,100,100,100,NULL,NULL,NULL);
+    INSERT INTO pages VALUES (71,'other-doc','Контакты','kontakty','Сохранить','kontakty',100,100,100,NULL,NULL,NULL,NULL,NULL);
     INSERT INTO components_shared_seos VALUES (91,'Контакты','Контактные данные',0);
     INSERT INTO pages_cmps VALUES (111,71,91,'shared.seo','seo',NULL);`);
   t.after(() => db.close());
@@ -67,6 +67,19 @@ test('rolls back rows if the atomic ledger callback fails and refuses a partial 
   const partial = read(db);
   assert.throws(() => apply(db, { onApplied() {} }), /ambiguous/);
   assert.deepEqual(read(db), partial);
+});
+
+test('refuses missing or extra page columns without inserting any book records', async (t) => {
+  const apply = await applyMigration();
+  const extra = database(t);
+  extra.exec('ALTER TABLE pages ADD COLUMN unexpected TEXT');
+  assert.throws(() => apply(extra, { onApplied() {} }), /unsupported Strapi postimage schema for pages/);
+  assert.equal(extra.prepare("SELECT count(*) AS n FROM pages WHERE slug='knigi-i-uchebnye-materialy'").get().n, 0);
+
+  const missing = database(t);
+  missing.exec('ALTER TABLE pages DROP COLUMN manager_phone');
+  assert.throws(() => apply(missing, { onApplied() {} }), /unsupported Strapi postimage schema for pages/);
+  assert.equal(missing.prepare("SELECT count(*) AS n FROM pages WHERE slug='knigi-i-uchebnye-materialy'").get().n, 0);
 });
 
 test('first run accepts only the current-site pair regardless of documentId', async (t) => {

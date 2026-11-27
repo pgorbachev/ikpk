@@ -63,6 +63,11 @@ const BOOK_PAGE = {
   createdAt: 1795766400000,
   publishedAt: 1795766400001,
 };
+const BOOK_SEED_COLUMNS = {
+  pages: ['id', 'document_id', 'title', 'slug', 'body', 'legacy_id', 'created_at', 'updated_at', 'published_at', 'created_by_id', 'updated_by_id', 'locale', 'center_phone', 'manager_phone'],
+  components_shared_seos: ['id', 'seo_title', 'seo_description', 'noindex'],
+  pages_cmps: ['id', 'entity_id', 'cmp_id', 'component_type', 'field', 'order'],
+};
 const CURRENT_CONTENT_ADDITIONS = {
   promotions: { name: 'type', type: 'varchar(255)' },
   schedule_entries: { name: 'is_event_collection', type: 'boolean' },
@@ -122,6 +127,11 @@ function canonicalJson(value) { return json(canonical(value)); }
 function tableNames(db) {
   return db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name")
     .all().map(({ name }) => name);
+}
+function exactColumnSet(actual, expected) {
+  const actualSet = new Set(actual), expectedSet = new Set(expected);
+  return actualSet.size === actual.length && expectedSet.size === expected.length
+    && actualSet.size === expectedSet.size && expected.every((name) => actualSet.has(name));
 }
 function quote(identifier) { return `"${identifier.replaceAll('"', '""')}"`; }
 function sourceFileFingerprint(path) {
@@ -1206,6 +1216,12 @@ export function auditMigration({ sourceDbPath, candidateDbPath, plan, receipt, a
     const sourceSchema = schema(source); const candidateSchema = schema(candidate);
     const transforms = deriveKnownTransforms(source, plan, receipt);
     const differences = [];
+    if (transforms.bookSeller) {
+      for (const [table, expected] of Object.entries(BOOK_SEED_COLUMNS)) {
+        const actual = candidate.prepare(`PRAGMA table_info(${quote(table)})`).all().map(({ name }) => name);
+        if (!exactColumnSet(actual, expected)) differences.push({ table, kind: 'book-page-schema-mismatch', schemaSha256: sha(Buffer.from(json(actual))) });
+      }
+    }
     const acceptedSchemaSnapshot = validateSchemaHistory(source, candidate, candidateSchema, differences);
     const sourceIntegrity = integrity(source); const candidateIntegrity = integrity(candidate);
     if (sourceIntegrity.integrityCheck.length !== 1 || sourceIntegrity.integrityCheck[0] !== 'ok' || sourceIntegrity.foreignKeyViolations) differences.push({ table: '*', kind: 'source-integrity-failed' });
