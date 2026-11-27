@@ -28,7 +28,7 @@ import tempfile
 from datetime import datetime, timezone
 import time
 import uuid
-from contextlib import contextmanager, nullcontext
+from contextlib import ExitStack, contextmanager, nullcontext
 from pathlib import Path
 from typing import Any, Callable, Optional
 from urllib.parse import quote, urlsplit
@@ -52,6 +52,8 @@ INITIAL_PROD_CMS_ENV_FILE = Path("/etc/ikpk-cms/trial.env")
 STAGING194_CMS_ENV_FILE = Path("/etc/ikpk-cms/site-build-current194.env")
 PRODUCTION_PUBLICATION_LOCK = Path("/var/www/ikpk/.publication.lock")
 STAGING194_TEMPORARY_ROOT = Path("/var/tmp/ikpk-staging194")
+STAGING194_PAIRED_WORKSPACE_ROOT = Path("/var/lib/ikpk-site-build/staging194-paired")
+PRODUCTION_OPERATION_STATE_ROOT = Path("/var/lib/ikpk-rehearsal")
 PRODUCTION_PAIRED_WORKSPACE_ROOT = Path("/var/lib/ikpk-site-build/production-paired")
 SITE_PUBLICATION_MARKER = "host-publication.json"
 SITE_PUBLICATION_MARKER_DIR = Path("/var/lib/ikpk-rehearsal/site-publication")
@@ -476,6 +478,7 @@ def _root_config(path: Path, expected_profile: str = "staging194", *,
     if data.get("profile", "staging194") == "staging194":
         # Backward-compatible in-memory default; never rewrite the installed config.
         data.setdefault("cmsEnvironmentFile", str(STAGING194_CMS_ENV_FILE))
+        data.setdefault("siteBuildWorkspaceRoot", str(STAGING194_PAIRED_WORKSPACE_ROOT))
     _maintenance_banner(data)
     missing = REQUIRED_CONFIG - data.keys()
     if missing:
@@ -574,7 +577,8 @@ def _validate_target_binding(data: dict[str, Any]) -> None:
         if (data.get("siteRefreshState") != "/var/lib/ikpk-cms-prototype193/staging/site-refresh194/state/state.json"
                 or data.get("publicationLock") != str(PRODUCTION_PUBLICATION_LOCK)
                 or data.get("sitePublicationMarker") != "/var/lib/ikpk-rehearsal/site-publication/host-publication.json"
-                or data.get("cmsEnvironmentFile") != str(STAGING194_CMS_ENV_FILE)):
+                or data.get("cmsEnvironmentFile") != str(STAGING194_CMS_ENV_FILE)
+                or data.get("siteBuildWorkspaceRoot", str(STAGING194_PAIRED_WORKSPACE_ROOT)) != str(STAGING194_PAIRED_WORKSPACE_ROOT)):
             raise HostFailure("staging194 site publication coordination paths are not fixed")
         if data["cmsHealthUrl"] != "http://127.0.0.1:1338/_health":
             raise HostFailure("CMS health check must remain bound to the local staging194 service")
@@ -1375,7 +1379,7 @@ def _cleanup_site_releases(config: dict[str, Any], state: RehearsalState,
         protected.add(target)
     for key in ("siteBuildWorkspaceRoot", "releaseRoot", "backupRoot"):
         value = config.get(key)
-        if not value:
+        if not value or (key == "siteBuildWorkspaceRoot" and not os.path.lexists(value)):
             continue
         workspace = Path(value).resolve(strict=True)
         if workspace.parent == root.resolve(strict=True):
@@ -1542,6 +1546,13 @@ def _cleanup_cms_releases(config: dict[str, Any], state: RehearsalState) -> list
             return []
         protected = {current_release, _cms_release_dir(root, old.resolve())}
         protected.update(_restart_cms_releases(config, root))
+        workspace_root = config.get("siteBuildWorkspaceRoot")
+        if workspace_root and os.path.lexists(workspace_root):
+            for workspace in _protected_paired_workspace_paths(config, state):
+                for part in ("web/node_modules", "cms/node_modules"):
+                    dependency = (workspace / part).resolve(strict=True)
+                    if root in dependency.parents:
+                        protected.add(_cms_release_dir(root, dependency))
     except (OSError, ValueError) as error:
         raise HostFailure("CMS rollback target is outside its release root; cleanup refused") from error
     mounts = _mount_points()
@@ -1562,12 +1573,341 @@ def _cleanup_cms_releases(config: dict[str, Any], state: RehearsalState) -> list
     return removed
 
 
+def _cms_process_workspace_references(control_group: str, main_pid: int, *,
+                                      cgroups: Path = Path("/sys/fs/cgroup"),
+                                      processes: Path = Path("/proc")) -> set[str]:
+    if not re.fullmatch(r"/[A-Za-z0-9_./@-]+", control_group) or ".." in Path(control_group).parts:
+        raise HostFailure("CMS control group is unavailable or unsafe")
+    group = cgroups / control_group.lstrip("/")
+    if not group.is_dir() or group.resolve(strict=True) != group:
+        raise HostFailure("CMS control group is not a canonical directory")
+
+    def members() -> set[int]:
+        listings = sorted(group.rglob("cgroup.procs"))
+        if group / "cgroup.procs" not in listings:
+            raise HostFailure("CMS control group process list is unavailable")
+        return {int(pid) for listing in listings for pid in listing.read_text().split()}
+
+    refs = set()
+    pids = members()
+    if main_pid not in pids:
+        raise HostFailure("CMS main process is outside the effective service control group")
+    for pid in pids:
+        process = processes / str(pid)
+        environment = process.joinpath("environ").read_bytes().split(b"\0")
+        workspaces = [item.split(b"=", 1)[1].decode() for item in environment
+                      if item.startswith(b"IKPK_BUILD_WORKSPACE=")]
+        if len(workspaces) > 1 or (pid == main_pid and not workspaces):
+            raise HostFailure("running CMS workspace is missing or ambiguous")
+        refs.update(workspaces)
+        refs.add(os.readlink(process / "cwd"))
+        refs.add(os.readlink(process / "exe"))
+        for fd in process.joinpath("fd").iterdir():
+            # Ordinary request handling opens and closes descriptors continuously.
+            try:
+                target = os.readlink(fd)
+            except FileNotFoundError:
+                continue
+            if target.startswith("/"):
+                refs.add(target)
+        for line in process.joinpath("maps").read_text().splitlines():
+            fields = line.split(maxsplit=5)
+            if len(fields) == 6 and fields[5].startswith("/"):
+                refs.add(fields[5])
+    if pids != members():
+        raise HostFailure("CMS process inventory changed during inspection")
+    return refs
+
+
+def _protected_paired_workspace_paths(config: dict[str, Any], state: RehearsalState) -> set[Path]:
+    root = Path(config["siteBuildWorkspaceRoot"])
+    result = set()
+
+    def remember(value: str, *, process_reference: bool = False) -> None:
+        value = value.removesuffix(" (deleted)") if process_reference else value
+        path = Path(value)
+        if not path.is_absolute() or value != os.path.normpath(value):
+            raise HostFailure("noncanonical CMS workspace reference")
+        target = path.resolve(strict=not process_reference)
+        for named in (path, target):
+            if named == root:
+                raise HostFailure("CMS workspace reference names the workspace root")
+            if root in named.parents:
+                result.add(root / named.relative_to(root).parts[0])
+
+    unit = config["cmsUnit"]
+    properties = run(["/usr/bin/systemctl", "show", unit, "-p", "MainPID",
+                      "-p", "WorkingDirectory", "-p", "Environment", "-p", "EnvironmentFiles",
+                      "-p", "ActiveState", "-p", "NeedDaemonReload", "-p", "ControlGroup"]).stdout
+    values = dict(line.split("=", 1) for line in properties.splitlines() if "=" in line)
+    if values.get("ActiveState") != "active" or values.get("NeedDaemonReload") != "no":
+        raise HostFailure("running and next-start CMS references are not stable")
+    pid = int(values["MainPID"])
+    if pid < 2:
+        raise HostFailure("CMS main process is unavailable")
+    for reference in _cms_process_workspace_references(values.get("ControlGroup", ""), pid):
+        remember(reference, process_reference=True)
+    if values["WorkingDirectory"]:
+        remember(values["WorkingDirectory"])
+    key = "IKPK_BUILD_WORKSPACE="
+    for assignment in shlex.split(values["Environment"]):
+        if assignment.startswith(key):
+            remember(assignment[len(key):])
+    pattern = r"(/[A-Za-z0-9_.@/-]+) \(ignore_errors=(?:yes|no)\)"
+    files = re.findall(pattern, values["EnvironmentFiles"])
+    if re.sub(pattern, "", values["EnvironmentFiles"]).strip() or config["cmsEnvironmentFile"] not in files:
+        raise HostFailure("effective CMS environment files are ambiguous")
+    for raw in files:
+        path = Path(raw)
+        info = path.lstat()
+        if not stat.S_ISREG(info.st_mode) or info.st_uid != 0 or info.st_nlink != 1 or info.st_mode & 0o022:
+            raise HostFailure("effective CMS environment file is unsafe")
+        for line in path.read_text(encoding="utf-8").splitlines():
+            if re.match(r"^\s*(?:export\s+)?IKPK_BUILD_WORKSPACE\s*=", line):
+                parts = shlex.split(line.split("=", 1)[1], comments=True)
+                if len(parts) != 1:
+                    raise HostFailure("CMS environment workspace is ambiguous")
+                remember(parts[0])
+    configured = (_staging194_cms_source_env(config) if config.get("profile", "staging194") == "staging194"
+                  else _paired_cms_source_env(config))
+    if not configured["IKPK_BUILD_WORKSPACE"]:
+        raise HostFailure("next-start CMS workspace is missing")
+    remember(configured["IKPK_BUILD_WORKSPACE"])
+    if _service_pid(unit) != pid:
+        raise HostFailure("CMS restarted while inspecting workspace references")
+
+    history = state.read_journal_for_cleanup(validate_history=True)
+    committed = [row for row in history if row["record"] == "committed"]
+    if not committed:
+        raise HostFailure("no committed CMS release identifies the previous workspace")
+    old = _effective_old_pair(state, committed[-1]["operationId"])
+    previous = old.get("cmsSourceEnvironment", {}).get("IKPK_BUILD_WORKSPACE")
+    if not isinstance(previous, str) or not previous:
+        raise HostFailure("previous CMS workspace is unavailable in the operation journal")
+    remember(previous)
+    return result
+
+
+def _workspace_identity(candidate: Path, expected: dict[str, str]) -> bool:
+    marker = candidate / ".ikpk-workspace-identity.json"
+    try:
+        fd = os.open(marker, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+        with os.fdopen(fd, "rb") as stream:
+            info = os.fstat(stream.fileno())
+            return (stat.S_ISREG(info.st_mode) and info.st_nlink == 1 and info.st_size <= 4096
+                    and json.loads(stream.read(4097)) == expected)
+    except (OSError, ValueError):
+        return False
+
+
+def _workspace_allocated_bytes(candidate: Path) -> int:
+    pending = [candidate]
+    total = 0
+    while pending:
+        path = pending.pop()
+        info = path.lstat()
+        # Shared regular-file blocks would not be freed by removing this entry.
+        if not stat.S_ISREG(info.st_mode) or info.st_nlink == 1:
+            total += info.st_blocks * 512
+        if stat.S_ISDIR(info.st_mode):
+            pending.extend(path.iterdir())
+    return total
+
+
+def _cleanup_paired_workspaces(config: dict[str, Any], state: RehearsalState, *,
+                               preview: bool = False, enabled: bool = True) -> dict[str, Any]:
+    root = Path(config["siteBuildWorkspaceRoot"])
+    expected = (STAGING194_PAIRED_WORKSPACE_ROOT if config.get("profile", "staging194") == "staging194"
+                else PRODUCTION_PAIRED_WORKSPACE_ROOT)
+    if root != expected:
+        raise HostFailure("workspace cleanup root does not match its environment")
+    if not os.path.lexists(root):
+        return {"workspaceDecisions": []}
+    if root.resolve(strict=True) != root or not root.is_dir():
+        raise HostFailure("workspace cleanup root is unsafe")
+    history = state.read_journal_for_cleanup(validate_history=True)
+    if state._read_marker() is not None or state._unfinished_operation_ids(history):
+        raise HostFailure("unfinished CMS publication or recovery protects workspaces")
+    try:
+        protected = _protected_paired_workspace_paths(config, state)
+    except (OSError, ValueError, KeyError, HostFailure) as error:
+        raise HostFailure("cannot establish all protected CMS workspace references") from error
+    terminal = {}
+    for row in history:
+        if row["record"] in ("committed", "recovered"):
+            terminal[row["operationId"]] = row.get("sourceSha")
+    mounts = _mount_points()
+    decisions = []
+    directory = os.open(root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    try:
+        for candidate in sorted(root.iterdir()):
+            info = candidate.lstat()
+            if candidate.name.startswith(".workspace-removing-"):
+                receipt = state.root / (candidate.name + ".json")
+                try:
+                    record = json.loads(_cohort_file(receipt, maximum=4096))
+                    original = root / record["name"]
+                    sha, operation = record["sourceSha"], record["operationId"]
+                    valid = (receipt.lstat().st_uid == os.geteuid()
+                             and re.fullmatch(r"\.workspace-removing-[a-f0-9]{32}", candidate.name)
+                             and record["name"] == f"{sha}-{operation}"
+                             and terminal.get(operation) == sha and original not in protected
+                             and not os.path.lexists(original) and stat.S_ISDIR(info.st_mode)
+                             and [info.st_dev, info.st_ino] == record["inode"]
+                             and not any(point == candidate or candidate in point.parents for point in mounts))
+                except (OSError, ValueError, KeyError, TypeError, HostFailure):
+                    valid = False
+                decision, reason = "retain", "interrupted deletion evidence is ambiguous"
+                if valid:
+                    reason = "verified interrupted deletion"
+                    if preview:
+                        decision = "delete"
+                    elif enabled:
+                        _remove_quarantined_workspace(candidate.name, directory, info)
+                        print(json.dumps({"workspaceRemoved": str(candidate), "reason": reason}), file=sys.stderr, flush=True)
+                        receipt.unlink()
+                        decision = "removed"
+                decisions.append({"path": str(candidate), "decision": decision, "reason": reason,
+                                  "estimatedAllocatedBytes": _workspace_allocated_bytes(candidate) if decision == "delete" else 0})
+                continue
+            match = re.fullmatch(r"([a-f0-9]{40})-([A-Za-z0-9][A-Za-z0-9._-]{0,127})", candidate.name)
+            size = 0
+            decision, reason = "retain", "unrecognized workspace"
+            if candidate in protected:
+                reason = "referenced by running, next-start or prior CMS"
+            elif not stat.S_ISDIR(info.st_mode) or not match:
+                pass
+            elif any(point == candidate or candidate in point.parents for point in mounts):
+                reason = "mount point in workspace"
+            else:
+                sha, operation = match.groups()
+                identity = {"sourceSha": sha, "operationId": operation}
+                if terminal.get(operation) != sha or not _workspace_identity(candidate, identity):
+                    reason = "workspace marker and completed journal operation do not match"
+                else:
+                    size = _workspace_allocated_bytes(candidate)
+                    reason = "completed operation with no protected references"
+                    if preview:
+                        decision = "delete"
+                    elif not enabled:
+                        reason = "eligible, production workspace cleanup disabled"
+                    else:
+                        named = os.stat(candidate.name, dir_fd=directory, follow_symlinks=False)
+                        if ((named.st_dev, named.st_ino) != (info.st_dev, info.st_ino)
+                                or not _workspace_identity(candidate, identity)):
+                            raise HostFailure("workspace changed before removal")
+                        _assert_workspace_removal_available()
+                        tombstone = f".workspace-removing-{uuid.uuid4().hex}"
+                        receipt = state.root / (tombstone + ".json")
+                        durable_json(receipt, {**identity, "name": candidate.name,
+                                               "inode": [info.st_dev, info.st_ino]})
+                        os.rename(candidate.name, tombstone, src_dir_fd=directory, dst_dir_fd=directory)
+                        os.fsync(directory)
+                        _remove_quarantined_workspace(tombstone, directory, info)
+                        print(json.dumps({"workspaceRemoved": str(candidate), "reason": reason,
+                                          "estimatedAllocatedBytes": size}), file=sys.stderr, flush=True)
+                        receipt.unlink()
+                        decision = "removed"
+            decisions.append({"path": str(candidate), "decision": decision, "reason": reason,
+                              "estimatedAllocatedBytes": size})
+    finally:
+        os.close(directory)
+    return {"workspaceDecisions": decisions}
+
+
+def _assert_workspace_removal_available() -> None:
+    if not shutil.rmtree.avoids_symlink_attacks or sys.version_info < (3, 11):
+        raise HostFailure("descriptor-relative symlink-resistant removal is unavailable")
+
+
+def _remove_quarantined_workspace(name: str, directory: int, expected: os.stat_result) -> None:
+    _assert_workspace_removal_available()
+    current = os.stat(name, dir_fd=directory, follow_symlinks=False)
+    if not stat.S_ISDIR(current.st_mode) or (current.st_dev, current.st_ino) != (expected.st_dev, expected.st_ino):
+        raise HostFailure("quarantined workspace identity changed during cleanup")
+    shutil.rmtree(name, dir_fd=directory)
+    os.fsync(directory)
+
+
+def _assert_production_journal_config(path: Path, expected: Path) -> None:
+    try:
+        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    except OSError as error:
+        raise HostFailure("production journal configuration is unavailable") from error
+    try:
+        info = os.fstat(fd)
+        if not stat.S_ISREG(info.st_mode) or info.st_uid != 0 or info.st_nlink != 1 or info.st_mode & 0o022:
+            raise HostFailure("production journal configuration is unsafe")
+        with os.fdopen(fd, "rb", closefd=False) as stream:
+            data = json.loads(stream.read(65537))
+        if (not isinstance(data, dict) or data.get("stateDir") != str(expected)
+                or data.get("profile") != expected.name
+                or data.get("publicationLock", str(PRODUCTION_PUBLICATION_LOCK)) != str(PRODUCTION_PUBLICATION_LOCK)):
+            raise HostFailure("production journal location differs from the fixed policy")
+    except (OSError, ValueError) as error:
+        raise HostFailure("cannot validate production journal location") from error
+    finally:
+        os.close(fd)
+
+
+def _cleanup_workspace_scope(config: dict[str, Any], state: RehearsalState, *,
+                             preview: bool = False) -> dict[str, Any]:
+    profile = config.get("profile", "staging194")
+    if profile == "staging194":
+        if "siteBuildWorkspaceRoot" in config and (preview or os.path.lexists(config["siteBuildWorkspaceRoot"])):
+            return _cleanup_paired_workspaces(config, state, preview=preview)
+        return {}
+    paired = config if profile == "production-paired" else None
+    paired_state = state
+    with ExitStack() as stack:
+        for other in ("initial-prod", "production-paired", "production-static"):
+            if other == profile:
+                continue
+            path = _config_path_for_profile(other)
+            journal_root = PRODUCTION_OPERATION_STATE_ROOT / other
+            if not os.path.lexists(journal_root) and not os.path.lexists(path):
+                continue
+            other_config = None
+            if other == "production-paired":
+                other_config = _root_config(path, expected_profile=other, validate_temporary_root=False)
+            else:
+                _assert_production_journal_config(path, journal_root)
+            info = journal_root.lstat()
+            if (not stat.S_ISDIR(info.st_mode) or info.st_uid != 0 or info.st_mode & 0o077
+                    or journal_root.resolve(strict=True) != journal_root):
+                raise HostFailure("production operation journal directory is unsafe")
+            other_state = RehearsalState(journal_root)
+            if other_state.root.resolve(strict=True) == state.root.resolve(strict=True):
+                other_state = state
+            else:
+                stack.enter_context(other_state.lock(timeout=2, create=not preview))
+            rows = other_state.read_journal_for_cleanup(validate_history=True)
+            if other_state._read_marker() is not None or other_state._unfinished_operation_ids(rows):
+                raise HostFailure("another production profile has unfinished maintenance")
+            if other == "production-paired":
+                paired, paired_state = other_config, other_state
+        if paired is None:
+            if os.path.lexists(PRODUCTION_PAIRED_WORKSPACE_ROOT):
+                raise HostFailure("paired workspace root exists without a trusted production configuration")
+            return {}
+        gate = paired_state.root / "workspace-cleanup.enabled"
+        enabled = False
+        if os.path.lexists(gate):
+            info = gate.lstat()
+            enabled = (stat.S_ISREG(info.st_mode) and info.st_uid == 0 and info.st_nlink == 1
+                       and stat.S_IMODE(info.st_mode) == 0o600 and info.st_size == 0)
+            if not enabled:
+                raise HostFailure("production workspace cleanup activation marker is unsafe")
+        return _cleanup_paired_workspaces(paired, paired_state, preview=preview, enabled=enabled)
+
+
 def _cleanup_after_commit(config: dict[str, Any], state: RehearsalState, operation_id: str) -> dict[str, Any]:
     try:
         result = _cleanup_site_releases(config, state, operation_id)
+        result.update(_cleanup_workspace_scope(config, state))
         result["removedCmsReleases"] = _cleanup_cms_releases(config, state)
         return result
-    except (HostFailure, OSError, ValueError) as error:
+    except (HostFailure, RehearsalRefusal, OSError, ValueError) as error:
         try:
             marker = _read_site_publication_marker(config)
             if marker is not None and marker["operationId"] == operation_id:
@@ -2153,8 +2493,12 @@ def _preflight_staging194_source(config: dict[str, Any], workspace: Path,
     workspace = workspace.absolute()
     expected_name = (rf"{re.escape(source_sha)}-{re.escape(operation_id)}" if operation_id is not None
                      else rf"{re.escape(source_sha)}-[A-Za-z0-9][A-Za-z0-9._-]{{0,127}}")
-    if workspace.parent != release_root or not re.fullmatch(expected_name, workspace.name):
+    if (workspace.parent not in (release_root, STAGING194_PAIRED_WORKSPACE_ROOT)
+            or not re.fullmatch(expected_name, workspace.name)):
         raise HostFailure("staging194 CMS source workspace is not the versioned admitted release")
+    if workspace.parent == STAGING194_PAIRED_WORKSPACE_ROOT:
+        source_root = release_root / workspace.name
+        _validate_paired_workspace(workspace, source_root, source_sha, workspace.name[len(source_sha) + 1:])
     if any(not (workspace / part).is_file() for part in ("cms/package.json", "web/package.json")):
         raise HostFailure("staging194 CMS source workspace is incomplete")
     _assert_staging194_source_env_effective(config)
@@ -2689,36 +3033,55 @@ def _extract_source_archive(config: dict[str, Any], source_sha: str, operation_i
         raise
 
 
+def _validate_paired_workspace(workspace: Path, source_root: Path,
+                               source_sha: str, operation_id: str) -> None:
+    if workspace.resolve(strict=True) != workspace or not workspace.is_dir():
+        raise HostFailure("paired site workspace is not a canonical directory")
+    if not _workspace_identity(workspace, {"sourceSha": source_sha, "operationId": operation_id}):
+        raise HostFailure("existing paired site workspace identity differs from this operation")
+    try:
+        for part in ("web/node_modules", "cms/node_modules"):
+            dependency = workspace / part
+            expected = (source_root / part).resolve(strict=True)
+            if (not dependency.is_symlink() or not expected.is_dir()
+                    or dependency.resolve(strict=True) != expected):
+                raise HostFailure("paired site workspace dependency identity differs")
+    except (OSError, ValueError) as error:
+        raise HostFailure("paired site workspace identity or dependencies are unavailable") from error
+
+
 def _prepare_paired_site_workspace(config: dict[str, Any], source_root: Path,
                                   source_sha: str, operation_id: str) -> Path:
     """Copy the admitted build tree beneath the existing CMS-writable workspace root."""
     workspace_root = Path(config.get("siteBuildWorkspaceRoot", ""))
-    if workspace_root != PRODUCTION_PAIRED_WORKSPACE_ROOT:
-        raise HostFailure("production paired site workspace root is not fixed")
+    profile = config.get("profile", "production-paired")
+    expected_root = {"production-paired": PRODUCTION_PAIRED_WORKSPACE_ROOT,
+                     "staging194": STAGING194_PAIRED_WORKSPACE_ROOT}.get(profile)
+    if workspace_root != expected_root:
+        raise HostFailure("paired site workspace root is not fixed for this profile")
+    if not SHA_RE.fullmatch(source_sha) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}", operation_id):
+        raise HostFailure("paired site workspace source or operation identity is invalid")
     source_root = source_root.resolve(strict=True)
     web_dependencies = source_root / "web/node_modules"
     cms_dependencies = source_root / "cms/node_modules"
     if (not web_dependencies.is_dir() or web_dependencies.is_symlink()
             or not cms_dependencies.is_symlink() or not cms_dependencies.resolve(strict=True).is_dir()):
         raise HostFailure("paired source dependencies are not prepared for the CMS site-refresh workspace")
-    workspace_root.mkdir(mode=0o750, parents=True, exist_ok=True)
+    workspace_root.parent.mkdir(mode=0o755, parents=True, exist_ok=True)
+    parent = workspace_root.parent.lstat()
+    if (workspace_root.parent.resolve(strict=True) != workspace_root.parent
+            or not stat.S_ISDIR(parent.st_mode) or parent.st_uid != os.geteuid() or parent.st_mode & 0o022):
+        raise HostFailure("paired site workspace parent is not controlled by the host helper")
+    workspace_root.mkdir(mode=0o750, exist_ok=True)
     root_info = workspace_root.lstat()
-    if not stat.S_ISDIR(root_info.st_mode) or stat.S_ISLNK(root_info.st_mode):
-        raise HostFailure("paired site workspace root is not a real directory")
+    if not stat.S_ISDIR(root_info.st_mode) or workspace_root.resolve(strict=True) != workspace_root:
+        raise HostFailure("paired site workspace root is not a canonical directory")
     user = pwd.getpwnam(config["cmsUser"])
     os.chown(workspace_root, user.pw_uid, user.pw_gid)
     os.chmod(workspace_root, 0o750)
     destination = workspace_root / f"{source_sha}-{operation_id}"
-    if destination.exists():
-        if destination.is_symlink():
-            raise HostFailure("paired site workspace destination is a symlink")
-        marker = destination / ".ikpk-workspace-identity.json"
-        try:
-            identity = json.loads(marker.read_text(encoding="utf-8"))
-        except (OSError, ValueError) as error:
-            raise HostFailure("existing paired site workspace has no valid operation identity") from error
-        if identity != {"sourceSha": source_sha, "operationId": operation_id}:
-            raise HostFailure("existing paired site workspace identity differs from this operation")
+    if os.path.lexists(destination):
+        _validate_paired_workspace(destination, source_root, source_sha, operation_id)
         return destination
     temporary = workspace_root / f".{source_sha}-{operation_id}.new-{os.getpid()}"
     if os.path.lexists(temporary):
@@ -3921,6 +4284,7 @@ def _config_sha256(config: dict[str, Any]) -> str:
     if stable_config.get("profile", "staging194") == "staging194":
         # The source environment path is fixed by profile; older configs omit it.
         stable_config.pop("cmsEnvironmentFile", None)
+        stable_config.pop("siteBuildWorkspaceRoot", None)
     payload = json.dumps(stable_config, sort_keys=True, separators=(",", ":")).encode("utf-8")
     return sha256_file_bytes(payload)
 
@@ -4748,6 +5112,12 @@ def _activate_cms(config: dict[str, Any], cms_release: Path, candidate_db: Path,
             raise HostFailure("paired CMS activation artifact identity differs from the operation journal")
         _verify_cms_artifact_bytes(source_root, cms_release, cms_artifact,
             allow_runtime_updater=True, cms_uid=pwd.getpwnam(config["cmsUser"]).pw_uid)
+    staging_workspace = None
+    if config.get("profile", "staging194") == "staging194":
+        if source_root is None or source_sha is None or not SHA_RE.fullmatch(source_sha):
+            raise HostFailure("staging194 CMS activation lacks its admitted source workspace")
+        staging_workspace = (site_workspace or source_root).absolute()
+        _preflight_staging194_source(config, staging_workspace, source_sha)
     live = Path(config["cmsDatabase"]).resolve(strict=True)
     _assert_no_database_handles(live)
     needs_cohort = bool(admitted.get('seminarProofArtifact')) or (source_root is not None and (source_root / 'web/scripts/lib/historical-exceptions.ts').is_file())
@@ -4793,18 +5163,14 @@ def _activate_cms(config: dict[str, Any], cms_release: Path, candidate_db: Path,
             "INITIAL_PROD_PROFILE": "1", "DEPLOY_MODE": "prod", "PAYMENT_ROLE": "prod",
             "PAYMENT_ENDPOINT_PROD": payment_endpoint, "DEMO_FORMS": None,
             "CHAT_LOADER_SRC": chat_loader, "CHAT_OFFLINE_MESSAGE": None})
-    elif config.get("profile", "staging194") == "staging194":
-        if source_root is None or source_sha is None or not SHA_RE.fullmatch(source_sha):
-            raise HostFailure("staging194 CMS activation lacks its admitted source workspace")
-        workspace = source_root.absolute()
-        _preflight_staging194_source(config, workspace, source_sha)
+    elif staging_workspace is not None:
         _write_staging194_cms_source_env(config, {
-            "IKPK_BUILD_WORKSPACE": str(workspace), "IKPK_INSTALLED_COMMIT": source_sha})
+            "IKPK_BUILD_WORKSPACE": str(staging_workspace), "IKPK_INSTALLED_COMMIT": source_sha})
     run(["/usr/bin/systemctl", "start", config["cmsUnit"]], timeout=120)
     _wait_health(config["cmsHealthUrl"])
-    if config.get("profile", "staging194") == "staging194":
+    if staging_workspace is not None:
         _assert_staging194_process_source_env(config, {
-            "IKPK_BUILD_WORKSPACE": str(workspace), "IKPK_INSTALLED_COMMIT": source_sha})
+            "IKPK_BUILD_WORKSPACE": str(staging_workspace), "IKPK_INSTALLED_COMMIT": source_sha})
     proof = _database_process_proof(_service_pid(config["cmsUnit"]), live)
     inventory = json.loads((capture / "media-manifest.json").read_text(encoding="utf-8")).get("media")
     if not isinstance(inventory, list) or not inventory:
@@ -6144,8 +6510,9 @@ def _cms_update(config: dict[str, Any], state: RehearsalState, args: argparse.Na
         previous_proof = next((row.get("proof") for row in state._operation_rows(op) if row.get("record") == "seminar-proof-admitted"), None)
         if phase and previous_proof != proof_admission:
             raise HostFailure("seminar proof differs from durable root journal admission")
-    site_workspace = (_prepare_paired_site_workspace(config, source_root, sha, op)
-                      if config.get("profile") == "production-paired" else None)
+    site_workspace = None
+    if profile == "production-paired" or (profile == "staging194" and config.get("siteBuildWorkspaceRoot")):
+        site_workspace = _prepare_paired_site_workspace(config, source_root, sha, op)
     if profile in ("staging194", "production-paired"):
         _validate_prepared_cms_candidate(config, source_root, op, provenance)
     if profile == "staging194" and phase is not None:
@@ -7775,7 +8142,9 @@ def dispatch(args: argparse.Namespace) -> dict[str, Any]:
         raise HostFailure("host action has no destination lock policy")
     destination_lock = (nullcontext() if args.action == "status" else
         _destination_publication_lock(config, prelocked_fd=prelocked_fd))
-    with destination_lock, state.lock():
+    preview_workspaces = args.action == "cleanup-site" and getattr(args, "preview_workspaces", False)
+    operation_lock = state.lock(create=False) if preview_workspaces else state.lock()
+    with destination_lock, operation_lock:
         if profile == "staging194" and args.action == "cms-update":
             try:
                 admitted_provenance = json.loads(base64.b64decode(args.provenance_b64, validate=True))
@@ -7867,9 +8236,13 @@ def dispatch(args: argparse.Namespace) -> dict[str, Any]:
         if args.action == "cleanup-site":
             if _read_site_publication_marker(config) != cleanup_marker_snapshot:
                 raise HostFailure("site-publication marker changed while housekeeping was acquiring locks; retry required")
+            if preview_workspaces:
+                if marker is not None and marker["phase"] == "active":
+                    raise HostFailure("active publication prevents workspace preview")
+                return {"status": "preview", **_cleanup_workspace_scope(config, state, preview=True)}
             _consume_site_cleanup_request(config)
             static_result = _cleanup_site_releases(config, state, None)
-            return {"status": "succeeded", **static_result,
+            return {"status": "succeeded", **static_result, **_cleanup_workspace_scope(config, state),
                     "removedCmsReleases": _cleanup_cms_releases(config, state)}
         rows = state._operation_rows(args.operation_id)
         if (args.action in ("recover", "restore", "static-publish", "finalize-recover")
@@ -8058,7 +8431,8 @@ def main(argv: Optional[list[str]] = None, *, publication_lock_fd: Optional[int]
     parser.add_argument("--profile", choices=("staging194", "initial-prod", "production-static", "production-paired"), default="staging194")
     sub = parser.add_subparsers(dest="action", required=True)
     sub.add_parser("validate-config")
-    sub.add_parser("cleanup-site")
+    cleanup = sub.add_parser("cleanup-site")
+    cleanup.add_argument("--preview-workspaces", action="store_true")
     for name in ("cms-update", "static-publish", "static-main"):
         command = sub.add_parser(name)
         command.add_argument("--operation-id", required=True)
@@ -8138,7 +8512,7 @@ def main(argv: Optional[list[str]] = None, *, publication_lock_fd: Optional[int]
             return 0
         print(json.dumps(result, sort_keys=True))
         return 0
-    except (HostFailure, RehearsalRefusal) as error:
+    except (HostFailure, RehearsalRefusal, OSError) as error:
         print(f"ikpk-rehearsal: {error}", file=sys.stderr)
         return 2
 

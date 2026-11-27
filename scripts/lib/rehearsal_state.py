@@ -76,7 +76,7 @@ class RehearsalState:
         self._lock_local = threading.local()
 
     @contextmanager
-    def lock(self, timeout: float = 30.0) -> Iterator[None]:
+    def lock(self, timeout: float = 30.0, *, create: bool = True) -> Iterator[None]:
         depth = getattr(self._lock_local, "depth", 0)
         if depth:
             self._lock_local.depth = depth + 1
@@ -85,7 +85,7 @@ class RehearsalState:
             finally:
                 self._lock_local.depth -= 1
             return
-        flags = os.O_CREAT | os.O_RDWR | getattr(os, "O_NOFOLLOW", 0)
+        flags = (os.O_CREAT if create else 0) | os.O_RDWR | getattr(os, "O_NOFOLLOW", 0)
         fd = os.open(self.lock_path, flags, 0o600)
         try:
             info = os.fstat(fd)

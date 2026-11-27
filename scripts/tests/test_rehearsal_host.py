@@ -4082,7 +4082,7 @@ class ProductionPairedManualPreflightTests(unittest.TestCase):
         import os
         import types
         with tempfile.TemporaryDirectory(prefix="ikpk-paired-workspace-") as temporary:
-            root = Path(temporary)
+            root = Path(temporary).resolve()
             source = root / "candidate"
             (source / "cms").mkdir(parents=True)
             (source / "web").mkdir()
