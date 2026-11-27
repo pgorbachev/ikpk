@@ -7721,6 +7721,12 @@ def _production_migration_static_proof(config: dict[str, Any], state: RehearsalS
                 or fresh.get("backupDatabaseSha256") != backup["databaseSha256"]
                 or fresh.get("backupMediaManifestSha256") != backup["mediaManifestSha256"]):
             raise HostFailure("inherited book seller proof differs from the verified backup")
+        source_live_sha = intent.get("sourceLiveSha256")
+        post_checkpoint_live_sha = backup.get("postCheckpointLiveSha256")
+        if (not SHA256_RE.fullmatch(str(source_live_sha or ""))
+                or not SHA256_RE.fullmatch(str(post_checkpoint_live_sha or ""))
+                or source_live_sha != post_checkpoint_live_sha):
+            raise HostFailure("inherited book seller proof differs from the verified post-checkpoint live database")
         capture_bytes = _cohort_file(capture_manifest)
         capture = json.loads(capture_bytes)
         projected = json.loads(_cohort_file(snapshot, maximum=100 * 1024 * 1024))
@@ -7736,6 +7742,7 @@ def _production_migration_static_proof(config: dict[str, Any], state: RehearsalS
         composition = {**fresh, "backupArchiveSha256": backup["archiveSha256"],
             "backupDatabaseSha256": backup["databaseSha256"],
             "backupMediaManifestSha256": backup["mediaManifestSha256"],
+            "sourceLiveSha256": source_live_sha,
             "targetProjection": target}
         return {
             "version": 1, "operationId": operation_id, "sourceSha": source_sha,
