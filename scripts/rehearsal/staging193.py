@@ -1960,9 +1960,17 @@ def validate_production_content_acceptance(candidate_archive: bytes, static_dige
                 or source.get("databaseSha256") != composition.get("backupDatabaseSha256")
                 or source.get("mediaManifestSha256") != composition.get("backupMediaManifestSha256")):
             raise Refusal("production migration proof does not bind the verified source database and media")
-        if (book_seed is not None and composition.get("mode") == "book-seller-seed-v1"
-                and book_seed.get("sourceDatabaseSha256") != source.get("databaseSha256")):
-            raise Refusal("book seller source database digest differs from the verified backup manifest")
+        if book_seed is not None and composition.get("mode") == "book-seller-seed-v1":
+            seed_source_sha = book_seed.get("sourceDatabaseSha256")
+            source_live_sha = composition.get("sourceLiveSha256")
+            post_checkpoint_live_sha = source.get("postCheckpointLiveSha256")
+            if not isinstance(seed_source_sha, str) or not re.fullmatch(r"[a-f0-9]{64}", seed_source_sha):
+                raise Refusal("book seller staged source database digest is malformed")
+            if (not isinstance(source_live_sha, str) or not re.fullmatch(r"[a-f0-9]{64}", source_live_sha)
+                    or not isinstance(post_checkpoint_live_sha, str)
+                    or not re.fullmatch(r"[a-f0-9]{64}", post_checkpoint_live_sha)
+                    or source_live_sha != post_checkpoint_live_sha):
+                raise Refusal("book seller source live digest differs from the verified backup manifest")
         if (not isinstance(composition.get("publicProjection"), dict)
                 or backup.get("oldProjectorNodeVersion") != production_projector_node_version()):
             raise Refusal("production migration has no complete independent public comparison")

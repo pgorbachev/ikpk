@@ -807,6 +807,29 @@ class CrossVersionPublicProjectionTests(unittest.TestCase):
             db.commit()
             db.close()
             source_bytes = Path(source.name).read_bytes()
+        # These are independent valid SQLite serializations of the same logical
+        # source. The runner receipt can hash one serialization while the
+        # off-host TAR contains another and the checkpointed live file a third.
+        with tempfile.TemporaryDirectory(prefix="ikpk-book-sqlite-serializations-") as directory:
+            source_path = Path(directory) / "source.sqlite"
+            archive_path = Path(directory) / "archive.sqlite"
+            live_path = Path(directory) / "live.sqlite"
+            source_path.write_bytes(source_bytes)
+            source_db = sqlite3.connect(source_path)
+            archive_db = sqlite3.connect(archive_path)
+            source_db.backup(archive_db)
+            archive_db.close()
+            source_db.execute("VACUUM INTO ?", (str(live_path),))
+            source_db.close()
+            archive_database_bytes = archive_path.read_bytes()
+            post_checkpoint_live_sha = sha(live_path.read_bytes())
+            self.assertEqual(sha(source_bytes), sha(source_path.read_bytes()))
+            self.assertNotEqual(sha(source_bytes), sha(archive_database_bytes))
+            self.assertNotEqual(sha(source_bytes), post_checkpoint_live_sha)
+            self.assertNotEqual(sha(archive_database_bytes), post_checkpoint_live_sha)
+            for path in (source_path, archive_path, live_path):
+                with sqlite3.connect(path) as db:
+                    self.assertEqual(db.execute("SELECT id FROM pages ORDER BY id").fetchall(), [(4,), (7,)])
         seed_document = "cd7f96fcf41b4721214e6c36"
         seed = {
             "version": 1, "stepId": "book-seller-page-v1", "stepSha256": "a" * 64,
@@ -848,10 +871,11 @@ process.stdout.write(JSON.stringify({fingerprint, snapshotId: snapshotId({...sna
             projector_sha=source_sha, captured_at=captured_at)
         # Exercise the complete off-host proof consumer with the real minimal
         # backup TAR and sidecar format (which deliberately has no DB hash field).
-        source_database_bytes = source_bytes
+        source_database_bytes = archive_database_bytes
         media_bytes = b'{"media": []}\n'
         source_manifest = {
             "version": 1, "operationId": OPERATION, "databaseSha256": sha(source_database_bytes),
+            "postCheckpointLiveSha256": post_checkpoint_live_sha,
             "mediaManifestSha256": sha(media_bytes), "media": [],
         }
         archive_buffer = io.BytesIO()
@@ -902,7 +926,7 @@ process.stdout.write(JSON.stringify({fingerprint, snapshotId: snapshotId({...sna
             binding = {
                 "operationId": OPERATION, "sourceCommit": SOURCE,
                 "candidateDatabaseSha256": capture["databaseSha256"],
-                "sourceDatabaseSha256": source_manifest["databaseSha256"],
+                "sourceDatabaseSha256": sha(source_bytes),
                 "registrySha256": sha(b"[]"), "migrationPlanDigest": "7" * 64,
             }
             receipt = {
@@ -934,7 +958,9 @@ process.stdout.write(JSON.stringify({fingerprint, snapshotId: snapshotId({...sna
             binding["candidateDatabaseSha256"] = capture["databaseSha256"]
             rows = [
                 {"record": "historical-cohort-intent", "sourceSha": SOURCE,
-                 "receiptSha256": receipt_digest, "binding": binding, "freshComposition": fresh},
+                 "receiptSha256": receipt_digest, "binding": binding,
+                 "sourceLiveSha256": source_manifest["postCheckpointLiveSha256"],
+                 "freshComposition": fresh},
                 {"record": "historical-cohort-selected", "sourceSha": SOURCE,
                  "manifest": {**binding, "receiptSha256": receipt_digest}},
             ]
@@ -942,6 +968,7 @@ process.stdout.write(JSON.stringify({fingerprint, snapshotId: snapshotId({...sna
                 def _operation_rows(self, _operation): return rows
             host_backup = {
                 "archiveSha256": backup_digest, "databaseSha256": source_manifest["databaseSha256"],
+                "postCheckpointLiveSha256": source_manifest["postCheckpointLiveSha256"],
                 "mediaManifestSha256": source_manifest["mediaManifestSha256"],
             }
             with patch.object(rehearsal_host, "_backup_manifest", return_value=host_backup):
@@ -949,6 +976,16 @@ process.stdout.write(JSON.stringify({fingerprint, snapshotId: snapshotId({...sna
                     config, State(), OPERATION, SOURCE, snapshot_path, capture_path, "9" * 64)
             self.assertEqual(proof["composition"]["mode"], "book-seller-seed-v1")
             self.assertEqual(proof["receiptSha256"], receipt_digest)
+            self.assertEqual(proof["composition"]["sourceLiveSha256"], post_checkpoint_live_sha)
+            self.assertNotEqual(binding["sourceDatabaseSha256"], source_manifest["databaseSha256"])
+            for bad_source_live_sha in (None, "0" * 64):
+                rows[0]["sourceLiveSha256"] = bad_source_live_sha
+                with self.subTest(host_source_live_sha=bad_source_live_sha):
+                    with patch.object(rehearsal_host, "_backup_manifest", return_value=host_backup):
+                        with self.assertRaisesRegex(rehearsal_host.HostFailure, "post-checkpoint live database"):
+                            rehearsal_host._production_migration_static_proof(
+                                config, State(), OPERATION, SOURCE, snapshot_path, capture_path, "9" * 64)
+            rows[0]["sourceLiveSha256"] = source_manifest["postCheckpointLiveSha256"]
         candidate_buffer = io.BytesIO()
         with tarfile.open(fileobj=candidate_buffer, mode="w:") as archive:
             for name, payload in (("snapshot/capture-manifest.json", capture_bytes),
@@ -969,6 +1006,28 @@ process.stdout.write(JSON.stringify({fingerprint, snapshotId: snapshotId({...sna
             operator.validate_production_content_acceptance(
                 candidate_buffer.getvalue(), proof["staticTreeSha256"], target["fingerprint"],
                 backup_path, backup_sidecar, OPERATION, SOURCE, ADMISSION)
+            for name, mutate in (
+                ("missing source live binding", lambda document: document["composition"].pop("sourceLiveSha256")),
+                ("malformed source live binding", lambda document: document["composition"].update(sourceLiveSha256="invalid")),
+                ("wrong source live binding", lambda document: document["composition"].update(sourceLiveSha256="0" * 64)),
+                ("malformed staged source hash", lambda document: document["composition"]["bookSellerSeed"].update(sourceDatabaseSha256="invalid")),
+            ):
+                with self.subTest(proof_mutation=name):
+                    altered_proof = copy.deepcopy(proof)
+                    mutate(altered_proof)
+                    altered = io.BytesIO()
+                    with tarfile.open(fileobj=altered, mode="w:") as archive:
+                        for path, payload in (
+                            ("snapshot/capture-manifest.json", capture_bytes),
+                            ("snapshot/snapshot.json", json.dumps(target, sort_keys=True, separators=(",", ":")).encode()),
+                            ("snapshot/production-migration-proof.json", json.dumps(altered_proof, sort_keys=True, separators=(",", ":")).encode()),
+                        ):
+                            member = tarfile.TarInfo(path); member.size = len(payload); member.mode = 0o600
+                            archive.addfile(member, io.BytesIO(payload))
+                    with self.assertRaises(operator.Refusal):
+                        operator.validate_production_content_acceptance(
+                            altered.getvalue(), proof["staticTreeSha256"], target["fingerprint"],
+                            backup_path, backup_sidecar, OPERATION, SOURCE, ADMISSION)
             tampered = copy.deepcopy(target)
             tampered["content"]["types"]["static_pages"][0]["body_text"] = "editorial mutation"
             altered_archive = io.BytesIO()
