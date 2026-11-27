@@ -39,6 +39,8 @@ class WorkspaceTestCase(unittest.TestCase):
 
 class StagingWorkspaceTests(WorkspaceTestCase):
     def test_preparation_copies_staging_workspace_with_identity_and_dependency_links(self):
+        # The deployed staging194 template omits profile; absence means staging194.
+        del self.config["profile"]
         web_deps = self.source / "web/node_modules"
         web_deps.mkdir(parents=True)
         cms_deps = self.root / "cms-deps/node_modules"

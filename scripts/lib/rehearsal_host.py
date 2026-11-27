@@ -3054,7 +3054,7 @@ def _prepare_paired_site_workspace(config: dict[str, Any], source_root: Path,
                                   source_sha: str, operation_id: str) -> Path:
     """Copy the admitted build tree beneath the existing CMS-writable workspace root."""
     workspace_root = Path(config.get("siteBuildWorkspaceRoot", ""))
-    profile = config.get("profile", "production-paired")
+    profile = config.get("profile", "staging194")
     expected_root = {"production-paired": PRODUCTION_PAIRED_WORKSPACE_ROOT,
                      "staging194": STAGING194_PAIRED_WORKSPACE_ROOT}.get(profile)
     if workspace_root != expected_root:
