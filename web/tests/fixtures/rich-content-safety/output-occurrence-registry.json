@@ -1,7 +1,7 @@
 {
   "status": "dist-reviewed",
   "generatedFrom": "source AST + built output; CI must not regenerate",
-  "generatedFromSha": "eaca577aae2f21d31e9b5f4ac98287a914bc2432",
+  "generatedFromSha": "6f9cd0c59bf711a5763232105a905484a9722073",
   "distRoots": [
     "web/dist",
     "web/dist-demo"
@@ -119,13 +119,13 @@
     "src:pages/[institute]/[courseGroup].astro:L216:C1:style",
     "src:pages/[institute]/[courseGroup]/[seminar].astro:L216:C1:style",
     "src:pages/[institute]/prepodavatel/[id].astro:L72:C1:style",
-    "src:pages/[slug].astro:L74:C1:style",
+    "src:pages/[slug].astro:L75:C1:style",
     "src:pages/404.astro:L19:C1:style",
     "src:pages/aktsii-i-skidki.astro:L53:C1:style",
     "src:pages/demo-zayavka/[...rest].astro:L48:C1:style",
     "src:pages/instituty/[slug].astro:L66:C1:style",
     "src:pages/instituty/index.astro:L37:C1:style",
-    "src:pages/knigi-i-uchebnye-materialy.astro:L54:C1:style",
+    "src:pages/knigi-i-uchebnye-materialy.astro:L62:C1:style",
     "src:pages/kontakty.astro:L72:C1:style",
     "src:pages/oplata.astro:L52:C11:svg",
     "src:pages/oplata.astro:L83:C1:style",
