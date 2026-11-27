@@ -113,9 +113,9 @@ describe('cms-content-authoring: связь персоны с институто
   });
 });
 
-describe('cms-content-authoring: обязательная категория статьи', () => {
-  // Scenario: публикация статьи без категории отклоняется
-  it('статья без категории не публикуется', async () => {
+describe('cms-content-authoring: категории статьи', () => {
+  // Scenario: публикация статьи без категории разрешена
+  it('статья без категории публикуется', async () => {
     const { checkPublication } = await loadContentValidation();
     const verdict = checkPublication({
       type: 'article',
@@ -130,8 +130,8 @@ describe('cms-content-authoring: обязательная категория с�
         categories: [],
       },
     });
-    expect(verdict.ok).toBe(false);
-    expect(verdict.missing).toContain('categories');
+    expect(verdict.ok).toBe(true);
+    expect(verdict.missing).toEqual([]);
   });
 
   // Scenario: у статьи несколько категорий
@@ -239,7 +239,7 @@ describe('cms-content-authoring: обязательные поля публик�
   // Состав обязательных полей задан по типам, а не одним общим списком: без этого
   // «отказ обещан для любой записи» нечем проверить.
   it.each([
-    ['article', ['title', 'identifier', 'body', 'image', 'published_at', 'categories']],
+    ['article', ['title', 'identifier', 'body', 'image', 'published_at']],
     ['seminar', ['name', 'identifier', 'course_group', 'description', 'documentsState']],
     ['course-group', ['name', 'identifier', 'institute', 'description', 'seo_title', 'seo_description']],
     ['institute', ['name', 'identifier', 'description', 'seo_title', 'seo_description', 'order']],

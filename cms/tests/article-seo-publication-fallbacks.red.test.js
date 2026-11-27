@@ -83,7 +83,7 @@ test('CMS and scripts validators accept absent or blank Article SEO only, preser
     assert.deepEqual(cms, scripts, 'the synchronized validators diverged');
     if (!cms.ok) rejected.push(`${JSON.stringify([record.seo_title, record.seo_description])}: ${cms.message}`);
   }
-  for (const missing of ['title', 'identifier', 'body', 'image', 'published_at', 'categories']) {
+  for (const missing of ['title', 'identifier', 'body', 'image', 'published_at']) {
     const record = { title: 't', identifier: 's', body: 'b', image: 'i', published_at: 'date', categories: ['c'] };
     delete record[missing];
     for (const validate of [cmsCheck, scriptsCheck]) {

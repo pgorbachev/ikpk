@@ -1,6 +1,6 @@
 /**
  * Валидация публикации и черновиков системы управления: обязательные поля по
- * типам, признак персоны, состав института, обязательная категория статьи,
+ * типам, признак персоны, состав института,
  * структурные сведения о выдаваемых документах.
  *
  * Подписи заданы `./cms-authoring-contract.ts` (выбраны сессией тестов).
@@ -18,7 +18,7 @@ import type {
 } from './cms-authoring-contract';
 
 const REQUIRED_FIELDS: Record<string, string[]> = {
-  article: ['title', 'identifier', 'body', 'image', 'published_at', 'categories'],
+  article: ['title', 'identifier', 'body', 'image', 'published_at'],
   seminar: ['name', 'identifier', 'course_group', 'description', 'documentsState'],
   'course-group': ['name', 'identifier', 'institute', 'description', 'seo_title', 'seo_description'],
   institute: ['name', 'identifier', 'description', 'seo_title', 'seo_description', 'order'],

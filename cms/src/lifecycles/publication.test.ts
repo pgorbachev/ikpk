@@ -39,6 +39,9 @@ function makeStrapi(opts: {
     },
     documents(uid: string) {
       return {
+        async update({ documentId, data }: { documentId: string; data: Record<string, unknown> }) {
+          return Object.assign(drafts[documentId], data);
+        },
         async findOne({ documentId }: { documentId: string; status?: string }) {
           if (uid === 'api::course-group.course-group') return courseGroups[documentId] ?? drafts[documentId] ?? null;
           return drafts[documentId] ?? null;
@@ -460,27 +463,26 @@ test('publish: недопустимое значение признака пер
   );
 });
 
-test('published create: set задаёт итоговые связи и опережает connect', async () => {
-  const { run } = makeStrapi({});
-  await assert.rejects(
-    () => run({
-      uid: 'api::article.article',
-      action: 'create',
-      params: {
-        status: 'published',
-        data: {
-          title: 'Статья',
-          slug: 'statya',
-          body: '<p>Текст</p>',
-          seo: { seo_title: 'Заголовок', seo_description: 'Описание' },
-          image: { id: 1 },
-          published_date: '2026-10-11T00:00:00.000Z',
-          categories: { set: [], connect: ['cg-1'] },
-        },
+test('publish: правка SEO Title статьи публикуется без категории', async () => {
+  const { run } = makeStrapi({
+    draftsByUid: {
+      'doc-1': {
+        title: 'Методы исследования мочи',
+        slug: 'metody-issledovaniya-mochi',
+        body: '<p>Текст статьи</p>',
+        seo: { seo_title: 'Методы исследования мочи: публикация ИКПК' },
+        image: { id: 1 },
+        published_date: '2025-01-21T00:00:00.000Z',
+        categories: [],
       },
-    }),
-    /categories/,
-  );
+    },
+  });
+  const result = await run({
+    uid: 'api::article.article',
+    action: 'publish',
+    params: { documentId: 'doc-1' },
+  });
+  assert.equal(result, 'next-called');
 });
 
 test('снятие признака категории отклоняется, пока программа — единственная категория опубликованной статьи', async () => {

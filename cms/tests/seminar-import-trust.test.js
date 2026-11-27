@@ -482,7 +482,7 @@ describe('доверенный перенос в собранном Strapi', { t
     assert.equal(published.course_group.documentId, publishedProgram.documentId);
   });
 
-  test('published article update отклоняет disconnect категории по числовому id', async () => {
+  test('published article update разрешает disconnect категории по числовому id', async () => {
     const article = await createPublishedArticle('publication-category-numeric-disconnect');
     const draft = await app.documents(ARTICLE).findOne({
       documentId: article.documentId,
@@ -490,20 +490,24 @@ describe('доверенный перенос в собранном Strapi', { t
       populate: { categories: true },
     });
     const categoryId = draft.categories[0].id;
-    await assert.rejects(
-      () => app.documents(ARTICLE).update({
-        documentId: article.documentId,
-        status: 'published',
-        data: { categories: { disconnect: [{ id: categoryId }] } },
-      }),
-      /categories|категори|обязательные поля/i,
-    );
+    await app.documents(ARTICLE).update({
+      documentId: article.documentId,
+      status: 'published',
+      data: { categories: { disconnect: [{ id: categoryId }] } },
+    });
+    const seoTitle = 'Методы исследования мочи: публикация ИКПК';
+    await app.documents(ARTICLE).update({
+      documentId: article.documentId,
+      data: { seo: { seo_title: seoTitle } },
+    });
+    await app.documents(ARTICLE).publish({ documentId: article.documentId });
     const published = await app.documents(ARTICLE).findOne({
       documentId: article.documentId,
       status: 'published',
-      populate: { categories: true },
+      populate: { categories: true, seo: true },
     });
-    assert.deepEqual(published.categories.map(({ documentId }) => documentId), [publishedProgram.documentId]);
+    assert.deepEqual(published.categories, []);
+    assert.equal(published.seo.seo_title, seoTitle);
   });
 
   // ── Имя проведения ─────────────────────────────────────────────────────────
