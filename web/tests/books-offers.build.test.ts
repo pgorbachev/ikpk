@@ -43,7 +43,8 @@ describe('Книги и предложения в собранном сайте'
 
   it('указывает продавца и выводит безопасные ссылки на каталог и площадки', () => {
     const page = readPage(`${BOOKS_PATH}/`);
-    expect(page).toContain('ИП Пилявский Д.С.');
+    expect(page).toContain('ИП Тучанфа В.А.');
+    expect(page).not.toContain('ИП Пилявский Д.С.');
     expect(page).toContain('Издательский дом ИКПК');
     const anchors = links(page);
     expect(anchors.some((link) => link.href === '/aktsii-i-skidki' && link.text.includes('Sale'))).toBe(true);
