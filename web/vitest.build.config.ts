@@ -54,6 +54,7 @@ export default defineConfig({
       'tests/cms-catalog-pages.build.test.ts',
       'tests/article-page-date.build.test.ts',
       'tests/books-offers.build.test.ts',
+      'tests/book-seller-snapshot.build.test.ts',
     ],
   },
 });
