@@ -33,7 +33,7 @@ function fixture(path) {
     INSERT INTO pages_cmps VALUES (11,7,9,'shared.seo','seo',NULL);`);
   db.close();
 }
-function addLedger(db, step) {
+function addLedger(db) {
   const lineage = 'a'.repeat(64), snapshot = 'b'.repeat(64), schema = 'c'.repeat(64), operation = 'book-seller-audit';
   db.exec(`CREATE TABLE ikpk_migration_lineage (singleton, lineage_id, source_snapshot_sha256, source_schema_sha256, created_at);
     CREATE TABLE ikpk_migration_operations (operation_id, lineage_id, source_snapshot_sha256, source_schema_sha256, created_at);
@@ -51,7 +51,7 @@ test('independent preservation audit permits only seeded Page, SEO component, li
   writeFileSync(manifestPath, JSON.stringify({ version: 1, steps: [step] }) + '\n');
   const plan = { manifestPath, planSha256: sha(readFileSync(manifestPath)), steps: [step] };
   const candidate = new Database(candidateDbPath);
-  const binding = addLedger(candidate, step);
+  const binding = addLedger(candidate);
   const { apply } = await import('../database/migrations/data-steps/book-seller.mjs');
   const result = apply(candidate, { onApplied(db, row) {
     db.prepare('INSERT INTO ikpk_data_migration_history VALUES (?,?,?,?,?,1)').run(binding.lineage, binding.operation, step.id, step.sha256, JSON.stringify(row));
@@ -91,7 +91,7 @@ test('a valid inherited book ledger preserves editorial text and SEO independent
   writeFileSync(manifestPath, JSON.stringify({ version: 1, steps: [step] }) + '\n');
   const plan = { manifestPath, planSha256: sha(readFileSync(manifestPath)), steps: [step] };
   const source = new Database(sourceDbPath);
-  const binding = addLedger(source, step);
+  const binding = addLedger(source);
   source.exec(`INSERT INTO pages VALUES (72,'editorial-doc','Книги и учебные материалы','knigi-i-uchebnye-materialy','Опубликовано редактором','knigi-i-uchebnye-materialy',NULL,NULL,100,200,200,NULL,NULL,NULL);
     INSERT INTO pages VALUES (73,'editorial-doc','Книги и учебные материалы','knigi-i-uchebnye-materialy','Редакторский черновик','knigi-i-uchebnye-materialy',NULL,NULL,100,300,NULL,NULL,NULL,NULL);
     INSERT INTO components_shared_seos VALUES (92,'Изменённый SEO','Описание опубликованной страницы',0);

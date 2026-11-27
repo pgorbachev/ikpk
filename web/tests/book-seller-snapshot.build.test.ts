@@ -45,7 +45,7 @@ function snapshotWithBook(texts: string[], conflicts: Array<Partial<Record<strin
 
 function build(snapshotDir: string, name: string): string {
   const outDir = join(root(), `dist-${name}`);
-  const env = { ...process.env, CONTENT_SNAPSHOT_DIR: snapshotDir, PAYMENT_ROLE: 'ci' };
+  const env: NodeJS.ProcessEnv = { ...process.env, CONTENT_SNAPSHOT_DIR: snapshotDir, PAYMENT_ROLE: 'ci' };
   for (const key of ['DEMO_PROFILE', 'DEMO_OUTPUT', 'DEMO_FORMS', 'PAYMENT_ENDPOINT_PROD', 'PAYMENT_ENDPOINT_STAND']) {
     delete env[key];
   }
@@ -82,7 +82,7 @@ describe('страница книг из опубликованного сним
   ])('отказывает в сборке, если опубликованная Page книг %s', (_case, texts) => {
     const dir = snapshotWithBook(texts);
     const outDir = join(root(), `dist-invalid-${texts.length}-${Math.random().toString(16).slice(2)}`);
-    const env = { ...process.env, CONTENT_SNAPSHOT_DIR: dir, PAYMENT_ROLE: 'ci' };
+    const env: NodeJS.ProcessEnv = { ...process.env, CONTENT_SNAPSHOT_DIR: dir, PAYMENT_ROLE: 'ci' };
     delete env.DEMO_PROFILE;
     delete env.DEMO_OUTPUT;
     expect(() => execFileSync(ASTRO, ['--config', 'astro.config.mjs', 'build', '--outDir', outDir], {
@@ -100,7 +100,7 @@ describe('страница книг из опубликованного сним
   ])('отказывает, если опубликованная запись совпадает только по %s', (_case, conflict) => {
     const dir = snapshotWithBook(['единственная валидная запись'], [conflict]);
     const outDir = join(root(), `dist-conflict-${Math.random().toString(16).slice(2)}`);
-    const env = { ...process.env, CONTENT_SNAPSHOT_DIR: dir, PAYMENT_ROLE: 'ci' };
+    const env: NodeJS.ProcessEnv = { ...process.env, CONTENT_SNAPSHOT_DIR: dir, PAYMENT_ROLE: 'ci' };
     delete env.DEMO_PROFILE;
     delete env.DEMO_OUTPUT;
     expect(() => execFileSync(ASTRO, ['--config', 'astro.config.mjs', 'build', '--outDir', outDir], {

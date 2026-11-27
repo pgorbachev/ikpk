@@ -31,7 +31,14 @@ import { relationFileId } from "./lib/strapi-relation-file.js";
 import { createImageUploader } from "./lib/import-media.js";
 import { buildStrapiMediaInventory } from "./lib/strapi-media-inventory.js";
 import { METHOD_AUTHOR_LEGACY_IDS } from "./lib/person-trait.js";
-import { BOOK_PAGE_INTRODUCTION, BOOK_PAGE_SEO_DESCRIPTION, BOOK_PAGE_SEO_TITLE, BOOK_PAGE_SLUG, BOOK_PAGE_TITLE } from "../cms/src/lib/book-seller.js";
+
+// Keep the clean-install seed aligned with cms/src/lib/book-seller.ts. The
+// importer has its own TypeScript rootDir and cannot compile across packages.
+const BOOK_PAGE_SLUG = "knigi-i-uchebnye-materialy";
+const BOOK_PAGE_TITLE = "Книги и учебные материалы";
+const BOOK_PAGE_INTRODUCTION = "Издательский дом ИКПК выпускает книги и учебные материалы. Продавец книг — ИП Тучанфа В.А.";
+const BOOK_PAGE_SEO_TITLE = "Книги и учебные материалы — ИКПК";
+const BOOK_PAGE_SEO_DESCRIPTION = "Книжные новинки издательского дома ИКПК, акции и ссылки на площадки продавца.";
 
 // ────────────────────────────────────────────────────────────────
 // Configuration
