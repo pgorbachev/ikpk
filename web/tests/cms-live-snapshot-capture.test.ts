@@ -7,7 +7,7 @@
 //
 // Три требования, восемь сценариев. Соответствие «сценарий → тест» — в отчёте сессии.
 
-import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { createHash } from 'node:crypto';
 import { contentFingerprint, type SnapshotContent } from '../scripts/lib/content-snapshot';
@@ -1549,14 +1549,23 @@ describe('published Open Graph metadata through capture and build', () => {
     try {
       const capture = await runCapture({ CMS_URL: cms.url, CONTENT_SNAPSHOT_DIR: dir });
       expect(capture.status, `capture failed:\n${capture.output}`).toBe(0);
+      const isolatedWeb = join(dir, 'build-repo', 'web');
+      const excluded = new Set(['node_modules', '.astro', '.snapshot', 'dist', 'dist-snapshot', 'public/media']);
+      cpSync(WEB_ROOT, isolatedWeb, {
+        recursive: true,
+        filter: (path) => !excluded.has(path.slice(WEB_ROOT.length + 1)),
+      });
+      symlinkSync(join(WEB_ROOT, 'node_modules'), join(isolatedWeb, 'node_modules'), 'dir');
+      symlinkSync(join(WEB_ROOT, '..', 'media-originals'), join(dir, 'build-repo', 'media-originals'), 'dir');
+      symlinkSync(join(WEB_ROOT, '..', 'fixtures'), join(dir, 'build-repo', 'fixtures'), 'dir');
       execFileSync('npm', ['run', 'prebuild'], {
-        cwd: WEB_ROOT,
+        cwd: isolatedWeb,
         env: { ...process.env, CONTENT_SNAPSHOT_DIR: dir },
         timeout: 180_000,
         stdio: 'pipe',
       });
-      execFileSync(join(WEB_ROOT, 'node_modules', '.bin', 'astro'), ['build', '--outDir', dist], {
-        cwd: WEB_ROOT,
+      execFileSync(join(isolatedWeb, 'node_modules', '.bin', 'astro'), ['build', '--outDir', dist], {
+        cwd: isolatedWeb,
         env: { ...process.env, CONTENT_SNAPSHOT_DIR: dir },
         timeout: 120_000,
         stdio: 'pipe',
@@ -1564,7 +1573,7 @@ describe('published Open Graph metadata through capture and build', () => {
       const publishedImage = join(dist, 'media', 'uploads', `img-${ARTICLE_COUNT + 1}.webp`);
       expect(existsSync(publishedImage), 'individual OG image is absent from the published site').toBe(true);
       const dimensions = await sharp(publishedImage).metadata();
-      const manifest = JSON.parse(readFileSync(join(WEB_ROOT, 'src/lib/media-manifest.json'), 'utf8'));
+      const manifest = JSON.parse(readFileSync(join(isolatedWeb, 'src/lib/media-manifest.json'), 'utf8'));
       expect(manifest[`/media/uploads/img-${ARTICLE_COUNT + 1}.webp`]).toMatchObject({
         width: dimensions.width, height: dimensions.height,
       });
@@ -1607,7 +1616,7 @@ describe('published Open Graph metadata through capture and build', () => {
           expect(value('image'), path).toMatch(/^https:\/\/[^/]+\/og-image\.png$/);
           expect(value('image:width'), path).toBe('1200');
           expect(value('image:height'), path).toBe('630');
-          expect(value('image:alt'), path).toBeTruthy();
+          expect(value('image:alt'), path).toBe('Логотип и название Института клинической прикладной кинезиологии');
         }
       }
     } finally {
