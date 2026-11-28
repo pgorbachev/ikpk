@@ -83,7 +83,7 @@ test('нет удаления, чужих типов и администрати
   assert.equal(EDITOR_PERMISSIONS.some((permission) => permission.action === action('delete')), false);
   assert.equal(
     EDITOR_PERMISSIONS.some((permission) =>
-      ['api::news-item.news-item', 'api::page.page', 'api::institute.institute'].includes(
+      ['api::news-item.news-item', 'api::page.page'].includes(
         permission.subject ?? '',
       ),
     ),

@@ -71,17 +71,19 @@ export async function prepareProgramWrite(strapi: Core.Strapi, context: { action
 }
 
 export async function relabelInstitutePrograms(strapi: Core.Strapi, documentId: string): Promise<void> {
-  const institutes = await strapi.db.query(INSTITUTE).findMany({ where: { documentId }, select: ['id', 'name'] }) as { id: number; name?: string | null }[];
-  for (const institute of institutes) {
-    const links = await strapi.db.connection('course_groups_institute_lnk').where({ institute_id: institute.id }).select('course_group_id') as { course_group_id: number }[];
-    for (const link of links) {
-      const group = await strapi.db.query(COURSE_GROUP).findOne({ where: { id: link.course_group_id }, select: ['id', 'name', 'editor_label'] }) as Row | null;
-      if (!group?.id) continue;
-      const label = programEditorLabel(institute.name, group.name);
-      if (group.editor_label === label) continue;
-      await strapi.db.connection('course_groups').where({ id: group.id }).update({ editor_label: label });
+  await strapi.db.transaction(async ({ trx }) => {
+    const institutes = await strapi.db.query(INSTITUTE).findMany({ where: { documentId }, select: ['id', 'name'] }) as { id: number; name?: string | null }[];
+    for (const institute of institutes) {
+      const links = await trx('course_groups_institute_lnk').where({ institute_id: institute.id }).select('course_group_id') as { course_group_id: number }[];
+      for (const link of links) {
+        const group = await strapi.db.query(COURSE_GROUP).findOne({ where: { id: link.course_group_id }, select: ['id', 'name', 'editor_label'] }) as Row | null;
+        if (!group?.id) continue;
+        const label = programEditorLabel(institute.name, group.name);
+        if (group.editor_label === label) continue;
+        await trx('course_groups').where({ id: group.id }).update({ editor_label: label });
+      }
     }
-  }
+  });
 }
 
 export async function backfillProgramEditorLabels(strapi: Core.Strapi): Promise<number> {

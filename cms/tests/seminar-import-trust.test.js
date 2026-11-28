@@ -259,6 +259,62 @@ describe('доверенный перенос в собранном Strapi', { t
     fs.rmSync(work, { recursive: true, force: true });
   });
 
+  test('редактор публикует правки карточек, сохраняя URL, служебный SEO и право на снятие за администратором', async () => {
+    const instituteUid = 'api::institute.institute';
+    const programUid = 'api::course-group.course-group';
+    const cover = await app.db.query('plugin::upload.file').create({
+      data: { name: 'test-cover.png', hash: 'test-cover', ext: '.png', mime: 'image/png',
+        size: 1, url: '/uploads/test-cover.png', provider: 'local' },
+    });
+    const seo = { seo_title: 'Тест прав редактора', seo_description: 'Прежнее описание', noindex: true, og_image: cover.id };
+    const institute = await app.documents(instituteUid).create({
+      status: 'published',
+      data: { name: 'Институт доступа', slug: 'editor-card-institute', description: 'Описание', order: 99, seo },
+    });
+    const program = await app.documents(programUid).create({
+      status: 'published',
+      data: { name: 'Программа доступа', slug: 'editor-card-program', description: 'Описание', institute: institute.documentId, seo },
+    });
+    const teacher = await app.documents(TEACHER).create({
+      status: 'published',
+      data: { name: 'Преподаватель доступа', slug: 'editor-card-teacher', trait: 'teacher', institute: institute.documentId },
+    });
+    for (const [uid, card] of [[instituteUid, institute], [programUid, program], [TEACHER, teacher]]) {
+      const collection = `/content-manager/collection-types/${uid}`;
+      const entry = `${collection}/${card.documentId}`;
+      const content = uid === TEACHER ? { bio: '<p>Биография редактора</p>' } : { seo: { seo_title: 'Новый заголовок' } };
+      const update = await call('PUT', entry, editorJwt, { ...content, name: card.name + ' изменён', slug: 'different-url' });
+      const failure = JSON.stringify(update.body);
+      // Strapi can sanitize a forbidden field or reject a mixed payload.
+      if (update.status === 400 || update.status === 403) {
+        ok(await call('PUT', entry, editorJwt, { ...content, name: card.name + ' изменён' }), failure);
+      } else {
+        assert.equal(update.status, 200, failure);
+      }
+      const published = await app.documents(uid).findOne({ documentId: card.documentId, status: 'published' });
+      assert.equal(published.name, card.name, 'сохранение не меняет опубликованную версию');
+      ok(await call('POST', entry + '/actions/publish', editorJwt, {}), uid + ': публикация карточки');
+      const next = await app.documents(uid).findOne({
+        documentId: card.documentId,
+        status: 'published',
+        populate: uid === TEACHER ? ['institute'] : { seo: { populate: ['og_image'] }, ...(uid === programUid ? { institute: true } : {}) },
+      });
+      assert.equal(next.name, card.name + ' изменён');
+      assert.equal(next.slug, card.slug);
+      if (uid !== instituteUid) assert.equal(next.institute.documentId, institute.documentId);
+      if (uid !== TEACHER) {
+        assert.equal(next.seo.seo_title, 'Новый заголовок');
+        assert.equal(next.seo.seo_description, seo.seo_description);
+        assert.equal(next.seo.noindex, true);
+        assert.equal(next.seo.og_image.id, cover.id);
+      }
+      assert.equal((await call('POST', entry + '/actions/unpublish', editorJwt, {})).status, 403);
+      assert.equal((await call('DELETE', entry, editorJwt)).status, 403);
+      assert.equal((await call('POST', collection, editorJwt, { name: 'Новая карточка' })).status, 403);
+    }
+  });
+
+
   // ── Публикация через Document Service и Content API ────────────────────────
 
   const validTeacher = (slug) => ({ name: `Преподаватель ${slug}`, slug, trait: 'teacher' });

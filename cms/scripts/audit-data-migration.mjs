@@ -503,6 +503,7 @@ function permissionGraph(db, differences, label) {
     descriptors.set(key, {
       role, action: permission.action, subject: permission.subject ?? null, conditions, properties: baseProperties,
       fields: fields ? [...fields].sort() : null, id: permissionId, documentId: permission.document_id,
+      metadata: permissionMetadata, linkMetadata: roleIds[0].metadata,
       linkId: roleIds[0].id, permissionOrd: roleIds[0].permissionOrd,
       timestamps: Object.fromEntries(PERMISSION_TIMESTAMP_COLUMNS.filter((column) => Object.hasOwn(permission, column)).map((column) => [column, permission[column]])),
     });
@@ -605,11 +606,59 @@ function overlayProgramEditorConfiguration(configuration, addMissingLabel = true
     },
   };
 }
+// Reviewed postimage for the existing Editor role. Keep this independent of the
+// runtime allowlist so unrelated changes cannot make themselves pass the audit.
+const EDITOR_CARD_GRANTS = (() => {
+  const institute = ['name', 'shortName', 'description', 'image', 'order', 'seo.seo_title', 'seo.seo_description'];
+  const program = ['name', 'description', 'image', 'order', 'is_article_category', 'seo.seo_title', 'seo.seo_description'];
+  const teacher = ['name', 'trait', 'order', 'photo', 'bio'];
+  return new Map([
+    ['api::course-group.course-group', [...program, 'slug', 'institute', 'editor_label'], program],
+    ['api::teacher.teacher', [...teacher, 'slug', 'institute'], teacher],
+    ['api::institute.institute', [...institute, 'slug'], institute],
+  ].flatMap(([subject, read, update]) => [
+    ['read', read.sort()], ['update', update.sort()], ['publish', null],
+  ].map(([action, fields]) => [`strapi-editor\0plugin::content-manager.explorer.${action}\0${subject}`, fields])));
+})();
+
+const EDITOR_CARD_PREIMAGE = new Map([
+  ['strapi-editor\0plugin::content-manager.explorer.read\0api::course-group.course-group', ['editor_label', 'is_article_category', 'name', 'slug']],
+  ['strapi-editor\0plugin::content-manager.explorer.update\0api::course-group.course-group', ['is_article_category']],
+  ['strapi-editor\0plugin::content-manager.explorer.read\0api::teacher.teacher', ['name', 'slug']],
+]);
+
+function readEditorCardGrant(permission) {
+  const identity = permissionIdentity(permission);
+  const { action_parameters: actionParameters, ...metadata } = permission.metadata;
+  const standardMetadata = Object.entries(metadata).every(([key, value]) =>
+    ['created_by_id', 'updated_by_id', 'locale'].includes(key) && value === null,
+  );
+  if (!EDITOR_CARD_GRANTS.has(identity) || permission.conditions.length !== 0
+    || json(permission.properties) !== '{}' || actionParameters !== '{}' || !standardMetadata
+    || json(permission.linkMetadata) !== '{}') return null;
+  return identity;
+}
+
 function comparePermissionGraphs(sourceDb, candidateDb, receipt, differences) {
   const source = permissionGraph(sourceDb, differences, 'source');
   const candidate = permissionGraph(candidateDb, differences, 'candidate');
   if (!source || !candidate) return;
-  if (source.size !== candidate.size) differences.push({ table: 'admin_permissions', kind: 'logical-permission-count-mismatch' });
+  const sourceValues = [...source.values()];
+  const priorCardGrants = new Map(sourceValues.flatMap((permission) => {
+    const identity = readEditorCardGrant(permission);
+    return identity ? [[identity, permission.fields]] : [];
+  }));
+  const evolution = [...EDITOR_CARD_PREIMAGE].every(([identity, fields]) =>
+    json(priorCardGrants.get(identity)) === json(fields) ||
+    json(priorCardGrants.get(identity)) === json(EDITOR_CARD_GRANTS.get(identity)),
+  );
+  const newCardGrants = new Map(evolution
+    ? [...EDITOR_CARD_GRANTS].filter(([identity]) => !priorCardGrants.has(identity))
+    : []);
+  const replacedCardIds = new Set();
+  if (candidate.size !== source.size + newCardGrants.size) {
+    differences.push({ table: 'admin_permissions', kind: 'logical-permission-count-mismatch' });
+  }
   const recreated = [];
   const inPlace = [];
   const sourcePermissionIds = new Set([...source.values()].map(({ id }) => id));
@@ -622,26 +671,40 @@ function comparePermissionGraphs(sourceDb, candidateDb, receipt, differences) {
     const recreatedAllowed = PERMISSION_FIELD_ADDITIONS.get(identity) ?? [];
     const inPlaceAllowed = IN_PLACE_PERMISSION_FIELD_ADDITIONS.get(identity) ?? [];
     const allowed = [...recreatedAllowed, ...inPlaceAllowed];
-    const expectedFields = before.fields === null ? null : [...new Set([...before.fields, ...allowed])].sort();
+    const cardGrant = evolution && readEditorCardGrant(before);
+    const expectedFields = cardGrant ? EDITOR_CARD_GRANTS.get(cardGrant)
+      : before.fields === null ? null : [...new Set([...before.fields, ...allowed])].sort();
     if (json(expectedFields) !== json(after.fields)) differences.push({ table: 'admin_permissions', kind: 'logical-permission-fields-mismatch', keySha256: sha(Buffer.from(key)) });
     const fieldsChange = json(expectedFields) !== json(before.fields);
     if (fieldsChange && inPlaceAllowed.length > 0 && recreatedAllowed.length === 0) {
       inPlace.push({ before, after });
       if (!samePermissionStorage(before, after)) differences.push({ table: 'admin_permissions', kind: 'in-place-permission-identity-changed', keySha256: sha(Buffer.from(key)) });
-    } else if (fieldsChange) recreated.push({
-      role: before.role, id: after.id, documentId: after.documentId, ordinal: after.permissionOrd,
-      linkId: after.linkId, sourceId: before.id, sourceDocumentId: before.documentId,
-      timestamps: after.timestamps,
-    });
-    else if (!samePermissionStorage(before, after) || json(valueKey(before.timestamps)) !== json(valueKey(after.timestamps))) {
+    } else if (fieldsChange) {
+      if (cardGrant) replacedCardIds.add(before.id);
+      recreated.push({
+        role: before.role, id: after.id, documentId: after.documentId, ordinal: after.permissionOrd,
+        linkId: after.linkId, sourceId: before.id, sourceDocumentId: before.documentId,
+        timestamps: after.timestamps,
+      });
+    } else if (!samePermissionStorage(before, after) || json(valueKey(before.timestamps)) !== json(valueKey(after.timestamps))) {
       differences.push({ table: 'admin_permissions', kind: 'unchanged-permission-storage-identity-changed', keySha256: sha(Buffer.from(key)) });
     }
   }
-  for (const key of candidate.keys()) if (!source.has(key)) {
-    differences.push({ table: 'admin_permissions', kind: 'logical-permission-added', keySha256: sha(Buffer.from(key)) });
+  let addedCards = 0;
+  for (const [key, permission] of candidate) if (!source.has(key)) {
+    const identity = readEditorCardGrant(permission);
+    if (!newCardGrants.has(identity) || json(permission.fields) !== json(newCardGrants.get(identity))) {
+      differences.push({ table: 'admin_permissions', kind: 'logical-permission-added', keySha256: sha(Buffer.from(key)) });
+      continue;
+    }
+    newCardGrants.delete(identity);
+    addedCards += 1;
+    recreated.push({
+      role: permission.role, id: permission.id, documentId: permission.documentId,
+      ordinal: permission.permissionOrd, linkId: permission.linkId, timestamps: permission.timestamps,
+    });
   }
-  const sourceValues = [...source.values()];
-  if (recreated.length !== pendingFieldAdditions(PERMISSION_FIELD_ADDITIONS, sourceValues).length
+  if (newCardGrants.size || recreated.length !== pendingFieldAdditions(PERMISSION_FIELD_ADDITIONS, sourceValues).length + replacedCardIds.size + addedCards
     || inPlace.length !== pendingFieldAdditions(IN_PLACE_PERMISSION_FIELD_ADDITIONS, sourceValues).length) {
     differences.push({ table: 'admin_permissions', kind: 'recreated-permission-count-mismatch' });
   }
@@ -679,7 +742,7 @@ function comparePermissionGraphs(sourceDb, candidateDb, receipt, differences) {
     }
   }
   for (const role of new Set(recreated.map(({ role }) => role))) {
-    const sourceOrdinals = [...source.values()].filter((row) => row.role === role).map(({ permissionOrd }) => permissionOrd)
+    const sourceOrdinals = sourceValues.filter((row) => row.role === role && !replacedCardIds.has(row.id)).map(({ permissionOrd }) => permissionOrd)
       .map((value) => typeof value === 'bigint' ? Number(value) : value).filter(Number.isSafeInteger);
     const start = Math.max(-1, ...sourceOrdinals) + 1;
     const roleRows = recreated.filter((row) => row.role === role).sort((a, b) => String(a.id).localeCompare(String(b.id), undefined, { numeric: true }));

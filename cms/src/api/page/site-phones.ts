@@ -51,7 +51,7 @@ export function registerSitePhones(strapi) {
       config: { policies: ['admin::isAuthenticatedAdmin'] },
       handler: async (ctx) => {
         const actor = ctx.state.user;
-        if (!actor.roles.some(({ code }) => code === 'content-admin' || code === 'strapi-super-admin')) {
+        if (!actor.roles.some(({ code }) => ['strapi-editor', 'content-admin', 'strapi-super-admin'].includes(code))) {
           return ctx.forbidden('Недостаточно прав для изменения телефонов сайта.');
         }
         if (Object.keys(ctx.query).length) return ctx.badRequest('Страницу контактов выбирает сервер.');

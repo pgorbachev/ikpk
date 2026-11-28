@@ -1,6 +1,6 @@
 import type { Core } from '@strapi/strapi';
 import { UPLOAD_ALLOWED_EXTENSIONS, UPLOAD_ALLOWED_MIME_TYPES, UPLOAD_SIZE_LIMIT_BYTES } from '../config/plugins';
-import { syncEditorRolePermissions, type EditorRoleStrapi } from './lib/editor-role';
+import { registerEditorCardRestrictions, syncEditorRolePermissions, type EditorRoleStrapi } from './lib/editor-role';
 import { assertStoredUploadExtension, registerUploadExtensionGuard } from './lib/upload-extension';
 import { registerContentAddressLifecycle } from './lifecycles/content-address';
 import { registerPublicationLifecycle } from './lifecycles/publication';
@@ -21,6 +21,7 @@ export default {
     strapi.customFields.register({ name: 'occurrence-price', type: 'decimal' });
     strapi.customFields.register({ name: 'occurrence-duration', type: 'string' });
     registerSeminarUid(strapi);
+    registerEditorCardRestrictions(strapi);
     registerProgramEditor(strapi);
     registerSeminarDocuments(strapi);
     registerUnlinkedEntryList(strapi);
