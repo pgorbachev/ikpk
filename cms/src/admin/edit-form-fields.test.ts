@@ -50,3 +50,9 @@ test('shared SEO hides noindex while preserving SEO text, og_image, and other co
   assert.deepEqual(names([result.layout.components['shared.seo'].layout]), ['seo_title', 'seo_description', 'og_image']);
   assert.deepEqual(names([result.layout.components['shared.other'].layout]), ['description']);
 });
+
+test('student document form URL is absent from the standard Page editor layout', () => {
+  const source = makeLayout(['title', 'slug', 'body', 'student_document_form_url', 'center_phone']);
+  const result = hideUnneededEditFields({ layout: source, query: {} });
+  assert.deepEqual(names(result.layout.layout), ['title', 'slug', 'body', 'center_phone']);
+});

@@ -10,12 +10,12 @@ function database(t) {
   db.exec(`CREATE TABLE pages (
       id INTEGER PRIMARY KEY, document_id varchar(255), title varchar(255), slug varchar(255), body TEXT,
       legacy_id varchar(255), created_at datetime, updated_at datetime, published_at datetime,
-      created_by_id integer, updated_by_id integer, locale varchar(255), center_phone varchar(255), manager_phone varchar(255));
+      created_by_id integer, updated_by_id integer, locale varchar(255), center_phone varchar(255), manager_phone varchar(255), student_document_form_url varchar(255));
     CREATE TABLE components_shared_seos (
       id INTEGER PRIMARY KEY, seo_title varchar(255), seo_description TEXT, noindex boolean);
     CREATE TABLE pages_cmps (
       id INTEGER PRIMARY KEY, entity_id integer, cmp_id integer, component_type varchar(255), field varchar(255), "order" float);
-    INSERT INTO pages VALUES (71,'other-doc','Контакты','kontakty','Сохранить','kontakty',100,100,100,NULL,NULL,NULL,NULL,NULL);
+    INSERT INTO pages VALUES (71,'other-doc','Контакты','kontakty','Сохранить','kontakty',100,100,100,NULL,NULL,NULL,NULL,NULL,NULL);
     INSERT INTO components_shared_seos VALUES (91,'Контакты','Контактные данные',0);
     INSERT INTO pages_cmps VALUES (111,71,91,'shared.seo','seo',NULL);`);
   t.after(() => db.close());

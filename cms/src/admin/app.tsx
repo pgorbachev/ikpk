@@ -62,6 +62,10 @@ export default {
             path: 'collection-types/site-book-intro',
             lazy: async () => ({ Component: (await import('./pages/SiteBookIntro')).default }),
           },
+          {
+            path: 'collection-types/site-student-document-form',
+            lazy: async () => ({ Component: (await import('./pages/SiteStudentDocumentForm')).default }),
+          },
         ],
       };
     }));

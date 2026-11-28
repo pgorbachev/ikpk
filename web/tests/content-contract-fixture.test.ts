@@ -1,9 +1,11 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { validateSnapshotContract } from '../scripts/lib/content-contract.ts';
 import type { Snapshot } from '../scripts/lib/content-snapshot.ts';
+import { assertStudentDocumentFormSnapshot } from '../scripts/lib/student-document-form-snapshot.ts';
+import { primaryNav } from '../src/lib/navigation';
 
 const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const PINNED = join(REPO_ROOT, 'fixtures', 'content-snapshot', 'snapshot.json');
@@ -26,6 +28,50 @@ describe('закреплённая фикстура и её собственны
       .map((v) => `${v.type}/${v.recordId}: ${v.rule}${v.field ? ` (${v.field})` : ''}`)
       .join('\n');
     expect(violations, `нарушений ${violations.length}:\n${summary}`).toEqual([]);
+  });
+
+  it('отказывает в публикации при отсутствующем или подменённом URL формы документов', () => {
+    for (const value of [undefined, '', 'https://b24-cbqwqo.bitrix24site.ru.evil.test/crm_form_k5ush/',
+      'http://b24-cbqwqo.bitrix24site.ru/crm_form_k5ush/', 'https://b24-cbqwqo.bitrix24site.ru/wrong/']) {
+      const broken = structuredClone(snapshot) as Snapshot;
+      const page = broken.content.types.static_pages?.find(record => record.slug === 'oplata');
+      if (value === undefined) delete page?.student_document_form_url;
+      else if (page) page.student_document_form_url = value;
+      expect(validateSnapshotContract(broken).violations).toContainEqual(expect.objectContaining({
+        type: 'static_pages', recordId: 'oplata', field: 'student_document_form_url', rule: 'invalid-value',
+      }));
+    }
+  });
+
+  it('capture fails closed for missing, duplicate and invalid /oplata values', () => {
+    const page = snapshot.content.types.static_pages?.find(record => record.slug === 'oplata');
+    expect(() => assertStudentDocumentFormSnapshot(undefined)).toThrow(/снимок не записан/);
+    expect(() => assertStudentDocumentFormSnapshot([])).toThrow(/снимок не записан/);
+    expect(() => assertStudentDocumentFormSnapshot([page!, page!])).toThrow(/единственную действительную/);
+    expect(() => assertStudentDocumentFormSnapshot([{ ...page!, student_document_form_url: 'https://evil.test/' }]))
+      .toThrow(/снимок не записан/);
+    expect(() => assertStudentDocumentFormSnapshot([page!])).not.toThrow();
+  });
+
+  it('the shared desktop and mobile navigation source exposes the documents link and demo rewrites it', async () => {
+    const learning = primaryNav.find(item => item.label === 'Обучение');
+    const form = learning?.children?.find(item => item.label === 'Заполнение документов');
+    expect(form?.external).toBe(true);
+    expect(form?.href).toMatch(/^https:\/\/b24-cbqwqo\.bitrix24site\.ru\/crm_form_/);
+    vi.stubEnv('DEMO_FORMS', 'stub');
+    vi.resetModules();
+    const demo = await import('../src/lib/navigation');
+    const demoForm = demo.primaryNav.find(item => item.label === 'Обучение')?.children?.find(item => item.label === 'Заполнение документов');
+    expect(demoForm?.href).toBe('/demo-zayavka');
+    expect(demoForm?.external).toBe(false);
+    vi.stubEnv('DEMO_FORMS', 'forms-test.example');
+    vi.resetModules();
+    const hostDemo = await import('../src/lib/navigation');
+    const hostForm = hostDemo.primaryNav.find(item => item.label === 'Обучение')?.children?.find(item => item.label === 'Заполнение документов');
+    expect(hostForm?.href).toMatch(/^https:\/\/forms-test\.example\/crm_form_/);
+    expect(hostForm?.external).toBe(true);
+    vi.unstubAllEnvs();
+    vi.resetModules();
   });
 
   // Защита от вакуумности: контракт, которому нечего проверять, зелён по совпадению.

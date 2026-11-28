@@ -31,6 +31,7 @@ export function hideUnneededEditFields<T extends HookInput>(input: T): T {
   if ('documents_owner_verified' in metadata && 'documents_state' in metadata) {
     excluded.add('documents_owner_verified');
   }
+  excluded.add('student_document_form_url');
 
   const components = layout.components;
   const seo = components?.['shared.seo'];

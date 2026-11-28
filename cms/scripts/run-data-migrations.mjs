@@ -16,6 +16,7 @@ const MODULE_PATH = fileURLToPath(import.meta.url);
 const CMS_ROOT = resolve(dirname(MODULE_PATH), '..');
 const require = createRequire(join(CMS_ROOT, 'package.json'));
 const LEDGER_TABLE = 'ikpk_data_migration_history';
+const LEGACY_BOOK_SELLER_SHA = '645ec7800d64cd531f54c4a24945c6f1fbd31512052165b84f17bbf6427a7f21';
 const LINEAGE_TABLE = 'ikpk_migration_lineage';
 const STEP_ID = /^[A-Za-z0-9][A-Za-z0-9._-]+$/;
 const HASH = /^[a-f0-9]{64}$/;
@@ -471,7 +472,7 @@ function resolvePlan(artifactDir, { fingerprint = true } = {}) {
     if (!['strapi-native', 'data'].includes(step.kind)) fail(`unsupported migration step kind for ${step.id}`);
     if (step.kind === 'strapi-native' && step.phase !== 'before-sync') fail(`native Strapi migration must be before-sync: ${step.id}`);
     if (step.kind === 'data' && step.phase !== 'after-sync') fail(`explicit data migration must be after-sync: ${step.id}`);
-    if (step.kind === 'data' && !['site-phones', 'book-seller', 'classification', 'normalize-documents-state', 'content-admin-permissions', 'reviewed-schedule', 'reviewed-documents', 'reviewed-content'].includes(step.handler)) fail(`unsupported data migration handler for ${step.id}`);
+    if (step.kind === 'data' && !['site-phones', 'student-document-form', 'book-seller', 'classification', 'normalize-documents-state', 'content-admin-permissions', 'reviewed-schedule', 'reviewed-documents', 'reviewed-content'].includes(step.handler)) fail(`unsupported data migration handler for ${step.id}`);
     if (typeof step.path !== 'string' || !step.path || isAbsolute(step.path) || step.path.split(/[\\/]/).includes('..')) fail(`invalid migration payload path for ${step.id}`);
     if (!HASH.test(step.sha256 ?? '')) fail(`missing SHA-256 for migration payload ${step.id}`);
     if (paths.has(step.path)) fail(`duplicate migration payload path: ${step.path}`);
@@ -614,14 +615,29 @@ function bindOperationToSource(db, { operationId, lineageId, sourceSnapshotSha25
   db.prepare('INSERT INTO ikpk_migration_operations (operation_id,lineage_id,source_snapshot_sha256,source_schema_sha256,created_at) VALUES (?,?,?,?,?)')
     .run(operationId, lineageId, sourceSnapshotSha256, sourceSchemaSha256, new Date().toISOString());
 }
-function completedStep(db, lineageId, step) {
+function verifiedLegacyBookSeller(db, row, lineageId, step, operationId) {
+  if (step.id !== 'book-seller-page-v1' || step.phase !== 'after-sync' || step.kind !== 'data'
+      || step.handler !== 'book-seller' || step.path !== 'data-steps/book-seller.mjs'
+      || row.payload_sha256 !== LEGACY_BOOK_SELLER_SHA || !row.operation_id || row.operation_id === operationId) return false;
+  let result;
+  try { result = JSON.parse(row.result_json); } catch { return false; }
+  const validResult = JSON.stringify(result) === JSON.stringify({ createdPages: 0, createdSeoComponents: 0, createdPageLinks: 0 })
+    || JSON.stringify(result) === JSON.stringify({ createdPages: 2, createdSeoComponents: 2, createdPageLinks: 2 });
+  if (!validResult || typeof row.completed_at !== 'string' || !Number.isFinite(Date.parse(row.completed_at))) return false;
+  const lineage = db.prepare(`SELECT lineage_id,source_snapshot_sha256,source_schema_sha256 FROM ${LINEAGE_TABLE} WHERE singleton=1`).get();
+  const operation = db.prepare(`SELECT lineage_id,source_snapshot_sha256,source_schema_sha256 FROM ikpk_migration_operations WHERE operation_id=?`).get(row.operation_id);
+  return Boolean(lineage && operation && lineage.lineage_id === lineageId && operation.lineage_id === lineageId
+    && HASH.test(lineage.source_snapshot_sha256 ?? '') && HASH.test(lineage.source_schema_sha256 ?? '')
+    && HASH.test(operation.source_snapshot_sha256 ?? '') && HASH.test(operation.source_schema_sha256 ?? ''));
+}
+export function completedStep(db, lineageId, step, operationId) {
   const row = db.prepare(`SELECT operation_id, payload_sha256, result_json, completed_at FROM ${LEDGER_TABLE} WHERE lineage_id = ? AND step_id = ?`).get(lineageId, step.id);
   if (!row) return null;
-  if (row.payload_sha256 !== step.sha256) fail(`step ID ${step.id} is already recorded with a different SHA-256; refusing to reuse it`);
+  if (row.payload_sha256 !== step.sha256 && !verifiedLegacyBookSeller(db, row, lineageId, step, operationId)) fail(`step ID ${step.id} is already recorded with a different SHA-256; refusing to reuse it`);
   return row;
 }
 function recordStep(db, { operationId, lineageId, step, result }) {
-  const existing = completedStep(db, lineageId, step);
+  const existing = completedStep(db, lineageId, step, operationId);
   if (existing) {
     if (existing.operation_id !== operationId) return existing;
     return existing;
@@ -714,12 +730,16 @@ function receiptFrom(path, operationId) {
   if (receipt.operationId !== operationId) fail(`receipt belongs to a different operation (${receipt.operationId})`);
   return receipt;
 }
-function readCandidateState(candidateDbPath) {
+function readCandidateState(candidateDbPath, receipt) {
   const db = openDatabase(candidateDbPath);
   try {
     const lineage = getLineage(db);
     if (!lineage) fail('candidate has no migration lineage record');
     const history = db.prepare(`SELECT operation_id,step_id,payload_sha256,result_json,completed_at FROM ${LEDGER_TABLE} WHERE lineage_id=? ORDER BY completed_at,step_id`).all(lineage.lineage_id);
+    if (receipt) for (const row of history) {
+      const step = receipt.steps.find(item => item.id === row.step_id);
+      if (step && row.payload_sha256 !== step.sha256 && verifiedLegacyBookSeller(db, row, lineage.lineage_id, step, receipt.operationId)) row.legacyBookSellerVerified = true;
+    }
     return { lineage, history, schema: sqliteSnapshot(db) };
   } finally { db.close(); }
 }
@@ -736,8 +756,8 @@ function publicStatus(receipt, state) {
       return {
         id: step.id,
         phase: step.phase,
-        status: row ? (row.payload_sha256 === step.sha256 ? 'completed' : 'hash-mismatch') : (step.kind === 'strapi-native' ? 'strapi-managed' : 'pending'),
-        payloadSha256: step.sha256,
+        status: row ? (row.payload_sha256 === step.sha256 || row.legacyBookSellerVerified ? 'completed' : 'hash-mismatch') : (step.kind === 'strapi-native' ? 'strapi-managed' : 'pending'),
+        payloadSha256: row?.payload_sha256 ?? step.sha256,
         ...(row ? { result: JSON.parse(row.result_json), completedAt: row.completed_at } : {}),
       };
     }),
@@ -1186,7 +1206,7 @@ export async function prepareMigration({ sourceDbPath: rawSourceDbPath, candidat
       await onCheckpoint?.('stage-snapshot-captured', { stageId, snapshot: captured });
     };
     await snapshotStage('schema', { allowCapture: receipt.phase === 'schema-ready' });
-    if (stopAfterStage === 'schema') return { ...publicStatus(receipt, readCandidateState(candidateDbPath)), pausedAfterStage: 'schema' };
+    if (stopAfterStage === 'schema') return { ...publicStatus(receipt, readCandidateState(candidateDbPath, receipt)), pausedAfterStage: 'schema' };
 
     const dataSteps = release.steps.filter(({ kind }) => kind === 'data');
     if (reviewedStep && !dataSteps.some(step => step.id === reviewedStep.id && reviewedHandlers.has(step.handler))) {
@@ -1198,7 +1218,7 @@ export async function prepareMigration({ sourceDbPath: rawSourceDbPath, candidat
       let existing;
       try {
         ensureLedger(candidate);
-        existing = completedStep(candidate, lineageId, step);
+        existing = completedStep(candidate, lineageId, step, operationId);
       } finally { candidate.close(); }
       if (!inherited && existing && existing.operation_id !== operationId && SEMINAR_HANDLERS.has(step.handler)) fail('existing seminar steps require a sealed inherited cohort; refusing replay');
       if (inherited && SEMINAR_HANDLERS.has(step.handler) && (!existing || existing.payload_sha256 !== step.sha256)) fail('inherited seminar step is missing; refusing replay');
@@ -1216,7 +1236,7 @@ export async function prepareMigration({ sourceDbPath: rawSourceDbPath, candidat
         }
         if (!binding) {
           if (reviewedStep && !reviewedStepConsumed) fail(`review is required for earlier step: ${step.id}`);
-          return { ...publicStatus(receipt, readCandidateState(candidateDbPath)), waitingForReview: step.id };
+          return { ...publicStatus(receipt, readCandidateState(candidateDbPath, receipt)), waitingForReview: step.id };
         }
         assertDistinctPaths([...databasePathSet('source database', sourceDbPath), ...databasePathSet('candidate database', candidateDbPath), ['operation receipt', receiptPath], [`review file ${step.id}`, binding.reviewFilePath]]);
         verifyReviewedStepBinding(step, binding);
@@ -1231,7 +1251,7 @@ export async function prepareMigration({ sourceDbPath: rawSourceDbPath, candidat
       if (existing) {
         await snapshotStage(step.id, { allowCapture: receipt.pendingSnapshotStep === step.id });
         if (receipt.pendingSnapshotStep === step.id) { receipt.pendingSnapshotStep = null; atomicJson(receiptPath, receipt); }
-        if (stopAfterStage === step.id) return { ...publicStatus(receipt, readCandidateState(candidateDbPath)), pausedAfterStage: step.id };
+        if (stopAfterStage === step.id) return { ...publicStatus(receipt, readCandidateState(candidateDbPath, receipt)), pausedAfterStage: step.id };
         continue;
       }
       if (step.handler === 'content-admin-permissions') {
@@ -1269,7 +1289,7 @@ export async function prepareMigration({ sourceDbPath: rawSourceDbPath, candidat
       await onCheckpoint?.('data-step-transaction-committed', { stepId: step.id });
       const after = openDatabase(candidateDbPath);
       try {
-        const row = completedStep(after, lineageId, step);
+        const row = completedStep(after, lineageId, step, operationId);
         if (!row) fail(`data step ${step.id} returned without committing its durable ID and SHA record`);
       } finally { after.close(); }
       await snapshotStage(step.id, { allowCapture: receipt.pendingSnapshotStep === step.id });
@@ -1277,12 +1297,12 @@ export async function prepareMigration({ sourceDbPath: rawSourceDbPath, candidat
       receipt.lifecycle.push({ event: 'data-step-committed', stepId: step.id, at: new Date().toISOString() });
       receipt.phase = 'data-steps-in-progress';
       atomicJson(receiptPath, receipt);
-      if (stopAfterStage === step.id) return { ...publicStatus(receipt, readCandidateState(candidateDbPath)), pausedAfterStage: step.id };
+      if (stopAfterStage === step.id) return { ...publicStatus(receipt, readCandidateState(candidateDbPath, receipt)), pausedAfterStage: step.id };
     }
     if (reviewedStep && !reviewedStepConsumed) fail(`review step was not found: ${reviewedStep.id}`);
     if (stageSnapshotDir && receipt.pendingSnapshotStep) fail(`stage snapshot remains pending: ${receipt.pendingSnapshotStep}`);
     verifyCompletedStageSnapshots(receipt, release);
-    const finalState = readCandidateState(candidateDbPath);
+    const finalState = readCandidateState(candidateDbPath, receipt);
     const status = publicStatus(receipt, finalState);
     if (status.steps.some((step) => step.phase === 'after-sync' && step.status !== 'completed')) fail('not all planned data steps are recorded complete');
     if (inherited) {
@@ -1389,7 +1409,7 @@ export function getMigrationStatus({ candidateDbPath: rawCandidateDbPath, operat
   const receiptPath = abs(rawReceiptPath, 'receiptPath');
   const receipt = receiptFrom(receiptPath, operationId);
   if (resolve(receipt.candidateDbPath) !== candidateDbPath) fail('candidate path differs from the operation receipt');
-  const state = readCandidateState(candidateDbPath);
+  const state = readCandidateState(candidateDbPath, receipt);
   return publicStatus(receipt, state);
 }
 
@@ -1518,7 +1538,7 @@ export async function activateMigration({ candidateDbPath: rawCandidateDbPath, c
     receipt.phase = 'activated';
     receipt.activation.phase = 'pair-selected-editors-closed';
     atomicJson(receiptPath, receipt);
-    return publicStatus(receipt, readCandidateState(candidateDbPath));
+    return publicStatus(receipt, readCandidateState(candidateDbPath, receipt));
   } finally { unlock(); }
 }
 

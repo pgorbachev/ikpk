@@ -18,6 +18,7 @@ export function bookSellerMenuLinkPlugin(): Plugin {
     const { get } = useFetchClient();
     const [canEditPhones, setCanEditPhones] = React.useState(false);
     const [canEditBooks, setCanEditBooks] = React.useState(false);
+    const [canEditStudentDocumentForm, setCanEditStudentDocumentForm] = React.useState(false);
     React.useEffect(() => {
         let current = true;
         get('/admin/site-phones').then(() => {
@@ -36,7 +37,14 @@ export function bookSellerMenuLinkPlugin(): Plugin {
         });
         return () => { current = false; };
     }, [get]);
-    const canOpenPages = canEditPhones || canEditBooks;
+    React.useEffect(() => {
+        let current = true;
+        get('/admin/site-student-document-form').then(() => {
+            if (current) setCanEditStudentDocumentForm(true);
+        }).catch(() => { if (current) setCanEditStudentDocumentForm(false); });
+        return () => { current = false; };
+    }, [get]);
+    const canOpenPages = canEditPhones || canEditBooks || canEditStudentDocumentForm;
     const collectionTypeLinks = canOpenPages && !nativeCollectionTypeLinks.some(link => link.uid === 'api::page.page')
         ? [...nativeCollectionTypeLinks, { uid: 'ikpk-managed-pages', title: 'Страницы', to: '/content-manager/collection-types/site-pages' }]
         : nativeCollectionTypeLinks;`);

@@ -25,10 +25,10 @@ function fixture(path) {
   db.exec(`CREATE TABLE pages (
       id INTEGER PRIMARY KEY, document_id varchar(255), title varchar(255), slug varchar(255), body TEXT,
       legacy_id varchar(255), created_at datetime, updated_at datetime, published_at datetime,
-      created_by_id integer, updated_by_id integer, locale varchar(255), center_phone varchar(255), manager_phone varchar(255));
+      created_by_id integer, updated_by_id integer, locale varchar(255), center_phone varchar(255), manager_phone varchar(255), student_document_form_url varchar(255));
     CREATE TABLE components_shared_seos (id INTEGER PRIMARY KEY, seo_title varchar(255), seo_description TEXT, noindex boolean);
     CREATE TABLE pages_cmps (id INTEGER PRIMARY KEY, entity_id integer, cmp_id integer, component_type varchar(255), field varchar(255), "order" float);
-    INSERT INTO pages VALUES (7,'other','Other','elsewhere','Untouched','elsewhere',1,1,1,NULL,NULL,NULL,NULL,NULL);
+    INSERT INTO pages VALUES (7,'other','Other','elsewhere','Untouched','elsewhere',1,1,1,NULL,NULL,NULL,NULL,NULL,NULL);
     INSERT INTO components_shared_seos VALUES (9,'Other SEO','Other description',0);
     INSERT INTO pages_cmps VALUES (11,7,9,'shared.seo','seo',NULL);`);
   db.close();
@@ -43,6 +43,8 @@ function legacyFixtureWithoutPhones(path) {
     CREATE TABLE pages_cmps (id INTEGER PRIMARY KEY, entity_id integer, cmp_id integer, component_type varchar(255), field varchar(255), "order" float);
     INSERT INTO pages VALUES (7,'contacts-doc','Контакты','kontakty','Контакты','kontakty',100,100,100,NULL,NULL,NULL);
     INSERT INTO pages VALUES (8,'contacts-doc','Контакты','kontakty','Контакты','kontakty',100,200,NULL,NULL,NULL,NULL);
+    INSERT INTO pages VALUES (9,'oplata-doc','Оплата','oplata','Текст оплаты','oplata',100,100,100,NULL,NULL,NULL);
+    INSERT INTO pages VALUES (10,'oplata-doc','Оплата','oplata','Черновик оплаты','oplata',100,200,NULL,NULL,NULL,NULL);
     INSERT INTO components_shared_seos VALUES (9,'Контакты','Описание контактов',0);
     INSERT INTO components_shared_seos VALUES (10,'Контакты','Черновое описание',0);
     INSERT INTO pages_cmps VALUES (11,7,9,'shared.seo','seo',NULL);
@@ -108,8 +110,8 @@ test('a valid inherited book ledger preserves editorial text and SEO independent
   const plan = { manifestPath, planSha256: sha(readFileSync(manifestPath)), steps: [step] };
   const source = new Database(sourceDbPath);
   const binding = addLedger(source);
-  source.exec(`INSERT INTO pages VALUES (72,'editorial-doc','Книги и учебные материалы','knigi-i-uchebnye-materialy','Опубликовано редактором','knigi-i-uchebnye-materialy',100,200,200,NULL,NULL,NULL,NULL,NULL);
-    INSERT INTO pages VALUES (73,'editorial-doc','Книги и учебные материалы','knigi-i-uchebnye-materialy','Редакторский черновик','knigi-i-uchebnye-materialy',100,300,NULL,NULL,NULL,NULL,NULL,NULL);
+  source.exec(`INSERT INTO pages VALUES (72,'editorial-doc','Книги и учебные материалы','knigi-i-uchebnye-materialy','Опубликовано редактором','knigi-i-uchebnye-materialy',100,200,200,NULL,NULL,NULL,NULL,NULL,NULL);
+    INSERT INTO pages VALUES (73,'editorial-doc','Книги и учебные материалы','knigi-i-uchebnye-materialy','Редакторский черновик','knigi-i-uchebnye-materialy',100,300,NULL,NULL,NULL,NULL,NULL,NULL,NULL);
     INSERT INTO components_shared_seos VALUES (92,'Изменённый SEO','Описание опубликованной страницы',0);
     INSERT INTO components_shared_seos VALUES (93,'Черновой SEO','Описание черновика',0);
     INSERT INTO pages_cmps VALUES (112,72,92,'shared.seo','seo',NULL);
@@ -190,15 +192,18 @@ test('audit accepts book seed NULL phone values when source lacked columns and s
   const sourceDbPath = join(dir, 'legacy-no-phone-source.db'), candidateDbPath = join(dir, 'legacy-no-phone-candidate.db');
   legacyFixtureWithoutPhones(sourceDbPath); copyFileSync(sourceDbPath, candidateDbPath);
   const allSteps = JSON.parse(readFileSync(new URL('../database/migrations/plan.json', import.meta.url), 'utf8')).steps;
-  const steps = ['site-contact-phones-v1', 'book-seller-page-v1'].map((id) => allSteps.find((step) => step.id === id));
+  const steps = ['site-contact-phones-v1', 'student-document-form-v1', 'book-seller-page-v1']
+    .map((id) => allSteps.find((step) => step.id === id));
   const manifestPath = join(dir, 'legacy-no-phone-plan.json');
   writeFileSync(manifestPath, JSON.stringify({ version: 1, steps }) + '\n');
   const plan = { manifestPath, planSha256: sha(readFileSync(manifestPath)), steps };
   const candidate = new Database(candidateDbPath), binding = addLedger(candidate);
   candidate.exec('ALTER TABLE pages ADD COLUMN center_phone varchar(255); ALTER TABLE pages ADD COLUMN manager_phone varchar(255)');
+  candidate.exec('ALTER TABLE pages ADD COLUMN student_document_form_url varchar(255)');
   const sitePhones = (await import('../database/migrations/data-steps/site-phones.mjs')).apply;
+  const studentDocumentForm = (await import('../database/migrations/data-steps/student-document-form.mjs')).apply;
   const bookSeller = (await import('../database/migrations/data-steps/book-seller.mjs')).apply;
-  for (const [step, apply] of [[steps[0], sitePhones], [steps[1], bookSeller]]) {
+  for (const [step, apply] of [[steps[0], sitePhones], [steps[1], studentDocumentForm], [steps[2], bookSeller]]) {
     apply(candidate, { onApplied(db, row) {
       db.prepare('INSERT INTO ikpk_data_migration_history VALUES (?,?,?,?,?,1)').run(binding.lineage, binding.operation, step.id, step.sha256, JSON.stringify(row));
     } });
@@ -220,6 +225,9 @@ test('audit accepts book seed NULL phone values when source lacked columns and s
   const seeded = candidateRead.prepare("SELECT center_phone, manager_phone FROM pages WHERE slug='knigi-i-uchebnye-materialy'").all();
   assert.equal(seeded.length, 2);
   assert.ok(seeded.every((row) => row.center_phone === null && row.manager_phone === null));
+  const oplata = candidateRead.prepare("SELECT student_document_form_url FROM pages WHERE slug='oplata'").all();
+  assert.equal(oplata.length, 2);
+  assert.ok(oplata.every((row) => row.student_document_form_url?.startsWith('https://b24-cbqwqo.bitrix24site.ru/crm_form_k5ush/')));
   candidateRead.close();
 });
 

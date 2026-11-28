@@ -3,7 +3,7 @@ import { Box, Button, Flex, Typography } from '@strapi/design-system';
 import { useFetchClient } from '@strapi/strapi/admin';
 import { useNavigate } from 'react-router-dom';
 
-type Capabilities = { contacts: boolean; books: boolean };
+type Capabilities = { contacts: boolean; books: boolean; studentDocumentForm: boolean };
 
 export default function SitePages() {
   const client = useFetchClient();
@@ -15,8 +15,9 @@ export default function SitePages() {
     Promise.all([
       client.get('/admin/site-phones').then(() => true, (error) => error?.status !== 403),
       client.get('/admin/site-books').then(() => true, () => false),
-    ]).then(([contacts, books]) => {
-      if (active) setCapabilities({ contacts, books });
+      client.get('/admin/site-student-document-form').then(() => true, () => false),
+    ]).then(([contacts, books, studentDocumentForm]) => {
+      if (active) setCapabilities({ contacts, books, studentDocumentForm });
     });
     return () => { active = false; };
   }, [client]);
@@ -31,7 +32,10 @@ export default function SitePages() {
     {capabilities?.books && <Button variant="secondary" onClick={() => navigate('/content-manager/collection-types/site-book-intro')}>
       Вводный текст книг
     </Button>}
-    {capabilities && !capabilities.contacts && !capabilities.books &&
+    {capabilities?.studentDocumentForm && <Button variant="secondary" onClick={() => navigate('/content-manager/collection-types/site-student-document-form')}>
+      Заполнение документов
+    </Button>}
+    {capabilities && !capabilities.contacts && !capabilities.books && !capabilities.studentDocumentForm &&
       <Typography textColor="danger600">Для этой роли нет разрешённых страниц.</Typography>}
   </Flex></Box>;
 }
