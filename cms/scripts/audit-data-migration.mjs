@@ -660,7 +660,7 @@ function readEditorCardGrant(permission) {
   return identity;
 }
 
-function comparePermissionGraphs(sourceDb, candidateDb, receipt, differences) {
+function comparePermissionGraphs(sourceDb, candidateDb, receipt, differences, { seoOrderFallback = false } = {}) {
   const source = permissionGraph(sourceDb, differences, 'source');
   const candidate = permissionGraph(candidateDb, differences, 'candidate');
   if (!source || !candidate) return;
@@ -767,14 +767,21 @@ function comparePermissionGraphs(sourceDb, candidateDb, receipt, differences) {
     }
   }
   for (const role of new Set(recreated.map(({ role }) => role))) {
+    const unchangedOrdinals = new Set(sourceValues
+      .filter((row) => row.role === role && !recreated.some((item) => item.sourceId === row.id))
+      .map(({ permissionOrd }) => typeof permissionOrd === 'bigint' ? Number(permissionOrd) : permissionOrd));
     const roleRows = recreated.filter((row) => row.role === role).sort((a, b) => String(a.id).localeCompare(String(b.id), undefined, { numeric: true }));
     const candidateOrdinals = roleRows.map(({ ordinal }) => typeof ordinal === 'bigint' ? Number(ordinal) : ordinal);
-    // Strapi's role sync inserts the recreated block before later native grants;
-    // requiring it to be after the role's maximum ordinal rejects that real
-    // behavior. Keep the guard narrow: the recreated rows must be one
-    // collision-free contiguous block, while unchanged rows retain their ordinals.
-    if (candidateOrdinals.some((value, index) => !Number.isSafeInteger(value) || (index > 0 && value !== candidateOrdinals[index - 1] + 1))) {
-      differences.push({ table: 'admin_permissions_role_lnk', kind: 'recreated-permission-order-not-contiguous' });
+    const contiguous = candidateOrdinals.every((value, index) => Number.isSafeInteger(value)
+      && (index === 0 || value === candidateOrdinals[index - 1] + 1));
+    const overlaps = candidateOrdinals.some((value) => unchangedOrdinals.has(value));
+    if (seoOrderFallback) {
+      if (!contiguous || overlaps) differences.push({ table: 'admin_permissions_role_lnk', kind: 'recreated-permission-order-not-contiguous' });
+    } else {
+      const sourceOrdinals = sourceValues.filter((row) => row.role === role && !replacedCardIds.has(row.id)).map(({ permissionOrd }) => permissionOrd)
+        .map((value) => typeof value === 'bigint' ? Number(value) : value).filter(Number.isSafeInteger);
+      const start = Math.max(-1, ...sourceOrdinals) + 1;
+      if (candidateOrdinals.some((value, index) => value !== start + index)) differences.push({ table: 'admin_permissions_role_lnk', kind: 'recreated-permission-order-not-appended' });
     }
   }
   const asMillis = (value) => typeof value === 'bigint' ? Number(value) : value;
@@ -1340,6 +1347,9 @@ export function auditMigration({ sourceDbPath, candidateDbPath, plan, receipt, a
         && target.type === (name === 'og_title' ? 'varchar(255)' : 'TEXT'));
     });
     const acceptedOgColumns = physicalOgAdditions && (acceptedSchemaSnapshot || !tableNames(source).includes('strapi_database_schema'));
+    const sourceMissingOgColumns = ['og_title', 'og_description'].every((name) =>
+      !sourceSchema.components_shared_seos?.some((column) => column.name === name));
+    const seoOrderFallback = acceptedSchemaSnapshot && sourceMissingOgColumns && physicalOgAdditions;
     if (transforms.bookSeller) {
       for (const [table, originalExpected] of Object.entries(BOOK_SEED_COLUMNS)) {
         const expected = table === 'components_shared_seos' && acceptedOgColumns
@@ -1433,7 +1443,7 @@ export function auditMigration({ sourceDbPath, candidateDbPath, plan, receipt, a
     }
     const runnerCounts = allowRunnerRows(source, candidate, plan, receipt, transforms, differences);
     compareNativeHistory(source, candidate, transforms.nativeSteps, differences);
-    const permissionAudit = comparePermissionGraphs(source, candidate, receipt, differences);
+    const permissionAudit = comparePermissionGraphs(source, candidate, receipt, differences, { seoOrderFallback });
     const programSchemaNormalized = compareCoreStore(source, candidate, differences, receipt, programSchema);
     const sourceCounts = countByTable(source, Object.keys(sourceSchema));
     const candidateCounts = countByTable(candidate, Object.keys(candidateSchema));
