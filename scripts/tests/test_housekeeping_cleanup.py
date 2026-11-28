@@ -558,6 +558,179 @@ class ReleaseCleanupTests(unittest.TestCase):
         self.assertTrue((static_root / ('a' * 40 + '-flow-one')).is_dir(), 'static sources are not deleted here')
         self.assertTrue((static_root / ('b' * 40 + '-flow-zero')).is_dir(), 'static sources are not deleted here')
 
+    # Production source retention. Sources live in releaseRoot (`<sha>-<operationId>`); the served
+    # static releases stay in staticReleaseRoot, which self.config already provides.
+    def _production_sources(self):
+        sources = Path(self.tmp.name) / 'production-static-sources'
+        sources.mkdir(exist_ok=True)
+        self.production_config = {**self.config, 'profile': 'production-static', 'releaseRoot': str(sources)}
+        return sources
+
+    def _source_tree(self, sources, name):
+        tree = sources / name
+        tree.mkdir()
+        (tree / 'index.html').write_text(name, encoding='utf-8')
+        return tree
+
+    def _static_op(self, operation_id, source_sha, records):
+        """Append static-main rows for one operation; `records` lists the record names in order.
+
+        Field values follow the validator in housekeeping_journal.validate_journal_history.
+        """
+        digest = 'e' * 64
+        old_path = str(self.old.resolve())
+        candidate_path = str((Path(self.production_config['releaseRoot']) / f'{source_sha}-{operation_id}').resolve())
+        old_digest = host._tree_sha256(self.old)
+        fields = {
+            'static-main-start': {'oldStaticPath': old_path, 'oldStaticTreeSha256': old_digest},
+            'static-main-prepared': {'staticTreeSha256': digest, 'snapshotId': 'snap:fixture'},
+            'static-main-switch-intent': {'oldStaticPath': old_path, 'candidateStaticPath': candidate_path,
+                                          'staticTreeSha256': digest},
+            'static-main-switched': {'staticTreeSha256': digest},
+            'static-main-committed': {'staticTreeSha256': digest, 'snapshotId': 'snap:fixture'},
+            'static-main-rolled-back': {'restoredStaticPath': old_path},
+            'static-main-recovered': {'restoredStaticPath': old_path},
+            'static-main-rollback-expired': {
+                'oldStaticPath': old_path, 'oldStaticTreeSha256': old_digest,
+                'candidateStaticPath': candidate_path, 'candidateStaticTreeSha256': digest,
+                'committedStaticTreeSha256': digest, 'snapshotId': 'snap:fixture', 'targetState': 'absent',
+                'operator': 'operator', 'reason': 'fixture expiry'},
+        }
+        for record in records:
+            self.state._append({'version': 1, 'record': record, 'operationKind': 'static-main',
+                                'operationId': operation_id, 'sourceSha': source_sha,
+                                **fields.get(record, {})})
+
+    # Guard P1: every terminal static-main source under releaseRoot, including the just-committed one, is removed.
+    # Mutation: in _cleanup_after_commit drop the production source-removal step.
+    def test_production_commit_removes_every_terminal_static_source(self):
+        sources = self._production_sources()
+        self._static_op('flow-zero', 'b' * 40, ['static-main-start', 'static-main-prepared', 'static-main-recovered'])
+        self._source_tree(sources, 'a' * 40 + '-flow-one')
+        self._source_tree(sources, 'b' * 40 + '-flow-zero')
+
+        result = host._cleanup_after_commit(self.production_config, self.state, 'flow-one')
+
+        self.assertFalse(result.get('cleanupPending'), result)
+        self.assertFalse((sources / ('a' * 40 + '-flow-one')).exists(), 'the just-committed source must be removed')
+        self.assertFalse((sources / ('b' * 40 + '-flow-zero')).exists(), 'an older terminal source must be removed')
+
+    # Guard P2 (GREEN today, guard): an unfinished operation refuses cleanup and no source is removed.
+    # Mutation: remove the `_unfinished_operation_ids` refusal before the source-removal step.
+    def test_production_unfinished_operation_refuses_source_cleanup(self):
+        sources = self._production_sources()
+        self._static_op('flow-zero', 'b' * 40, ['static-main-start', 'static-main-prepared', 'static-main-recovered'])
+        self._static_op('in-flight', 'c' * 40, ['static-main-start'])
+        self._source_tree(sources, 'a' * 40 + '-flow-one')
+        self._source_tree(sources, 'b' * 40 + '-flow-zero')
+
+        result = host._cleanup_after_commit(self.production_config, self.state, 'flow-one')
+
+        self.assertTrue(result.get('cleanupPending'), result)
+        self.assertIn('unfinished', result.get('cleanupError', ''))
+        self.assertTrue((sources / ('a' * 40 + '-flow-one')).is_dir())
+        self.assertTrue((sources / ('b' * 40 + '-flow-zero')).is_dir())
+
+    # Guard P3: an entry matching no static-main operation is kept and listed in retainedUnknownStaticSources.
+    # Mutation: treat every `<sha>-<id>` directory as removable without consulting the journal.
+    def test_production_unknown_source_is_kept_and_reported(self):
+        sources = self._production_sources()
+        self._static_op('flow-zero', 'b' * 40, ['static-main-start', 'static-main-prepared', 'static-main-recovered'])
+        self._source_tree(sources, 'a' * 40 + '-flow-one')
+        self._source_tree(sources, 'b' * 40 + '-flow-zero')
+        ghost = self._source_tree(sources, 'd' * 40 + '-ghost-op')
+
+        result = host._cleanup_after_commit(self.production_config, self.state, 'flow-one')
+
+        self.assertEqual(result.get('retainedUnknownStaticSources'), [str(ghost.resolve())], result)
+        self.assertTrue(ghost.is_dir())
+        self.assertFalse((sources / ('b' * 40 + '-flow-zero')).exists())
+
+    # Guard P4: rolled-back and rollback-expired operations are terminal, so their sources are removable.
+    # Mutation: drop 'static-main-rolled-back' / 'static-main-rollback-expired' from the terminal set.
+    def test_production_rolled_back_and_expired_sources_are_removable(self):
+        sources = self._production_sources()
+        self._static_op('flow-rb', 'd' * 40, ['static-main-start', 'static-main-prepared',
+                                              'static-main-switch-intent', 'static-main-rolled-back'])
+        self._static_op('flow-exp', 'e' * 40, ['static-main-start', 'static-main-prepared',
+                                               'static-main-switch-intent', 'static-main-switched',
+                                               'static-main-committed', 'static-main-rollback-expired'])
+        self._source_tree(sources, 'a' * 40 + '-flow-one')
+        rolled_back = self._source_tree(sources, 'd' * 40 + '-flow-rb')
+        expired = self._source_tree(sources, 'e' * 40 + '-flow-exp')
+
+        result = host._cleanup_after_commit(self.production_config, self.state, 'flow-one')
+
+        self.assertFalse(result.get('cleanupPending'), result)
+        self.assertFalse(rolled_back.exists(), 'a rolled-back operation is terminal')
+        self.assertFalse(expired.exists(), 'a rollback-expired operation is terminal')
+
+    # Guard P5 (GREEN today, guard): a corrupt or non-regular journal removes nothing and reports cleanupPending.
+    # A missing journal is NOT covered here: it reads as empty history by design.
+    # Mutation: catch RehearsalRefusal around read_journal_for_cleanup and continue with an empty history.
+    def test_production_corrupt_or_unsafe_journal_removes_nothing(self):
+        sources = self._production_sources()
+        self._static_op('flow-zero', 'b' * 40, ['static-main-start', 'static-main-prepared', 'static-main-recovered'])
+        self._source_tree(sources, 'a' * 40 + '-flow-one')
+        self._source_tree(sources, 'b' * 40 + '-flow-zero')
+        raw = self.state.journal_path.read_bytes()
+        real_copy = Path(self.tmp.name) / 'journal-copy'
+        real_copy.write_bytes(raw)
+        for label in ('corrupt-line', 'symlink-journal'):
+            with self.subTest(label=label):
+                self.state.journal_path.unlink()
+                if label == 'corrupt-line':
+                    self.state.journal_path.write_bytes(raw + b'{not json}\n')
+                else:
+                    self.state.journal_path.symlink_to(real_copy)
+                try:
+                    result = host._cleanup_after_commit(self.production_config, self.state, 'flow-one')
+                finally:
+                    self.state.journal_path.unlink()
+                    self.state.journal_path.write_bytes(raw)
+                self.assertTrue(result.get('cleanupPending'), result)
+                self.assertTrue((sources / ('a' * 40 + '-flow-one')).is_dir())
+                self.assertTrue((sources / ('b' * 40 + '-flow-zero')).is_dir())
+
+    # Guard P6 (GREEN today, guard): a symlink candidate is not followed; a candidate holding a mount point is not removed.
+    # Mutation: call shutil.rmtree on candidates without the lstat/symlink check, or skip the mount check.
+    def test_production_symlink_and_mount_candidates_are_not_followed_or_removed(self):
+        sources = self._production_sources()
+        outside = Path(self.tmp.name) / 'outside-tree'
+        outside.mkdir()
+        (outside / 'keep.txt').write_text('outside', encoding='utf-8')
+        self._static_op('flow-link', 'e' * 40, ['static-main-start', 'static-main-prepared', 'static-main-recovered'])
+        self._static_op('flow-mnt', 'f' * 40, ['static-main-start', 'static-main-prepared', 'static-main-recovered'])
+        link = sources / ('e' * 40 + '-flow-link')
+        link.symlink_to(outside, target_is_directory=True)
+        mounted = self._source_tree(sources, 'f' * 40 + '-flow-mnt')
+        self._source_tree(sources, 'a' * 40 + '-flow-one')
+
+        with patch.object(host, '_mount_points', return_value={mounted.resolve()}):
+            host._cleanup_after_commit(self.production_config, self.state, 'flow-one')
+
+        self.assertTrue((outside / 'keep.txt').is_file(), 'a symlink candidate must not be followed')
+        self.assertTrue(link.is_symlink(), 'a symlink candidate must not be removed')
+        self.assertTrue(mounted.is_dir(), 'a candidate containing a mount point must not be removed')
+
+    # Guard P7: a second cleanup run after a successful first run reports nothing pending and changes nothing.
+    # Mutation: make the first run leave the marker or a retained entry in place.
+    def test_production_cleanup_is_idempotent(self):
+        sources = self._production_sources()
+        self._static_op('flow-zero', 'b' * 40, ['static-main-start', 'static-main-prepared', 'static-main-recovered'])
+        self._source_tree(sources, 'a' * 40 + '-flow-one')
+        self._source_tree(sources, 'b' * 40 + '-flow-zero')
+
+        first = host._cleanup_after_commit(self.production_config, self.state, 'flow-one')
+        self.assertFalse(first.get('cleanupPending'), first)
+        self.assertFalse((sources / ('a' * 40 + '-flow-one')).exists())
+
+        second = host._cleanup_after_commit(self.production_config, self.state, 'flow-one')
+        self.assertFalse(second.get('cleanupPending'), second)
+        self.assertEqual(second.get('retainedUnknownStaticSources', []), [])
+        self.assertFalse((sources / ('a' * 40 + '-flow-one')).exists())
+        self.assertFalse((sources / ('b' * 40 + '-flow-zero')).exists())
+
 
 class CmsReleaseCleanupTests(unittest.TestCase):
     def _state(self, history, unfinished=()):
@@ -681,6 +854,161 @@ class CmsReleaseCleanupTests(unittest.TestCase):
         self.assertTrue(workspace.is_dir())
         self.assertNotIn(str(stale.resolve()), removed)
         self.assertTrue(stale.exists())
+
+
+class Staging194CaptureRetentionTests(unittest.TestCase):
+    """staging194 shares one releaseRoot between CMS releases and static source trees."""
+
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory(prefix="ikpk-staging-capture-retention-")
+        self.addCleanup(temporary.cleanup)
+        root = Path(temporary.name)
+        self.releases = root / "releases"
+        self.releases.mkdir()
+        self.cms_current = self.releases / "current-release"
+        rollback = self.releases / "rollback-release"
+        self.cms_stale = self.releases / "stale-release"
+        for directory in (self.cms_current, rollback, self.cms_stale):
+            directory.mkdir()
+            (directory / "marker").write_text(directory.name, encoding="utf-8")
+        (self.cms_current / "cms-artifact").mkdir()
+        (rollback / "cms-artifact").mkdir()
+        pointer = root / "current-cms"
+        pointer.symlink_to(self.cms_current / "cms-artifact")
+        self.state_dir = root / "state"
+        self.state_dir.mkdir()
+        self.state = RehearsalState(self.state_dir)
+        self.static_old = str((root / "static-old").resolve())
+        self.static_old_digest = "f" * 64
+        # The paired publication whose post-commit cleanup removes stale CMS releases.
+        digest = "d" * 64
+        database = self.state_dir / "cms.sqlite"
+        database.write_bytes(b"fixture database")
+        old_pair = {"cmsPath": str((rollback / "cms-artifact").resolve()), "staticPath": self.static_old,
+                    "staticTreeSha256": self.static_old_digest}
+        new_pair = {"sourceSha": "9" * 40, "cmsSha": "9" * 40, "staticSha": "9" * 40,
+                    "cmsPayloadSha256": digest, "staticTreeSha256": digest,
+                    "cmsDatabaseSha256": digest, "cmsMediaManifestSha256": digest,
+                    "cmsCaptureBundleSha256": digest, "oldDatabaseSha256": digest,
+                    "oldMediaManifestSha256": digest, "configSha256": digest, "snapshotId": "snap:test",
+                    "cmsDatabaseProof": {"pid": 123, "device": 1, "inode": 1, "database": str(database)}}
+        for row in ({"version": 1, "record": "start", "operationId": "op-current", "sourceSha": "9" * 40,
+                     "oldPair": old_pair},
+                    {"version": 1, "record": "new-bundle", "operationId": "op-current", "sourceSha": "9" * 40,
+                     "newPair": new_pair},
+                    {"version": 1, "record": "committed", "operationId": "op-current", "sourceSha": "9" * 40}):
+            self.state._append(row)
+        self.config = {"profile": "staging194", "releaseRoot": str(self.releases), "currentCms": str(pointer),
+                       "stateDir": str(self.state_dir), "siteRefreshState": str(root / "refresh-state.json"),
+                       "staticReleaseRoot": str(self.releases), "currentStatic": str(root / "static-current"),
+                       "sitePublicationMarker": str(root / "marker.json")}
+        self.shas = {}
+        mounts = patch.object(host, "_mount_points", return_value=set())
+        mounts.start()
+        self.addCleanup(mounts.stop)
+
+    def _static_capture(self, operation_id, source_sha, *, reused=None):
+        """Append a committed static-main operation; `reused` names the operation whose capture it reused."""
+        fingerprint = {"cms": "same"}
+        candidate = str((self.releases / f"{source_sha}-{operation_id}").resolve())
+        digest = "e" * 64
+        reference = None
+        if reused is not None:
+            reference = {"operationId": reused, "sourceSha": self.shas[reused], "bundleDigest": "d" * 64}
+        start = {"version": 1, "record": "static-main-start", "operationKind": "static-main",
+                 "operationId": operation_id, "sourceSha": source_sha, "cmsFingerprint": fingerprint,
+                 "oldStaticPath": self.static_old, "oldStaticTreeSha256": self.static_old_digest}
+        prepared = {"version": 1, "record": "static-main-prepared", "operationKind": "static-main",
+                    "operationId": operation_id, "sourceSha": source_sha, "cmsFingerprint": fingerprint,
+                    "staticTreeSha256": digest, "snapshotId": "snap:fixture"}
+        if reference is not None:
+            start["reusedCapture"] = reference
+            prepared["reusedCapture"] = reference
+        self.state._append(start)
+        self.state._append(prepared)
+        self.state._append({"version": 1, "record": "static-main-switch-intent", "operationKind": "static-main",
+                            "operationId": operation_id, "sourceSha": source_sha,
+                            "oldStaticPath": self.static_old, "candidateStaticPath": candidate,
+                            "staticTreeSha256": digest})
+        self.state._append({"version": 1, "record": "static-main-switched", "operationKind": "static-main",
+                            "operationId": operation_id, "sourceSha": source_sha, "staticTreeSha256": digest})
+        self.state._append({"version": 1, "record": "static-main-committed", "operationKind": "static-main",
+                            "operationId": operation_id, "sourceSha": source_sha,
+                            "staticTreeSha256": digest, "snapshotId": "snap:fixture"})
+        self.shas[operation_id] = source_sha
+        tree = self.releases / f"{source_sha}-{operation_id}"
+        tree.mkdir()
+        (tree / "index.html").write_text(operation_id, encoding="utf-8")
+        return tree
+
+    # Guard S1: the latest eligible operation's own fresh capture survives CMS release cleanup.
+    # Mutation: in _cleanup_cms_releases skip adding the referent to `protected`.
+    def test_latest_fresh_capture_survives_cms_release_cleanup(self):
+        older = self._static_capture("cap-a", "a" * 40)
+        latest = self._static_capture("cap-c", "c" * 40)
+
+        removed = host._cleanup_cms_releases(self.config, self.state)
+
+        self.assertTrue(latest.is_dir(), "the latest eligible capture referent must be kept")
+        self.assertFalse(older.exists(), "other static sources stay removable as today")
+        self.assertIn(str(self.cms_stale.resolve()), removed)
+
+    # Guard S2: when the latest operation reused A's capture, A's tree is kept and C's tree is removable.
+    # Mutation: protect the latest operation's own tree instead of the `reusedCapture` referent.
+    def test_latest_reused_capture_protects_the_referent_not_the_operation(self):
+        referent = self._static_capture("cap-a", "a" * 40)
+        latest = self._static_capture("cap-c", "c" * 40, reused="cap-a")
+
+        host._cleanup_cms_releases(self.config, self.state)
+
+        self.assertTrue(referent.is_dir(), "the reused capture's source tree must be kept")
+        self.assertFalse(latest.exists(), "the reusing operation's own tree is removable")
+
+    # Guard S3 (GREEN today, guard): a referent already absent adds no protection and raises nothing.
+    # Mutation: raise when the referent is missing instead of protecting nothing.
+    def test_absent_referent_protects_nothing_and_does_not_fail(self):
+        referent = self._static_capture("cap-a", "a" * 40)
+        latest = self._static_capture("cap-c", "c" * 40, reused="cap-a")
+        shutil.rmtree(referent)
+
+        removed = host._cleanup_cms_releases(self.config, self.state)
+
+        self.assertFalse(latest.exists())
+        self.assertIn(str(self.cms_stale.resolve()), removed)
+
+    # Guard S4: the protection holds on every path that runs CMS release cleanup.
+    # Mutation: in _cleanup_after_commit or the cleanup-site dispatch, call _cleanup_cms_releases with a
+    # state that hides the static-main journal rows.
+    def _post_commit_keeps_capture(self, operation_id):
+        latest = self._static_capture("cap-c", "c" * 40)
+        with patch.object(host, "_cleanup_site_releases", return_value={"removedReleases": [], "retainedLegacy": []}), \
+                patch.object(host, "_workspace_step", return_value=({}, None)), \
+                patch.object(host, "_record_workspace_run"):
+            result = host._cleanup_after_commit(self.config, self.state, operation_id)
+        self.assertFalse(result.get("cleanupPending"), result)
+        self.assertTrue(latest.is_dir(), "post-commit cleanup must keep the latest eligible capture")
+
+    def test_post_commit_of_paired_operation_keeps_latest_capture(self):
+        self._post_commit_keeps_capture("op-current")
+
+    def test_post_commit_of_static_operation_keeps_latest_capture(self):
+        self._post_commit_keeps_capture("cap-c")
+
+    def test_cleanup_site_timer_dispatch_keeps_latest_capture(self):
+        latest = self._static_capture("cap-c", "c" * 40)
+        with patch.object(host.os, "geteuid", return_value=0), \
+                patch.object(host, "_root_config", return_value=self.config), \
+                patch.object(host, "_select_cleanup_profile", return_value=(self.config, "staging194", None)), \
+                patch.object(host, "_read_site_publication_marker", return_value=None), \
+                patch.object(host, "_destination_publication_lock", return_value=nullcontext()), \
+                patch.object(host, "_consume_site_cleanup_request"), \
+                patch.object(host, "_cleanup_site_releases", return_value={"removedReleases": [], "retainedLegacy": []}), \
+                patch.object(host, "_workspace_step", return_value=({}, None)), \
+                patch.object(host, "_record_workspace_run"):
+            host.dispatch(Namespace(profile="staging194", action="cleanup-site", operation_id=None,
+                                    preview_workspaces=False))
+        self.assertTrue(latest.is_dir(), "the timer's CMS release cleanup must keep the latest eligible capture")
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -3265,6 +3265,22 @@ class StaticMainAdmissionTests(unittest.TestCase):
                 self.assertEqual(sum(row.get("record") == "static-main-rollback-expired"
                                      for row in state._operation_rows("main-op")), 1)
 
+    # Guard R1 (committed retry, red now): a repeated static-main request for a committed operation reports
+    # the committed result without reading its source tree. The retry reaches _static_main_prepare because the
+    # client omits --browser-digest and the journal already has rows for the operation (dispatch returns there
+    # before reading stdin). Mutation: in _static_main_prepare drop the committed short-circuit.
+    def test_static_main_committed_retry_reports_committed_after_source_removed(self):
+        with tempfile.TemporaryDirectory(prefix="ikpk-static-main-committed-retry-") as temporary:
+            config, state, _pointer, _old, candidate, _foreign = self._committed_static_main_fixture(Path(temporary))
+            committed_digest = rehearsal_host._tree_sha256(candidate)
+            shutil.rmtree(candidate)
+            with patch.object(rehearsal_host, "_validate_static_main_admission"):
+                result = rehearsal_host._static_main_prepare(config, state, "main-op", "a" * 40, {})
+        self.assertEqual(result["phase"], "committed")
+        self.assertEqual(result["operationId"], "main-op")
+        self.assertEqual(result["sourceSha"], "a" * 40)
+        self.assertEqual(result["staticTreeSha256"], committed_digest)
+
     def test_static_main_fails_closed_until_release_policy_is_explicit(self):
         with self.assertRaisesRegex(rehearsal_host.HostFailure, "ci-only-approved"):
             rehearsal_host._static_main_release_policy({"profile": "staging194"})

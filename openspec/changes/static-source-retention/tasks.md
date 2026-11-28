@@ -4,8 +4,8 @@
 
 ## 2. Tests (separate session, red first)
 
-- [ ] 2.1 Production: terminal operations' sources removed including the just-committed one; unfinished operation → refusal, nothing removed; unknown entry kept and listed in `retainedUnknownStaticSources`; rolled-back/expired terminal; corrupt or unsafe journal → no removal, `cleanupPending`; symlink and mount not followed; idempotent.
-- [ ] 2.1a Committed retry: repeating `static-main` for a committed operation whose source is gone reports committed (red now).
+- [x] 2.1 Production: terminal operations' sources removed including the just-committed one; unfinished operation → refusal, nothing removed; unknown entry kept and listed in `retainedUnknownStaticSources`; rolled-back/expired terminal; corrupt or unsafe journal → no removal, `cleanupPending`; symlink and mount not followed; idempotent.
+- [x] 2.1a Committed retry: repeating `static-main` for a committed operation whose source is gone reports committed (red now).
 - [ ] 2.2 Staging194: exactly the capture referent of the latest eligible operation is kept on post-commit (paired and static) and timer cleanup; reuse of it still verifies; other static sources and CMS releases cleaned as before; referent already absent → nothing extra protected.
 - [ ] 2.3 Negative checks recorded for each new guard.
 
