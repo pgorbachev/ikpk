@@ -1549,6 +1549,15 @@ describe('published Open Graph metadata through capture and build', () => {
     try {
       const capture = await runCapture({ CMS_URL: cms.url, CONTENT_SNAPSHOT_DIR: dir });
       expect(capture.status, `capture failed:\n${capture.output}`).toBe(0);
+      for (const endpoint of ['articles', 'course-groups', 'seminars']) {
+        const requests = cms.requests.filter((request) => request.endpoint === endpoint);
+        expect(requests.length, `${endpoint}: REST boundary was not queried`).toBeGreaterThan(0);
+        for (const request of requests) {
+          const params = new URLSearchParams(request.query);
+          expect(params.get('status'), `${endpoint}: published filter`).toBe('published');
+          expect(params.get('populate[seo][populate][og_image]'), `${endpoint}: SEO OG image populate`).toBe('true');
+        }
+      }
       const isolatedWeb = join(dir, 'build-repo', 'web');
       const excluded = new Set(['node_modules', '.astro', '.snapshot', 'dist', 'dist-snapshot', 'public/media']);
       cpSync(WEB_ROOT, isolatedWeb, {

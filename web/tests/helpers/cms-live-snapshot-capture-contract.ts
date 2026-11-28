@@ -157,8 +157,8 @@ export interface StubCollection {
 
 export interface CmsStub {
   url: string;
-  /** Журнал запросов: по нему видно, был ли постраничный обход. */
-  requests: { endpoint: string; page: number; pageSize: number }[];
+  /** Журнал запросов: по нему видно постраничный обход и REST-параметры публикации. */
+  requests: { endpoint: string; page: number; pageSize: number; query: string }[];
   /** Журнал обращений к каталогу загрузок: по нему видно, скачивались ли байты медиа. */
   uploadRequests: string[];
   close(): Promise<void>;
@@ -231,7 +231,7 @@ export async function startCmsStub(
       return;
     }
     const { page, pageSize } = paginationOf(parsed.searchParams);
-    requests.push({ endpoint, page, pageSize });
+    requests.push({ endpoint, page, pageSize, query: parsed.search });
     if (collection.status && collection.status >= 400) {
       res.writeHead(collection.status, { 'content-type': 'application/json' });
       res.end(JSON.stringify({ error: { status: collection.status, message: 'сбой' } }));
