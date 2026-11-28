@@ -16,6 +16,7 @@ import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { parseFragment } from 'parse5';
+import sharp from 'sharp';
 import { assertSitePhoneOutput, editorialPhone, organizationSlug } from './helpers/site-phone-output';
 import { cleanBodyHtml } from '../src/lib/data';
 import {
@@ -1539,7 +1540,7 @@ describe('published Open Graph metadata through capture and build', () => {
     }
     const uploads = Object.fromEntries(Array.from({ length: ARTICLE_COUNT + 1 }, (_, i) => [
       `/uploads/img-${i + 1}.webp`,
-      { bytes: i === ARTICLE_COUNT ? readFileSync(join(WEB_ROOT, 'public/books/ozon.webp')) : Buffer.from(`image-${i + 1}`) },
+      { bytes: readFileSync(join(WEB_ROOT, 'public/books/ozon.webp')) },
     ]));
     const cms = await startCmsStub(source, uploads);
     stubs.push(cms);
@@ -1548,12 +1549,27 @@ describe('published Open Graph metadata through capture and build', () => {
     try {
       const capture = await runCapture({ CMS_URL: cms.url, CONTENT_SNAPSHOT_DIR: dir });
       expect(capture.status, `capture failed:\n${capture.output}`).toBe(0);
+      execFileSync('npm', ['run', 'prebuild'], {
+        cwd: WEB_ROOT,
+        env: { ...process.env, CONTENT_SNAPSHOT_DIR: dir },
+        timeout: 180_000,
+        stdio: 'pipe',
+      });
       execFileSync(join(WEB_ROOT, 'node_modules', '.bin', 'astro'), ['build', '--outDir', dist], {
         cwd: WEB_ROOT,
         env: { ...process.env, CONTENT_SNAPSHOT_DIR: dir },
         timeout: 120_000,
         stdio: 'pipe',
       });
+      const publishedImage = join(dist, 'media', 'uploads', `img-${ARTICLE_COUNT + 1}.webp`);
+      expect(existsSync(publishedImage), 'individual OG image is absent from the published site').toBe(true);
+      const dimensions = await sharp(publishedImage).metadata();
+      const manifest = JSON.parse(readFileSync(join(WEB_ROOT, 'src/lib/media-manifest.json'), 'utf8'));
+      expect(manifest[`/media/uploads/img-${ARTICLE_COUNT + 1}.webp`]).toMatchObject({
+        width: dimensions.width, height: dimensions.height,
+      });
+      expect(dimensions.width).toBeGreaterThan(0);
+      expect(dimensions.height).toBeGreaterThan(0);
       const paths = [
         ['statyi/art-001', 'article', true], ['statyi/art-002', 'article', false],
         ['programmy/cg-001', 'website', true], ['programmy/cg-002', 'website', false],
@@ -1581,9 +1597,11 @@ describe('published Open Graph metadata through capture and build', () => {
         expect(value('title'), path).toBe(custom ? 'Заголовок карточки' : title);
         expect(value('description'), path).toBe(custom ? description : 'Описание карточки');
         if (custom) {
-          expect(value('image'), path).toMatch(/^https:\/\/[^/]+\/.*img-131\.webp$/);
-          expect(value('image:width'), path).toBe('1440');
-          expect(value('image:height'), path).toBe('1080');
+          const imageUrl = new URL(value('image')!);
+          expect(imageUrl.protocol, path).toBe('https:');
+          expect(imageUrl.pathname, path).toBe(`/media/uploads/img-${ARTICLE_COUNT + 1}.webp`);
+          expect(value('image:width'), path).toBe(String(dimensions.width));
+          expect(value('image:height'), path).toBe(String(dimensions.height));
           expect(value('image:alt'), path).toBe('Описание обложки из медиатеки');
         } else {
           expect(value('image'), path).toMatch(/^https:\/\/[^/]+\/og-image\.png$/);
@@ -1595,7 +1613,7 @@ describe('published Open Graph metadata through capture and build', () => {
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
-  }, 180_000);
+  }, 360_000);
 });
 
 
