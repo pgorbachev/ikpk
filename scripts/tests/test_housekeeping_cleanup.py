@@ -649,6 +649,24 @@ class ReleaseCleanupTests(unittest.TestCase):
         self.assertEqual(entry['retainedUnknownStaticSources'], [str(ghost.resolve())])
         self.assertFalse((paired / 'workspace-cleanup-status.json').exists())
 
+    # An OSError on one entry keeps it and continues with the rest. Mutation: catch only HostFailure in the loop.
+    def test_os_error_on_one_source_does_not_stop_the_others(self):
+        sources = self._production_sources()
+        self._static_op('flow-zero', 'b' * 40, ['static-main-start', 'static-main-prepared', 'static-main-recovered'])
+        stuck = self._source_tree(sources, 'a' * 40 + '-flow-one')
+        other = self._source_tree(sources, 'b' * 40 + '-flow-zero')
+        real = host._remove_release_tree
+
+        def remove(path, mounts):
+            if path.name == stuck.name:
+                raise PermissionError("operation not permitted")
+            real(path, mounts)
+
+        with patch.object(host, '_remove_release_tree', side_effect=remove):
+            result = host._cleanup_static_sources(self.production_config, self.state)
+        self.assertEqual(result['retainedUnknownStaticSources'], [str(stuck.resolve())])
+        self.assertFalse(other.exists())
+
     # Guard P2b: the source step itself refuses on an unfinished operation, independent of earlier steps.
     # Mutation: read the journal with validate_history=False in _cleanup_static_sources.
     def test_static_source_step_refuses_on_unfinished_operation(self):
