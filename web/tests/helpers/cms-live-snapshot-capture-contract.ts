@@ -112,6 +112,7 @@ export interface FieldMapModule {
     map: readonly FieldMapEntry[];
     schemas: Record<string, CmsSchema>;
     components: Record<string, CmsSchema>;
+    allowOptionalMissing?: boolean;
   }): {
     ok: boolean;
     missingSources: { type: string; field: string; source: string }[];

@@ -52,6 +52,8 @@ const seo = (name: string): Record<string, unknown> => ({
   id: 1,
   seo_title: `${name} — заголовок страницы`,
   seo_description: `${name} — описание страницы`,
+  og_title: null,
+  og_description: null,
   og_image: null,
   noindex: false,
 });
@@ -524,10 +526,10 @@ describe('Article SEO fallbacks through live snapshot capture', () => {
     const records = dataset().articles.records.map((record, index) => {
       if (index === 5) return { ...record, body: `<p>${'a'.repeat(199)}😀z</p>`, seo: null };
       if (index === 0) return { ...record, body: sourceBody, seo: null };
-      if (index === 1) return { ...record, body: '<p>Только описание</p>', seo: { og_image: null, seo_title: 'Авторский заголовок', seo_description: '' } };
-      if (index === 2) return { ...record, body: '<p>Только заголовок</p>', seo: { og_image: null, seo_title: '   ', seo_description: 'Авторское описание' } };
-      if (index === 3) return { ...record, body: '<p>Пробелы</p>', seo: { og_image: null, seo_title: '  ', seo_description: '\t ' } };
-      if (index === 4) return { ...record, seo: { og_image: null, seo_title: 'Сохранённый заголовок', seo_description: 'Д'.repeat(250) } };
+      if (index === 1) return { ...record, body: '<p>Только описание</p>', seo: { og_image: null, og_title: null, og_description: null, seo_title: 'Авторский заголовок', seo_description: '' } };
+      if (index === 2) return { ...record, body: '<p>Только заголовок</p>', seo: { og_image: null, og_title: null, og_description: null, seo_title: '   ', seo_description: 'Авторское описание' } };
+      if (index === 3) return { ...record, body: '<p>Пробелы</p>', seo: { og_image: null, og_title: null, og_description: null, seo_title: '  ', seo_description: '\t ' } };
+      if (index === 4) return { ...record, seo: { og_image: null, og_title: null, og_description: null, seo_title: 'Сохранённый заголовок', seo_description: 'Д'.repeat(250) } };
       return record;
     });
     const cms = await stub({ articles: { records } });
@@ -600,7 +602,7 @@ describe('Article SEO fallbacks through live snapshot capture', () => {
 
   it('refuses a snapshot when sanitization leaves no body text and no explicit SEO description', async () => {
     const records = dataset().articles.records.map((record, index) => index === 0
-      ? { ...record, body: '<script>discard()</script><style>.discard{display:none}</style>', seo: { og_image: null, seo_title: 'Explicit title', seo_description: '' } }
+      ? { ...record, body: '<script>discard()</script><style>.discard{display:none}</style>', seo: { og_image: null, og_title: null, og_description: null, seo_title: 'Explicit title', seo_description: '' } }
       : record);
     const cms = await stub({ articles: { records } });
     const dir = outDir();

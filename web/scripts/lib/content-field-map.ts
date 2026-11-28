@@ -288,14 +288,14 @@ export function unknownRecordFields(type: string, record: Record<string, unknown
  * источник исчез из установленной CMS. `null` и пустая коллекция — законные пустые значения. Подполе
  * проверяется, когда родитель — объект: компонент `seo` или связь (`course_group.legacy_id`).
  */
-export function missingSourceFields(type: string, record: Record<string, unknown>): string[] {
+export function missingSourceFields(type: string, record: Record<string, unknown>, requireOptional = false): string[] {
   const missing = new Map<string, string>();
   for (const { field, source, optional } of FIELD_MAP.filter((e) => e.type === type)) {
     const [root, sub] = source.split('.') as [string, string | undefined];
     const parent = record[root];
     const gone = !Object.hasOwn(record, root) ||
       (sub !== undefined && parent !== null && typeof parent === 'object' && !Array.isArray(parent) && !Object.hasOwn(parent, sub));
-    if (!optional && gone && !missing.has(source)) missing.set(source, `${type}.${field} ← ${source}`);
+    if ((!optional || requireOptional) && gone && !missing.has(source)) missing.set(source, `${type}.${field} ← ${source}`);
   }
   return [...missing.values()];
 }
@@ -370,12 +370,13 @@ export function checkFieldMapAgainstSchema(input: {
   map: readonly FieldMapEntry[];
   schemas: Record<string, CmsSchema>;
   components: Record<string, CmsSchema>;
+  allowOptionalMissing?: boolean;
 }): {
   ok: boolean;
   missingSources: { type: string; field: string; source: string }[];
   unmapped: { type: string; field: string }[];
 } {
-  const { map, schemas, components } = input;
+  const { map, schemas, components, allowOptionalMissing = false } = input;
   const missingSources: { type: string; field: string; source: string }[] = [];
   const coveredRoots = new Map<string, Set<string>>();
 
@@ -385,7 +386,7 @@ export function checkFieldMapAgainstSchema(input: {
     const attr = schema?.attributes[root!];
     const gone = attr === undefined || (subfield !== undefined && componentAttributeMissing(attr, subfield, components));
     if (gone) {
-      if (entry.optional) continue;
+      if (entry.optional && allowOptionalMissing) continue;
       missingSources.push({ type: entry.type, field: entry.field, source: entry.source });
     } else {
       const set = coveredRoots.get(entry.type) ?? new Set<string>();
