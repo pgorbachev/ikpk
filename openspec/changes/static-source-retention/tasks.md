@@ -32,5 +32,5 @@
 ## 4. Verification and release
 
 - [x] 4.1 Local gates, two independent code reviews and the simplification review. (Opus: facts and consequences+simplification on `5296f682`; re-review of the fix delta found no P0–P2; its P3s fixed with tests.)
-- [ ] 4.2 Install the helper on staging194, run a static publication with reuse of the latest capture, confirm retention.
+- [ ] 4.2 Install the helper on staging194 as a smoke check (install and one `cleanup-site` run). Reduced by owner decision on 2026-11-28: staging194 is low priority and likely to be removed, so the static publication with reuse is not run. Retention on staging194 is covered by unit tests only.
 - [ ] 4.3 Install on production, run a static publication, confirm only unfinished sources remain and the site, CMS and refresh work.
