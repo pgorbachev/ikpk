@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from 'node:util';
 import type { Core } from '@strapi/strapi';
 import { errors } from '@strapi/utils';
 
@@ -170,10 +171,34 @@ export async function syncEditorRolePermissions(strapi: EditorRoleStrapi): Promi
   await roleService.assignPermissions(editorRole.id, EDITOR_PERMISSIONS);
 }
 
+type CardSeo = {
+  seo_title?: string | null;
+  seo_description?: string | null;
+  noindex?: boolean;
+  og_image?: { id: number } | null;
+};
+
+type CardVersion = {
+  slug?: string;
+  legacy_id?: string;
+  institute?: { documentId: string } | null;
+  seo?: CardSeo | null;
+};
+
+function protectedValues(version: CardVersion) {
+  return {
+    slug: version.slug,
+    legacyId: version.legacy_id,
+    institute: version.institute?.documentId ?? null,
+    ogImage: version.seo?.og_image?.id ?? null,
+    noindex: version.seo?.noindex ?? false,
+  };
+}
+
 export function registerEditorCardRestrictions(strapi: Core.Strapi): void {
   strapi.documents.use(async (context, next) => {
     const card = editableCards.find(({ subject }) => subject === context.uid);
-    if (!card || !['unpublish', 'update'].includes(context.action)) return next();
+    if (!card || !['unpublish', 'update', 'publish', 'discardDraft'].includes(context.action)) return next();
     const roles = strapi.requestContext.get()?.state?.user?.roles as { code: string }[] | undefined;
     if (!roles?.some(({ code }) => code === 'strapi-editor') || roles.some(({ code }) => code === 'strapi-super-admin')) {
       return next();
@@ -183,23 +208,36 @@ export function registerEditorCardRestrictions(strapi: Core.Strapi): void {
     }
 
     const { data, documentId } = context.params as { data?: Record<string, unknown>; documentId?: string };
-    if (documentId && data && Object.prototype.hasOwnProperty.call(data, 'seo') && card.update.includes('seo.seo_title')) {
-      // Strapi replaces the component on update. Keep fields outside this role's write grant.
-      const draft = await strapi.documents(context.uid as never).findOne({
-        documentId,
-        status: 'draft',
-        populate: { seo: { populate: ['og_image'] } },
-      }) as { seo?: { seo_title?: string; seo_description?: string; noindex?: boolean; og_image?: { id: number } | null } | null } | null;
-      if (draft?.seo) {
-        const seo = data.seo as { seo_title?: string; seo_description?: string } | null;
+    const hasSeo = card.update.includes('seo.seo_title');
+    const seoTouched = hasSeo && data && Object.prototype.hasOwnProperty.call(data, 'seo');
+    if (!documentId || (context.action === 'update' && !seoTouched)) return next();
+    const populate = {
+      ...(hasSeo ? { seo: { populate: ['og_image'] } } : {}),
+      ...(card.read.includes('institute') ? { institute: true } : {}),
+    };
+    const load = (status: 'draft' | 'published') => strapi.documents(context.uid as never).findOne({
+      documentId, status, populate,
+    }) as Promise<CardVersion | null>;
+
+    return strapi.db.transaction(async () => {
+      const draft = await load('draft');
+      if (context.action !== 'update' && draft) {
+        // Native publish and discard act on the entire shared draft.
+        const published = await load('published');
+        if (published && !isDeepStrictEqual(protectedValues(draft), protectedValues(published))) {
+          throw new errors.ForbiddenError('В черновике есть изменения защищённых полей. Их должен проверить администратор.');
+        }
+      } else if (seoTouched && draft?.seo) {
+        const seo = data.seo as CardSeo | null;
+        // Strapi replaces the component on update. Preserve fields outside this write grant.
         data.seo = {
-          seo_title: seo === null || 'seo_title' in seo ? seo?.seo_title ?? null : draft.seo.seo_title,
-          seo_description: seo === null || 'seo_description' in seo ? seo?.seo_description ?? null : draft.seo.seo_description,
+          seo_title: seo === null ? null : seo.seo_title === undefined ? draft.seo.seo_title : seo.seo_title,
+          seo_description: seo === null ? null : seo.seo_description === undefined ? draft.seo.seo_description : seo.seo_description,
           noindex: draft.seo.noindex,
           og_image: draft.seo.og_image?.id ?? null,
         };
       }
-    }
-    return next();
+      return next();
+    });
   });
 }

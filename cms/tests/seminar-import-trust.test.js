@@ -312,6 +312,18 @@ describe('доверенный перенос в собранном Strapi', { t
       assert.equal((await call('DELETE', entry, editorJwt)).status, 403);
       assert.equal((await call('POST', collection, editorJwt, { name: 'Новая карточка' })).status, 403);
     }
+    const entry = `/content-manager/collection-types/${instituteUid}/${institute.documentId}`;
+    await app.documents(instituteUid).update({
+      documentId: institute.documentId,
+      data: { seo: { ...seo, noindex: false } },
+    });
+    for (const action of ['publish', 'discard']) {
+      assert.equal((await call('POST', entry + '/actions/' + action, editorJwt, {})).status, 403);
+    }
+    const versions = await Promise.all(['draft', 'published'].map(status =>
+      app.documents(instituteUid).findOne({ documentId: institute.documentId, status, populate: ['seo'] }),
+    ));
+    assert.deepEqual(versions.map(entry => entry.seo.noindex), [false, true]);
   });
 
 
