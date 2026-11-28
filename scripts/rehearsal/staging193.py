@@ -2386,6 +2386,14 @@ def browser_check(source_sha: str, operation_id: str, static_digest: str, archiv
             thread.join(timeout=5)
 
 
+def report_static_cleanup(result: dict) -> None:
+    """The publication is committed either way; a failed or partial source cleanup must still reach the operator."""
+    if result.get("cleanupPending"):
+        print(f"warning: post-publication cleanup pending: {result.get('cleanupError')}", file=sys.stderr)
+    for path in result.get("retainedUnknownStaticSources") or []:
+        print(f"warning: static source kept, remove by hand if unneeded: {path}", file=sys.stderr)
+
+
 def invoke(args: argparse.Namespace, *, admission: Optional[dict] = None) -> Optional[dict]:
     profile = getattr(args, "profile", "staging194")
     install_host_helper = getattr(args, "install_host_helper", False)
@@ -2672,6 +2680,9 @@ def invoke(args: argparse.Namespace, *, admission: Optional[dict] = None) -> Opt
         remote_options = {} if profile == "staging194" else {"profile": profile}
         prepared = parse_host_json(ssh_remote(common + ["--archive-sha256", archive_sha256], **remote_options,
                                               input_bytes=archive))
+        if prepared.get("phase") == "committed":
+            report_static_cleanup(prepared)
+            return
         if prepared.get("phase") != "browser-check-required":
             raise Refusal(f"static-main candidate is not ready for browser acceptance: {prepared.get('phase')}")
         digest = prepared.get("staticTreeSha256")
@@ -2689,6 +2700,7 @@ def invoke(args: argparse.Namespace, *, admission: Optional[dict] = None) -> Opt
         committed = parse_host_json(ssh_remote(common + ["--browser-digest", digest], **remote_options))
         if committed.get("phase") != "committed":
             raise Refusal(f"static-main publication did not reach durable commit: {committed.get('phase')}")
+        report_static_cleanup(committed)
     elif args.command == "static-main-recover":
         command = ["static-main-recover", "--operation-id", args.operation_id]
         expected_phase = "recovered"

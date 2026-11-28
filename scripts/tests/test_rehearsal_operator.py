@@ -302,6 +302,33 @@ class OperatorAdmissionTests(unittest.TestCase):
         self.assertIn(["export-static-main", "--operation-id", "new-build", "--source-sha", SHA],
                       [call[0] for call in operation_calls])
 
+    def test_static_main_retry_of_committed_operation_succeeds_without_export(self):
+        provenance = {"sourceSha": SHA, "runId": 123, "attempt": 1}
+        calls = []
+
+        def ssh(arguments, input_bytes=None, **_kwargs):
+            calls.append(arguments)
+            preflight = space_preflight_response(arguments)
+            if preflight is not None:
+                return preflight
+            return json.dumps({"phase": "committed", "staticTreeSha256": "c" * 64, "cleanupPending": True,
+                               "cleanupError": "static source root is unsafe",
+                               "retainedUnknownStaticSources": ["/srv/sources/kept"]}).encode()
+
+        args = type("Args", (), {"host": staging193.TARGET_HOST, "command": "static-main",
+            "operation_id": "new-build", "source_sha": SHA, "reuse_capture_operation_id": None})()
+        with patch.object(staging193, "validate_static_main_ci", return_value=provenance), \
+             patch.object(staging193, "_source_tree_bytes", return_value=10), \
+             patch.object(staging193, "make_archive", return_value=(b"source archive", "a" * 64)), \
+             patch.object(staging193, "ssh_remote", side_effect=ssh), \
+             patch.object(staging193, "browser_check") as browser, \
+             patch("sys.stderr", new_callable=io.StringIO) as stderr:
+            staging193.invoke(args)
+        browser.assert_not_called()
+        self.assertNotIn("export-static-main", [call[0] for call in calls])
+        self.assertIn("cleanup pending: static source root is unsafe", stderr.getvalue())
+        self.assertIn("/srv/sources/kept", stderr.getvalue())
+
     def test_production_static_profile_cli_accepts_reusable_static_main_operation(self):
         with patch.object(staging193, "invoke") as invoke:
             result = staging193.main(["--profile", "production-static", "static-main",
