@@ -490,7 +490,7 @@
       },
       {
         "path": "scripts/audit-data-migration.mjs",
-        "sha256": "9b36745f7732f7d9bc0e91208e3251867a401f22c3bc3e9a6e4eb373add7fa11"
+        "sha256": "780afb2f6a8ef873bf29d8f73cb921d871cbdcddad8884dd5a7a1af410e2cdf9"
       },
       {
         "path": "scripts/audit-documents-migration.mjs",

@@ -450,7 +450,7 @@ test('permission audit admits only the reviewed Editor card grants', () => {
   const program = 'api::course-group.course-group';
   const teacher = 'api::teacher.teacher';
   const instituteFields = ['name', 'shortName', 'description', 'image', 'order', 'seo.seo_title', 'seo.seo_description'];
-  const programFields = ['name', 'description', 'image', 'order', 'is_article_category', 'seo.seo_title', 'seo.seo_description', 'seo.og_title', 'seo.og_description'];
+  const programFields = ['name', 'description', 'image', 'order', 'is_article_category', 'seo.seo_title', 'seo.seo_description'];
   const teacherFields = ['name', 'trait', 'order', 'photo', 'bio'];
   const old = [
     ['read', program, ['name', 'slug', 'editor_label', 'is_article_category']],

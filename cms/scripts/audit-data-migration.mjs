@@ -644,7 +644,7 @@ function overlayProgramEditorConfiguration(configuration, addMissingLabel = true
 // runtime allowlist so unrelated changes cannot make themselves pass the audit.
 const EDITOR_CARD_GRANTS = (() => {
   const institute = ['name', 'shortName', 'description', 'image', 'order', 'seo.seo_title', 'seo.seo_description'];
-  const program = ['name', 'description', 'image', 'order', 'is_article_category', 'seo.seo_title', 'seo.seo_description', 'seo.og_title', 'seo.og_description'];
+  const program = ['name', 'description', 'image', 'order', 'is_article_category', 'seo.seo_title', 'seo.seo_description'];
   const teacher = ['name', 'trait', 'order', 'photo', 'bio'];
   return new Map([
     ['api::course-group.course-group', [...program, 'slug', 'institute', 'editor_label'], program],
@@ -654,6 +654,21 @@ const EDITOR_CARD_GRANTS = (() => {
     ['read', read.sort()], ['update', update.sort()], ['publish', null],
   ].map(([action, fields]) => [`strapi-editor\0plugin::content-manager.explorer.${action}\0${subject}`, fields])));
 })();
+function scopedEditorCardGrants(sourceValues, seoTransition) {
+  const grants = new Map([...EDITOR_CARD_GRANTS].map(([identity, fields]) => [identity, fields === null ? null : [...fields]]));
+  for (const identity of [
+    'strapi-editor\0plugin::content-manager.explorer.read\0api::course-group.course-group',
+    'strapi-editor\0plugin::content-manager.explorer.update\0api::course-group.course-group',
+  ]) {
+    const current = sourceValues.find((row) => permissionIdentity(row) === identity);
+    const existingOg = current?.fields?.filter((field) => field === 'seo.og_title' || field === 'seo.og_description') ?? [];
+    const additions = seoTransition ? ['seo.og_title', 'seo.og_description'] : existingOg;
+    if (additions.length > 0) {
+      grants.set(identity, [...grants.get(identity), ...additions].filter((field, index, all) => all.indexOf(field) === index).sort());
+    }
+  }
+  return grants;
+}
 
 const EDITOR_CARD_PREIMAGE = new Map([
   ['strapi-editor\0plugin::content-manager.explorer.read\0api::course-group.course-group', ['editor_label', 'is_article_category', 'name', 'slug']],
@@ -677,6 +692,7 @@ function comparePermissionGraphs(sourceDb, candidateDb, receipt, differences, { 
   const source = permissionGraph(sourceDb, differences, 'source');
   const candidate = permissionGraph(candidateDb, differences, 'candidate');
   if (!source || !candidate) return;
+  const editorCardGrants = scopedEditorCardGrants([...source.values()], seoTransition);
   const sourceValues = [...source.values()];
   const priorCardGrants = new Map(sourceValues.flatMap((permission) => {
     const identity = readEditorCardGrant(permission);
@@ -684,10 +700,10 @@ function comparePermissionGraphs(sourceDb, candidateDb, receipt, differences, { 
   }));
   const evolution = [...EDITOR_CARD_PREIMAGE].every(([identity, fields]) =>
     json(priorCardGrants.get(identity)) === json(fields) ||
-    json(priorCardGrants.get(identity)) === json(EDITOR_CARD_GRANTS.get(identity)),
+    json(priorCardGrants.get(identity)) === json(editorCardGrants.get(identity)),
   );
   const newCardGrants = new Map(evolution
-    ? [...EDITOR_CARD_GRANTS].filter(([identity]) => !priorCardGrants.has(identity))
+    ? [...editorCardGrants].filter(([identity]) => !priorCardGrants.has(identity))
     : []);
   const replacedCardIds = new Set();
   if (candidate.size !== source.size + newCardGrants.size) {
@@ -706,7 +722,7 @@ function comparePermissionGraphs(sourceDb, candidateDb, receipt, differences, { 
     const inPlaceAllowed = IN_PLACE_PERMISSION_FIELD_ADDITIONS.get(identity) ?? [];
     const allowed = [...recreatedAllowed, ...inPlaceAllowed].filter((field) => seoAdditionAllowed(before, field, sourceValues, seoTransition));
     const cardGrant = evolution && readEditorCardGrant(before);
-    const expectedFields = cardGrant ? EDITOR_CARD_GRANTS.get(cardGrant)
+    const expectedFields = cardGrant ? editorCardGrants.get(cardGrant)
       : before.fields === null ? null : [...new Set([...before.fields, ...allowed])].sort();
     if (json(expectedFields) !== json(after.fields)) differences.push({ table: 'admin_permissions', kind: 'logical-permission-fields-mismatch', keySha256: sha(Buffer.from(key)) });
     const fieldsChange = json(expectedFields) !== json(before.fields);
