@@ -62,6 +62,7 @@ describe('доверенный перенос в собранном Strapi', { t
   let app;
   let base;
   let adminJwt;
+  let editorJwt;
   let fullToken;
   let customToken;
   let readOnlyToken;
@@ -170,6 +171,10 @@ describe('доверенный перенос в собранном Strapi', { t
       roles: [role.id],
     });
     adminJwt = ok(await call('POST', '/admin/login', null, { email, password }), 'вход в панель').data.accessToken;
+    const editorRole = await app.service('admin::role').findOne({ code: 'strapi-editor' });
+    const editorEmail = `editor-${Date.now()}@example.invalid`;
+    await app.service('admin::user').create({ email: editorEmail, password, firstname: 'Editor', lastname: 'Probe', isActive: true, preferedLanguage: 'ru', roles: [editorRole.id] });
+    editorJwt = ok(await call('POST', '/admin/login', null, { email: editorEmail, password }), 'вход редактора').data.accessToken;
 
     const tokens = app.service('admin::api-token');
     const full = await tokens.create({
@@ -896,7 +901,7 @@ describe('доверенный перенос в собранном Strapi', { t
       assert.deepEqual(numbers(await getVersion(published.documentId, 'published')), edited);
     });
 
-    test('ordinary fields of a draft survive narrow save and publication by content-admin', async () => {
+    test('ordinary draft fields survive narrow phone save and publication by strapi-editor', async () => {
       const pages = app.documents(uid);
       const stored = await pages.findFirst({ status: 'published', filters: { slug: 'kontakty' } });
       const data = { ...content, slug: 'kontakty', legacy_id: 'kontakty', ...initial };
@@ -906,12 +911,12 @@ describe('доверенный перенос в собранном Strapi', { t
       try {
         await pages.update({ documentId, data: { body: '<p>Чужой черновик</p>', seo: { seo_title: 'Черновик', seo_description: 'Черновое описание' } } });
         const state = async () => {
-          const result = await call('GET', '/admin/site-phones', adminJwt);
+          const result = await call('GET', '/admin/site-phones', editorJwt);
           assert.equal(result.status, 200);
           assert.ok(result.body?.revision, 'contacts endpoint must return its data and revision as JSON');
           return result.body;
         };
-        const write = (action, revision, patch, token = adminJwt) => call(action === 'draft' ? 'PUT' : 'POST', '/admin/site-phones/' + action, token, patch, { 'if-match': '"' + revision + '"' });
+        const write = (action, revision, patch, token = editorJwt) => call(action === 'draft' ? 'PUT' : 'POST', '/admin/site-phones/' + action, token, patch, { 'if-match': '"' + revision + '"' });
         const first = await state();
         assert.deepEqual(numbers(first.published), initial);
         const excluded = await app.service('admin::role').create({ code: 'phone-observer', name: 'Observer' });
@@ -926,7 +931,7 @@ describe('доверенный перенос в собранном Strapi', { t
             assert.equal((await write(op, first.revision, { ...edited, ...extra })).status, 400);
           }
         }
-        const permissions = ok(await call('GET', '/admin/users/me/permissions', adminJwt), 'role permissions').data;
+        const permissions = ok(await call('GET', '/admin/users/me/permissions', editorJwt), 'role permissions').data;
         assert.deepEqual(permissions.filter((row) => row.subject === uid && row.action.startsWith('plugin::content-manager.explorer.')), []);
         ok(await write('draft', first.revision, { center_phone: edited.center_phone }), 'save center');
         assert.deepEqual(numbers(await getVersion(documentId, 'draft')), { ...initial, center_phone: edited.center_phone });

@@ -42,7 +42,7 @@ describe('site phone fields in the Strapi admin', { timeout: 360_000 }, () => {
     contacts = await page('kontakty', { center_phone: '+78126465450', manager_phone: '+79810387797' });
     another = await page('another-page', {});
     await page('knigi-i-uchebnye-materialy', { body: 'Вводный текст книг.' });
-    const editor = await app.service('admin::role').findOne({ code: 'strapi-editor' });
+    const editor = await app.service('admin::role').create({ code: 'page-editor-no-phone', name: 'Page editor without phone access' });
     for (const action of ['read', 'update']) {
       await app.db.query('admin::permission').create({ data: {
         action: 'plugin::content-manager.explorer.' + action,
@@ -117,8 +117,8 @@ describe('site phone fields in the Strapi admin', { timeout: 360_000 }, () => {
     } finally { await page.close(); }
   });
 
-  test('другая роль с доступом к Page сохраняет свою карточку без доступа к форме телефонов', async () => {
-    const page = await login('strapi-editor');
+  test('роль без доступа к endpoint телефонов сохраняет Page без телефона', async () => {
+    const page = await login('page-editor-no-phone');
     try {
       await page.goto(base + '/admin/content-manager');
       await page.getByRole('link', { name: 'Страницы', exact: true }).waitFor();

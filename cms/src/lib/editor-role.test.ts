@@ -47,18 +47,36 @@ test('изображение расписания доступно редакт�
   }
 });
 
-test('у программы редактор меняет только признак категории', () => {
-  assert.deepEqual(find('api::course-group.course-group', 'update')?.properties, {
-    fields: ['is_article_category'],
-  });
-  assert.equal(find('api::course-group.course-group', 'create'), undefined);
-  assert.equal(find('api::course-group.course-group', 'publish'), undefined);
+test('редактор меняет разрешённые поля программ, преподавателей и институтов', () => {
+  const expected = {
+    'api::course-group.course-group': ['name', 'description', 'image', 'order', 'is_article_category', 'seo.seo_title', 'seo.seo_description'],
+    'api::teacher.teacher': ['name', 'trait', 'order', 'photo', 'bio'],
+    'api::institute.institute': ['name', 'shortName', 'description', 'image', 'order', 'seo.seo_title', 'seo.seo_description'],
+  };
+  for (const [subject, fields] of Object.entries(expected)) {
+    assert.deepEqual(find(subject, 'update')?.properties?.fields, fields, `${subject} editable fields`);
+    for (const actionName of ['read', 'publish']) assert.ok(find(subject, actionName), `${subject}: нет ${actionName}`);
+    assert.equal(find(subject, 'create'), undefined, `${subject}: создание закрыто`);
+  }
+  assert.deepEqual(find('api::course-group.course-group', 'read')?.properties?.fields,
+    ['name', 'slug', 'editor_label', 'description', 'image', 'order', 'is_article_category', 'institute', 'seo.seo_title', 'seo.seo_description']);
+  assert.deepEqual(find('api::teacher.teacher', 'read')?.properties?.fields,
+    ['name', 'slug', 'trait', 'order', 'institute', 'photo', 'bio']);
+  assert.deepEqual(find('api::institute.institute', 'read')?.properties?.fields,
+    ['name', 'slug', 'shortName', 'description', 'image', 'order', 'seo.seo_title', 'seo.seo_description']);
+  for (const subject of Object.keys(expected)) {
+    for (const actionName of ['read', 'update']) {
+      const fields = find(subject, actionName)?.properties?.fields ?? [];
+      for (const forbidden of ['legacy_id', 'seo.og_image']) assert.equal(fields.includes(forbidden), false, `${subject}: ${actionName} exposes ${forbidden}`);
+    }
+  }
+  for (const [subject, forbidden] of [['api::course-group.course-group', 'institute'], ['api::course-group.course-group', 'slug'], ['api::teacher.teacher', 'institute']]) {
+    assert.equal(find(subject, 'update')?.properties?.fields?.includes(forbidden), false);
+  }
 });
 
-test('программы и преподаватели доступны для выбора связей только на чтение', () => {
-  assert.ok(find('api::course-group.course-group', 'read')?.properties?.fields.includes('editor_label'));
-  assert.ok(find('api::teacher.teacher', 'read'));
-  assert.equal(find('api::teacher.teacher', 'update'), undefined);
+test('телефоны доступны редактору только через отдельный endpoint, Page закрыта', () => {
+  assert.equal(EDITOR_PERMISSIONS.some((permission) => permission.subject === 'api::page.page'), false);
 });
 
 test('нет удаления, чужих типов и административных действий', () => {
