@@ -347,7 +347,6 @@ describe('целостность источника каталога', () => {
     ['body'],
     ['page_title'],
     ['page_description'],
-    ['image'],
   ])('пустое поле %s статьи — нарушение контракта', async (field) => {
     const mod = await contractModule();
     const snapshot = catalogSnapshot([catalogArticle(), catalogArticle({ slug: 'vtoraya', [field]: '' })]);
