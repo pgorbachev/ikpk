@@ -208,6 +208,46 @@ node /opt/ikpk-publication/stand/publication-launcher.mjs accept-state \
 Эта команда добавляет acceptance в журнал и сама ничего не публикует. После успешного
 принятия нужна новая явная публикация.
 
+## Очистка рабочих деревьев сборки (production-paired)
+
+Удаление рабочих деревьев сборки в `/var/lib/ikpk-site-build/production-paired` включено
+только при наличии маркера активации `/var/lib/ikpk-rehearsal/production-paired/workspace-cleanup.enabled`.
+Маркер должен быть обычным пустым файлом, принадлежащим root, с режимом 0600 и одной жёсткой
+ссылкой. Любой другой маркер отключает удаление рабочих деревьев, причина пишется в журнал и
+статус, но запуск не падает, и очистка релизов CMS выполняется как обычно. Отсутствие маркера
+означает отключённое удаление без предупреждения.
+
+Включить (создаёт пустой файл с нужными владельцем и режимом):
+
+```bash
+install -o root -g root -m 0600 /dev/null /var/lib/ikpk-rehearsal/production-paired/workspace-cleanup.enabled
+```
+
+Аварийно отключить:
+
+```bash
+rm /var/lib/ikpk-rehearsal/production-paired/workspace-cleanup.enabled
+```
+
+Предварительный просмотр того, что удалилось бы, без изменений:
+
+```bash
+ikpk-rehearsal --profile production-paired cleanup-site --preview-workspaces
+```
+
+Каждый запуск очистки (таймер и очистка после публикации) дописывает строку в
+`/var/lib/ikpk-rehearsal/production-paired/workspace-cleanup.log.jsonl`: время (`at`), источник
+(`path`: `timer` или `post-commit`), причину (`reason`: `succeeded`, причина отказа или причина
+отключения маркера) и решения по рабочим деревьям. Журнал ограничен 1 МиБ; при превышении
+он переименовывается в `workspace-cleanup.log.jsonl.1`.
+
+Статус хранится в `/var/lib/ikpk-rehearsal/production-paired/workspace-cleanup-status.json`:
+`lastSucceededAt` — время последнего полностью успешного запуска (не меняется при отказе),
+`consecutiveFailures` — число подряд идущих неуспешных запусков. Успешный полный запуск
+обнуляет счётчик. Рост счётчика означает, что рабочие деревья не очищаются, и нужен разбор
+по строкам `reason` в журнале. Сбой записи журнала или статуса выводит предупреждение в stderr
+и не меняет результат очистки.
+
 ## Приёмка после merge
 
 Сначала предъявить зелёный `Tests` актуального `main`. Затем, после готовности установки

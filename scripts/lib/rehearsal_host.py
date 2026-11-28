@@ -1509,6 +1509,25 @@ def _cms_release_dir(root: Path, path: Path) -> Path:
     return root / relative.parts[0]
 
 
+def _workspace_dependency_releases(root: Path, workspace_root: Path) -> set[Path]:
+    """Production: CMS releases that any workspace dependency link resolves into, from the filesystem alone."""
+    result = set()
+    try:
+        for child in workspace_root.iterdir():
+            if child.name.startswith(".workspace-removing-"):
+                continue
+            for part in ("web/node_modules", "cms/node_modules"):
+                link = child / part
+                if not os.path.islink(link):
+                    continue
+                target = link.resolve(strict=True)
+                if root in target.parents:
+                    result.add(_cms_release_dir(root, target))
+    except OSError as error:
+        raise HostFailure("workspace dependency link cannot be read; CMS release cleanup refused") from error
+    return result
+
+
 def _cleanup_cms_releases(config: dict[str, Any], state: RehearsalState) -> list[str]:
     """Remove finished CMS release directories, keeping the live tree and its rollback."""
     # production-static: releaseRoot holds static-main sources only; CMS releases are cleaned by production-paired.
@@ -1551,11 +1570,14 @@ def _cleanup_cms_releases(config: dict[str, Any], state: RehearsalState) -> list
         protected.update(_restart_cms_releases(config, root))
         workspace_root = config.get("siteBuildWorkspaceRoot")
         if workspace_root and os.path.lexists(workspace_root):
-            for workspace in _protected_paired_workspace_paths(config, state):
-                for part in ("web/node_modules", "cms/node_modules"):
-                    dependency = (workspace / part).resolve(strict=True)
-                    if root in dependency.parents:
-                        protected.add(_cms_release_dir(root, dependency))
+            if config.get("profile") == "staging194":
+                for workspace in _protected_paired_workspace_paths(config, state):
+                    for part in ("web/node_modules", "cms/node_modules"):
+                        dependency = (workspace / part).resolve(strict=True)
+                        if root in dependency.parents:
+                            protected.add(_cms_release_dir(root, dependency))
+            else:
+                protected.update(_workspace_dependency_releases(root, Path(workspace_root)))
     except (OSError, ValueError) as error:
         raise HostFailure("CMS rollback target is outside its release root; cleanup refused") from error
     mounts = _mount_points()
@@ -1894,30 +1916,97 @@ def _cleanup_workspace_scope(config: dict[str, Any], state: RehearsalState, *,
                 raise HostFailure("paired workspace root exists without a trusted production configuration")
             return {}
         gate = paired_state.root / "workspace-cleanup.enabled"
-        enabled = False
+        enabled, marker_reason = False, None
         if os.path.lexists(gate):
-            info = gate.lstat()
-            enabled = (stat.S_ISREG(info.st_mode) and info.st_uid == 0 and info.st_nlink == 1
-                       and stat.S_IMODE(info.st_mode) == 0o600 and info.st_size == 0)
-            if not enabled:
-                raise HostFailure("production workspace cleanup activation marker is unsafe")
-        return _cleanup_paired_workspaces(paired, paired_state, preview=preview, enabled=enabled)
+            try:
+                info = gate.lstat()
+                problems = []
+                if not stat.S_ISREG(info.st_mode):
+                    problems.append("not a regular file")
+                if info.st_uid != 0:
+                    problems.append("not root-owned")
+                if info.st_nlink != 1:
+                    problems.append("hard-linked")
+                if stat.S_IMODE(info.st_mode) != 0o600:
+                    problems.append(f"mode {stat.S_IMODE(info.st_mode):04o}, expected 0600")
+                if info.st_size != 0:
+                    problems.append("not empty")
+                if problems:
+                    marker_reason = "activation marker unsafe: " + "; ".join(problems)
+                else:
+                    enabled = True
+            except OSError as error:
+                marker_reason = f"activation marker unsafe: {error}"
+        result = _cleanup_paired_workspaces(paired, paired_state, preview=preview, enabled=enabled)
+        if marker_reason is not None:
+            result["activationMarkerReason"] = marker_reason
+        return result
+
+
+def _workspace_step(config: dict[str, Any], state: RehearsalState) -> tuple[dict[str, Any], Optional[str]]:
+    """Production workspace failures are returned so CMS release cleanup still runs; staging194 raises as before."""
+    try:
+        return _cleanup_workspace_scope(config, state), None
+    except (HostFailure, RehearsalRefusal, OSError, ValueError) as error:
+        if config.get("profile") == "staging194":
+            raise
+        return {}, str(error)
+
+
+def _record_workspace_run(config: dict[str, Any], state: RehearsalState, path: str,
+                          workspace: dict[str, Any], error: Optional[str]) -> None:
+    """Append the run to the production-paired log and rewrite the status file. Never changes the outcome."""
+    if config.get("profile") == "staging194":
+        return
+    root = state.root if config.get("profile") == "production-paired" else PRODUCTION_OPERATION_STATE_ROOT / "production-paired"
+    reason = error or workspace.get("activationMarkerReason") or "succeeded"
+    now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    try:
+        log = root / "workspace-cleanup.log.jsonl"
+        if os.path.lexists(log) and log.stat().st_size > 1 << 20:
+            os.replace(log, log.with_name(log.name + ".1"))
+        entry = {"at": now, "path": path, "reason": reason,
+                 "workspaceDecisions": workspace.get("workspaceDecisions", [])}
+        with log.open("a", encoding="utf-8") as output:
+            output.write(json.dumps(entry, sort_keys=True) + "\n")
+        status_path = root / "workspace-cleanup-status.json"
+        previous = json.loads(status_path.read_text(encoding="utf-8")) if os.path.lexists(status_path) else {}
+        if error is None:
+            status = {"lastSucceededAt": now, "consecutiveFailures": 0}
+        else:
+            status = {"lastSucceededAt": previous.get("lastSucceededAt"),
+                      "consecutiveFailures": int(previous.get("consecutiveFailures", 0)) + 1}
+        durable_json(status_path, status)
+    except (OSError, ValueError, TypeError, RehearsalRefusal) as failure:
+        print(f"warning: workspace cleanup log or status not written: {failure}", file=sys.stderr)
+
+
+def _mark_cleanup_pending(config: dict[str, Any], operation_id: str, message: str) -> None:
+    try:
+        marker = _read_site_publication_marker(config)
+        if marker is not None and marker["operationId"] == operation_id:
+            _write_site_publication_marker(config, operation_id, "cleanup-pending", message)
+    except (HostFailure, OSError, ValueError):
+        pass
 
 
 def _cleanup_after_commit(config: dict[str, Any], state: RehearsalState, operation_id: str) -> dict[str, Any]:
+    workspace, workspace_error = {}, None
     try:
         result = _cleanup_site_releases(config, state, operation_id)
-        result.update(_cleanup_workspace_scope(config, state))
+        workspace, workspace_error = _workspace_step(config, state)
+        result.update(workspace)
         result["removedCmsReleases"] = _cleanup_cms_releases(config, state)
-        return result
     except (HostFailure, RehearsalRefusal, OSError, ValueError) as error:
-        try:
-            marker = _read_site_publication_marker(config)
-            if marker is not None and marker["operationId"] == operation_id:
-                _write_site_publication_marker(config, operation_id, "cleanup-pending", str(error))
-        except (HostFailure, OSError, ValueError):
-            pass
+        message = workspace_error or str(error)
+        _record_workspace_run(config, state, "post-commit", workspace, message)
+        _mark_cleanup_pending(config, operation_id, str(error))
         return {"cleanupPending": True, "cleanupError": str(error)[:500]}
+    _record_workspace_run(config, state, "post-commit", workspace, workspace_error)
+    if workspace_error is None:
+        return result
+    _mark_cleanup_pending(config, operation_id, workspace_error)
+    return {**result, "cleanupPending": True, "cleanupError": workspace_error[:500]}
 
 
 def _save_bytes(path: Path, payload: bytes, mode: int = 0o600) -> None:
@@ -8427,8 +8516,16 @@ def dispatch(args: argparse.Namespace) -> dict[str, Any]:
                 return {"status": "preview", **_cleanup_workspace_scope(config, state, preview=True)}
             _consume_site_cleanup_request(config)
             static_result = _cleanup_site_releases(config, state, None)
-            return {"status": "succeeded", **static_result, **_cleanup_workspace_scope(config, state),
-                    "removedCmsReleases": _cleanup_cms_releases(config, state)}
+            workspace, workspace_error = _workspace_step(config, state)
+            try:
+                removed = _cleanup_cms_releases(config, state)
+            except (HostFailure, RehearsalRefusal, OSError, ValueError) as error:
+                _record_workspace_run(config, state, "timer", workspace, workspace_error or str(error))
+                raise
+            _record_workspace_run(config, state, "timer", workspace, workspace_error)
+            if workspace_error is not None:
+                raise HostFailure(workspace_error)
+            return {"status": "succeeded", **static_result, **workspace, "removedCmsReleases": removed}
         rows = state._operation_rows(args.operation_id)
         if (args.action in ("recover", "restore", "static-publish", "finalize-recover")
                 and rows and rows[-1].get("record") == "migration-pause-sealed"):
