@@ -103,10 +103,19 @@ class OgProjectionAdmissionTests(unittest.TestCase):
                 source_media=[],
             )
 
+    def test_og_projection_comparison_is_json_type_strict(self):
+        original, expected = self.snapshots()
+        original["content"]["types"]["articles"][0]["id"] = 1
+        expected["content"]["types"]["articles"][0]["id"] = True
+        candidate = copy.deepcopy(expected)
+        with self.assertRaisesRegex(operator.Refusal, "unrelated|projection"):
+            self.validate(original, candidate, expected)
+
     def test_acceptance_entrypoint_admits_real_og_branch_with_fake_tar(self):
         original, expected = self.snapshots()
         expected["content"]["types"]["articles"][0].update(
             og_image_alt="Article cover")
+        original["fingerprint"] = "sha256:" + "3" * 64
         expected["fingerprint"] = "sha256:" + "4" * 64
         original["captureProof"] = {"version": 1, "method": "quiesced-sqlite-backup",
                                      "captureId": "og-fake", "sourceSha": "d8ec908b9a98f6ed9f739a6e44ea996453d65855",
@@ -118,33 +127,40 @@ class OgProjectionAdmissionTests(unittest.TestCase):
         candidate_contract = "baa2b05e3522b1cf645bf2ab2ffd4db6ce17ceb3c0c87742c354c85f26a4134f"
         old_schema = "974abb10127748e47b552edb9c6cc1204ef8b2b2affe9ba876c76728aeee2a90"
         candidate_schema = "a4982acf217e8e2c5f46b9f2187c5195459e8b9342681d65526fb090ebbd832a"
+        media_manifest_bytes = b'{"media":[]}'
+        media_manifest_sha = hashlib.sha256(media_manifest_bytes).hexdigest()
         capture = {"operationId": op, "sourceSha": source, "profile": "production-static",
                    "runId": 1, "attempt": 1, "databaseSha256": "d" * 64,
-                   "mediaManifestSha256": "e" * 64, "schemaDigest": candidate_schema,
+                   "mediaManifestSha256": media_manifest_sha, "schemaDigest": candidate_schema,
                    "capturedAt": "2026-11-28T00:00:00.000Z"}
-        capture_bytes = json.dumps(capture, sort_keys=True).encode()
-        candidate["captureProof"] = {"version": 1, "method": "quiesced-sqlite-backup",
-                                      "captureId": op, "databaseDigest": "d" * 64,
-                                      "mediaManifestDigest": "e" * 64,
-                                      "schemaDigest": candidate_schema,
-                                      "bundleDigest": hashlib.sha256(capture_bytes).hexdigest(),
-                                      "sourceSha": source, "runId": 1, "attempt": 1}
-        archive_bytes = io.BytesIO()
-        with tarfile.open(fileobj=archive_bytes, mode="w") as archive:
-            for name, payload in (("snapshot/capture-manifest.json", capture_bytes),
-                                  ("snapshot/snapshot.json", json.dumps(candidate).encode())):
-                info = tarfile.TarInfo(name); info.size = len(payload); archive.addfile(info, io.BytesIO(payload))
+        def candidate_archive(manifest):
+            capture_bytes = json.dumps(manifest, sort_keys=True).encode()
+            projected = copy.deepcopy(candidate)
+            projected["captureProof"] = {"version": 1, "method": "quiesced-sqlite-backup",
+                                          "captureId": op, "databaseDigest": "d" * 64,
+                                          "mediaManifestDigest": manifest["mediaManifestSha256"],
+                                          "schemaDigest": candidate_schema,
+                                          "bundleDigest": hashlib.sha256(capture_bytes).hexdigest(),
+                                          "sourceSha": source, "runId": 1, "attempt": 1}
+            archive_bytes = io.BytesIO()
+            with tarfile.open(fileobj=archive_bytes, mode="w") as archive:
+                for name, payload in (("snapshot/capture-manifest.json", capture_bytes),
+                                      ("snapshot/snapshot.json", json.dumps(projected).encode())):
+                    info = tarfile.TarInfo(name); info.size = len(payload); archive.addfile(info, io.BytesIO(payload))
+            return archive_bytes.getvalue()
+        archive_payload = candidate_archive(capture)
         backup_bytes = io.BytesIO()
         manifest = {"operationId": op, "databaseSha256": "0" * 64, "mediaManifestSha256": "1" * 64}
         with tarfile.open(fileobj=backup_bytes, mode="w") as archive:
             for name, payload in (("manifest.json", json.dumps(manifest).encode()),
-                                  ("media-manifest.json", b'{"media":[]}'),
+                                  ("media-manifest.json", media_manifest_bytes),
                                   ("database.sqlite", b"sqlite")):
                 info = tarfile.TarInfo(name); info.size = len(payload); archive.addfile(info, io.BytesIO(payload))
         backup = {"operationId": op, "sourceSha": source, "sha256": "2" * 64, "runId": 1, "attempt": 1,
                   "oldCmsSourceSha": old, "oldCmsSchemaSha256": old_schema,
                   "oldProjectorSourceSha": old, "oldProjectorContractSha256": old_contract,
-                  "oldProjectorNodeVersion": "v22", "snapshotFingerprint": "sha256:" + "4" * 64}
+                  "oldProjectorNodeVersion": operator.production_projector_node_version(),
+                  "snapshotFingerprint": "sha256:" + "3" * 64}
 
         def project(_bytes, _source, _op, _run, _attempt, _schema, _digest, *, projector_sha, projection_output):
             value = original if projector_sha == old else expected
@@ -158,9 +174,30 @@ class OgProjectionAdmissionTests(unittest.TestCase):
                 patch.object(operator, "production_paired_backup_fingerprint", side_effect=project) as projector_mock:
             path = Path(directory) / "backup.tar"; path.write_bytes(backup_bytes.getvalue())
             operator.validate_production_content_acceptance(
-                archive_bytes.getvalue(), "a" * 64, "sha256:" + "4" * 64,
+                archive_payload, "a" * 64, "sha256:" + "4" * 64,
                 path, backup, op, source, {"runId": 1, "attempt": 1})
             self.assertEqual(projector_mock.call_count, 2)
+
+            missing_source = copy.deepcopy(backup)
+            missing_source.pop("oldProjectorSourceSha")
+            with self.assertRaisesRegex(operator.Refusal, "oldProjectorSourceSha"):
+                operator.validate_production_content_acceptance(
+                    archive_payload, "a" * 64, "sha256:" + "4" * 64,
+                    path, missing_source, op, source, {"runId": 1, "attempt": 1})
+
+            wrong_runtime = copy.deepcopy(backup)
+            wrong_runtime["oldProjectorNodeVersion"] = "v0.0.0"
+            with self.assertRaisesRegex(operator.Refusal, "runtime evidence"):
+                operator.validate_production_content_acceptance(
+                    archive_payload, "a" * 64, "sha256:" + "4" * 64,
+                    path, wrong_runtime, op, source, {"runId": 1, "attempt": 1})
+
+            bad_capture = dict(capture)
+            bad_capture["mediaManifestSha256"] = "e" * 64
+            with self.assertRaisesRegex(operator.Refusal, "media manifest"):
+                operator.validate_production_content_acceptance(
+                    candidate_archive(bad_capture), "a" * 64, "sha256:" + "4" * 64,
+                    path, backup, op, source, {"runId": 1, "attempt": 1})
 
 
 if __name__ == "__main__":

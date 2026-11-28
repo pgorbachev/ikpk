@@ -1255,6 +1255,8 @@ def reviewed_og_transition(source_sha: str, backup: dict) -> Optional[dict[str, 
     if not SHA.fullmatch(source_sha) or not isinstance(backup, dict):
         return None
     old_source = backup.get("oldCmsSourceSha")
+    if old_source == "059bae78c343508730b095879190273d1eaa87b3" and "oldProjectorSourceSha" not in backup:
+        raise Refusal("OG transition requires explicit oldProjectorSourceSha")
     old_projector = backup.get("oldProjectorSourceSha", old_source)
     old_schema = backup.get("oldCmsSchemaSha256")
     if (old_source != "059bae78c343508730b095879190273d1eaa87b3"
@@ -1409,21 +1411,26 @@ def validate_production_snapshot_composition(original: dict, candidate: dict, *,
         return result
 
     for kind in original_types:
-        if normalized(kind, original_types[kind], strip_og=True) != normalized(kind, expected_types[kind], strip_og=True):
+        if _canonical_json(normalized(kind, original_types[kind], strip_og=True)) != _canonical_json(
+                normalized(kind, expected_types[kind], strip_og=True)):
             raise Refusal(f"OG composition expected projection changes unrelated public projection in {kind}")
-        if normalized(kind, expected_types[kind], strip_og=False) != normalized(kind, candidate_types[kind], strip_og=False):
+        if _canonical_json(normalized(kind, expected_types[kind], strip_og=False)) != _canonical_json(
+                normalized(kind, candidate_types[kind], strip_og=False)):
             raise Refusal(f"OG composition changes unrelated public projection in {kind}")
 
-    if original_content.get("historicalExceptions") != expected_content.get("historicalExceptions") \
-            or expected_content.get("historicalExceptions") != candidate_content.get("historicalExceptions"):
+    if (_canonical_json(original_content.get("historicalExceptions"))
+            != _canonical_json(expected_content.get("historicalExceptions"))
+            or _canonical_json(expected_content.get("historicalExceptions"))
+            != _canonical_json(candidate_content.get("historicalExceptions"))):
         raise Refusal("OG composition changes historical exceptions")
     expected_media = _expected_public_media(expected_types, source_media)
     actual_media = candidate_content["media"]
     if not isinstance(actual_media, list) or any(not isinstance(item, dict) for item in actual_media):
         raise Refusal("OG composition has an invalid media inventory")
     actual_map = {item.get("ref"): item.get("contentId") for item in actual_media}
-    if (len(actual_map) != len(actual_media) or actual_map != expected_media
-            or candidate_content["media"] != expected_content["media"]):
+    if (len(actual_map) != len(actual_media)
+            or _canonical_json(actual_map) != _canonical_json(expected_media)
+            or _canonical_json(candidate_content["media"]) != _canonical_json(expected_content["media"])):
         raise Refusal("OG composition changes the verified public media inventory")
 
 
@@ -1730,6 +1737,11 @@ def _expected_public_media(types: dict, source_media: list[dict]) -> dict[str, s
     return expected
 
 
+def _canonical_json(value: object) -> str:
+    """Serialize JSON with deterministic ordering while preserving JSON types."""
+    return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False)
+
+
 def _expected_public_history(schedule: list[dict], registry: list[dict]) -> list[dict]:
     events = {event["documentId"]: event for event in schedule}
     pairs = [(entry, events.get(entry.get("documentId"))) for entry in registry]
@@ -1978,8 +1990,8 @@ def validate_production_content_acceptance(candidate_archive: bytes, static_dige
         if proof is None:
             candidate_contract = production_projector_contract(source_sha, source_sha)
             if old_contract != candidate_contract:
-                if (og_transition is None and (backup.get("oldProjectorContractSha256") is None
-                        or backup.get("oldProjectorNodeVersion") != production_projector_node_version())):
+                if (backup.get("oldProjectorContractSha256") is None
+                        or backup.get("oldProjectorNodeVersion") != production_projector_node_version()):
                     raise Refusal("ordinary production projector equivalence lacks exact original runtime evidence")
                 if backup_path.is_symlink() or not backup_path.is_file():
                     raise Refusal("ordinary production original backup path is unsafe")
@@ -1996,9 +2008,11 @@ def validate_production_content_acceptance(candidate_archive: bytes, static_dige
                         raise Refusal("production historical public projection differs from the verified backup")
                     original = json.loads(original_path.read_bytes())
                     actual_candidate_schema = production_paired_schema_from_commit(source_sha, candidate_schema_root)
+                    source_media_bytes: bytes | None = None
                     if og_transition is not None:
                         with tarfile.open(fileobj=io.BytesIO(backup_bytes), mode="r:") as source_archive:
-                            source_media_document = json.load(source_archive.extractfile("media-manifest.json"))
+                            source_media_bytes = source_archive.extractfile("media-manifest.json").read()
+                            source_media_document = json.loads(source_media_bytes)
                         source_media = (source_media_document.get("media")
                                         if isinstance(source_media_document, dict) else source_media_document)
                     original_proof = original.get("captureProof") if isinstance(original, dict) else None
@@ -2050,6 +2064,8 @@ def validate_production_content_acceptance(candidate_archive: bytes, static_dige
                 og_pair = (projector_sha, old_contract, candidate_contract) in REVIEWED_OG_PROJECTOR_PAIRS
                 og_schema = (backup["oldCmsSchemaSha256"], actual_candidate_schema) in REVIEWED_OG_SCHEMA_PAIRS
                 if og_pair and og_schema:
+                    if source_media_bytes is None or capture.get("mediaManifestSha256") != hashlib.sha256(source_media_bytes).hexdigest():
+                        raise Refusal("OG candidate media manifest differs from the verified backup manifest")
                     with tempfile.TemporaryDirectory(prefix="ikpk-og-expected-projection-") as directory:
                         expected_path = Path(directory) / "snapshot.json"
                         expected_fingerprint = production_paired_backup_fingerprint(
