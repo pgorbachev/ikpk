@@ -11,6 +11,7 @@ import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSy
 import { tmpdir } from 'node:os';
 import { createHash } from 'node:crypto';
 import { contentFingerprint, type SnapshotContent } from '../scripts/lib/content-snapshot';
+import { validateSnapshotContract } from '../scripts/lib/content-contract';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -1391,6 +1392,84 @@ describe('historical exceptions survive actual live snapshot capture', () => {
     });
     expect(run.status, run.output).not.toBe(0);
     expect(existsSync(join(dir, 'snapshot.json'))).toBe(false);
+  });
+});
+
+describe('schedule duration fallback in the live CMS capture contract', () => {
+  it('projects published seminar defaults 16/36 hours before accepting missing event overrides', async () => {
+    const source = dataset();
+    const seminars = source.seminars!.records.slice(0, 3).map((record, index) => ({
+      ...record,
+      duration: ['16 часов', '36 часов', null][index],
+    }));
+    const entries = source['schedule-entries']!.records.slice(0, 3).map((record, index) => ({
+      ...record,
+      duration: null,
+      price: [null, 32000, null][index],
+      isFree: false,
+      seminar: ref('sem', index + 1, `Семинар ${index + 1}`),
+    }));
+    const dir = outDir();
+    try {
+      const cms = await stub({
+        seminars: { records: seminars },
+        'schedule-entries': { records: entries.slice(0, 2) },
+      });
+      const run = await runCapture({ CMS_URL: cms.url, CONTENT_SNAPSHOT_DIR: dir });
+
+      expect(run.status, run.output).toBe(0);
+      const snapshot = readSnapshot(dir) as unknown as Parameters<typeof validateSnapshotContract>[0];
+      const capturedSeminars = snapshot.content.types.seminars;
+      const capturedEntries = snapshot.content.types.schedule_entries;
+      expect(capturedSeminars.map((seminar) => seminar.duration)).toEqual(['16 часов', '36 часов', null]);
+      expect(capturedEntries.map((entry) => entry.duration)).toEqual([null, null]);
+      expect(capturedEntries.map((entry) => (entry.seminar as { documentId: string }).documentId))
+        .toEqual(['sem-doc-1', 'sem-doc-2']);
+      expect(capturedEntries[0]?.price).toBeNull();
+      expect(validateSnapshotContract(snapshot).violations).toEqual([]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('keeps an unknown duration blocking and rejects paid zero while allowing unknown paid price', async () => {
+    const source = dataset();
+    const seminars = source.seminars!.records.slice(0, 3).map((record, index) => ({
+      ...record,
+      duration: ['16 часов', '36 часов', null][index],
+    }));
+    const baseEntries = source['schedule-entries']!.records.slice(0, 3).map((record, index) => ({
+      ...record,
+      duration: null,
+      price: null,
+      isFree: false,
+      seminar: ref('sem', index + 1, `Семинар ${index + 1}`),
+    }));
+
+    const unknownDurationDir = outDir();
+    const paidZeroDir = outDir();
+    try {
+      const unknownDurationCms = await stub({
+        seminars: { records: seminars },
+        'schedule-entries': { records: [baseEntries[2]!] },
+      });
+      const unknownDuration = await runCapture({ CMS_URL: unknownDurationCms.url, CONTENT_SNAPSHOT_DIR: unknownDurationDir });
+      expect(unknownDuration.status, unknownDuration.output).not.toBe(0);
+      expect(unknownDuration.output).toMatch(/duration/);
+      expect(existsSync(join(unknownDurationDir, 'snapshot.json'))).toBe(false);
+
+      const paidZeroCms = await stub({
+        seminars: { records: seminars },
+        'schedule-entries': { records: [{ ...baseEntries[0]!, duration: '16 часов', price: 0 }] },
+      });
+      const paidZero = await runCapture({ CMS_URL: paidZeroCms.url, CONTENT_SNAPSHOT_DIR: paidZeroDir });
+      expect(paidZero.status, paidZero.output).not.toBe(0);
+      expect(paidZero.output).toMatch(/price/);
+      expect(existsSync(join(paidZeroDir, 'snapshot.json'))).toBe(false);
+    } finally {
+      rmSync(unknownDurationDir, { recursive: true, force: true });
+      rmSync(paidZeroDir, { recursive: true, force: true });
+    }
   });
 });
 
