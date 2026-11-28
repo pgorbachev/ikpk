@@ -539,6 +539,25 @@ class ReleaseCleanupTests(unittest.TestCase):
         self.assertEqual(self.state.journal_path.read_bytes(), raw)
         self.assertTrue(self.old.exists())
 
+    def test_production_static_commit_reports_no_cms_cleanup_pending(self):
+        static_root = self.releases.parent / 'production-static-sources'
+        static_root.mkdir()
+        for name in ('a' * 40 + '-flow-one', 'b' * 40 + '-flow-zero'):
+            (static_root / name).mkdir()
+            (static_root / name / 'index.html').write_text('static source')
+        cms_current = self.releases.parent / 'opt-cms-current'
+        cms_current.mkdir()
+        config = {**self.config, 'profile': 'production-static',
+                  'releaseRoot': str(static_root), 'currentCms': str(cms_current)}
+
+        result = host._cleanup_after_commit(config, self.state, 'flow-one')
+
+        self.assertFalse(result.get('cleanupPending'), result)
+        self.assertNotIn('cleanupError', result)
+        self.assertEqual(result['removedCmsReleases'], [])
+        self.assertTrue((static_root / ('a' * 40 + '-flow-one')).is_dir(), 'static sources are not deleted here')
+        self.assertTrue((static_root / ('b' * 40 + '-flow-zero')).is_dir(), 'static sources are not deleted here')
+
 
 class CmsReleaseCleanupTests(unittest.TestCase):
     def _state(self, history, unfinished=()):
@@ -578,6 +597,14 @@ class CmsReleaseCleanupTests(unittest.TestCase):
         self.assertEqual(removed, [str(stale.resolve())])
         self.assertTrue(current.exists())
         self.assertTrue(rollback.exists())
+        self.assertFalse(stale.exists())
+
+    def test_cms_cleanup_still_runs_for_production_paired_profile(self):
+        config, current, rollback, stale, history = self._layout()
+        config["profile"] = "production-paired"
+        with patch.object(host, "_mount_points", return_value=set()):
+            removed = host._cleanup_cms_releases(config, self._state(history))
+        self.assertEqual(removed, [str(stale.resolve())])
         self.assertFalse(stale.exists())
 
     def test_cms_cleanup_refuses_while_a_publication_is_unfinished(self):
