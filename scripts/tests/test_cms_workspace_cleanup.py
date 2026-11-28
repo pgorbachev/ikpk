@@ -619,6 +619,66 @@ class PairedCleanupScenarioTests(PairedWorkspaceHelpers, WorkspaceTestCase):
         self.assertEqual(self._read_status()["consecutiveFailures"], 2)
         self.assertGreaterEqual(len([entry for entry in self._read_log() if "reason" in entry]), 2)
 
+    # A dangling or looping dependency link points at nothing to protect; it must not stop CMS release cleanup.
+    def test_dangling_or_looping_dependency_link_does_not_block_cms_release_cleanup(self):
+        orphan = self.workspace_root / "orphan" / "web"
+        orphan.mkdir(parents=True)
+        (orphan / "node_modules").symlink_to(self.release_root / "gone-release" / "web" / "node_modules")
+        looping = self.workspace_root / "looping" / "cms"
+        looping.mkdir(parents=True)
+        (looping / "node_modules").symlink_to(looping / "node_modules")
+        result = self._after_commit(self.prod)
+        self.assertNotIn("dependency link", result.get("cleanupError", ""))
+        self.assertFalse(self.stale.exists())
+        self.assertIn(str(self.stale.resolve()), result.get("removedCmsReleases", []))
+
+    # A link into a release that still exists keeps that release.
+    def test_dependency_link_into_existing_release_keeps_it(self):
+        orphan = self.workspace_root / "orphan" / "web"
+        orphan.mkdir(parents=True)
+        (orphan / "node_modules").symlink_to(self.stale / "web" / "node_modules")
+        result = self._after_commit(self.prod)
+        self.assertTrue(self.stale.exists())
+        self.assertNotIn(str(self.stale.resolve()), result.get("removedCmsReleases", []))
+
+    # The unsafe-marker reason and "deletion off" are visible in the log and the status file.
+    def test_unsafe_marker_reason_is_logged_and_status_shows_deletion_disabled(self):
+        gate = self.state.root / "workspace-cleanup.enabled"
+        gate.write_text("", encoding="utf-8")
+        gate.chmod(0o644)
+        self._after_commit(self.prod)
+        self.assertIn("activation marker unsafe", self._read_log()[-1]["reason"])
+        status = self._read_status()
+        self.assertIs(status["deletionEnabled"], False)
+        self.assertIn("activation marker unsafe", status["lastReason"])
+
+    # A failure before the workspace step (site release cleanup) is counted on the timer path too.
+    def test_timer_failure_before_workspace_step_is_counted(self):
+        with self._timer_cleanup() as args, patch.object(
+                host, "_cleanup_site_releases", side_effect=host.HostFailure("site release cleanup refused")):
+            with self.assertRaises(host.HostFailure):
+                host.dispatch(args)
+        self.assertEqual(self._read_status()["consecutiveFailures"], 1)
+        self.assertIn("site release cleanup refused", self._read_log()[-1]["reason"])
+
+    # The timer's journald message names the step and keeps the underlying cause.
+    def test_timer_workspace_failure_message_names_the_step(self):
+        with self._timer_cleanup() as args, self._cms_unit(active="inactive"):
+            with self.assertRaises(host.HostFailure) as raised:
+                host.dispatch(args)
+        self.assertTrue(str(raised.exception).startswith("workspace step failed: "), str(raised.exception))
+        self.assertIn("workspace step failed", self._read_log()[-1]["reason"])
+
+    # A status file that is not a JSON object is replaced, not left to break every later run.
+    def test_non_object_status_file_is_replaced(self):
+        self.status_file.write_text("[]", encoding="utf-8")
+        with self._cms_unit(active="inactive"):
+            self._after_commit(self.prod)
+        self.assertEqual(self._read_status()["consecutiveFailures"], 1)
+        self.status_file.write_text("{broken", encoding="utf-8")
+        self._after_commit(self.prod)
+        self.assertEqual(self._read_status()["consecutiveFailures"], 0)
+
     # Staging194 keeps existing behaviour: a protected-set failure still prevents CMS release cleanup.
     # Expected GREEN now; it guards against the production decoupling leaking into staging194.
     def test_staging194_protected_set_failure_still_blocks_cms_release_cleanup(self):
