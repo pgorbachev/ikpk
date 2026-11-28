@@ -73,3 +73,28 @@ Cleanup SHALL record each removed workspace and each retained candidate with its
 #### Scenario: Cleanup runs twice
 - **WHEN** cleanup is repeated after successfully removing eligible workspaces
 - **THEN** it safely reports current decisions without harming retained workspaces
+
+### Requirement: Keep release cleanup independent and failures visible
+
+On production, failure of the workspace step (including inability to establish the protected set, a stopped or reloading CMS service, an unsafe activation marker or lock contention with another production profile) SHALL NOT prevent cleanup of CMS releases in the same run. CMS release cleanup SHALL protect every CMS release that a dependency link (`web/node_modules`, `cms/node_modules`) of any immediate child of the fixed production workspace root resolves into, determined from the filesystem alone, in addition to the existing current, rollback and restart protection; it SHALL refuse CMS release deletion only if such a link cannot be read. Staging194 SHALL keep its existing behaviour. A run in which the workspace step failed SHALL still report failure (non-zero exit on the timer path, `cleanupPending` on the post-commit path) after completing CMS release cleanup.
+
+Every run, on the timer and on the post-commit path, SHALL append its workspace decisions, removals and any refusal with its reason to a size-bounded append-only log in the production-paired state directory, and SHALL update a status file recording the time of the last fully successful run and the number of consecutive failed runs.
+
+The production activation marker SHALL enable workspace deletion only when it is a root-owned empty regular file with mode 0600 and a single link. Any other marker SHALL disable workspace deletion and be reported as the reason, without failing the run.
+
+#### Scenario: CMS stopped during cleanup
+- **WHEN** the workspace protected set cannot be established because the CMS service is stopped or needs a daemon reload
+- **THEN** no workspace is deleted, CMS releases not referenced by any workspace dependency link are still removed, and the run reports failure with the workspace reason
+
+#### Scenario: Retained workspace keeps its dependencies
+- **WHEN** a workspace is retained for any reason and its dependency links point into a CMS release that is neither current nor rollback
+- **THEN** that CMS release is not removed
+
+#### Scenario: Activation marker created with a default mode
+- **WHEN** the activation marker exists with mode 0644
+- **THEN** workspace deletion is disabled, the reason is reported and logged, and site and CMS release cleanup complete normally
+
+#### Scenario: Persistent refusal is visible
+- **WHEN** cleanup runs fail repeatedly
+- **THEN** the status file shows the time of the last successful run and the growing count of consecutive failures, and the log contains each refusal reason
+

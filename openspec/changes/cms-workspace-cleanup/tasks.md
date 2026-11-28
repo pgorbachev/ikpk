@@ -28,3 +28,12 @@
 - [ ] 5.1 Prepare the admitted production deployment and safe helper/unit transition; keep automatic workspace cleanup disabled before preview review.
 - [ ] 5.2 Immediately before first production application, present a fresh locked delete/retain/reason/allocated-size preview; re-evaluate under locks on execution.
 - [ ] 5.3 Enable the reviewed cleanup, verify site and CMS refresh/restart and retry behavior, and report exact outcomes and remaining retained data.
+
+## 6. Hardening after retrospective review (2026-11-28)
+
+- [ ] 6.1 In a separate session, add failing tests that kill each unprotected safeguard found by review: protected-set failure deletes nothing; inode recheck before removal; nested mount; activation gate on apply; tombstone validity; CMS-release dependency protection; CMS inactive or NeedDaemonReload; plus the four scenarios of "Keep release cleanup independent and failures visible". Record the mutation that each test catches.
+- [ ] 6.2 Decouple production CMS release cleanup from the workspace step and protect dependencies of every workspace under the fixed root from the filesystem.
+- [ ] 6.3 Persist decisions and refusals in a size-bounded log and a status file in the production-paired state directory on both timer and post-commit paths.
+- [ ] 6.4 Treat an unsafe activation marker as disabled and reported; document the marker, preview command, emergency disable and status/log locations in `docs/deploy-vps.md`.
+- [ ] 6.5 Two independent code reviews and the simplification review; resolve findings.
+
