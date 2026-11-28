@@ -490,7 +490,7 @@
       },
       {
         "path": "scripts/audit-data-migration.mjs",
-        "sha256": "4ab1f953dae76880b84862763f9ea56c8fc194aea06f599e4c192cbb11ee84ca"
+        "sha256": "c31d8f1c9290a2be318e875348ae4d7f75a63c1f9e5a16c458a6686b3f6c3815"
       },
       {
         "path": "scripts/audit-documents-migration.mjs",
@@ -518,7 +518,7 @@
       },
       {
         "path": "scripts/audit-schema-snapshot.mjs",
-        "sha256": "487bf7a31a575b537f896ca0500ec79431785231c0408d449288cdce3fe27707"
+        "sha256": "f6dea14e49a59bb01a6fac4efe0a096b5290d4cb7d0bb5f6f48608b35893a01c"
       },
       {
         "path": "scripts/audit-seminar-migration-composition.mjs",

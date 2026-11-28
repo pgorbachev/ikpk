@@ -68,6 +68,7 @@ const BOOK_SEED_COLUMNS = {
   components_shared_seos: ['id', 'seo_title', 'seo_description', 'noindex'],
   pages_cmps: ['id', 'entity_id', 'cmp_id', 'component_type', 'field', 'order'],
 };
+const BOOK_SEED_SEO_ADDITIONS = ['og_title', 'og_description'];
 const CURRENT_CONTENT_ADDITIONS = {
   promotions: { name: 'type', type: 'varchar(255)' },
   schedule_entries: { name: 'is_event_collection', type: 'boolean' },
@@ -365,6 +366,13 @@ function deriveKnownTransforms(sourceDb, plan, receipt) {
 }
 function expectedTableRows(sourceDb, sourceTable, columns, transforms, candidateColumns = columns) {
   const rows = collectRows(sourceDb, sourceTable, columns).map(({ keyed }) => ({ ...keyed }));
+  if (sourceTable === 'components_shared_seos') {
+    for (const name of BOOK_SEED_SEO_ADDITIONS) {
+      if (!columns.some(({ name: existing }) => existing === name) && candidateColumns.some(({ name: candidate }) => candidate === name)) {
+        for (const row of rows) row[name] = null;
+      }
+    }
+  }
   if (sourceTable === 'pages' && transforms.sitePhones) {
     for (const row of rows) {
       for (const [key, seed] of Object.entries(CONTACT_PHONES)) {
@@ -387,7 +395,7 @@ function expectedTableRows(sourceDb, sourceTable, columns, transforms, candidate
     } else if (sourceTable === 'components_shared_seos') {
       const id = next('components_shared_seos');
       for (const offset of [0, 1]) rows.push(row({ id: int(id + offset), seo_title: BOOK_PAGE.seoTitle,
-        seo_description: BOOK_PAGE.seoDescription, noindex: int(0) }));
+        seo_description: BOOK_PAGE.seoDescription, noindex: int(0) }, candidateColumns));
     } else {
       const id = next('pages_cmps'), pageId = Number(sourceDb.prepare('SELECT COALESCE(MAX(id),0) AS id FROM pages').get().id) + 1;
       const seoId = Number(sourceDb.prepare('SELECT COALESCE(MAX(id),0) AS id FROM components_shared_seos').get().id) + 1;
@@ -1110,6 +1118,8 @@ function validateSchemaHistory(sourceDb, candidateDb, candidateSchema, differenc
         ...Object.fromEntries(Object.keys(CONTACT_PHONES).map(name => [`pages.${name}`,
           { name, type: 'string', args: [], defaultTo: null, notNullable: false, unsigned: false }])),
         'course_groups.editor_label': { name: 'editor_label', type: 'string', args: [], defaultTo: null, notNullable: false, unsigned: false },
+        'components_shared_seos.og_title': { name: 'og_title', type: 'string', args: [], defaultTo: null, notNullable: false, unsigned: false },
+        'components_shared_seos.og_description': { name: 'og_description', type: 'text', args: [], defaultTo: null, notNullable: false, unsigned: false },
       },
     });
     return true;
@@ -1279,8 +1289,19 @@ export function auditMigration({ sourceDbPath, candidateDbPath, plan, receipt, a
     const sourceSchema = schema(source); const candidateSchema = schema(candidate);
     const transforms = deriveKnownTransforms(source, plan, receipt);
     const differences = [];
+    const acceptedSchemaSnapshot = validateSchemaHistory(source, candidate, candidateSchema, differences);
+    const physicalOgAdditions = ['og_title', 'og_description'].every((name) => {
+      const sourceHas = sourceSchema.components_shared_seos?.some((column) => column.name === name);
+      const target = candidateSchema.components_shared_seos?.find((column) => column.name === name);
+      return sourceHas || Boolean(target && target.notnull === 0 && target.defaultValue === null && target.pk === 0
+        && target.type === (name === 'og_title' ? 'varchar(255)' : 'TEXT'));
+    });
+    const acceptedOgColumns = physicalOgAdditions && (acceptedSchemaSnapshot || !tableNames(source).includes('strapi_database_schema'));
     if (transforms.bookSeller) {
-      for (const [table, expected] of Object.entries(BOOK_SEED_COLUMNS)) {
+      for (const [table, originalExpected] of Object.entries(BOOK_SEED_COLUMNS)) {
+        const expected = table === 'components_shared_seos' && acceptedOgColumns
+          ? [...originalExpected, ...BOOK_SEED_SEO_ADDITIONS.filter((name) => candidateSchema[table]?.some((column) => column.name === name))]
+          : originalExpected;
         const columns = candidate.prepare(`PRAGMA table_xinfo(${quote(table)})`).all();
         const actual = columns.map(({ name }) => name);
         if (!exactColumnSet(actual, expected) || columns.some(({ hidden }) => Number(hidden) !== 0)) {
@@ -1288,7 +1309,6 @@ export function auditMigration({ sourceDbPath, candidateDbPath, plan, receipt, a
         }
       }
     }
-    const acceptedSchemaSnapshot = validateSchemaHistory(source, candidate, candidateSchema, differences);
     const sourceIntegrity = integrity(source); const candidateIntegrity = integrity(candidate);
     if (sourceIntegrity.integrityCheck.length !== 1 || sourceIntegrity.integrityCheck[0] !== 'ok' || sourceIntegrity.foreignKeyViolations) differences.push({ table: '*', kind: 'source-integrity-failed' });
     if (candidateIntegrity.integrityCheck.length !== 1 || candidateIntegrity.integrityCheck[0] !== 'ok' || candidateIntegrity.foreignKeyViolations) differences.push({ table: '*', kind: 'candidate-integrity-failed' });
@@ -1306,6 +1326,11 @@ export function auditMigration({ sourceDbPath, candidateDbPath, plan, receipt, a
       const sourceHasAddition = addition && before.some(({ name }) => name === addition.name);
       const candidateHasAddition = addition && after.some(({ name }) => name === addition.name);
       const acceptedAddition = Boolean(addition && !sourceHasAddition && candidateHasAddition);
+      const acceptedOgAddition = table === 'components_shared_seos' && acceptedOgColumns
+        ? BOOK_SEED_SEO_ADDITIONS.filter((name) => !before.some((column) => column.name === name)
+          && after.some((column) => column.name === name)).map((name) => ({ name, type: name === 'og_title' ? 'varchar(255)' : 'TEXT' }))
+        : [];
+      expected.push(...acceptedOgAddition.map((column) => ({ ...column, notnull: 0, defaultValue: null, pk: 0 })));
       if (acceptedAddition) expected.push({ name: addition.name, type: addition.type, notnull: 0, defaultValue: null, pk: 0 });
       const hasDocumentsState = table === 'seminars' && transforms.documentsState && !expected.some(({ name }) => name === 'documents_state');
       if (hasDocumentsState) expected.push({ name: 'documents_state', type: 'TEXT', notnull: 0, defaultValue: null, pk: 0 });
@@ -1329,6 +1354,10 @@ export function auditMigration({ sourceDbPath, candidateDbPath, plan, receipt, a
         ...afterRelations,
         definitions: afterRelations.definitions.map((item) => normalizeAddedTableDefinition(item, table, addition)),
       };
+      for (const column of acceptedOgAddition) {
+        afterRelations = { ...afterRelations,
+          definitions: afterRelations.definitions.map((item) => normalizeAddedTableDefinition(item, table, column)) };
+      }
       if (json(beforeRelations) !== json(afterRelations)) differences.push({ table, kind: 'relation-schema-mismatch', sourceSha256: sha(Buffer.from(json(beforeRelations))), candidateSha256: sha(Buffer.from(json(afterRelations))) });
       if (acceptedAddition && table === 'course_groups') acceptProgramEditorLabels(candidate, differences);
       else if (acceptedAddition) {
