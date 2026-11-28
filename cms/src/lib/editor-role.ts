@@ -241,16 +241,17 @@ export function registerEditorCardRestrictions(strapi: Core.Strapi): void {
         if (published && !isDeepStrictEqual(protectedValues(draft, protectOgText), protectedValues(published, protectOgText))) {
           throw new errors.ForbiddenError('В черновике есть изменения защищённых полей. Их должен проверить администратор.');
         }
-      } else if (seoTouched && draft?.seo) {
+      } else if (seoTouched && draft) {
         const seo = data.seo as CardSeo | null;
+        const previous = draft.seo ?? {};
         // Strapi replaces the component on update. Preserve fields outside this write grant.
         data.seo = {
-          seo_title: seo === null ? null : seo.seo_title === undefined ? draft.seo.seo_title : seo.seo_title,
-          seo_description: seo === null ? null : seo.seo_description === undefined ? draft.seo.seo_description : seo.seo_description,
-          og_title: card.update.includes('seo.og_title') ? (seo === null ? null : seo.og_title === undefined ? draft.seo.og_title : seo.og_title) : draft.seo.og_title,
-          og_description: card.update.includes('seo.og_description') ? (seo === null ? null : seo.og_description === undefined ? draft.seo.og_description : seo.og_description) : draft.seo.og_description,
-          noindex: draft.seo.noindex,
-          og_image: draft.seo.og_image?.id ?? null,
+          seo_title: seo === null ? null : seo.seo_title === undefined ? previous.seo_title : seo.seo_title,
+          seo_description: seo === null ? null : seo.seo_description === undefined ? previous.seo_description : seo.seo_description,
+          og_title: card.update.includes('seo.og_title') ? (seo === null ? null : seo.og_title === undefined ? previous.og_title : seo.og_title) : previous.og_title,
+          og_description: card.update.includes('seo.og_description') ? (seo === null ? null : seo.og_description === undefined ? previous.og_description : seo.og_description) : previous.og_description,
+          noindex: previous.noindex,
+          og_image: previous.og_image?.id ?? null,
         };
       }
       return next();
