@@ -21,8 +21,8 @@
       "attribute": "set:html",
       "expression": "serializeJsonLd(scopeSchemaToSite(schema))",
       "attrKind": "expression",
-      "locator": "components/HeadMeta.astro:L82:C12:element:script:set:html",
-      "fingerprint": "components/HeadMeta.astro:L82:C12:element:script:set:html"
+      "locator": "components/HeadMeta.astro:L92:C12:element:script:set:html",
+      "fingerprint": "components/HeadMeta.astro:L92:C12:element:script:set:html"
     },
     {
       "id": "rich-content-singleton",
