@@ -661,6 +661,7 @@ class CmsReleaseCleanupTests(unittest.TestCase):
     # Mutation: in _cleanup_cms_releases replace `protected.add(_cms_release_dir(root, dependency))` with `pass`.
     def test_dependency_of_protected_workspace_keeps_its_cms_release(self):
         config, current, rollback, stale, history = self._layout()
+        config["profile"] = "staging194"  # the referenced-workspace path is staging194's; production uses the filesystem scan
         workspace = self._dependent_workspace(config, stale, "a" * 40 + "-referenced")
         with patch.object(host, "_mount_points", return_value=set()), \
                 patch.object(host, "_protected_paired_workspace_paths", return_value={workspace}):
@@ -672,6 +673,7 @@ class CmsReleaseCleanupTests(unittest.TestCase):
     # Red now: only dependencies of referenced workspaces are protected.
     def test_dependency_of_retained_workspace_keeps_its_cms_release(self):
         config, current, rollback, stale, history = self._layout()
+        config["profile"] = "production-paired"
         workspace = self._dependent_workspace(config, stale, "a" * 40 + "-retained", operation_id="retained")
         with patch.object(host, "_mount_points", return_value=set()), \
                 patch.object(host, "_protected_paired_workspace_paths", return_value=set()):

@@ -1570,7 +1570,7 @@ def _cleanup_cms_releases(config: dict[str, Any], state: RehearsalState) -> list
         protected.update(_restart_cms_releases(config, root))
         workspace_root = config.get("siteBuildWorkspaceRoot")
         if workspace_root and os.path.lexists(workspace_root):
-            if config.get("profile") == "staging194":
+            if config.get("profile", "staging194") == "staging194":
                 for workspace in _protected_paired_workspace_paths(config, state):
                     for part in ("web/node_modules", "cms/node_modules"):
                         dependency = (workspace / part).resolve(strict=True)
@@ -1948,7 +1948,7 @@ def _workspace_step(config: dict[str, Any], state: RehearsalState) -> tuple[dict
     try:
         return _cleanup_workspace_scope(config, state), None
     except (HostFailure, RehearsalRefusal, OSError, ValueError) as error:
-        if config.get("profile") == "staging194":
+        if config.get("profile", "staging194") == "staging194":
             raise
         return {}, str(error)
 
@@ -1956,7 +1956,7 @@ def _workspace_step(config: dict[str, Any], state: RehearsalState) -> tuple[dict
 def _record_workspace_run(config: dict[str, Any], state: RehearsalState, path: str,
                           workspace: dict[str, Any], error: Optional[str]) -> None:
     """Append the run to the production-paired log and rewrite the status file. Never changes the outcome."""
-    if config.get("profile") == "staging194":
+    if config.get("profile", "staging194") == "staging194":
         return
     root = state.root if config.get("profile") == "production-paired" else PRODUCTION_OPERATION_STATE_ROOT / "production-paired"
     reason = error or workspace.get("activationMarkerReason") or "succeeded"

@@ -31,9 +31,9 @@
 
 ## 6. Hardening after retrospective review (2026-11-28)
 
-- [ ] 6.1 In a separate session, add failing tests that kill each unprotected safeguard found by review: protected-set failure deletes nothing; inode recheck before removal; nested mount; activation gate on apply; tombstone validity; CMS-release dependency protection; CMS inactive or NeedDaemonReload; plus the four scenarios of "Keep release cleanup independent and failures visible". Record the mutation that each test catches.
+- [x] 6.1 In a separate session, add failing tests that kill each unprotected safeguard found by review: protected-set failure deletes nothing; inode recheck before removal; nested mount; activation gate on apply; tombstone validity; CMS-release dependency protection; CMS inactive or NeedDaemonReload; plus the four scenarios of "Keep release cleanup independent and failures visible". Record the mutation that each test catches.
 - [x] 6.2 Decouple production CMS release cleanup from the workspace step and protect dependencies of every workspace under the fixed root from the filesystem.
-- [ ] 6.3 Persist decisions and refusals in a size-bounded log and a status file in the production-paired state directory on both timer and post-commit paths.
+- [x] 6.3 Persist decisions and refusals in a size-bounded log and a status file in the production-paired state directory on both timer and post-commit paths.
 - [x] 6.4 Treat an unsafe activation marker as disabled and reported; document the marker, preview command, emergency disable and status/log locations in `docs/deploy-vps.md`.
 - [ ] 6.5 Two independent code reviews and the simplification review; resolve findings.
 

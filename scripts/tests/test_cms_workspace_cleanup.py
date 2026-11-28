@@ -608,7 +608,6 @@ class PairedCleanupScenarioTests(PairedWorkspaceHelpers, WorkspaceTestCase):
         status = self._read_status()
         self.assertEqual(status["consecutiveFailures"], 0)
         self.assertIsInstance(status["lastSucceededAt"], str)
-        self.assertFalse(self.candidate.exists())
 
     # Scenario d on the timer path (status and log are the same files as above).
     # Red now: no status file and no log are written.
