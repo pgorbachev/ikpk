@@ -19,6 +19,7 @@ const PHONE_LABELS = {
   manager_phone: { label: 'Мобильный телефон менеджера' },
 };
 const ARTICLE_CONFIG_KEY = 'plugin_content_manager_configuration_content_types::api::article.article';
+const SEO_COMPONENT_CONFIG_KEY = 'plugin_content_manager_configuration_components::shared.seo';
 const COURSE_GROUP_CONFIG_KEY = 'plugin_content_manager_configuration_content_types::api::course-group.course-group';
 const INSTITUTE_CONFIG_KEY = 'plugin_content_manager_configuration_content_types::api::institute.institute';
 const CORE_STORE_KEYS = new Set([
@@ -29,6 +30,7 @@ const CORE_STORE_KEYS = new Set([
   COURSE_GROUP_CONFIG_KEY,
   INSTITUTE_CONFIG_KEY,
   ARTICLE_CONFIG_KEY,
+  SEO_COMPONENT_CONFIG_KEY,
   'plugin_upload_metrics',
   'strapi_content_types_schema',
 ]);
@@ -95,6 +97,9 @@ const PERMISSION_FIELD_ADDITIONS = new Map([
 // content-admin получает поле тем же id: bootstrap обновляет строку, а не создаёт её заново.
 const IN_PLACE_PERMISSION_FIELD_ADDITIONS = new Map([
   ['content-admin\0plugin::content-manager.explorer.read\0api::course-group.course-group', ['editor_label']],
+  ...['create', 'read', 'update'].map((action) => [
+    `content-admin\0plugin::content-manager.explorer.${action}\0api::seminar.seminar`, ['seo.og_title', 'seo.og_description'],
+  ]),
 ]);
 // Тот же набор, что PROGRAM_FIELDS и скрытые поля в forms.ts.
 const PROGRAM_EDITOR_FIELDS = [
@@ -872,6 +877,32 @@ function expectedCoreStoreValue(key, sourceValue, programSchema) {
       };
     }
     return { ...expected, metadatas };
+  }
+  if (key === SEO_COMPONENT_CONFIG_KEY) {
+    if (!Array.isArray(expected.layouts?.edit) || !expected.metadatas || typeof expected.metadatas !== 'object'
+      || Array.isArray(expected.metadatas) || Object.hasOwn(expected.metadatas, 'og_title')
+      || Object.hasOwn(expected.metadatas, 'og_description')) return null;
+    const additions = [
+      ['og_title', 'seo_title'],
+      ['og_description', 'seo_description'],
+    ];
+    const metadatas = { ...expected.metadatas };
+    for (const [name, templateName] of additions) {
+      const template = metadatas[templateName];
+      const templateRow = expected.layouts.edit.find((row) => Array.isArray(row) && row.length === 1 && row[0]?.name === templateName);
+      if (!template || typeof template !== 'object' || Array.isArray(template)
+        || !template.edit || typeof template.edit !== 'object' || Array.isArray(template.edit)
+        || !template.list || typeof template.list !== 'object' || Array.isArray(template.list)
+        || !templateRow) return null;
+      metadatas[name] = {
+        ...structuredClone(template),
+        edit: { ...structuredClone(template.edit), label: name },
+        list: { ...structuredClone(template.list), label: name },
+      };
+      expected.layouts.edit.push(templateRow.map((field) => ({ ...field, name })));
+    }
+    expected.metadatas = metadatas;
+    return expected;
   }
   if (key === 'plugin_content_manager_configuration_content_types::api::promotion.promotion') {
     if (!Array.isArray(expected.layouts?.edit) || !expected.metadatas || typeof expected.metadatas !== 'object'

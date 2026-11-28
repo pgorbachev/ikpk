@@ -369,6 +369,54 @@ function createPermissionShape(path, { candidate = false, mutate = null, mutateL
   db.close();
 }
 
+function createContentAdminSeminarPermissionShape(path, { candidate = false, extraField = null } = {}) {
+  const db = new Database(path);
+  db.exec(`CREATE TABLE admin_roles (id INTEGER PRIMARY KEY, code TEXT NOT NULL);
+    CREATE TABLE admin_permissions (id INTEGER PRIMARY KEY, document_id TEXT, action TEXT NOT NULL, subject TEXT, properties TEXT, conditions TEXT, action_parameters TEXT, created_at INTEGER, updated_at INTEGER, published_at INTEGER);
+    CREATE TABLE admin_permissions_role_lnk (id INTEGER PRIMARY KEY, permission_id INTEGER NOT NULL, role_id INTEGER NOT NULL, permission_ord INTEGER);
+    INSERT INTO admin_roles VALUES (2, 'content-admin');`);
+  const baseFields = ['name', 'seo.seo_title', 'seo.seo_description'];
+  const fields = extraField ? [...baseFields, 'seo.og_title', 'seo.og_description', extraField] : candidate
+    ? [...baseFields, 'seo.og_title', 'seo.og_description'] : baseFields;
+  const createdAt = 1700000000000;
+  const timestamp = candidate ? 1792101826000 : createdAt;
+  for (const [index, action] of ['read', 'create', 'update'].entries()) {
+    const id = 100 + index;
+    db.prepare('INSERT INTO admin_permissions VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(
+      id, `seminar-${action}`, `plugin::content-manager.explorer.${action}`, 'api::seminar.seminar',
+      JSON.stringify({ fields }), '[]', null, createdAt, timestamp, timestamp,
+    );
+    db.prepare('INSERT INTO admin_permissions_role_lnk VALUES (?, ?, ?, ?)').run(id, id, 2, index);
+  }
+  db.close();
+}
+
+test('content-admin seminar permissions admit only the two reviewed Open Graph fields in place', () => {
+  const sourceDbPath = join(directory, 'content-admin-seminar-source.db');
+  const candidateDbPath = join(directory, 'content-admin-seminar-candidate.db');
+  createContentAdminSeminarPermissionShape(sourceDbPath);
+  createContentAdminSeminarPermissionShape(candidateDbPath, { candidate: true });
+  const plan = emptyBoundPlan();
+  const sourceLineage = addEmptyMigrationLineage(sourceDbPath, 'content-admin-seminar-test');
+  const candidateLineage = addEmptyMigrationLineage(candidateDbPath, 'content-admin-seminar-test');
+  const receipt = boundReceipt(sourceDbPath, candidateDbPath, plan);
+  Object.assign(receipt, { operationId: candidateLineage.operationId });
+  Object.assign(receipt.source, { snapshotSha256: sourceLineage.sourceSnapshotSha256, schemaFingerprint: sourceLineage.sourceSchemaSha256 });
+  const report = auditMigration({ sourceDbPath, candidateDbPath, plan, receipt });
+  assert.equal(report.passed, true, JSON.stringify(report.differences));
+  assert.equal(report.transformations.permissionRowsRecreated, 0);
+
+  const rejectedPath = join(directory, 'content-admin-seminar-rejected.db');
+  createContentAdminSeminarPermissionShape(rejectedPath, { candidate: true, extraField: 'seo.og_image' });
+  addEmptyMigrationLineage(rejectedPath, 'content-admin-seminar-test');
+  const rejectedReceipt = boundReceipt(sourceDbPath, rejectedPath, plan);
+  Object.assign(rejectedReceipt, { operationId: candidateLineage.operationId });
+  Object.assign(rejectedReceipt.source, { snapshotSha256: sourceLineage.sourceSnapshotSha256, schemaFingerprint: sourceLineage.sourceSchemaSha256 });
+  const rejected = auditMigration({ sourceDbPath, candidateDbPath: rejectedPath, plan, receipt: rejectedReceipt });
+  assert.equal(rejected.passed, false);
+  assert.ok(rejected.differences.some(({ table, kind }) => table === 'admin_permissions' && kind === 'logical-permission-fields-mismatch'));
+});
+
 test('permission graph accepts exact current fields while permission and link IDs churn', () => {
   const sourceDbPath = join(directory, 'permissions-source.db');
   const candidateDbPath = join(directory, 'permissions-candidate.db');
@@ -545,6 +593,7 @@ const PROMOTION_CONFIG_KEY = 'plugin_content_manager_configuration_content_types
 const SCHEDULE_CONFIG_KEY = 'plugin_content_manager_configuration_content_types::api::schedule-entry.schedule-entry';
 const SEMINAR_CONFIG_KEY = 'plugin_content_manager_configuration_content_types::api::seminar.seminar';
 const ARTICLE_CONFIG_KEY = 'plugin_content_manager_configuration_content_types::api::article.article';
+const SEO_COMPONENT_CONFIG_KEY = 'plugin_content_manager_configuration_components::shared.seo';
 const ARTICLE_FIELD_LABELS = [
   ['title', 'Заголовок', 'Заголовок статьи.'],
   ['slug', 'Адрес страницы', 'Формируется из заголовка при первом сохранении. После сохранения адрес не меняется.'],
@@ -708,6 +757,14 @@ function coreStoreValues(candidate) {
     },
     settings: { mainField: 'name', defaultSortBy: 'name', defaultSortOrder: 'ASC' },
   };
+  const seoComponent = {
+    layouts: { edit: [[{ name: 'seo_title', size: 6 }], [{ name: 'seo_description', size: 12 }], [{ name: 'noindex', size: 6 }]] },
+    metadatas: {
+      seo_title: { edit: { label: 'seo_title' }, list: { label: 'seo_title' } },
+      seo_description: { edit: { label: 'seo_description' }, list: { label: 'seo_description' } },
+      noindex: { edit: { label: 'noindex' }, list: { label: 'noindex' } },
+    },
+  };
   const schema = {
     'api::promotion.promotion': { attributes: { name: { type: 'string' } }, __schema__: { attributes: { name: { type: 'string' } } } },
     'api::schedule-entry.schedule-entry': { attributes: { startAt: { type: 'datetime' } }, __schema__: { attributes: { startAt: { type: 'datetime' } } } },
@@ -726,6 +783,9 @@ function coreStoreValues(candidate) {
     schedule.metadatas.image = { edit: { label: 'Изображение', description: '', placeholder: '', visible: true, editable: true }, list: { label: 'Изображение', searchable: false, sortable: false } };
     schedule.metadatas.isEventCollection = { edit: { label: 'Исходный флаг коллекции', description: '', placeholder: '', visible: false, editable: false }, list: { label: 'Исходный флаг коллекции', searchable: true, sortable: true } };
     seminar.metadatas.seo.edit.description = SEMINAR_SEO_DESCRIPTION;
+    seoComponent.layouts.edit.push([{ name: 'og_title', size: 6 }], [{ name: 'og_description', size: 12 }]);
+    seoComponent.metadatas.og_title = { edit: { label: 'og_title' }, list: { label: 'og_title' } };
+    seoComponent.metadatas.og_description = { edit: { label: 'og_description' }, list: { label: 'og_description' } };
     for (const uid of Object.keys(schema)) {
       const fields = uid === 'api::promotion.promotion'
         ? [['type', { type: 'enumeration', enum: ['SHOP', 'INSTITUTE'] }]]
@@ -740,6 +800,7 @@ function coreStoreValues(candidate) {
     [PROMOTION_CONFIG_KEY, JSON.stringify(promotion)],
     [SCHEDULE_CONFIG_KEY, JSON.stringify(schedule)],
     [SEMINAR_CONFIG_KEY, JSON.stringify(seminar)],
+    [SEO_COMPONENT_CONFIG_KEY, JSON.stringify(seoComponent)],
     [CONTENT_SCHEMA_KEY, JSON.stringify(schema)],
     [UPLOAD_METRICS_KEY, JSON.stringify({ lastWeeklyUpdate: METRICS_LOAD_START - WEEK_MS - 1, weeklySchedule: candidate ? weeklyCronAt(METRICS_LOAD_START + 15_000) : '0 0 0 * * 0' })],
     ['unrelated-key', JSON.stringify({ preserved: true })],
@@ -825,6 +886,36 @@ test('core-store accepts only reviewed content-type updates and a stale upload m
 
   assert.equal(report.differences.some(({ table, kind }) => table === 'strapi_core_store_settings' && kind.startsWith('core-store-')), false,
     'only exact metadata, layout, compiled content schema additions, and stale upload schedule refresh are allowed');
+});
+
+test('core-store accepts only the exact shared SEO Open Graph component additions', () => {
+  const sourceDbPath = join(directory, 'seo-component-source.db');
+  const candidateDbPath = join(directory, 'seo-component-candidate.db');
+  createCoreStoreShape(sourceDbPath);
+  createCoreStoreShape(candidateDbPath, { candidate: true });
+  const plan = emptyBoundPlan();
+  const report = auditMigration({ sourceDbPath, candidateDbPath, plan, receipt: boundReceipt(sourceDbPath, candidateDbPath, plan) });
+  assert.equal(report.differences.some(({ table, kind }) => table === 'strapi_core_store_settings' && kind.startsWith('core-store-')), false,
+    'the SEO component may add only the two nullable Open Graph fields');
+
+  const mutations = [
+    (value) => { value.layouts.edit[0][0].size = 12; },
+    (value) => { value.metadatas.seo_title.edit.label = 'Другой заголовок'; },
+    (value) => { value.metadatas.og_title = { edit: { label: 'og_title', editable: true }, list: { label: 'og_title' } }; },
+  ];
+  for (const [index, mutate] of mutations.entries()) {
+    const mutationPath = join(directory, `seo-component-negative-${index}.db`);
+    copyFileSync(candidateDbPath, mutationPath);
+    const db = new Database(mutationPath);
+    const row = db.prepare('SELECT value FROM strapi_core_store_settings WHERE key = ?').get(SEO_COMPONENT_CONFIG_KEY);
+    const value = JSON.parse(row.value);
+    mutate(value);
+    db.prepare('UPDATE strapi_core_store_settings SET value = ? WHERE key = ?').run(JSON.stringify(value), SEO_COMPONENT_CONFIG_KEY);
+    db.close();
+    const rejected = auditMigration({ sourceDbPath, candidateDbPath: mutationPath, plan, receipt: boundReceipt(sourceDbPath, mutationPath, plan) });
+    assert.equal(rejected.passed, false, `mutation ${index} must be rejected`);
+    assert.ok(rejected.differences.some(({ table, kind }) => table === 'strapi_core_store_settings' && kind.startsWith('core-store-')));
+  }
 });
 
 test('program slug true-to-false normalization requires the plan-bound source schema and both mirrors', () => {
