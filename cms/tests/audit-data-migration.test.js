@@ -395,6 +395,54 @@ test('permission audit accepts an already-current next-release no-op without rec
   assert.equal(report.transformations.permissionRowsRecreated, 0);
 });
 
+test('permission audit admits only the reviewed Editor card grants', () => {
+  const sourceDbPath = join(directory, 'editor-cards-source.db');
+  const candidateDbPath = join(directory, 'editor-cards-candidate.db');
+  const institute = 'api::institute.institute';
+  const program = 'api::course-group.course-group';
+  const teacher = 'api::teacher.teacher';
+  const instituteFields = ['name', 'shortName', 'description', 'image', 'order', 'seo.seo_title', 'seo.seo_description'];
+  const programFields = ['name', 'description', 'image', 'order', 'is_article_category', 'seo.seo_title', 'seo.seo_description'];
+  const teacherFields = ['name', 'trait', 'order', 'photo', 'bio'];
+  const old = [
+    ['read', program, ['name', 'slug', 'editor_label', 'is_article_category']],
+    ['update', program, ['is_article_category']],
+    ['read', teacher, ['name', 'slug']],
+  ];
+  const changed = [
+    ['read', program, [...programFields, 'slug', 'editor_label', 'institute']],
+    ['update', program, programFields],
+    ['read', teacher, [...teacherFields, 'slug', 'institute']],
+    ['read', institute, [...instituteFields, 'slug']],
+    ['update', institute, instituteFields],
+    ['update', teacher, teacherFields],
+    ...[program, teacher, institute].map(subject => ['publish', subject, null]),
+  ];
+  for (const [dbPath, rows, fromId] of [[sourceDbPath, old, 120], [candidateDbPath, changed, 220]]) {
+    createPermissionShape(dbPath, { candidate: true });
+    const db = new Database(dbPath);
+    rows.forEach(([verb, subject, fields], index) => {
+      const id = fromId + index;
+      const ts = dbPath === sourceDbPath ? 1700000000000 : 1792101826000;
+      db.prepare('INSERT INTO admin_permissions VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(
+        id, `doc-${id}`, `plugin::content-manager.explorer.${verb}`, subject,
+        JSON.stringify(fields ? { fields } : {}), '[]', '{}', ts, ts, ts,
+      );
+      db.prepare('INSERT INTO admin_permissions_role_lnk VALUES (?, ?, ?, ?)').run(id, id, 1, 6 + index);
+    });
+    db.close();
+  }
+  const plan = emptyBoundPlan();
+  const audit = () => auditMigration({ sourceDbPath, candidateDbPath, plan, receipt: boundReceipt(sourceDbPath, candidateDbPath, plan) });
+  const report = audit();
+  assert.deepEqual(report.differences.filter(({ table }) => table.startsWith('admin_permission')), []);
+
+  const candidate = new Database(candidateDbPath);
+  candidate.prepare('UPDATE admin_permissions SET properties = ? WHERE id = 224').run(JSON.stringify({ fields: [...instituteFields, 'slug'] }));
+  candidate.close();
+  assert.ok(audit().differences.some(({ kind }) => kind === 'logical-permission-added'));
+});
+
 test('permission graph rejects unapproved fields, changed conditions, role reassignment, and dangling links', () => {
   const mutations = [
     (permission, index) => index === 0 ? { ...permission, properties: { fields: ['startAt', 'image', 'price'] } } : permission,

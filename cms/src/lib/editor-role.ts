@@ -1,3 +1,7 @@
+import { isDeepStrictEqual } from 'node:util';
+import type { Core } from '@strapi/strapi';
+import { errors } from '@strapi/utils';
+
 export interface EditorPermission {
   action: string;
   subject?: string | null;
@@ -122,25 +126,33 @@ function contentPermissions(subject: string, fields: string[]): EditorPermission
   return permissions;
 }
 
+const editableCards = [
+  {
+    subject: 'api::course-group.course-group',
+    read: ['name', 'slug', 'editor_label', 'description', 'image', 'order', 'is_article_category', 'institute', 'seo.seo_title', 'seo.seo_description'],
+    update: ['name', 'description', 'image', 'order', 'is_article_category', 'seo.seo_title', 'seo.seo_description'],
+  },
+  {
+    subject: 'api::teacher.teacher',
+    read: ['name', 'slug', 'trait', 'order', 'institute', 'photo', 'bio'],
+    update: ['name', 'trait', 'order', 'photo', 'bio'],
+  },
+  {
+    subject: 'api::institute.institute',
+    read: ['name', 'slug', 'shortName', 'description', 'image', 'order', 'seo.seo_title', 'seo.seo_description'],
+    update: ['name', 'shortName', 'description', 'image', 'order', 'seo.seo_title', 'seo.seo_description'],
+  },
+];
+
 export const EDITOR_PERMISSIONS: EditorPermission[] = [
   ...contentPermissions('api::article.article', articleFields),
   ...contentPermissions('api::seminar.seminar', seminarFields),
   ...contentPermissions('api::schedule-entry.schedule-entry', scheduleFields),
-  {
-    action: contentAction('read'),
-    subject: 'api::course-group.course-group',
-    properties: { fields: ['name', 'slug', 'editor_label', 'is_article_category'] },
-  },
-  {
-    action: contentAction('update'),
-    subject: 'api::course-group.course-group',
-    properties: { fields: ['is_article_category'] },
-  },
-  {
-    action: contentAction('read'),
-    subject: 'api::teacher.teacher',
-    properties: { fields: ['name', 'slug'] },
-  },
+  ...editableCards.flatMap(({ subject, read, update }) => [
+    { action: contentAction('read'), subject, properties: { fields: read } },
+    { action: contentAction('update'), subject, properties: { fields: update } },
+    { action: contentAction('publish'), subject },
+  ]),
   { action: 'plugin::upload.read' },
   { action: 'plugin::upload.configure-view' },
   { action: 'plugin::upload.assets.create' },
@@ -157,4 +169,81 @@ export async function syncEditorRolePermissions(strapi: EditorRoleStrapi): Promi
     throw new Error('роль Strapi Editor не найдена');
   }
   await roleService.assignPermissions(editorRole.id, EDITOR_PERMISSIONS);
+}
+
+type CardSeo = {
+  seo_title?: string | null;
+  seo_description?: string | null;
+  noindex?: boolean;
+  og_image?: { id: number } | null;
+};
+
+type CardVersion = {
+  slug?: string;
+  legacy_id?: string;
+  institute?: { documentId: string } | null;
+  course_groups?: { documentId: string }[];
+  seminars?: { documentId: string }[];
+  seo?: CardSeo | null;
+};
+
+function protectedValues(version: CardVersion) {
+  return {
+    slug: version.slug,
+    legacyId: version.legacy_id,
+    institute: version.institute?.documentId ?? null,
+    programs: (version.course_groups ?? []).map(({ documentId }) => documentId).sort(),
+    seminars: (version.seminars ?? []).map(({ documentId }) => documentId).sort(),
+    ogImage: version.seo?.og_image?.id ?? null,
+    noindex: version.seo?.noindex ?? false,
+  };
+}
+
+export function registerEditorCardRestrictions(strapi: Core.Strapi): void {
+  strapi.documents.use(async (context, next) => {
+    const card = editableCards.find(({ subject }) => subject === context.uid);
+    if (!card || !['unpublish', 'update', 'publish', 'discardDraft'].includes(context.action)) return next();
+    const roles = strapi.requestContext.get()?.state?.user?.roles as { code: string }[] | undefined;
+    if (!roles?.some(({ code }) => code === 'strapi-editor') || roles.some(({ code }) => code === 'strapi-super-admin')) {
+      return next();
+    }
+    if (context.action === 'unpublish') {
+      throw new errors.ForbiddenError('Редактор может публиковать правки, но не может снять карточку с публикации.');
+    }
+
+    const { data, documentId } = context.params as { data?: Record<string, unknown>; documentId?: string };
+    const hasSeo = card.update.includes('seo.seo_title');
+    const seoTouched = hasSeo && data && Object.prototype.hasOwnProperty.call(data, 'seo');
+    if (!documentId || (context.action === 'update' && !seoTouched)) return next();
+    const populate = {
+      ...(hasSeo ? { seo: { populate: ['og_image'] } } : {}),
+      ...(context.action === 'update' ? {} : card.subject === 'api::institute.institute'
+        ? { course_groups: { fields: ['documentId'] } }
+        : { institute: { fields: ['documentId'] }, seminars: { fields: ['documentId'] } }),
+    };
+    const load = (status: 'draft' | 'published') => strapi.documents(context.uid as never).findOne({
+      documentId, status, populate,
+    }) as Promise<CardVersion | null>;
+
+    return strapi.db.transaction(async () => {
+      const draft = await load('draft');
+      if (context.action !== 'update' && draft) {
+        // Native publish and discard act on the entire shared draft.
+        const published = await load('published');
+        if (published && !isDeepStrictEqual(protectedValues(draft), protectedValues(published))) {
+          throw new errors.ForbiddenError('В черновике есть изменения защищённых полей. Их должен проверить администратор.');
+        }
+      } else if (seoTouched && draft?.seo) {
+        const seo = data.seo as CardSeo | null;
+        // Strapi replaces the component on update. Preserve fields outside this write grant.
+        data.seo = {
+          seo_title: seo === null ? null : seo.seo_title === undefined ? draft.seo.seo_title : seo.seo_title,
+          seo_description: seo === null ? null : seo.seo_description === undefined ? draft.seo.seo_description : seo.seo_description,
+          noindex: draft.seo.noindex,
+          og_image: draft.seo.og_image?.id ?? null,
+        };
+      }
+      return next();
+    });
+  });
 }

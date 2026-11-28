@@ -62,6 +62,7 @@ describe('доверенный перенос в собранном Strapi', { t
   let app;
   let base;
   let adminJwt;
+  let editorJwt;
   let fullToken;
   let customToken;
   let readOnlyToken;
@@ -170,6 +171,10 @@ describe('доверенный перенос в собранном Strapi', { t
       roles: [role.id],
     });
     adminJwt = ok(await call('POST', '/admin/login', null, { email, password }), 'вход в панель').data.accessToken;
+    const editorRole = await app.service('admin::role').findOne({ code: 'strapi-editor' });
+    const editorEmail = `editor-${Date.now()}@example.invalid`;
+    await app.service('admin::user').create({ email: editorEmail, password, firstname: 'Editor', lastname: 'Probe', isActive: true, preferedLanguage: 'ru', roles: [editorRole.id] });
+    editorJwt = ok(await call('POST', '/admin/login', null, { email: editorEmail, password }), 'вход редактора').data.accessToken;
 
     const tokens = app.service('admin::api-token');
     const full = await tokens.create({
@@ -253,6 +258,81 @@ describe('доверенный перенос в собранном Strapi', { t
     if (app) await app.destroy();
     fs.rmSync(work, { recursive: true, force: true });
   });
+
+  test('редактор публикует правки карточек, сохраняя URL, служебный SEO и право на снятие за администратором', async () => {
+    const instituteUid = 'api::institute.institute';
+    const programUid = 'api::course-group.course-group';
+    const cover = await app.db.query('plugin::upload.file').create({
+      data: { name: 'test-cover.png', hash: 'test-cover', ext: '.png', mime: 'image/png',
+        size: 1, url: '/uploads/test-cover.png', provider: 'local' },
+    });
+    const seo = { seo_title: 'Тест прав редактора', seo_description: 'Прежнее описание', noindex: true, og_image: cover.id };
+    const institute = await app.documents(instituteUid).create({
+      status: 'published',
+      data: { name: 'Институт доступа', slug: 'editor-card-institute', description: 'Описание', order: 99, seo },
+    });
+    const program = await app.documents(programUid).create({
+      status: 'published',
+      data: { name: 'Программа доступа', slug: 'editor-card-program', description: 'Описание', institute: institute.documentId, seo },
+    });
+    const teacher = await app.documents(TEACHER).create({
+      status: 'published',
+      data: { name: 'Преподаватель доступа', slug: 'editor-card-teacher', trait: 'teacher', institute: institute.documentId },
+    });
+    for (const [uid, card] of [[instituteUid, institute], [programUid, program], [TEACHER, teacher]]) {
+      const collection = `/content-manager/collection-types/${uid}`;
+      const entry = `${collection}/${card.documentId}`;
+      const content = uid === TEACHER ? { bio: '<p>Биография редактора</p>' } : { seo: { seo_title: 'Новый заголовок' } };
+      const update = await call('PUT', entry, editorJwt, { ...content, name: card.name + ' изменён', slug: 'different-url' });
+      const failure = JSON.stringify(update.body);
+      // Strapi can sanitize a forbidden field or reject a mixed payload.
+      if (update.status === 400 || update.status === 403) {
+        ok(await call('PUT', entry, editorJwt, { ...content, name: card.name + ' изменён' }), failure);
+      } else {
+        assert.equal(update.status, 200, failure);
+      }
+      const published = await app.documents(uid).findOne({ documentId: card.documentId, status: 'published' });
+      assert.equal(published.name, card.name, 'сохранение не меняет опубликованную версию');
+      ok(await call('POST', entry + '/actions/publish', editorJwt, {}), uid + ': публикация карточки');
+      const next = await app.documents(uid).findOne({
+        documentId: card.documentId,
+        status: 'published',
+        populate: uid === TEACHER ? ['institute'] : { seo: { populate: ['og_image'] }, ...(uid === programUid ? { institute: true } : {}) },
+      });
+      assert.equal(next.name, card.name + ' изменён');
+      assert.equal(next.slug, card.slug);
+      if (uid !== instituteUid) assert.equal(next.institute.documentId, institute.documentId);
+      if (uid !== TEACHER) {
+        assert.equal(next.seo.seo_title, 'Новый заголовок');
+        assert.equal(next.seo.seo_description, seo.seo_description);
+        assert.equal(next.seo.noindex, true);
+        assert.equal(next.seo.og_image.id, cover.id);
+      }
+      assert.equal((await call('POST', entry + '/actions/unpublish', editorJwt, {})).status, 403);
+      assert.equal((await call('DELETE', entry, editorJwt)).status, 403);
+      assert.equal((await call('POST', collection, editorJwt, { name: 'Новая карточка' })).status, 403);
+    }
+    const entry = `/content-manager/collection-types/${instituteUid}/${institute.documentId}`;
+    await app.documents(instituteUid).update({
+      documentId: institute.documentId,
+      data: { seo: { ...seo, noindex: false } },
+    });
+    for (const action of ['publish', 'discard']) {
+      assert.equal((await call('POST', entry + '/actions/' + action, editorJwt, {})).status, 403);
+    }
+    const versions = await Promise.all(['draft', 'published'].map(status =>
+      app.documents(instituteUid).findOne({ documentId: institute.documentId, status, populate: ['seo'] }),
+    ));
+    assert.deepEqual(versions.map(entry => entry.seo.noindex), [false, true]);
+    await app.documents(instituteUid).discardDraft({ documentId: institute.documentId });
+    await app.documents(instituteUid).update({ documentId: institute.documentId, data: { course_groups: { set: [] } } });
+    assert.equal((await call('POST', entry + '/actions/publish', editorJwt, {})).status, 403);
+    const linked = await app.documents(instituteUid).findOne({
+      documentId: institute.documentId, status: 'published', populate: ['course_groups'],
+    });
+    assert.deepEqual(linked.course_groups.map(item => item.documentId), [program.documentId]);
+  });
+
 
   // ── Публикация через Document Service и Content API ────────────────────────
 
@@ -896,7 +976,7 @@ describe('доверенный перенос в собранном Strapi', { t
       assert.deepEqual(numbers(await getVersion(published.documentId, 'published')), edited);
     });
 
-    test('ordinary fields of a draft survive narrow save and publication by content-admin', async () => {
+    test('ordinary draft fields survive narrow phone save and publication by strapi-editor', async () => {
       const pages = app.documents(uid);
       const stored = await pages.findFirst({ status: 'published', filters: { slug: 'kontakty' } });
       const data = { ...content, slug: 'kontakty', legacy_id: 'kontakty', ...initial };
@@ -906,12 +986,12 @@ describe('доверенный перенос в собранном Strapi', { t
       try {
         await pages.update({ documentId, data: { body: '<p>Чужой черновик</p>', seo: { seo_title: 'Черновик', seo_description: 'Черновое описание' } } });
         const state = async () => {
-          const result = await call('GET', '/admin/site-phones', adminJwt);
+          const result = await call('GET', '/admin/site-phones', editorJwt);
           assert.equal(result.status, 200);
           assert.ok(result.body?.revision, 'contacts endpoint must return its data and revision as JSON');
           return result.body;
         };
-        const write = (action, revision, patch, token = adminJwt) => call(action === 'draft' ? 'PUT' : 'POST', '/admin/site-phones/' + action, token, patch, { 'if-match': '"' + revision + '"' });
+        const write = (action, revision, patch, token = editorJwt) => call(action === 'draft' ? 'PUT' : 'POST', '/admin/site-phones/' + action, token, patch, { 'if-match': '"' + revision + '"' });
         const first = await state();
         assert.deepEqual(numbers(first.published), initial);
         const excluded = await app.service('admin::role').create({ code: 'phone-observer', name: 'Observer' });
@@ -926,7 +1006,7 @@ describe('доверенный перенос в собранном Strapi', { t
             assert.equal((await write(op, first.revision, { ...edited, ...extra })).status, 400);
           }
         }
-        const permissions = ok(await call('GET', '/admin/users/me/permissions', adminJwt), 'role permissions').data;
+        const permissions = ok(await call('GET', '/admin/users/me/permissions', editorJwt), 'role permissions').data;
         assert.deepEqual(permissions.filter((row) => row.subject === uid && row.action.startsWith('plugin::content-manager.explorer.')), []);
         ok(await write('draft', first.revision, { center_phone: edited.center_phone }), 'save center');
         assert.deepEqual(numbers(await getVersion(documentId, 'draft')), { ...initial, center_phone: edited.center_phone });
