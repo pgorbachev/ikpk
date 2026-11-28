@@ -18,6 +18,8 @@
   - protect the newest operation without the eligibility check → `test_rolled_back_newest_operation_leaves_the_older_eligible_capture_protected` 0 → 1;
   - re-raise on a bad entry instead of keeping it → `ReleaseCleanupTests` 0 → 3;
   - committed retry ignoring rollback intent → `test_static_main_committed_retry_reports_committed_after_source_removed` 0 → 1;
+  - drop the production-static early return in `_record_workspace_run` → `test_production_static_run_is_logged_without_touching_paired_status` 0 → 1;
+  - catch only HostFailure per entry → `test_os_error_on_one_source_does_not_stop_the_others` 0 → 1;
   - not covered by a test: the dispatch wiring that runs post-commit cleanup after a committed retry (two lines, mirroring the `--browser-digest` branch). A dispatch fixture needs the full lock and marker admission; this is checked on staging194 in 4.2.
 
 ## 3. Implementation
@@ -29,6 +31,6 @@
 
 ## 4. Verification and release
 
-- [ ] 4.1 Local gates, two independent code reviews and the simplification review.
+- [x] 4.1 Local gates, two independent code reviews and the simplification review. (Opus: facts and consequences+simplification on `5296f682`; re-review of the fix delta found no P0–P2; its P3s fixed with tests.)
 - [ ] 4.2 Install the helper on staging194, run a static publication with reuse of the latest capture, confirm retention.
 - [ ] 4.3 Install on production, run a static publication, confirm only unfinished sources remain and the site, CMS and refresh work.
