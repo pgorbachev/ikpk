@@ -633,6 +633,22 @@ class ReleaseCleanupTests(unittest.TestCase):
         self.assertTrue((sources / ('a' * 40 + '-flow-one')).is_dir())
         self.assertTrue((sources / ('b' * 40 + '-flow-zero')).is_dir())
 
+    # Visibility: a production-static run logs removed and kept sources and leaves the paired timer status alone.
+    # Mutation: drop the production-static early return in _record_workspace_run, or the static keys from the log.
+    def test_production_static_run_is_logged_without_touching_paired_status(self):
+        sources = self._production_sources()
+        self._source_tree(sources, 'a' * 40 + '-flow-one')
+        ghost = self._source_tree(sources, 'd' * 40 + '-ghost-op')
+        paired = Path(self.tmp.name) / 'journals' / 'production-paired'
+        paired.mkdir(parents=True)
+        with patch.object(host, 'PRODUCTION_OPERATION_STATE_ROOT', paired.parent):
+            host._cleanup_after_commit(self.production_config, self.state, 'flow-one')
+        entry = json.loads((paired / 'workspace-cleanup.log.jsonl').read_text(encoding='utf-8').splitlines()[-1])
+        self.assertEqual(entry['profile'], 'production-static')
+        self.assertEqual(entry['removedStaticSources'], [str((sources / ('a' * 40 + '-flow-one')).resolve())])
+        self.assertEqual(entry['retainedUnknownStaticSources'], [str(ghost.resolve())])
+        self.assertFalse((paired / 'workspace-cleanup-status.json').exists())
+
     # Guard P2b: the source step itself refuses on an unfinished operation, independent of earlier steps.
     # Mutation: read the journal with validate_history=False in _cleanup_static_sources.
     def test_static_source_step_refuses_on_unfinished_operation(self):

@@ -7248,6 +7248,8 @@ def _cleanup_static_sources(config: dict[str, Any], state: RehearsalState) -> di
     if not stat.S_ISDIR(info.st_mode) or stat.S_ISLNK(info.st_mode):
         raise HostFailure("static source root is unsafe; cleanup refused")
     root = root.resolve(strict=True)
+    if not getattr(shutil.rmtree, "avoids_symlink_attacks", False):
+        raise HostFailure("safe symlink-resistant release removal is unavailable")
     mounts = _mount_points()
     removed, retained = [], []
     for candidate in sorted(root.iterdir()):
@@ -7256,8 +7258,8 @@ def _cleanup_static_sources(config: dict[str, Any], state: RehearsalState) -> di
                 raise HostFailure("not a static-main operation of this journal")
             _remove_release_tree(candidate, mounts)  # refuses symlinks, non-directories and mounts
             removed.append(str(candidate))
-        except HostFailure:
-            retained.append(str(candidate))
+        except (HostFailure, OSError):
+            retained.append(str(candidate))  # a partly removed known tree is retried on the next commit
     return {"removedStaticSources": removed, "retainedUnknownStaticSources": retained}
 
 
