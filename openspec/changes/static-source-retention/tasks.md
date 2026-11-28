@@ -7,7 +7,14 @@
 - [x] 2.1 Production: terminal operations' sources removed including the just-committed one; unfinished operation → refusal, nothing removed; unknown entry kept and listed in `retainedUnknownStaticSources`; rolled-back/expired terminal; corrupt or unsafe journal → no removal, `cleanupPending`; symlink and mount not followed; idempotent.
 - [x] 2.1a Committed retry: repeating `static-main` for a committed operation whose source is gone reports committed (red now).
 - [x] 2.2 Staging194: exactly the capture referent of the latest eligible operation is kept on post-commit (paired and static) and timer cleanup; reuse of it still verifies; other static sources and CMS releases cleaned as before; referent already absent → nothing extra protected. (The journal predicate shared with reuse keeps its existing test; an actual reuse of the kept tree needs CMS-owned sealed trees and is verified in 4.2.)
-- [ ] 2.3 Negative checks recorded for each new guard.
+- [x] 2.3 Negative checks recorded for each new guard (relevant test class before → after; tree restored and verified each time):
+  - drop `result.update(_cleanup_static_sources(...))` in `_cleanup_after_commit` → `ReleaseCleanupTests` 0 → 5;
+  - protect the latest operation's own tree instead of its `reusedCapture` referent → `Staging194CaptureRetentionTests` 0 → 2;
+  - drop `_latest_capture_referent` from the protected set → 0 → 5;
+  - remove unknown entries as well → `ReleaseCleanupTests` 0 → 2;
+  - drop the committed short-circuit in `_static_main_prepare` → `test_static_main_committed_retry_reports_committed_after_source_removed` 0 → 1;
+  - client: without the `committed` branch, `test_static_main_retry_of_committed_operation_succeeds_without_export` fails with a Refusal;
+  - unfinished operation: refused twice, by journal history validation and by the explicit check. Dropping either one alone keeps `test_static_source_step_refuses_on_unfinished_operation` green; dropping both turns it red (0 → 1).
 
 ## 3. Implementation
 
