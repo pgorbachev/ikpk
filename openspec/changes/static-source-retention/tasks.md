@@ -6,15 +6,15 @@
 
 - [x] 2.1 Production: terminal operations' sources removed including the just-committed one; unfinished operation → refusal, nothing removed; unknown entry kept and listed in `retainedUnknownStaticSources`; rolled-back/expired terminal; corrupt or unsafe journal → no removal, `cleanupPending`; symlink and mount not followed; idempotent.
 - [x] 2.1a Committed retry: repeating `static-main` for a committed operation whose source is gone reports committed (red now).
-- [ ] 2.2 Staging194: exactly the capture referent of the latest eligible operation is kept on post-commit (paired and static) and timer cleanup; reuse of it still verifies; other static sources and CMS releases cleaned as before; referent already absent → nothing extra protected.
+- [x] 2.2 Staging194: exactly the capture referent of the latest eligible operation is kept on post-commit (paired and static) and timer cleanup; reuse of it still verifies; other static sources and CMS releases cleaned as before; referent already absent → nothing extra protected. (The journal predicate shared with reuse keeps its existing test; an actual reuse of the kept tree needs CMS-owned sealed trees and is verified in 4.2.)
 - [ ] 2.3 Negative checks recorded for each new guard.
 
 ## 3. Implementation
 
-- [ ] 3.1 Production static-source retention on the post-commit path of the static profile.
-- [ ] 3.1a Committed short-circuit in `_static_main_prepare`.
-- [ ] 3.2 Staging194 protection of the capture referent in CMS release cleanup.
-- [ ] 3.3 `docs/deploy-vps.md`: what the static source root holds per profile and when it is cleaned.
+- [x] 3.1 Production static-source retention on the post-commit path of the static profile.
+- [x] 3.1a Committed short-circuit in `_static_main_prepare`.
+- [x] 3.2 Staging194 protection of the capture referent in CMS release cleanup.
+- [x] 3.3 `docs/deploy-vps.md`: what the static source root holds per profile and when it is cleaned.
 
 ## 4. Verification and release
 

@@ -2672,6 +2672,8 @@ def invoke(args: argparse.Namespace, *, admission: Optional[dict] = None) -> Opt
         remote_options = {} if profile == "staging194" else {"profile": profile}
         prepared = parse_host_json(ssh_remote(common + ["--archive-sha256", archive_sha256], **remote_options,
                                               input_bytes=archive))
+        if prepared.get("phase") == "committed":
+            return
         if prepared.get("phase") != "browser-check-required":
             raise Refusal(f"static-main candidate is not ready for browser acceptance: {prepared.get('phase')}")
         digest = prepared.get("staticTreeSha256")

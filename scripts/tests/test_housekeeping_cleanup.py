@@ -555,8 +555,10 @@ class ReleaseCleanupTests(unittest.TestCase):
         self.assertFalse(result.get('cleanupPending'), result)
         self.assertNotIn('cleanupError', result)
         self.assertEqual(result['removedCmsReleases'], [])
-        self.assertTrue((static_root / ('a' * 40 + '-flow-one')).is_dir(), 'static sources are not deleted here')
-        self.assertTrue((static_root / ('b' * 40 + '-flow-zero')).is_dir(), 'static sources are not deleted here')
+        # static-source-retention: the committed source goes; flow-zero has no journal rows, so it is kept and reported.
+        self.assertFalse((static_root / ('a' * 40 + '-flow-one')).exists())
+        self.assertEqual(result['retainedUnknownStaticSources'],
+                         [str((static_root / ('b' * 40 + '-flow-zero')).resolve())])
 
     # Production source retention. Sources live in releaseRoot (`<sha>-<operationId>`); the served
     # static releases stay in staticReleaseRoot, which self.config already provides.
