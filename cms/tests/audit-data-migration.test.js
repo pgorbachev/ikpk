@@ -450,7 +450,7 @@ test('permission audit admits only the reviewed Editor card grants', () => {
   const program = 'api::course-group.course-group';
   const teacher = 'api::teacher.teacher';
   const instituteFields = ['name', 'shortName', 'description', 'image', 'order', 'seo.seo_title', 'seo.seo_description'];
-  const programFields = ['name', 'description', 'image', 'order', 'is_article_category', 'seo.seo_title', 'seo.seo_description'];
+  const programFields = ['name', 'description', 'image', 'order', 'is_article_category', 'seo.seo_title', 'seo.seo_description', 'seo.og_title', 'seo.og_description'];
   const teacherFields = ['name', 'trait', 'order', 'photo', 'bio'];
   const old = [
     ['read', program, ['name', 'slug', 'editor_label', 'is_article_category']],
@@ -758,11 +758,12 @@ function coreStoreValues(candidate) {
     settings: { mainField: 'name', defaultSortBy: 'name', defaultSortOrder: 'ASC' },
   };
   const seoComponent = {
-    layouts: { edit: [[{ name: 'seo_title', size: 6 }], [{ name: 'seo_description', size: 12 }], [{ name: 'noindex', size: 6 }]] },
+    layouts: { edit: [[{ name: 'seo_title', size: 6 }, { name: 'seo_description', size: 6 }], [{ name: 'og_image', size: 6 }, { name: 'noindex', size: 4 }]] },
     metadatas: {
-      seo_title: { edit: { label: 'seo_title' }, list: { label: 'seo_title' } },
-      seo_description: { edit: { label: 'seo_description' }, list: { label: 'seo_description' } },
-      noindex: { edit: { label: 'noindex' }, list: { label: 'noindex' } },
+      seo_title: { edit: { label: 'seo_title', description: '', placeholder: '', visible: true, editable: true }, list: { label: 'seo_title', searchable: true, sortable: true } },
+      seo_description: { edit: { label: 'seo_description', description: '', placeholder: '', visible: true, editable: true }, list: { label: 'seo_description', searchable: true, sortable: true } },
+      og_image: { edit: { label: 'og_image', description: '', placeholder: '', visible: true, editable: true }, list: { label: 'og_image', searchable: false, sortable: false } },
+      noindex: { edit: { label: 'noindex', description: '', placeholder: '', visible: true, editable: true }, list: { label: 'noindex', searchable: false, sortable: false } },
     },
   };
   const schema = {
@@ -783,9 +784,9 @@ function coreStoreValues(candidate) {
     schedule.metadatas.image = { edit: { label: 'Изображение', description: '', placeholder: '', visible: true, editable: true }, list: { label: 'Изображение', searchable: false, sortable: false } };
     schedule.metadatas.isEventCollection = { edit: { label: 'Исходный флаг коллекции', description: '', placeholder: '', visible: false, editable: false }, list: { label: 'Исходный флаг коллекции', searchable: true, sortable: true } };
     seminar.metadatas.seo.edit.description = SEMINAR_SEO_DESCRIPTION;
-    seoComponent.layouts.edit.push([{ name: 'og_title', size: 6 }], [{ name: 'og_description', size: 12 }]);
-    seoComponent.metadatas.og_title = { edit: { label: 'og_title' }, list: { label: 'og_title' } };
-    seoComponent.metadatas.og_description = { edit: { label: 'og_description' }, list: { label: 'og_description' } };
+    seoComponent.layouts.edit.push([{ name: 'og_title', size: 6 }, { name: 'og_description', size: 6 }]);
+    seoComponent.metadatas.og_title = { edit: { label: 'og_title', description: '', placeholder: '', visible: true, editable: true }, list: { label: 'og_title', searchable: true, sortable: true } };
+    seoComponent.metadatas.og_description = { edit: { label: 'og_description', description: '', placeholder: '', visible: true, editable: true }, list: { label: 'og_description', searchable: true, sortable: true } };
     for (const uid of Object.keys(schema)) {
       const fields = uid === 'api::promotion.promotion'
         ? [['type', { type: 'enumeration', enum: ['SHOP', 'INSTITUTE'] }]]
@@ -1195,7 +1196,7 @@ test('program editor label recreates the four full-list permissions and updates 
         ordinal: candidate ? (role === 'strapi-editor' ? 1 : 2 + index) : sourceOrdinal,
         timestamp: stamp + index,
         action,
-        fields: [...fields, ...(candidate ? ['editor_label'] : [])],
+      fields: [...fields, ...(candidate ? (role === 'strapi-editor' ? ['editor_label', 'seo.og_title', 'seo.og_description'] : ['editor_label', 'seo.og_title', 'seo.og_description']) : [])],
       });
     });
     db.close();

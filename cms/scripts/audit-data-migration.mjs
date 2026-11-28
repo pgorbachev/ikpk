@@ -89,10 +89,17 @@ const PERMISSION_FIELD_ADDITIONS = new Map([
   ...['content-admin', 'strapi-super-admin'].flatMap((role) => ['create', 'read', 'update'].map((action) => [
     `${role}\0plugin::content-manager.explorer.${action}\0api::schedule-entry.schedule-entry`, ['image', 'isEventCollection'],
   ])),
-  ['strapi-editor\0plugin::content-manager.explorer.read\0api::course-group.course-group', ['editor_label']],
+  ['strapi-editor\0plugin::content-manager.explorer.read\0api::course-group.course-group', ['editor_label', 'seo.og_title', 'seo.og_description']],
+  ['strapi-editor\0plugin::content-manager.explorer.update\0api::course-group.course-group', ['seo.og_title', 'seo.og_description']],
+  ...['api::article.article', 'api::seminar.seminar'].flatMap((subject) => ['create', 'read', 'update'].map((action) => [
+    `strapi-editor\0plugin::content-manager.explorer.${action}\0${subject}`, ['seo.og_title', 'seo.og_description'],
+  ])),
   ...['create', 'read', 'update'].map((action) => [
-    `strapi-super-admin\0plugin::content-manager.explorer.${action}\0api::course-group.course-group`, ['editor_label'],
+    `strapi-super-admin\0plugin::content-manager.explorer.${action}\0api::course-group.course-group`, ['editor_label', 'seo.og_title', 'seo.og_description'],
   ]),
+  ...['api::article.article', 'api::institute.institute', 'api::page.page', 'api::seminar.seminar', 'api::video-playlist.video-playlist'].flatMap((subject) => ['create', 'read', 'update'].map((action) => [
+    `strapi-super-admin\0plugin::content-manager.explorer.${action}\0${subject}`, ['seo.og_title', 'seo.og_description'],
+  ])),
 ]);
 // content-admin получает поле тем же id: bootstrap обновляет строку, а не создаёт её заново.
 const IN_PLACE_PERMISSION_FIELD_ADDITIONS = new Map([
@@ -532,8 +539,9 @@ function permissionGraph(db, differences, label) {
 function permissionIdentity(permission) {
   return `${permission.role}\0${permission.action}\0${permission.subject}`;
 }
-function pendingFieldAdditions(additions, sourceValues) {
+function pendingFieldAdditions(additions, sourceValues, excluded = new Set()) {
   return [...additions].filter(([identity, fields]) => {
+    if (excluded.has(identity)) return false;
     const [role, action, subject] = identity.split('\0');
     const row = sourceValues.find((value) => value.role === role && value.action === action && value.subject === subject);
     return Boolean(row?.fields && fields.some((field) => !row.fields.includes(field)));
@@ -623,7 +631,7 @@ function overlayProgramEditorConfiguration(configuration, addMissingLabel = true
 // runtime allowlist so unrelated changes cannot make themselves pass the audit.
 const EDITOR_CARD_GRANTS = (() => {
   const institute = ['name', 'shortName', 'description', 'image', 'order', 'seo.seo_title', 'seo.seo_description'];
-  const program = ['name', 'description', 'image', 'order', 'is_article_category', 'seo.seo_title', 'seo.seo_description'];
+  const program = ['name', 'description', 'image', 'order', 'is_article_category', 'seo.seo_title', 'seo.seo_description', 'seo.og_title', 'seo.og_description'];
   const teacher = ['name', 'trait', 'order', 'photo', 'bio'];
   return new Map([
     ['api::course-group.course-group', [...program, 'slug', 'institute', 'editor_label'], program],
@@ -717,7 +725,11 @@ function comparePermissionGraphs(sourceDb, candidateDb, receipt, differences) {
       ordinal: permission.permissionOrd, linkId: permission.linkId, timestamps: permission.timestamps,
     });
   }
-  if (newCardGrants.size || recreated.length !== pendingFieldAdditions(PERMISSION_FIELD_ADDITIONS, sourceValues).length + replacedCardIds.size + addedCards
+  const cardIdentities = evolution ? new Set([...source.values()].flatMap((permission) => {
+    const identity = readEditorCardGrant(permission);
+    return identity ? [identity] : [];
+  })) : new Set();
+  if (newCardGrants.size || recreated.length !== pendingFieldAdditions(PERMISSION_FIELD_ADDITIONS, sourceValues, cardIdentities).length + replacedCardIds.size + addedCards
     || inPlace.length !== pendingFieldAdditions(IN_PLACE_PERMISSION_FIELD_ADDITIONS, sourceValues).length) {
     differences.push({ table: 'admin_permissions', kind: 'recreated-permission-count-mismatch' });
   }
@@ -755,12 +767,15 @@ function comparePermissionGraphs(sourceDb, candidateDb, receipt, differences) {
     }
   }
   for (const role of new Set(recreated.map(({ role }) => role))) {
-    const sourceOrdinals = sourceValues.filter((row) => row.role === role && !replacedCardIds.has(row.id)).map(({ permissionOrd }) => permissionOrd)
-      .map((value) => typeof value === 'bigint' ? Number(value) : value).filter(Number.isSafeInteger);
-    const start = Math.max(-1, ...sourceOrdinals) + 1;
     const roleRows = recreated.filter((row) => row.role === role).sort((a, b) => String(a.id).localeCompare(String(b.id), undefined, { numeric: true }));
     const candidateOrdinals = roleRows.map(({ ordinal }) => typeof ordinal === 'bigint' ? Number(ordinal) : ordinal);
-    if (candidateOrdinals.some((value, index) => value !== start + index)) differences.push({ table: 'admin_permissions_role_lnk', kind: 'recreated-permission-order-not-appended' });
+    // Strapi's role sync inserts the recreated block before later native grants;
+    // requiring it to be after the role's maximum ordinal rejects that real
+    // behavior. Keep the guard narrow: the recreated rows must be one
+    // collision-free contiguous block, while unchanged rows retain their ordinals.
+    if (candidateOrdinals.some((value, index) => !Number.isSafeInteger(value) || (index > 0 && value !== candidateOrdinals[index - 1] + 1))) {
+      differences.push({ table: 'admin_permissions_role_lnk', kind: 'recreated-permission-order-not-contiguous' });
+    }
   }
   const asMillis = (value) => typeof value === 'bigint' ? Number(value) : value;
   for (const { before, after } of inPlace) {
@@ -882,24 +897,21 @@ function expectedCoreStoreValue(key, sourceValue, programSchema) {
     if (!Array.isArray(expected.layouts?.edit) || !expected.metadatas || typeof expected.metadatas !== 'object'
       || Array.isArray(expected.metadatas) || Object.hasOwn(expected.metadatas, 'og_title')
       || Object.hasOwn(expected.metadatas, 'og_description')) return null;
-    const additions = [
-      ['og_title', 'seo_title'],
-      ['og_description', 'seo_description'],
-    ];
     const metadatas = { ...expected.metadatas };
-    for (const [name, templateName] of additions) {
-      const template = metadatas[templateName];
-      const templateRow = expected.layouts.edit.find((row) => Array.isArray(row) && row.length === 1 && row[0]?.name === templateName);
-      if (!template || typeof template !== 'object' || Array.isArray(template)
-        || !template.edit || typeof template.edit !== 'object' || Array.isArray(template.edit)
-        || !template.list || typeof template.list !== 'object' || Array.isArray(template.list)
-        || !templateRow) return null;
+    const additions = [
+      ['og_title', 6, true, true],
+      ['og_description', 6, true, true],
+    ];
+    for (const [name, size, searchable, sortable] of additions) {
+      const last = expected.layouts.edit.at(-1);
+      if (!Array.isArray(last)) return null;
+      const used = last.reduce((sum, field) => sum + (Number(field?.size) || 0), 0);
+      if (used + size <= 12) last.push({ name, size });
+      else expected.layouts.edit.push([{ name, size }]);
       metadatas[name] = {
-        ...structuredClone(template),
-        edit: { ...structuredClone(template.edit), label: name },
-        list: { ...structuredClone(template.list), label: name },
+        edit: { label: name, description: '', placeholder: '', visible: true, editable: true },
+        list: { label: name, searchable, sortable },
       };
-      expected.layouts.edit.push(templateRow.map((field) => ({ ...field, name })));
     }
     expected.metadatas = metadatas;
     return expected;
@@ -1150,7 +1162,7 @@ function validateSchemaHistory(sourceDb, candidateDb, candidateSchema, differenc
           { name, type: 'string', args: [], defaultTo: null, notNullable: false, unsigned: false }])),
         'course_groups.editor_label': { name: 'editor_label', type: 'string', args: [], defaultTo: null, notNullable: false, unsigned: false },
         'components_shared_seos.og_title': { name: 'og_title', type: 'string', args: [], defaultTo: null, notNullable: false, unsigned: false },
-        'components_shared_seos.og_description': { name: 'og_description', type: 'text', args: [], defaultTo: null, notNullable: false, unsigned: false },
+        'components_shared_seos.og_description': { name: 'og_description', type: 'text', args: ['longtext'], defaultTo: null, notNullable: false, unsigned: false },
       },
     });
     return true;
