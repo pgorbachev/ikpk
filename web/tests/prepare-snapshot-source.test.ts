@@ -90,6 +90,17 @@ describe('prepare-snapshot: источник снимка', () => {
     expect(run.status, `живой снимок отвергнут:\n${run.output}`).toBe(0);
   });
 
+  it('отказывает при подготовке сохранённого снимка без типа static_pages', () => {
+    const dir = dirWithSnapshot();
+    const path = join(dir, 'snapshot.json');
+    const snapshot = JSON.parse(readFileSync(path, 'utf8'));
+    delete snapshot.content.types.static_pages;
+    writeFileSync(path, JSON.stringify(snapshot));
+    const run = prepare({ CONTENT_SNAPSHOT_DIR: dir, SNAPSHOT_SOURCE: undefined });
+    expect(run.status, `сохранённый снимок без /oplata прошёл подготовку:\n${run.output}`).not.toBe(0);
+    expect(run.output).toMatch(/опубликованная Page \/oplata|снимок не записан/);
+  });
+
   it('сборка отклоняет изменённое историческое проведение до копирования снимка', () => {
     const dir = dirWithSnapshot();
     const path = join(dir, 'snapshot.json');

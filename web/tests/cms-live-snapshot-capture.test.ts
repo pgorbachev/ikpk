@@ -144,6 +144,17 @@ function dataset(over: Record<string, StubCollection> = {}): Record<string, Stub
     teachers: [ref('teach', 1, 'Преподаватель 1')],
   }));
 
+  const pages: Record<string, unknown>[] = ['kontakty', 'page-002'].map((slug, i) => ({
+    ...without(base('page', i + 1, slug), 'name'), slug, legacy_id: slug,
+    title: `Страница ${i + 1}`, body: '<p>Тело страницы</p>', seo: seo(slug),
+    center_phone: i === 0 ? '+78125550101' : null, manager_phone: i === 0 ? '+79815550202' : null,
+  }));
+  pages.push(defaultBookPage, {
+    ...without(base('page', 4, 'Оплата'), 'name'), slug: 'oplata', legacy_id: 'oplata',
+    title: 'Оплата', body: '<p>Оплата обучения</p>', seo: seo('Оплата'),
+    center_phone: null, manager_phone: null,
+    student_document_form_url: 'https://b24-cbqwqo.bitrix24site.ru/crm_form_test9/',
+  });
   const collections: Record<string, StubCollection> = {
     institutes: { records: institutes },
     'course-groups': { records: courseGroups },
@@ -153,11 +164,7 @@ function dataset(over: Record<string, StubCollection> = {}): Record<string, Stub
     'schedule-entries': { records: scheduleEntries },
     'news-items': { records: Array.from({ length: 2 }, (_, i) => ({ ...without(base('news', i + 1, `Новость ${i + 1}`), 'slug'), date: '2026-01-01T00:00:00.000Z', description: '<p>Новость</p>', image: media(i + 1), link: 'https://example.invalid', priority: i })) },
     promotions: { records: Array.from({ length: 2 }, (_, i) => ({ ...without(base('promo', i + 1, `Акция ${i + 1}`), 'slug'), date: '2026-01-01T00:00:00.000Z', description: '<p>Акция</p>', type: 'SHOP', image: media(i + 1), link: 'https://example.invalid', priority: i, active: true })) },
-    pages: { records: ['kontakty', 'page-002'].map((slug, i) => ({
-      ...without(base('page', i + 1, slug), 'name'), slug, legacy_id: slug,
-      title: `Страница ${i + 1}`, body: '<p>Тело страницы</p>', seo: seo(slug),
-      center_phone: i === 0 ? '+78125550101' : null, manager_phone: i === 0 ? '+79815550202' : null,
-    })).concat(defaultBookPage) },
+    pages: { records: pages },
     'video-playlists': { records: Array.from({ length: 2 }, (_, i) => ({ ...base('vp', i + 1, `Плейлист ${i + 1}`), videos: [{ url: 'https://example.invalid/v' }], seo: seo(`Плейлист ${i + 1}`) })) },
   };
   return { ...collections, ...over };
@@ -177,7 +184,7 @@ const EXPECTED_TYPES: { label: string; match: RegExp; count: number }[] = [
   { label: 'schedule-entries', match: /schedule[-_ ]?entries|schedule/i, count: 3 },
   { label: 'news-items', match: /news([-_ ]?items)?/i, count: 2 },
   { label: 'promotions', match: /promotions?|promos?/i, count: 2 },
-  { label: 'pages', match: /(static[-_ ]?)?pages?/i, count: 3 },
+  { label: 'pages', match: /(static[-_ ]?)?pages?/i, count: 4 },
   { label: 'video-playlists', match: /video[-_ ]?playlists?/i, count: 2 },
 ];
 

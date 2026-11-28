@@ -14,10 +14,8 @@ const PINNED = join(REPO_ROOT, 'fixtures', 'content-snapshot', 'snapshot.json');
 // сравнивал `course_group_legacy_id` семинара с множеством СЛУГОВ программ. Поле называется
 // `…_legacy_id`, и сравнивать его надо с `legacy_id`.
 //
-// Дефект дожил незамеченным, потому что контракт не запускается ни в одном обязательном пути:
-// `prepare-snapshot.ts` копирует фикстуру БЕЗ проверки, а единственный вызывающий —
-// `capture-content-snapshot.ts` — в цепочку сборки не входит. Гейт, который никто не исполняет,
-// не отличается от отсутствующего.
+// Общий контракт используется и live capture, и prepare. Этот файл фиксирует поведение
+// валидатора на целой закреплённой фикстуре и на одиночных мутациях.
 describe('закреплённая фикстура и её собственный контракт', () => {
   const snapshot = JSON.parse(readFileSync(PINNED, 'utf-8')) as Snapshot;
 
@@ -43,12 +41,11 @@ describe('закреплённая фикстура и её собственны
     }
   });
 
-  it('отказывает сохранённому снимку без static_pages', () => {
+  it('частичный валидатор допускает отсутствующий тип, а строгая проверка снимка отказывает', () => {
     const broken = structuredClone(snapshot) as Snapshot;
     delete broken.content.types.static_pages;
-    expect(validateSnapshotContract(broken).violations).toContainEqual(expect.objectContaining({
-      type: 'static_pages', recordId: 'oplata', field: 'student_document_form_url', rule: 'invalid-value',
-    }));
+    expect(validateSnapshotContract(broken).violations).toEqual([]); // partial validator deliberately accepts partial snapshots
+    expect(() => assertStudentDocumentFormSnapshot(broken.content.types.static_pages)).toThrow(/единственную действительную/);
   });
 
   it('capture fails closed for missing, duplicate and invalid /oplata values', () => {

@@ -9,6 +9,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { materializeInto } from './lib/content-media-store.ts';
 import { assertCaptureSnapshotContract, reportSnapshotContractError } from './lib/capture-snapshot-contract.ts';
+import { assertStudentDocumentFormSnapshot } from './lib/student-document-form-snapshot.ts';
 import type { Snapshot } from './lib/content-snapshot.ts';
 
 const webRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -52,6 +53,7 @@ if (!existsSync(join(source, 'snapshot.json'))) {
 const sourceSnapshot = JSON.parse(readFileSync(join(source, 'snapshot.json'), 'utf8')) as Snapshot;
 const sourcePolicy = sourceSnapshot.sourcePolicy;
 try {
+  assertStudentDocumentFormSnapshot(sourceSnapshot.content.types.static_pages);
   assertCaptureSnapshotContract(sourceSnapshot, undefined,
     sourcePolicy === 'initial-production' ? 'initial-prod' : sourcePolicy === 'production-static' ? 'production-static' : undefined);
 } catch (error) {
