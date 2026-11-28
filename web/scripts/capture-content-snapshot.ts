@@ -609,7 +609,7 @@ async function liveCapture(): Promise<void> {
       const filled = [
         ...Object.keys(UNMAPPED_SCHEMA_FIELDS[st.type] ?? {}).filter((f) => hasValue(record[f])).map((f) => `${st.type}.${f}`),
         ...Object.keys(UNMAPPED_SEO_FIELDS).filter((f) =>
-          hasValue(seo[f]) && !(st.type === 'articles' && f === 'og_image'),
+          hasValue(seo[f]) && !FIELD_MAP.some((entry) => entry.type === st.type && entry.source === `seo.${f}`),
         ).map((f) => `${st.type}.seo.${f}`),
       ];
       for (const name of filled) filledUnmapped.set(name, (filledUnmapped.get(name) ?? 0) + 1);
