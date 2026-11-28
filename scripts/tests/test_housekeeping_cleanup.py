@@ -639,5 +639,46 @@ class CmsReleaseCleanupTests(unittest.TestCase):
         self.assertEqual(host._cleanup_cms_releases({}, self._state([])), [])
 
 
+    def _dependent_workspace(self, config, stale, name, *, operation_id=None):
+        """A workspace under the fixed root whose web and cms node_modules link into `stale`."""
+        workspace_root = Path(config["releaseRoot"]).parent / "workspace"
+        workspace_root.mkdir(exist_ok=True)
+        workspace = workspace_root / name
+        workspace.mkdir()
+        for part in ("web", "cms"):
+            dependency = stale / part / "node_modules"
+            dependency.mkdir(parents=True)
+            (workspace / part).mkdir()
+            (workspace / part / "node_modules").symlink_to(dependency, target_is_directory=True)
+        if operation_id is not None:
+            # Identity that does not match any completed operation: the workspace is retained.
+            (workspace / ".ikpk-workspace-identity.json").write_text(
+                json.dumps({"operationId": operation_id, "sourceSha": "c" * 40}), encoding="utf-8")
+        config["siteBuildWorkspaceRoot"] = str(workspace_root)
+        return workspace
+
+    # Guard 6: a workspace that is referenced keeps the CMS release its web/node_modules links into.
+    # Mutation: in _cleanup_cms_releases replace `protected.add(_cms_release_dir(root, dependency))` with `pass`.
+    def test_dependency_of_protected_workspace_keeps_its_cms_release(self):
+        config, current, rollback, stale, history = self._layout()
+        workspace = self._dependent_workspace(config, stale, "a" * 40 + "-referenced")
+        with patch.object(host, "_mount_points", return_value=set()), \
+                patch.object(host, "_protected_paired_workspace_paths", return_value={workspace}):
+            removed = host._cleanup_cms_releases(config, self._state(history))
+        self.assertNotIn(str(stale.resolve()), removed)
+        self.assertTrue(stale.exists())
+
+    # Scenario b: a retained (unreferenced, marker-mismatched) workspace keeps its dependency release.
+    # Red now: only dependencies of referenced workspaces are protected.
+    def test_dependency_of_retained_workspace_keeps_its_cms_release(self):
+        config, current, rollback, stale, history = self._layout()
+        workspace = self._dependent_workspace(config, stale, "a" * 40 + "-retained", operation_id="retained")
+        with patch.object(host, "_mount_points", return_value=set()), \
+                patch.object(host, "_protected_paired_workspace_paths", return_value=set()):
+            removed = host._cleanup_cms_releases(config, self._state(history))
+        self.assertTrue(workspace.is_dir())
+        self.assertNotIn(str(stale.resolve()), removed)
+        self.assertTrue(stale.exists())
+
 if __name__ == '__main__':
     unittest.main()
