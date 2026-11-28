@@ -8,7 +8,7 @@ const seo: Seo = { seo_title: 'SEO', seo_description: 'Описание', og_tit
 type Middleware = (context: { uid: string; action: string; params: { documentId: string; data?: Record<string, unknown> } }, next: () => Promise<void>) => Promise<void>;
 function setup(draft: Seo | null, published: Seo | null = draft): Middleware {
   let middleware: Middleware | undefined;
-  const docs = Object.assign((_uid: string) => ({
+  const docs = Object.assign(() => ({
     findOne: async ({ status }: { status: string }) => ({ seo: status === 'draft' ? draft : published }),
   }), { use: (fn: Middleware) => { middleware = fn; } });
   const strapi = {
