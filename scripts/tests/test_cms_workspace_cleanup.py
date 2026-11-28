@@ -268,7 +268,7 @@ class PairedWorkspaceCleanupTests(PairedWorkspaceHelpers, WorkspaceTestCase):
                 patch.object(host.os, "fstat", root_owned_config), \
                 patch.object(host, "_cleanup_paired_workspaces", return_value={"workspaceDecisions": []}) as cleanup:
             self.assertEqual(host._cleanup_workspace_scope(production, self.state, preview=True),
-                             {"workspaceDecisions": []})
+                             {"workspaceDecisions": [], "deletionEnabled": False})
             legacy_config.write_text(json.dumps({"profile": "initial-prod", "stateDir": str(self.root / "different-state")}), encoding="utf-8")
             with self.assertRaisesRegex(host.HostFailure, "location differs"):
                 host._cleanup_workspace_scope(production, self.state, preview=True)
@@ -479,8 +479,8 @@ class PairedCleanupScenarioTests(PairedWorkspaceHelpers, WorkspaceTestCase):
 
     Names fixed for the implementer (assertions below depend on them, in the production-paired state directory,
     which is the RehearsalState root `stateDir`):
-      - `workspace-cleanup-status.json`: keys `lastSucceededAt` (null or ISO string) and `consecutiveFailures` (int)
-      - `workspace-cleanup.log.jsonl`: one JSON object per line, each with at least `reason`
+      - `workspace-cleanup-status.json`: keys `lastSucceededAt` (null or ISO string), `consecutiveFailures` (int), `lastReason`, `deletionEnabled`
+      - `workspace-cleanup.log.jsonl`: one JSON object per refusal, disabled deletion or removal, each with at least `reason`
     Both are written by the timer `cleanup-site` path and by `_cleanup_after_commit`.
     """
 

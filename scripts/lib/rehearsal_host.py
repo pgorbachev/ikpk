@@ -1510,7 +1510,9 @@ def _cms_release_dir(root: Path, path: Path) -> Path:
 
 
 def _workspace_dependency_releases(root: Path, workspace_root: Path) -> set[Path]:
-    """Production: CMS releases that any workspace dependency link resolves into, from the filesystem alone."""
+    """Production: CMS releases that workspace dependency links point into, from the filesystem alone.
+
+    A dangling or looping link protects nothing and is not a refusal; only a link that cannot be read is."""
     result = set()
     try:
         for child in workspace_root.iterdir():
@@ -1520,9 +1522,10 @@ def _workspace_dependency_releases(root: Path, workspace_root: Path) -> set[Path
                 link = child / part
                 if not os.path.islink(link):
                     continue
-                target = link.resolve(strict=True)
+                os.readlink(link)
+                target = Path(os.path.realpath(link))
                 if root in target.parents:
-                    result.add(_cms_release_dir(root, target))
+                    result.add(root / target.relative_to(root).parts[0])
     except OSError as error:
         raise HostFailure("workspace dependency link cannot be read; CMS release cleanup refused") from error
     return result
@@ -1938,6 +1941,7 @@ def _cleanup_workspace_scope(config: dict[str, Any], state: RehearsalState, *,
             except OSError as error:
                 marker_reason = f"activation marker unsafe: {error}"
         result = _cleanup_paired_workspaces(paired, paired_state, preview=preview, enabled=enabled)
+        result["deletionEnabled"] = enabled
         if marker_reason is not None:
             result["activationMarkerReason"] = marker_reason
         return result
@@ -1950,32 +1954,41 @@ def _workspace_step(config: dict[str, Any], state: RehearsalState) -> tuple[dict
     except (HostFailure, RehearsalRefusal, OSError, ValueError) as error:
         if config.get("profile", "staging194") == "staging194":
             raise
-        return {}, str(error)
+        cause = f": {error.__cause__}" if error.__cause__ is not None else ""
+        return {}, f"workspace step failed: {error}{cause}"
 
 
 def _record_workspace_run(config: dict[str, Any], state: RehearsalState, path: str,
-                          workspace: dict[str, Any], error: Optional[str]) -> None:
-    """Append the run to the production-paired log and rewrite the status file. Never changes the outcome."""
+                          result: dict[str, Any], error: Optional[str]) -> None:
+    """Rewrite the production-paired status file and log refusals and removals. Never changes the outcome."""
     if config.get("profile", "staging194") == "staging194":
         return
     root = state.root if config.get("profile") == "production-paired" else PRODUCTION_OPERATION_STATE_ROOT / "production-paired"
-    reason = error or workspace.get("activationMarkerReason") or "succeeded"
+    reason = error or result.get("activationMarkerReason") or "succeeded"
     now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    removed = {key: result.get(key) or [] for key in ("removedReleases", "removedCmsReleases")}
+    decisions = result.get("workspaceDecisions", [])
     try:
-        log = root / "workspace-cleanup.log.jsonl"
-        if os.path.lexists(log) and log.stat().st_size > 1 << 20:
-            os.replace(log, log.with_name(log.name + ".1"))
-        entry = {"at": now, "path": path, "reason": reason,
-                 "workspaceDecisions": workspace.get("workspaceDecisions", [])}
-        with log.open("a", encoding="utf-8") as output:
-            output.write(json.dumps(entry, sort_keys=True) + "\n")
+        if reason != "succeeded" or any(removed.values()) or any(d.get("decision") == "removed" for d in decisions):
+            log = root / "workspace-cleanup.log.jsonl"
+            if os.path.lexists(log) and log.stat().st_size > 1 << 20:
+                os.replace(log, log.with_name(log.name + ".1"))
+            entry = {"at": now, "path": path, "profile": config.get("profile"), "reason": reason,
+                     "workspaceDecisions": decisions, **removed}
+            with log.open("a", encoding="utf-8") as output:
+                output.write(json.dumps(entry, sort_keys=True) + "\n")
         status_path = root / "workspace-cleanup-status.json"
-        previous = json.loads(status_path.read_text(encoding="utf-8")) if os.path.lexists(status_path) else {}
-        if error is None:
-            status = {"lastSucceededAt": now, "consecutiveFailures": 0}
-        else:
-            status = {"lastSucceededAt": previous.get("lastSucceededAt"),
-                      "consecutiveFailures": int(previous.get("consecutiveFailures", 0)) + 1}
+        try:
+            previous = json.loads(status_path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            previous = {}
+        if not isinstance(previous, dict):
+            previous = {}
+        failures = previous.get("consecutiveFailures")
+        status = {"lastRunAt": now, "lastReason": reason,
+                  "deletionEnabled": result.get("deletionEnabled", previous.get("deletionEnabled")),
+                  "lastSucceededAt": now if error is None else previous.get("lastSucceededAt"),
+                  "consecutiveFailures": 0 if error is None else (failures if isinstance(failures, int) else 0) + 1}
         durable_json(status_path, status)
     except (OSError, ValueError, TypeError, RehearsalRefusal) as failure:
         print(f"warning: workspace cleanup log or status not written: {failure}", file=sys.stderr)
@@ -1991,18 +2004,19 @@ def _mark_cleanup_pending(config: dict[str, Any], operation_id: str, message: st
 
 
 def _cleanup_after_commit(config: dict[str, Any], state: RehearsalState, operation_id: str) -> dict[str, Any]:
-    workspace, workspace_error = {}, None
+    result: dict[str, Any] = {}
+    workspace_error = None
     try:
         result = _cleanup_site_releases(config, state, operation_id)
         workspace, workspace_error = _workspace_step(config, state)
         result.update(workspace)
         result["removedCmsReleases"] = _cleanup_cms_releases(config, state)
     except (HostFailure, RehearsalRefusal, OSError, ValueError) as error:
-        message = workspace_error or str(error)
-        _record_workspace_run(config, state, "post-commit", workspace, message)
-        _mark_cleanup_pending(config, operation_id, str(error))
-        return {"cleanupPending": True, "cleanupError": str(error)[:500]}
-    _record_workspace_run(config, state, "post-commit", workspace, workspace_error)
+        message = "; ".join(filter(None, (workspace_error, str(error))))
+        _record_workspace_run(config, state, "post-commit", result, message)
+        _mark_cleanup_pending(config, operation_id, message)
+        return {"cleanupPending": True, "cleanupError": message[:500]}
+    _record_workspace_run(config, state, "post-commit", result, workspace_error)
     if workspace_error is None:
         return result
     _mark_cleanup_pending(config, operation_id, workspace_error)
@@ -8514,18 +8528,22 @@ def dispatch(args: argparse.Namespace) -> dict[str, Any]:
                 if marker is not None and marker["phase"] == "active":
                     raise HostFailure("active publication prevents workspace preview")
                 return {"status": "preview", **_cleanup_workspace_scope(config, state, preview=True)}
-            _consume_site_cleanup_request(config)
-            static_result = _cleanup_site_releases(config, state, None)
-            workspace, workspace_error = _workspace_step(config, state)
+            result: dict[str, Any] = {}
+            workspace_error = None
             try:
-                removed = _cleanup_cms_releases(config, state)
+                _consume_site_cleanup_request(config)
+                result = dict(_cleanup_site_releases(config, state, None))
+                workspace, workspace_error = _workspace_step(config, state)
+                result.update(workspace)
+                result["removedCmsReleases"] = _cleanup_cms_releases(config, state)
             except (HostFailure, RehearsalRefusal, OSError, ValueError) as error:
-                _record_workspace_run(config, state, "timer", workspace, workspace_error or str(error))
-                raise
-            _record_workspace_run(config, state, "timer", workspace, workspace_error)
+                message = "; ".join(filter(None, (workspace_error, str(error))))
+                _record_workspace_run(config, state, "timer", result, message)
+                raise HostFailure(message) from error
+            _record_workspace_run(config, state, "timer", result, workspace_error)
             if workspace_error is not None:
                 raise HostFailure(workspace_error)
-            return {"status": "succeeded", **static_result, **workspace, "removedCmsReleases": removed}
+            return {"status": "succeeded", **result}
         rows = state._operation_rows(args.operation_id)
         if (args.action in ("recover", "restore", "static-publish", "finalize-recover")
                 and rows and rows[-1].get("record") == "migration-pause-sealed"):
