@@ -133,8 +133,8 @@ function contentPermissions(subject: string, fields: string[]): EditorPermission
 const editableCards = [
   {
     subject: 'api::course-group.course-group',
-    read: ['name', 'slug', 'editor_label', 'description', 'image', 'order', 'is_article_category', 'institute', 'seo.seo_title', 'seo.seo_description'],
-    update: ['name', 'description', 'image', 'order', 'is_article_category', 'seo.seo_title', 'seo.seo_description'],
+    read: ['name', 'slug', 'editor_label', 'description', 'image', 'order', 'is_article_category', 'institute', 'seo.seo_title', 'seo.seo_description', 'seo.og_title', 'seo.og_description'],
+    update: ['name', 'description', 'image', 'order', 'is_article_category', 'seo.seo_title', 'seo.seo_description', 'seo.og_title', 'seo.og_description'],
   },
   {
     subject: 'api::teacher.teacher',
@@ -178,6 +178,8 @@ export async function syncEditorRolePermissions(strapi: EditorRoleStrapi): Promi
 type CardSeo = {
   seo_title?: string | null;
   seo_description?: string | null;
+  og_title?: string | null;
+  og_description?: string | null;
   noindex?: boolean;
   og_image?: { id: number } | null;
 };
@@ -191,7 +193,7 @@ type CardVersion = {
   seo?: CardSeo | null;
 };
 
-function protectedValues(version: CardVersion) {
+function protectedValues(version: CardVersion, protectOgText: boolean) {
   return {
     slug: version.slug,
     legacyId: version.legacy_id,
@@ -200,6 +202,7 @@ function protectedValues(version: CardVersion) {
     seminars: (version.seminars ?? []).map(({ documentId }) => documentId).sort(),
     ogImage: version.seo?.og_image?.id ?? null,
     noindex: version.seo?.noindex ?? false,
+    ...(protectOgText ? { ogTitle: version.seo?.og_title ?? null, ogDescription: version.seo?.og_description ?? null } : {}),
   };
 }
 
@@ -234,7 +237,8 @@ export function registerEditorCardRestrictions(strapi: Core.Strapi): void {
       if (context.action !== 'update' && draft) {
         // Native publish and discard act on the entire shared draft.
         const published = await load('published');
-        if (published && !isDeepStrictEqual(protectedValues(draft), protectedValues(published))) {
+        const protectOgText = !card.update.includes('seo.og_title');
+        if (published && !isDeepStrictEqual(protectedValues(draft, protectOgText), protectedValues(published, protectOgText))) {
           throw new errors.ForbiddenError('В черновике есть изменения защищённых полей. Их должен проверить администратор.');
         }
       } else if (seoTouched && draft?.seo) {
@@ -243,6 +247,8 @@ export function registerEditorCardRestrictions(strapi: Core.Strapi): void {
         data.seo = {
           seo_title: seo === null ? null : seo.seo_title === undefined ? draft.seo.seo_title : seo.seo_title,
           seo_description: seo === null ? null : seo.seo_description === undefined ? draft.seo.seo_description : seo.seo_description,
+          og_title: card.update.includes('seo.og_title') ? (seo === null ? null : seo.og_title === undefined ? draft.seo.og_title : seo.og_title) : draft.seo.og_title,
+          og_description: card.update.includes('seo.og_description') ? (seo === null ? null : seo.og_description === undefined ? draft.seo.og_description : seo.og_description) : draft.seo.og_description,
           noindex: draft.seo.noindex,
           og_image: draft.seo.og_image?.id ?? null,
         };
