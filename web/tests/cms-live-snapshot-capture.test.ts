@@ -1280,6 +1280,7 @@ describe('съём понимает формы данных установлен
     expect(run.status, run.output).toBe(0);
     const snapshot = readSnapshot(dir);
     expect(typesOf(snapshot).articles?.[0]?.og_image).toBe(`/uploads/img-${ARTICLE_COUNT + 1}.webp`);
+    expect(typesOf(snapshot).articles?.[1]).not.toHaveProperty('og_image');
     expect((snapshot.content as SnapshotContent).media).toContainEqual(expect.objectContaining({
       ref: `/media/uploads/img-${ARTICLE_COUNT + 1}.webp`,
     }));

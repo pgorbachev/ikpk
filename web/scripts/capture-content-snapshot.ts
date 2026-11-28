@@ -356,7 +356,10 @@ function mapRecord(type: string, record: Record<string, unknown>): Record<string
     delete out.center_phone;
     delete out.manager_phone;
   }
-  if (type === 'articles') normalizeArticleSeo(record, out);
+  if (type === 'articles') {
+    if (out.og_image === null) delete out.og_image;
+    normalizeArticleSeo(record, out);
+  }
   return out;
 }
 
