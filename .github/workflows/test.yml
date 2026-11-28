@@ -615,7 +615,7 @@ jobs:
 
       - name: Verify staging193 rehearsal command and recovery boundaries
         working-directory: .
-        run: python3 -m unittest scripts.tests.test_rehearsal_state scripts.tests.test_rehearsal_host scripts.tests.test_rehearsal_install scripts.tests.test_cms_workspace_cleanup scripts.tests.test_rehearsal_operator scripts.tests.test_host_helper_artifact scripts.tests.test_production_static_release_admission -v
+        run: python3 -m unittest scripts.tests.test_rehearsal_state scripts.tests.test_rehearsal_host scripts.tests.test_rehearsal_install scripts.tests.test_cms_workspace_cleanup scripts.tests.test_rehearsal_operator scripts.tests.test_host_helper_artifact scripts.tests.test_production_static_release_admission scripts.tests.test_housekeeping_cleanup -v
 
       - name: Verify seminar migration admission and recovery
         working-directory: .
