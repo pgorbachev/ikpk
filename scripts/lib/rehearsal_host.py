@@ -1512,7 +1512,7 @@ def _cms_release_dir(root: Path, path: Path) -> Path:
 def _workspace_dependency_releases(root: Path, workspace_root: Path) -> set[Path]:
     """Production: CMS releases that workspace dependency links point into, from the filesystem alone.
 
-    A dangling or looping link protects nothing and is not a refusal; only a link that cannot be read is."""
+    A dangling or looping link protects only the release its path names and is not a refusal."""
     result = set()
     try:
         for child in workspace_root.iterdir():
@@ -1522,7 +1522,6 @@ def _workspace_dependency_releases(root: Path, workspace_root: Path) -> set[Path
                 link = child / part
                 if not os.path.islink(link):
                     continue
-                os.readlink(link)
                 target = Path(os.path.realpath(link))
                 if root in target.parents:
                     result.add(root / target.relative_to(root).parts[0])
