@@ -633,6 +633,16 @@ class ReleaseCleanupTests(unittest.TestCase):
         self.assertTrue((sources / ('a' * 40 + '-flow-one')).is_dir())
         self.assertTrue((sources / ('b' * 40 + '-flow-zero')).is_dir())
 
+    # Guard P2b: the source step itself refuses on an unfinished operation, independent of earlier steps.
+    # Mutation: drop the `_unfinished_operation_ids` refusal in _cleanup_static_sources.
+    def test_static_source_step_refuses_on_unfinished_operation(self):
+        sources = self._production_sources()
+        self._static_op('in-flight', 'c' * 40, ['static-main-start'])
+        tree = self._source_tree(sources, 'a' * 40 + '-flow-one')
+        with self.assertRaisesRegex(host.HostFailure, 'unfinished'):
+            host._cleanup_static_sources(self.production_config, self.state)
+        self.assertTrue(tree.is_dir())
+
     # Guard P3: an entry matching no static-main operation is kept and listed in retainedUnknownStaticSources.
     # Mutation: treat every `<sha>-<id>` directory as removable without consulting the journal.
     def test_production_unknown_source_is_kept_and_reported(self):
