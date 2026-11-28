@@ -1239,7 +1239,12 @@ REVIEWED_OG_PROJECTOR_PAIRS = {
     (
         "059bae78c343508730b095879190273d1eaa87b3",
         "6b7e003dfb4d4905b8635c198c6b979efa90a434284dd794441d868deb8284bc",
-        "baa2b05e3522b1cf645bf2ab2ffd4db6ce17ceb3c0c87742c354c85f26a4134f",
+        "8b1ba2479a955bc8cf43ad75f7281068ef7d685157cfa1d3763e378db5c8ff57",
+    ),
+    (
+        "7f52340a55d71525c95c8bef0b4c0516885683d4",
+        "6b7e003dfb4d4905b8635c198c6b979efa90a434284dd794441d868deb8284bc",
+        "8b1ba2479a955bc8cf43ad75f7281068ef7d685157cfa1d3763e378db5c8ff57",
     ),
 }
 REVIEWED_OG_SCHEMA_PAIRS = {
@@ -1255,21 +1260,24 @@ def reviewed_og_transition(source_sha: str, backup: dict) -> Optional[dict[str, 
     if not SHA.fullmatch(source_sha) or not isinstance(backup, dict):
         return None
     old_source = backup.get("oldCmsSourceSha")
-    if old_source == "059bae78c343508730b095879190273d1eaa87b3" and "oldProjectorSourceSha" not in backup:
-        raise Refusal("OG transition requires explicit oldProjectorSourceSha")
-    old_projector = backup.get("oldProjectorSourceSha", old_source)
+    old_projector = backup.get("oldProjectorSourceSha")
     old_schema = backup.get("oldCmsSchemaSha256")
-    if (old_source != "059bae78c343508730b095879190273d1eaa87b3"
-            or not SHA.fullmatch(str(old_projector))
+    if (old_source not in {"059bae78c343508730b095879190273d1eaa87b3", "7f52340a55d71525c95c8bef0b4c0516885683d4"}
             or not re.fullmatch(r"[a-f0-9]{64}", str(old_schema))):
         return None
-    old_contract = production_projector_contract(old_projector, old_source)
     candidate_contract = production_projector_contract(source_sha, source_sha)
-    if (old_projector, old_contract, candidate_contract) not in REVIEWED_OG_PROJECTOR_PAIRS:
+    if candidate_contract != "8b1ba2479a955bc8cf43ad75f7281068ef7d685157cfa1d3763e378db5c8ff57":
         return None
     with tempfile.TemporaryDirectory(prefix="ikpk-og-schema-admission-") as directory:
         candidate_schema = production_paired_schema_from_commit(source_sha, Path(directory) / "schema")
     if (old_schema, candidate_schema) not in REVIEWED_OG_SCHEMA_PAIRS:
+        return None
+    if "oldProjectorSourceSha" not in backup:
+        raise Refusal("OG transition requires explicit oldProjectorSourceSha")
+    if old_source != old_projector:
+        return None
+    old_contract = production_projector_contract(old_projector, old_source)
+    if (old_projector, old_contract, candidate_contract) not in REVIEWED_OG_PROJECTOR_PAIRS:
         return None
     return {"oldContract": old_contract, "candidateContract": candidate_contract,
             "candidateSchema": candidate_schema}

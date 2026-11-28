@@ -30,9 +30,9 @@ class OgProjectionAdmissionTests(unittest.TestCase):
         return operator.validate_production_snapshot_composition(
             original, candidate,
             old_projector_sha="059bae78c343508730b095879190273d1eaa87b3",
-            candidate_projector_sha="d8ec908b9a98f6ed9f739a6e44ea996453d65855",
+            candidate_projector_sha="669e4d1e4706ea4f0e09261184ca6444142649f0",
             old_projector_contract_sha256="6b7e003dfb4d4905b8635c198c6b979efa90a434284dd794441d868deb8284bc",
-            candidate_projector_contract_sha256="baa2b05e3522b1cf645bf2ab2ffd4db6ce17ceb3c0c87742c354c85f26a4134f",
+            candidate_projector_contract_sha256="8b1ba2479a955bc8cf43ad75f7281068ef7d685157cfa1d3763e378db5c8ff57",
             old_schema_sha256="974abb10127748e47b552edb9c6cc1204ef8b2b2affe9ba876c76728aeee2a90",
             candidate_schema_sha256="a4982acf217e8e2c5f46b9f2187c5195459e8b9342681d65526fb090ebbd832a",
             source_media=[] if source_media is None else source_media,
@@ -95,9 +95,9 @@ class OgProjectionAdmissionTests(unittest.TestCase):
             operator.validate_production_snapshot_composition(
                 original, candidate,
                 old_projector_sha="059bae78c343508730b095879190273d1eaa87b3",
-                candidate_projector_sha="d8ec908b9a98f6ed9f739a6e44ea996453d65855",
+                candidate_projector_sha="669e4d1e4706ea4f0e09261184ca6444142649f0",
                 old_projector_contract_sha256="0" * 64,
-                candidate_projector_contract_sha256="baa2b05e3522b1cf645bf2ab2ffd4db6ce17ceb3c0c87742c354c85f26a4134f",
+                candidate_projector_contract_sha256="8b1ba2479a955bc8cf43ad75f7281068ef7d685157cfa1d3763e378db5c8ff57",
                 old_schema_sha256="974abb10127748e47b552edb9c6cc1204ef8b2b2affe9ba876c76728aeee2a90",
                 candidate_schema_sha256="a4982acf217e8e2c5f46b9f2187c5195459e8b9342681d65526fb090ebbd832a",
                 source_media=[],
@@ -111,6 +111,41 @@ class OgProjectionAdmissionTests(unittest.TestCase):
         with self.assertRaisesRegex(operator.Refusal, "unrelated|projection"):
             self.validate(original, candidate, expected)
 
+    def test_reviewed_og_transition_distinguishes_explicit_old_projector_source(self):
+        old_source = "7f52340a55d71525c95c8bef0b4c0516885683d4"
+        candidate_source = "669e4d1e4706ea4f0e09261184ca6444142649f0"
+        old_contract = "6b7e003dfb4d4905b8635c198c6b979efa90a434284dd794441d868deb8284bc"
+        candidate_contract = "8b1ba2479a955bc8cf43ad75f7281068ef7d685157cfa1d3763e378db5c8ff57"
+        schema = "974abb10127748e47b552edb9c6cc1204ef8b2b2affe9ba876c76728aeee2a90"
+        candidate_schema = "a4982acf217e8e2c5f46b9f2187c5195459e8b9342681d65526fb090ebbd832a"
+        backup = {"oldCmsSourceSha": old_source, "oldProjectorSourceSha": old_source,
+                  "oldCmsSchemaSha256": schema}
+        with patch.object(operator, "production_projector_contract",
+                          side_effect=lambda projector, _schema: old_contract if projector == old_source else candidate_contract), \
+                patch.object(operator, "production_paired_schema_from_commit", return_value=candidate_schema):
+            self.assertIsNotNone(operator.reviewed_og_transition(candidate_source, backup))
+            wrong = {**backup, "oldProjectorSourceSha": "059bae78c343508730b095879190273d1eaa87b3"}
+            self.assertIsNone(operator.reviewed_og_transition(candidate_source, wrong))
+
+    def test_mixed_cms_and_projector_sources_are_refused_even_with_same_contract(self):
+        old_source = "7f52340a55d71525c95c8bef0b4c0516885683d4"
+        candidate_source = "669e4d1e4706ea4f0e09261184ca6444142649f0"
+        schema = "974abb10127748e47b552edb9c6cc1204ef8b2b2affe9ba876c76728aeee2a90"
+        candidate_schema = "a4982acf217e8e2c5f46b9f2187c5195459e8b9342681d65526fb090ebbd832a"
+        backup = {"oldCmsSourceSha": old_source,
+                  "oldProjectorSourceSha": "059bae78c343508730b095879190273d1eaa87b3",
+                  "oldCmsSchemaSha256": schema}
+        with patch.object(operator, "production_projector_contract", return_value="8b1ba2479a955bc8cf43ad75f7281068ef7d685157cfa1d3763e378db5c8ff57"), \
+                patch.object(operator, "production_paired_schema_from_commit", return_value=candidate_schema):
+            self.assertIsNone(operator.reviewed_og_transition(candidate_source, backup))
+
+    def test_missing_old_projector_is_ordinary_noop_until_exact_og_candidate(self):
+        backup = {"oldCmsSourceSha": "7f52340a55d71525c95c8bef0b4c0516885683d4",
+                  "oldCmsSchemaSha256": "974abb10127748e47b552edb9c6cc1204ef8b2b2affe9ba876c76728aeee2a90"}
+        with patch.object(operator, "production_projector_contract", return_value="ordinary"), \
+                patch.object(operator, "production_paired_schema_from_commit", return_value="not-og"):
+            self.assertIsNone(operator.reviewed_og_transition("669e4d1e4706ea4f0e09261184ca6444142649f0", backup))
+
     def test_acceptance_entrypoint_admits_real_og_branch_with_fake_tar(self):
         original, expected = self.snapshots()
         expected["content"]["types"]["articles"][0].update(
@@ -118,13 +153,13 @@ class OgProjectionAdmissionTests(unittest.TestCase):
         original["fingerprint"] = "sha256:" + "3" * 64
         expected["fingerprint"] = "sha256:" + "4" * 64
         original["captureProof"] = {"version": 1, "method": "quiesced-sqlite-backup",
-                                     "captureId": "og-fake", "sourceSha": "d8ec908b9a98f6ed9f739a6e44ea996453d65855",
+                                     "captureId": "og-fake", "sourceSha": "669e4d1e4706ea4f0e09261184ca6444142649f0",
                                      "runId": 1, "attempt": 1, "schemaDigest": "a" * 64}
         candidate = copy.deepcopy(expected)
-        op, source = "og-fake", "d8ec908b9a98f6ed9f739a6e44ea996453d65855"
+        op, source = "og-fake", "669e4d1e4706ea4f0e09261184ca6444142649f0"
         old = "059bae78c343508730b095879190273d1eaa87b3"
         old_contract = "6b7e003dfb4d4905b8635c198c6b979efa90a434284dd794441d868deb8284bc"
-        candidate_contract = "baa2b05e3522b1cf645bf2ab2ffd4db6ce17ceb3c0c87742c354c85f26a4134f"
+        candidate_contract = "8b1ba2479a955bc8cf43ad75f7281068ef7d685157cfa1d3763e378db5c8ff57"
         old_schema = "974abb10127748e47b552edb9c6cc1204ef8b2b2affe9ba876c76728aeee2a90"
         candidate_schema = "a4982acf217e8e2c5f46b9f2187c5195459e8b9342681d65526fb090ebbd832a"
         media_manifest_bytes = b'{"media":[]}'
