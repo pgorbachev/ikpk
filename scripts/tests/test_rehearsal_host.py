@@ -3273,13 +3273,24 @@ class StaticMainAdmissionTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix="ikpk-static-main-committed-retry-") as temporary:
             config, state, _pointer, _old, candidate, _foreign = self._committed_static_main_fixture(Path(temporary))
             committed_digest = rehearsal_host._tree_sha256(candidate)
+            # The fixture names the served tree like a source tree; make it the source root and remove it.
+            config = {**config, "releaseRoot": str(candidate.parent)}
             shutil.rmtree(candidate)
             with patch.object(rehearsal_host, "_validate_static_main_admission"):
                 result = rehearsal_host._static_main_prepare(config, state, "main-op", "a" * 40, {})
-        self.assertEqual(result["phase"], "committed")
-        self.assertEqual(result["operationId"], "main-op")
-        self.assertEqual(result["sourceSha"], "a" * 40)
-        self.assertEqual(result["staticTreeSha256"], committed_digest)
+            self.assertEqual(result["phase"], "committed")
+            self.assertEqual(result["operationId"], "main-op")
+            self.assertEqual(result["sourceSha"], "a" * 40)
+            self.assertEqual(result["staticTreeSha256"], committed_digest)
+            # Once rollback has started the operation is no longer reported as committed.
+            state._append({"version": 1, "record": "static-main-rollback-intent", "operationKind": "static-main",
+                           "operationId": "main-op", "sourceSha": "a" * 40})
+            with patch.object(rehearsal_host, "_validate_static_main_admission"):
+                try:
+                    later = rehearsal_host._static_main_prepare(config, state, "main-op", "a" * 40, {})
+                except rehearsal_host.HostFailure:
+                    later = {}
+            self.assertNotEqual(later.get("phase"), "committed")
 
     def test_static_main_fails_closed_until_release_policy_is_explicit(self):
         with self.assertRaisesRegex(rehearsal_host.HostFailure, "ci-only-approved"):

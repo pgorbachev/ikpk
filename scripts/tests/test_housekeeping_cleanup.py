@@ -634,7 +634,7 @@ class ReleaseCleanupTests(unittest.TestCase):
         self.assertTrue((sources / ('b' * 40 + '-flow-zero')).is_dir())
 
     # Guard P2b: the source step itself refuses on an unfinished operation, independent of earlier steps.
-    # Mutation: drop the `_unfinished_operation_ids` refusal in _cleanup_static_sources.
+    # Mutation: read the journal with validate_history=False in _cleanup_static_sources.
     def test_static_source_step_refuses_on_unfinished_operation(self):
         sources = self._production_sources()
         self._static_op('in-flight', 'c' * 40, ['static-main-start'])
@@ -651,10 +651,12 @@ class ReleaseCleanupTests(unittest.TestCase):
         self._source_tree(sources, 'a' * 40 + '-flow-one')
         self._source_tree(sources, 'b' * 40 + '-flow-zero')
         ghost = self._source_tree(sources, 'd' * 40 + '-ghost-op')
+        leftover = self._source_tree(sources, '.' + 'a' * 40 + '-flow-one.new-123')
 
         result = host._cleanup_after_commit(self.production_config, self.state, 'flow-one')
 
-        self.assertEqual(result.get('retainedUnknownStaticSources'), [str(ghost.resolve())], result)
+        self.assertEqual(result.get('retainedUnknownStaticSources'), [str(leftover.resolve()), str(ghost.resolve())], result)
+        self.assertTrue(leftover.is_dir())
         self.assertTrue(ghost.is_dir())
         self.assertFalse((sources / ('b' * 40 + '-flow-zero')).exists())
 
@@ -679,7 +681,8 @@ class ReleaseCleanupTests(unittest.TestCase):
 
     # Guard P5 (GREEN today, guard): a corrupt or non-regular journal removes nothing and reports cleanupPending.
     # A missing journal is NOT covered here: it reads as empty history by design.
-    # Mutation: catch RehearsalRefusal around read_journal_for_cleanup and continue with an empty history.
+    # The refusal comes from the earliest cleanup step that reads the journal (site releases), so no single
+    # mutation of the static source step turns this red; the step's own read is covered by P2b.
     def test_production_corrupt_or_unsafe_journal_removes_nothing(self):
         sources = self._production_sources()
         self._static_op('flow-zero', 'b' * 40, ['static-main-start', 'static-main-prepared', 'static-main-recovered'])
@@ -719,11 +722,15 @@ class ReleaseCleanupTests(unittest.TestCase):
         self._source_tree(sources, 'a' * 40 + '-flow-one')
 
         with patch.object(host, '_mount_points', return_value={mounted.resolve()}):
-            host._cleanup_after_commit(self.production_config, self.state, 'flow-one')
+            result = host._cleanup_after_commit(self.production_config, self.state, 'flow-one')
 
         self.assertTrue((outside / 'keep.txt').is_file(), 'a symlink candidate must not be followed')
         self.assertTrue(link.is_symlink(), 'a symlink candidate must not be removed')
         self.assertTrue(mounted.is_dir(), 'a candidate containing a mount point must not be removed')
+        # One bad entry must not stop cleanup for good: both are kept and reported, the rest proceeds.
+        self.assertFalse(result.get('cleanupPending'), result)
+        self.assertEqual(result['retainedUnknownStaticSources'], [str(sources.resolve() / link.name), str(mounted.resolve())])
+        self.assertFalse((sources / ('a' * 40 + '-flow-one')).exists())
 
     # Guard P7: a second cleanup run after a successful first run reports nothing pending and changes nothing.
     # Mutation: make the first run leave the marker or a retained entry in place.
@@ -975,6 +982,32 @@ class Staging194CaptureRetentionTests(unittest.TestCase):
 
         self.assertTrue(referent.is_dir(), "the reused capture's source tree must be kept")
         self.assertFalse(latest.exists(), "the reusing operation's own tree is removable")
+
+    # Guard S2b: the newest operation was rolled back, so the newest *eligible* capture (older) is kept.
+    # Mutation: protect the newest static-main operation without the reuse eligibility check.
+    def test_rolled_back_newest_operation_leaves_the_older_eligible_capture_protected(self):
+        eligible = self._static_capture("cap-a", "a" * 40)
+        rolled_back = self.releases / ("c" * 40 + "-cap-c")
+        rolled_back.mkdir()
+        for record in ("static-main-start", "static-main-prepared", "static-main-switch-intent",
+                       "static-main-rolled-back"):
+            row = {"version": 1, "record": record, "operationKind": "static-main", "operationId": "cap-c",
+                   "sourceSha": "c" * 40, "cmsFingerprint": {"cms": "same"}}
+            if record == "static-main-start":
+                row.update(oldStaticPath=self.static_old, oldStaticTreeSha256=self.static_old_digest)
+            elif record == "static-main-prepared":
+                row.update(staticTreeSha256="e" * 64, snapshotId="snap:fixture")
+            elif record == "static-main-switch-intent":
+                row.update(oldStaticPath=self.static_old, candidateStaticPath=str(rolled_back.resolve()),
+                           staticTreeSha256="e" * 64)
+            else:
+                row.update(restoredStaticPath=self.static_old)
+            self.state._append(row)
+
+        host._cleanup_cms_releases(self.config, self.state)
+
+        self.assertTrue(eligible.is_dir(), "the newest eligible capture must be kept")
+        self.assertFalse(rolled_back.exists(), "an ineligible newer operation is not protected")
 
     # Guard S3 (GREEN today, guard): a referent already absent adds no protection and raises nothing.
     # Mutation: raise when the referent is missing instead of protecting nothing.

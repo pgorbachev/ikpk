@@ -1967,7 +1967,8 @@ def _record_workspace_run(config: dict[str, Any], state: RehearsalState, path: s
     root = state.root if config.get("profile") == "production-paired" else PRODUCTION_OPERATION_STATE_ROOT / "production-paired"
     reason = error or result.get("activationMarkerReason") or "succeeded"
     now = datetime.now(timezone.utc).isoformat(timespec="seconds")
-    removed = {key: result.get(key) or [] for key in ("removedReleases", "removedCmsReleases")}
+    removed = {key: result.get(key) or [] for key in ("removedReleases", "removedCmsReleases",
+                                                       "removedStaticSources", "retainedUnknownStaticSources")}
     decisions = result.get("workspaceDecisions", [])
     try:
         if reason != "succeeded" or any(removed.values()) or any(d.get("decision") == "removed" for d in decisions):
@@ -1978,6 +1979,8 @@ def _record_workspace_run(config: dict[str, Any], state: RehearsalState, path: s
                      "workspaceDecisions": decisions, **removed}
             with log.open("a", encoding="utf-8") as output:
                 output.write(json.dumps(entry, sort_keys=True) + "\n")
+        if config.get("profile") == "production-static":
+            return  # static publications are operator-driven: the client reports their cleanup, the status tracks the timer
         status_path = root / "workspace-cleanup-status.json"
         try:
             previous = json.loads(status_path.read_text(encoding="utf-8"))
@@ -7206,28 +7209,26 @@ def _reusable_capture_evidence(rows: list[dict[str, Any]],
             or terminal.get("operationId") != operation_id
             or start.get("sourceSha") != prepared.get("sourceSha")
             or start.get("sourceSha") != terminal.get("sourceSha")
-            or not SHA_RE.fullmatch(start.get("sourceSha", ""))):
+            or not SHA_RE.fullmatch(start.get("sourceSha", ""))
+            or prepared.get("cmsFingerprint") != start.get("cmsFingerprint")):
         return None
     return start, prepared
 
 
 def _latest_capture_referent(history: list[dict[str, Any]], root: Path) -> set[Path]:
     """staging194: the one source tree holding the capture of the newest operation the reuse check would accept."""
-    rows_by_operation: dict[str, list[dict[str, Any]]] = {}
-    last_position: dict[str, int] = {}
-    for position, row in enumerate(history):
-        if row.get("operationKind") == "static-main":
-            rows_by_operation.setdefault(row.get("operationId"), []).append(row)
-            last_position[row.get("operationId")] = position
-    for operation_id in sorted(last_position, key=last_position.get, reverse=True):
-        evidence = _reusable_capture_evidence(rows_by_operation[operation_id], operation_id)
-        if evidence is None or evidence[0].get("cmsFingerprint") != evidence[1].get("cmsFingerprint"):
+    newest_first = dict.fromkeys(row.get("operationId") for row in reversed(history)
+                                 if row.get("operationKind") == "static-main")
+    for operation_id in newest_first:
+        rows = [row for row in history
+                if row.get("operationKind") == "static-main" and row.get("operationId") == operation_id]
+        evidence = _reusable_capture_evidence(rows, operation_id)
+        if evidence is None:
             continue
-        start = evidence[0]
-        reference = start.get("reusedCapture")
+        reference = evidence[0].get("reusedCapture")
         if isinstance(reference, dict):
             return {root / f"{reference.get('sourceSha')}-{reference.get('operationId')}"}
-        return {root / f"{start['sourceSha']}-{operation_id}"}
+        return {root / f"{evidence[0]['sourceSha']}-{operation_id}"}
     return set()
 
 
@@ -7236,12 +7237,10 @@ def _cleanup_static_sources(config: dict[str, Any], state: RehearsalState) -> di
     if config.get("profile") != "production-static":
         return {}
     try:
+        # History validation refuses while any operation is unfinished, so every operation below is terminal.
         history = state.read_journal_for_cleanup(validate_history=True)
     except RehearsalRefusal as error:
         raise HostFailure(str(error)) from error
-    if state._unfinished_operation_ids(history):
-        raise HostFailure("another publication is unfinished; static source cleanup refused")
-    # With nothing unfinished, every static-main operation in the journal is terminal.
     known = {f"{row.get('sourceSha')}-{row.get('operationId')}" for row in history
              if row.get("operationKind") == "static-main"}
     root = Path(config["releaseRoot"])
@@ -7250,21 +7249,16 @@ def _cleanup_static_sources(config: dict[str, Any], state: RehearsalState) -> di
         raise HostFailure("static source root is unsafe; cleanup refused")
     root = root.resolve(strict=True)
     mounts = _mount_points()
-    removed, unknown = [], []
+    removed, retained = [], []
     for candidate in sorted(root.iterdir()):
-        if candidate.name.startswith("."):
-            continue  # interrupted extraction temporaries are left to the owner
-        if candidate.name not in known:
-            unknown.append(str(candidate))
-            continue
-        _remove_release_tree(candidate, mounts)
-        removed.append(str(candidate))
-    directory = os.open(root, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
-    try:
-        os.fsync(directory)
-    finally:
-        os.close(directory)
-    return {"removedStaticSources": removed, "retainedUnknownStaticSources": unknown}
+        try:
+            if candidate.name not in known:
+                raise HostFailure("not a static-main operation of this journal")
+            _remove_release_tree(candidate, mounts)  # refuses symlinks, non-directories and mounts
+            removed.append(str(candidate))
+        except HostFailure:
+            retained.append(str(candidate))
+    return {"removedStaticSources": removed, "retainedUnknownStaticSources": retained}
 
 
 def _verify_reusable_static_capture(config: dict[str, Any], state: RehearsalState,
@@ -7275,8 +7269,6 @@ def _verify_reusable_static_capture(config: dict[str, Any], state: RehearsalStat
     if evidence is None:
         raise HostFailure("selected capture is not a prepared terminal staging194 static-main operation")
     start, prepared = evidence
-    if prepared.get("cmsFingerprint") != start.get("cmsFingerprint"):
-        raise HostFailure("selected capture operation has inconsistent CMS fingerprint evidence")
     if start.get("cmsFingerprint") != cms_fingerprint:
         raise HostFailure("current CMS fingerprint differs from the selected terminal capture")
 
@@ -7364,9 +7356,12 @@ def _static_main_prepare(config: dict[str, Any], state: RehearsalState, operatio
             selected_capture = (start.get("reusedCapture") or {}).get("operationId")
             if selected_capture != reuse_capture_operation_id:
                 raise HostFailure("static-main retry changed its selected capture operation")
-            if rows[-1].get("record") == "static-main-committed" and rows[-1].get("sourceSha") == source_sha:
+            committed = next((row for row in rows if row.get("record") == "static-main-committed"), None)
+            if (committed is not None and committed.get("sourceSha") == source_sha
+                    and not any(row.get("record") in ("static-main-rollback-intent", "static-main-rollback-completed")
+                                for row in rows)):
                 return {"operationId": operation_id, "sourceSha": source_sha, "phase": "committed",
-                        "staticTreeSha256": rows[-1]["staticTreeSha256"], "snapshotId": rows[-1].get("snapshotId")}
+                        "staticTreeSha256": committed["staticTreeSha256"], "snapshotId": committed.get("snapshotId")}
             return {"operationId": operation_id, "sourceSha": source_sha, "phase": "browser-check-required",
                     "staticTreeSha256": prepared["staticTreeSha256"], "snapshotId": prepared["snapshotId"]}
         raise HostFailure("static-main operation has incomplete durable state; use static-main-recover")
@@ -8636,8 +8631,11 @@ def dispatch(args: argparse.Namespace) -> dict[str, Any]:
                     result.update(_cleanup_after_commit(config, state, args.operation_id))
                 return result
             if rows:
-                return _static_main_prepare(config, state, args.operation_id, args.source_sha, provenance,
-                                            args.reuse_capture_operation_id)
+                result = _static_main_prepare(config, state, args.operation_id, args.source_sha, provenance,
+                                              args.reuse_capture_operation_id)
+                if result.get("phase") == "committed":
+                    result.update(_cleanup_after_commit(config, state, args.operation_id))
+                return result
             if not SHA256_RE.fullmatch(args.archive_sha256 or ""):
                 raise HostFailure("static-main source archive SHA-256 is required before preparation")
             archive_bytes = sys.stdin.buffer.read()

@@ -311,7 +311,9 @@ class OperatorAdmissionTests(unittest.TestCase):
             preflight = space_preflight_response(arguments)
             if preflight is not None:
                 return preflight
-            return json.dumps({"phase": "committed", "staticTreeSha256": "c" * 64}).encode()
+            return json.dumps({"phase": "committed", "staticTreeSha256": "c" * 64, "cleanupPending": True,
+                               "cleanupError": "static source root is unsafe",
+                               "retainedUnknownStaticSources": ["/srv/sources/kept"]}).encode()
 
         args = type("Args", (), {"host": staging193.TARGET_HOST, "command": "static-main",
             "operation_id": "new-build", "source_sha": SHA, "reuse_capture_operation_id": None})()
@@ -319,10 +321,13 @@ class OperatorAdmissionTests(unittest.TestCase):
              patch.object(staging193, "_source_tree_bytes", return_value=10), \
              patch.object(staging193, "make_archive", return_value=(b"source archive", "a" * 64)), \
              patch.object(staging193, "ssh_remote", side_effect=ssh), \
-             patch.object(staging193, "browser_check") as browser:
+             patch.object(staging193, "browser_check") as browser, \
+             patch("sys.stderr", new_callable=io.StringIO) as stderr:
             staging193.invoke(args)
         browser.assert_not_called()
         self.assertNotIn("export-static-main", [call[0] for call in calls])
+        self.assertIn("cleanup pending: static source root is unsafe", stderr.getvalue())
+        self.assertIn("/srv/sources/kept", stderr.getvalue())
 
     def test_production_static_profile_cli_accepts_reusable_static_main_operation(self):
         with patch.object(staging193, "invoke") as invoke:
