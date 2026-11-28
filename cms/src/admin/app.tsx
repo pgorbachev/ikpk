@@ -125,14 +125,18 @@ export default {
       const seo = input.layout.components['shared.seo'];
       if (!seo) return input;
       const layout = seo.layout
-        .map(row => row.filter(field => field.name !== 'noindex').map(field => field.name === 'og_image'
-          ? {
+        .map(row => row.map(field => {
+          if (field.name === 'og_image') {
+            return {
               ...field,
               label: 'Обложка ссылки',
-              hint: 'Используется только для ссылок на статьи. Если оставить поле пустым, сайт покажет в превью основное изображение статьи или общую обложку ИКПК.',
-            }
-          : field))
-        .filter(row => row.length > 0);
+              hint: 'Используется для ссылок на программы, семинары и статьи. Если оставить поле пустым, сайт покажет общую обложку ИКПК.',
+            };
+          }
+          if (field.name === 'og_title') return { ...field, label: 'Open Graph Title' };
+          if (field.name === 'og_description') return { ...field, label: 'Open Graph Description' };
+          return field;
+        }));
       return { ...input, layout: { ...input.layout, components: { ...input.layout.components, 'shared.seo': { ...seo, layout } } } };
     });
     app.addMenuLink({

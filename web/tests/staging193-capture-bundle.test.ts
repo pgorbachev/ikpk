@@ -72,7 +72,7 @@ function fixtureDatabase(
   ]) {
     db.exec(`CREATE TABLE ${table} (id INTEGER PRIMARY KEY, ${left}_id INTEGER, ${right}_id INTEGER${order ? `, ${order}_ord REAL` : ''}${table === 'seminars_teachers_lnk' ? ', seminar_ord REAL' : ''})`);
   }
-  db.exec(`CREATE TABLE files (id INTEGER PRIMARY KEY, document_id TEXT, url TEXT);
+  db.exec(`CREATE TABLE files (id INTEGER PRIMARY KEY, document_id TEXT, url TEXT, alternative_text TEXT);
     CREATE TABLE files_related_mph (id INTEGER PRIMARY KEY, file_id INTEGER, related_id INTEGER, related_type TEXT, field TEXT, "order" REAL);
     INSERT INTO institutes (id, document_id, name, slug, published_at) VALUES (1,'inst','Institute','inst','2026-10-01');
     INSERT INTO course_groups (id, document_id, name, slug, legacy_id, published_at) VALUES (2,'group','Group','group','group','2026-10-01');
@@ -85,8 +85,12 @@ function fixtureDatabase(
     INSERT INTO components_shared_seos (id, seo_title, seo_description) VALUES (10,'Published SEO','Published seminar'), (11,'Draft SEO','Draft seminar'), (13,'Article SEO','Article description');
     INSERT INTO seminars_cmps VALUES (1,5,10,'shared.seo','seo',1), (2,6,11,'shared.seo','seo',1);
     INSERT INTO articles_cmps VALUES (1,7,13,'shared.seo','seo',1);
-    INSERT INTO files VALUES (20,'photo','/uploads/photo.jpg');
-    INSERT INTO files_related_mph VALUES (1,20,5,'api::seminar.seminar','image',1), (2,20,7,'api::article.article','image',1);
+    INSERT INTO files VALUES (20,'photo','/uploads/photo.jpg','Photo alternative text');
+    INSERT INTO files_related_mph VALUES
+      (1,20,5,'api::seminar.seminar','image',1),
+      (2,20,7,'api::article.article','image',1),
+      (3,20,10,'shared.seo','og_image',1),
+      (4,20,13,'shared.seo','og_image',1);
   `);
   if (schemas['api::page.page']?.attributes.center_phone) {
     db.exec(`INSERT INTO pages (id, document_id, slug, legacy_id, title, center_phone, manager_phone, published_at)
@@ -194,6 +198,24 @@ function archivedFixtureSchemas(archive: string): Record<string, FixtureSchema> 
 }
 
 describe('production backup schema compatibility', () => {
+  it('projects SEO media alternative text from the sealed SQLite component relation', () => {
+    const root = mkdtempSync(join(tmpdir(), 'og-sqlite-capture-'));
+    temporaryRoots.push(root);
+    const database = join(root, 'database.sqlite');
+    fixtureDatabase(database);
+
+    const captured = readPublishedSqlite(database, schemaRoot) as unknown as { collections: Record<string, Record<string, unknown>[]> };
+    const seminar = captured.collections.seminars[0] as { seo: { og_image: { url: string; alternativeText: string } } };
+    const article = captured.collections.articles[0] as { seo: { og_image: { url: string; alternativeText: string } } };
+    expect(seminar.seo.og_image).toEqual({
+      id: 20,
+      documentId: 'photo',
+      url: '/uploads/photo.jpg',
+      alternativeText: 'Photo alternative text',
+    });
+    expect(article.seo.og_image).toEqual(seminar.seo.og_image);
+  });
+
   it('projects published rows and legacy documents from the exact 9fad CMS schema', () => {
     const archive = archivedCaptureSchema('9fad640520a90518a89d2751701acd2faa10ab21');
     expect(existsSync(join(archive, 'components/seminar/registry-fact.json'))).toBe(false);

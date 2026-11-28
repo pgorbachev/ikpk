@@ -5,7 +5,7 @@
 interface Props {
   title: string;
   description?: string;
-  ogImage?: string;
+  openGraph?: import('../lib/media').OpenGraphMetadata;
   noindex?: boolean;
   schema?: Record<string, unknown>;
   preloadHero?: boolean;
@@ -25,7 +25,7 @@ import '../styles/global.css';
 const {
   title,
   description = 'Институт клинической прикладной кинезиологии — ведущий центр постдипломного образования в области холистической медицины.',
-  ogImage,
+  openGraph,
   noindex = false,
   schema,
   preloadHero = false,
@@ -39,7 +39,7 @@ const chatPage = chatLoaderConfig().state === 'address' && !isDemoOutput;
     <HeadMeta
       title={title}
       description={description}
-      ogImage={ogImage}
+      openGraph={openGraph}
       noindex={noindex}
       schema={schema}
       preloadHero={preloadHero}

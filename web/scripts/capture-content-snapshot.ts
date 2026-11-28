@@ -279,7 +279,7 @@ function entryTeachers(value: unknown): unknown {
   });
 }
 
-const MEDIA_TRANSFORMS = new Set(['mediaRef', 'mediaUrl', 'mediaUrlList']);
+const MEDIA_TRANSFORMS = new Set(['mediaRef', 'mediaUrl', 'mediaUrlList', 'mediaAlternativeText']);
 
 /**
  * Установленная CMS отдаёт медиа списком (`multiple: true`), прежняя схема — объектом. Сайт
@@ -304,6 +304,9 @@ const TRANSFORMS: Record<string, (value: unknown) => unknown> = {
   htmlToText: (value) => (typeof value === 'string' ? htmlToText(value) : value),
   mediaRef,
   mediaUrl,
+  mediaAlternativeText: (value) => value && typeof value === 'object'
+    ? (value as Record<string, unknown>).alternativeText
+    : undefined,
   mediaUrlList,
   refList,
   entryTeachers,
@@ -357,8 +360,21 @@ function mapRecord(type: string, record: Record<string, unknown>): Record<string
     delete out.manager_phone;
   }
   if (type === 'articles') {
-    if (out.og_image === null) delete out.og_image;
     normalizeArticleSeo(record, out);
+  }
+  if (['articles', 'course_groups', 'seminars'].includes(type)) {
+    for (const field of ['og_title', 'og_description', 'og_image', 'og_image_alt']) {
+      const value = out[field];
+      if (value === null || value === undefined) {
+        delete out[field];
+      } else if (typeof value !== 'string') {
+        throw new Error(`${type}.${field}: ожидается строка или null (${recordKey(record)})`);
+      } else if (value.trim() === '') {
+        delete out[field];
+      } else if (field !== 'og_image') {
+        out[field] = value.trim();
+      }
+    }
   }
   return out;
 }
@@ -399,7 +415,9 @@ async function fetchAllPages(endpoint: string): Promise<Record<string, unknown>[
   for (;;) {
     assertWithinBudget(`${endpoint}, страница ${page}`);
     const populate = endpoint === 'seminars'
-      ? 'populate[seo]=true&populate[image]=true&populate[course_group]=true&populate[teachers]=true&populate[documents][populate][registry]=true&populate[training_registries]=true&populate[nmo]=true'
+      ? 'populate[seo][populate][og_image]=true&populate[image]=true&populate[course_group]=true&populate[teachers]=true&populate[documents][populate][registry]=true&populate[training_registries]=true&populate[nmo]=true'
+      : endpoint === 'course-groups'
+        ? 'populate[seo][populate][og_image]=true&populate[image]=true&populate[institute]=true'
       : endpoint === 'articles'
         ? 'populate[seo][populate][og_image]=true&populate[image]=true&populate[categories]=true'
         : 'populate=*';

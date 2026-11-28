@@ -16,6 +16,16 @@
       "maxLength": 320,
       "required": false
     },
+    "og_title": {
+      "type": "string",
+      "maxLength": 255,
+      "required": false
+    },
+    "og_description": {
+      "type": "text",
+      "maxLength": 320,
+      "required": false
+    },
     "og_image": {
       "type": "media",
       "multiple": false,

@@ -12,7 +12,7 @@ import Breadcrumbs from '../../components/Breadcrumbs.astro';
 import { excerpt, getCourseGroups, getInstitutes, getSeminars } from '../../lib/data';
 import { seminarDescriptionFallback } from '../../lib/seo-fallback';
 import type { Seminar } from '../../lib/data';
-import { getAssetDimensions } from '../../lib/media';
+import { buildOpenGraphMetadata, getAssetDimensions } from '../../lib/media';
 import type { GetStaticPaths } from 'astro';
 
 export const getStaticPaths: GetStaticPaths = () => {
@@ -39,9 +39,23 @@ const description =
   (courseGroup && institute
     ? seminarDescriptionFallback(seminar.name, courseGroup.name, institute.slug, institute.name)
     : `${seminar.name} — семинар ИКПК. Расписание, стоимость и запись.`);
+const openGraph = buildOpenGraphMetadata({
+  title,
+  description,
+  pageTitle: seminar.name,
+  titleOverride: seminar.og_title,
+  descriptionOverride: seminar.og_description,
+  image: seminar.og_image,
+  imageAlt: seminar.og_image_alt,
+});
 ---
 
-<BaseLayout title={title} description={description} noindex>
+<BaseLayout
+  title={title}
+  description={description}
+  openGraph={openGraph}
+  noindex
+>
   <div class="container">
     <Breadcrumbs items={[{ label: 'Семинары', href: '/seminary' }, { label: seminar.name }]} />
 

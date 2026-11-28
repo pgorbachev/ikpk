@@ -18,6 +18,7 @@ import type { CourseGroup, Institute, Seminar } from '../../../lib/data';
 import RichContent from '../../../components/RichContent.astro';
 import { calendarDay, isBeforeStart } from '../../../lib/schedule-window';
 import type { GetStaticPaths } from 'astro';
+import { buildOpenGraphMetadata } from '../../../lib/media';
 
 export const getStaticPaths: GetStaticPaths = () => getSeminarPagePaths().map(({ seminar, courseGroup, institute }) => ({
   params: { institute: institute.slug, courseGroup: courseGroup.slug, seminar: seminar.slug },
@@ -112,6 +113,15 @@ const schemaDescription =
   seminar.seo_description?.trim() ||
   seminar.description_text?.slice(0, 200) ||
   pageDescription;
+const openGraph = buildOpenGraphMetadata({
+  title: pageTitle,
+  description: pageDescription,
+  pageTitle: seminar.name,
+  titleOverride: seminar.og_title,
+  descriptionOverride: seminar.og_description,
+  image: seminar.og_image,
+  imageAlt: seminar.og_image_alt,
+});
 
 // Event без startDate невалиден (Google Rich Results) — Этап 3, план 004.
 // Семинар с назначенной датой → Event; без даты → Course (программа обучения).
@@ -164,7 +174,12 @@ const seminarSchema =
       };
 ---
 
-<BaseLayout title={pageTitle} description={pageDescription} schema={seminarSchema}>
+<BaseLayout
+  title={pageTitle}
+  description={pageDescription}
+  openGraph={openGraph}
+  schema={seminarSchema}
+>
   <div class="container">
     <Breadcrumbs
       items={[
