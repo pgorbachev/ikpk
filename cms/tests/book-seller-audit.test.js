@@ -222,3 +222,43 @@ test('audit accepts book seed NULL phone values when source lacked columns and s
   assert.ok(seeded.every((row) => row.center_phone === null && row.manager_phone === null));
   candidateRead.close();
 });
+
+test('audit accepts only nullable Open Graph columns added to the SEO component', async () => {
+  const sourceDbPath = join(dir, 'og-source.db'), candidateDbPath = join(dir, 'og-candidate.db');
+  fixture(sourceDbPath); copyFileSync(sourceDbPath, candidateDbPath);
+  const step = JSON.parse(readFileSync(new URL('../database/migrations/plan.json', import.meta.url), 'utf8')).steps.find(({ id }) => id === 'book-seller-page-v1');
+  const manifestPath = join(dir, 'og-plan.json');
+  writeFileSync(manifestPath, JSON.stringify({ version: 1, steps: [step] }) + '\n');
+  const plan = { manifestPath, planSha256: sha(readFileSync(manifestPath)), steps: [step] };
+  const candidate = new Database(candidateDbPath), binding = addLedger(candidate);
+  const { apply } = await import('../database/migrations/data-steps/book-seller.mjs');
+  apply(candidate, { onApplied(db, row) {
+    db.prepare('INSERT INTO ikpk_data_migration_history VALUES (?,?,?,?,?,1)').run(binding.lineage, binding.operation, step.id, step.sha256, JSON.stringify(row));
+  } });
+  candidate.exec('ALTER TABLE components_shared_seos ADD COLUMN og_title varchar(255); ALTER TABLE components_shared_seos ADD COLUMN og_description TEXT');
+  candidate.close();
+  const audit = () => auditMigration({ sourceDbPath, candidateDbPath, plan, receipt: {
+    sourceDbPath, candidateDbPath, planSha256: plan.planSha256, steps: [step], operationId: binding.operation,
+    source: { sourceFileFingerprint: fingerprint(sourceDbPath), snapshotSha256: binding.snapshot, schemaFingerprint: binding.schema },
+    lifecycle: [{ event: 'closed-load-started', at: '2026-11-27T09:00:00.000Z' }, { event: 'strapi-load-complete', at: '2026-11-27T09:01:00.000Z' }],
+    candidatePostMigrationSha256: sha(readFileSync(candidateDbPath)), candidatePostMigrationFileFingerprint: fingerprint(candidateDbPath),
+  } });
+  const accepted = audit();
+  assert.equal(accepted.passed, true, JSON.stringify(accepted.differences));
+  for (const mutation of [
+    "UPDATE components_shared_seos SET og_title='Изменено' WHERE id=9",
+    "UPDATE components_shared_seos SET seo_title='Изменено' WHERE id=9",
+    'ALTER TABLE components_shared_seos ADD COLUMN unexpected TEXT',
+  ]) {
+    const db = new Database(candidateDbPath);
+    db.exec(mutation);
+    db.close();
+    const rejected = audit();
+    assert.equal(rejected.passed, false, `${mutation}: ${JSON.stringify(rejected.differences)}`);
+    if (!mutation.startsWith('ALTER')) {
+      const reset = new Database(candidateDbPath);
+      reset.exec(mutation.includes('og_title') ? 'UPDATE components_shared_seos SET og_title=NULL WHERE id=9' : "UPDATE components_shared_seos SET seo_title='Other SEO' WHERE id=9");
+      reset.close();
+    }
+  }
+});
