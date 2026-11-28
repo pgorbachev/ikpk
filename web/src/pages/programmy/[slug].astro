@@ -9,7 +9,7 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
 import Breadcrumbs from '../../components/Breadcrumbs.astro';
 import { excerpt, getCourseGroups, getInstitutes, getSeminars } from '../../lib/data';
 import type { CourseGroup } from '../../lib/data';
-import { getAssetDimensions } from '../../lib/media';
+import { buildOpenGraphMetadata, getAssetDimensions } from '../../lib/media';
 import type { GetStaticPaths } from 'astro';
 
 export const getStaticPaths: GetStaticPaths = () => {
@@ -29,9 +29,23 @@ const summary = excerpt(courseGroup.description_text, 500);
 // См. пояснение про суффикс и непустое описание в instituty/[slug].astro.
 const title = `${courseGroup.seo_title || courseGroup.name} — Программы — ИКПК`;
 const description = courseGroup.seo_description?.trim() || excerpt(courseGroup.description_text, 160);
+const openGraph = buildOpenGraphMetadata({
+  title,
+  description,
+  pageTitle: courseGroup.name,
+  titleOverride: courseGroup.og_title,
+  descriptionOverride: courseGroup.og_description,
+  image: courseGroup.og_image,
+  imageAlt: courseGroup.og_image_alt,
+});
 ---
 
-<BaseLayout title={title} description={description} noindex>
+<BaseLayout
+  title={title}
+  description={description}
+  openGraph={openGraph}
+  noindex
+>
   <div class="container">
     <Breadcrumbs items={[{ label: 'Программы', href: '/programmy' }, { label: courseGroup.name }]} />
 

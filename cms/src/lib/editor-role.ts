@@ -29,6 +29,8 @@ const articleFields = [
   'categories',
   'seo.seo_title',
   'seo.seo_description',
+  'seo.og_title',
+  'seo.og_description',
   'seo.og_image',
   'seo.noindex',
 ];
@@ -93,6 +95,8 @@ const seminarFields = [
   'schedule_entries',
   'seo.seo_title',
   'seo.seo_description',
+  'seo.og_title',
+  'seo.og_description',
   'seo.og_image',
   'seo.noindex',
 ];

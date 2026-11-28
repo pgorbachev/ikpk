@@ -103,8 +103,20 @@ describe('ключ-источник в ответе и заполненные п
 
   it('исчезнувший вложенный ключ-источник назван обоими именами', () => {
     const rec = full({ seo: { id: 1, seo_description: 'd' } });
-    expect(missingSourceFields('seminars', rec)).toEqual(['seminars.seo_title ← seo.seo_title']);
+    expect(missingSourceFields('seminars', rec)).toEqual([
+      'seminars.seo_title ← seo.seo_title',
+      'seminars.og_image ← seo.og_image',
+    ]);
     expect(missingSourceFields('seminars', full({ seo: null }))).toEqual([]);
+  });
+
+  it('new OG text fields may be absent without relaxing the existing SEO and image sources', () => {
+    expect(missingSourceFields('seminars', full({
+      seo: { id: 1, seo_title: 'Title', seo_description: 'Description', og_image: null },
+    }))).toEqual([]);
+    expect(unknownRecordFields('institutes', {
+      seo: { seo_title: 'Title', seo_description: 'Description', og_title: null, og_description: null },
+    })).toEqual([]);
   });
 
   it('пустой rich-text и false — не данные', () => {

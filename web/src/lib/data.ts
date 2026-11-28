@@ -160,6 +160,10 @@ export interface CourseGroup {
   institute_legacy_id: string;
   seo_title: string;
   seo_description: string;
+  og_title?: string | null;
+  og_description?: string | null;
+  og_image?: string | null;
+  og_image_alt?: string | null;
   description_html: string;
   description_text: string;
   images: string[];
@@ -210,6 +214,10 @@ export interface Seminar {
   course_group_legacy_id: string;
   seo_title: string;
   seo_description: string;
+  og_title?: string | null;
+  og_description?: string | null;
+  og_image?: string | null;
+  og_image_alt?: string | null;
   description_html: string;
   description_text: string;
   full_text_html?: string | null;
@@ -296,6 +304,9 @@ export interface Article {
   published_at: string | null;
   image: string | null;
   og_image?: string | null;
+  og_title?: string | null;
+  og_description?: string | null;
+  og_image_alt?: string | null;
 }
 
 export interface ScheduleEntry {

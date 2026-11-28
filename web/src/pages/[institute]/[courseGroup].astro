@@ -8,6 +8,7 @@ import { calendarDay, compareNearest, isBeforeStart } from '../../lib/schedule-w
 import { formatScheduleDateRange } from '../../lib/home';
 import RichContent from '../../components/RichContent.astro';
 import type { CourseGroup, Institute } from '../../lib/data';
+import { buildOpenGraphMetadata } from '../../lib/media';
 import type { GetStaticPaths } from 'astro';
 
 export const getStaticPaths: GetStaticPaths = () => {
@@ -173,9 +174,23 @@ const groupTitle =
 const groupDescription =
   courseGroup.seo_description?.trim() ||
   `${courseGroup.name}: программы и семинары ${institute.name}. Расписание, стоимость и запись на обучение.`;
+const openGraph = buildOpenGraphMetadata({
+  title: groupTitle,
+  description: groupDescription,
+  pageTitle: courseGroup.name,
+  titleOverride: courseGroup.og_title,
+  descriptionOverride: courseGroup.og_description,
+  image: courseGroup.og_image,
+  imageAlt: courseGroup.og_image_alt,
+});
 ---
 
-<BaseLayout title={groupTitle} description={groupDescription} schema={schema}>
+<BaseLayout
+  title={groupTitle}
+  description={groupDescription}
+  openGraph={openGraph}
+  schema={schema}
+>
   <div class="container">
     <Breadcrumbs
       items={[

@@ -24,6 +24,16 @@ test('редактор создаёт, читает, меняет и публи�
   }
 });
 
+test('SEO редакторские поля доступны в статье и семинаре, а программы остаются закрытыми для записи', () => {
+  for (const subject of ['api::article.article', 'api::seminar.seminar']) {
+    const update = find(subject, 'update');
+    assert.ok(update, `${subject}: нет update`);
+    assert.ok(update.properties?.fields.includes('seo.og_title'));
+    assert.ok(update.properties?.fields.includes('seo.og_description'));
+  }
+  assert.equal(find('api::course-group.course-group', 'update')?.properties?.fields.includes('seo.og_title'), false);
+});
+
 test('редактор меняет состояние события через поле, не занятое Draft & Publish', () => {
   const scheduleUpdate = find('api::schedule-entry.schedule-entry', 'update');
   assert.ok(scheduleUpdate?.properties?.fields.includes('entry_status'));
