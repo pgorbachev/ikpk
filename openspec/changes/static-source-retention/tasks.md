@@ -14,7 +14,11 @@
   - remove unknown entries as well → `ReleaseCleanupTests` 0 → 2;
   - drop the committed short-circuit in `_static_main_prepare` → `test_static_main_committed_retry_reports_committed_after_source_removed` 0 → 1;
   - client: without the `committed` branch, `test_static_main_retry_of_committed_operation_succeeds_without_export` fails with a Refusal;
-  - unfinished operation: refused twice, by journal history validation and by the explicit check. Dropping either one alone keeps `test_static_source_step_refuses_on_unfinished_operation` green; dropping both turns it red (0 → 1).
+  - unfinished operation (after review: the explicit check was removed as a duplicate of history validation): reading the journal with `validate_history=False` in `_cleanup_static_sources` → `test_static_source_step_refuses_on_unfinished_operation` 0 → 1;
+  - protect the newest operation without the eligibility check → `test_rolled_back_newest_operation_leaves_the_older_eligible_capture_protected` 0 → 1;
+  - re-raise on a bad entry instead of keeping it → `ReleaseCleanupTests` 0 → 3;
+  - committed retry ignoring rollback intent → `test_static_main_committed_retry_reports_committed_after_source_removed` 0 → 1;
+  - not covered by a test: the dispatch wiring that runs post-commit cleanup after a committed retry (two lines, mirroring the `--browser-digest` branch). A dispatch fixture needs the full lock and marker admission; this is checked on staging194 in 4.2.
 
 ## 3. Implementation
 
