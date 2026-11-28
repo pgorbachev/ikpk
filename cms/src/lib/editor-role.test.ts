@@ -24,6 +24,19 @@ test('редактор создаёт, читает, меняет и публи�
   }
 });
 
+test('SEO редакторские поля доступны в статье, семинаре и программе', () => {
+  for (const subject of ['api::article.article', 'api::seminar.seminar']) {
+    const update = find(subject, 'update');
+    assert.ok(update, `${subject}: нет update`);
+    assert.ok(update.properties?.fields.includes('seo.og_title'));
+    assert.ok(update.properties?.fields.includes('seo.og_description'));
+  }
+  for (const actionName of ['read', 'update']) {
+    const fields = find('api::course-group.course-group', actionName)?.properties?.fields ?? [];
+    for (const field of ['seo.og_title', 'seo.og_description']) assert.ok(fields.includes(field), `${actionName}: ${field}`);
+  }
+});
+
 test('редактор меняет состояние события через поле, не занятое Draft & Publish', () => {
   const scheduleUpdate = find('api::schedule-entry.schedule-entry', 'update');
   assert.ok(scheduleUpdate?.properties?.fields.includes('entry_status'));
@@ -49,7 +62,7 @@ test('изображение расписания доступно редакт�
 
 test('редактор меняет разрешённые поля программ, преподавателей и институтов', () => {
   const expected = {
-    'api::course-group.course-group': ['name', 'description', 'image', 'order', 'is_article_category', 'seo.seo_title', 'seo.seo_description'],
+    'api::course-group.course-group': ['name', 'description', 'image', 'order', 'is_article_category', 'seo.seo_title', 'seo.seo_description', 'seo.og_title', 'seo.og_description'],
     'api::teacher.teacher': ['name', 'trait', 'order', 'photo', 'bio'],
     'api::institute.institute': ['name', 'shortName', 'description', 'image', 'order', 'seo.seo_title', 'seo.seo_description'],
   };
@@ -59,7 +72,7 @@ test('редактор меняет разрешённые поля програ
     assert.equal(find(subject, 'create'), undefined, `${subject}: создание закрыто`);
   }
   assert.deepEqual(find('api::course-group.course-group', 'read')?.properties?.fields,
-    ['name', 'slug', 'editor_label', 'description', 'image', 'order', 'is_article_category', 'institute', 'seo.seo_title', 'seo.seo_description']);
+    ['name', 'slug', 'editor_label', 'description', 'image', 'order', 'is_article_category', 'institute', 'seo.seo_title', 'seo.seo_description', 'seo.og_title', 'seo.og_description']);
   assert.deepEqual(find('api::teacher.teacher', 'read')?.properties?.fields,
     ['name', 'slug', 'trait', 'order', 'institute', 'photo', 'bio']);
   assert.deepEqual(find('api::institute.institute', 'read')?.properties?.fields,

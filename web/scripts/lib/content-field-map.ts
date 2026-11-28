@@ -25,6 +25,8 @@ export interface FieldMapEntry {
   source: string;
   /** Имя преобразования, исполняемого захватом. Без него поле — прямой passthrough. */
   transform?: string;
+  /** New SEO fields are optional so older CMS deployments and saved snapshots remain valid. */
+  optional?: boolean;
 }
 
 export interface SourceType {
@@ -85,6 +87,10 @@ export const FIELD_MAP: readonly FieldMapEntry[] = [
   { type: 'course_groups', field: 'institute_legacy_id', source: 'institute.slug' },
   { type: 'course_groups', field: 'seo_title', source: 'seo.seo_title' },
   { type: 'course_groups', field: 'seo_description', source: 'seo.seo_description' },
+  { type: 'course_groups', field: 'og_title', source: 'seo.og_title', optional: true },
+  { type: 'course_groups', field: 'og_description', source: 'seo.og_description', optional: true },
+  { type: 'course_groups', field: 'og_image', source: 'seo.og_image', transform: 'mediaUrl' },
+  { type: 'course_groups', field: 'og_image_alt', source: 'seo.og_image', transform: 'mediaAlternativeText', optional: true },
   { type: 'course_groups', field: 'description_html', source: 'description' },
   { type: 'course_groups', field: 'description_text', source: 'description', transform: 'htmlToText' },
   { type: 'course_groups', field: 'image', source: 'image', transform: 'mediaRef' },
@@ -110,6 +116,10 @@ export const FIELD_MAP: readonly FieldMapEntry[] = [
   { type: 'seminars', field: 'course_group_legacy_id', source: 'course_group.legacy_id' },
   { type: 'seminars', field: 'seo_title', source: 'seo.seo_title' },
   { type: 'seminars', field: 'seo_description', source: 'seo.seo_description' },
+  { type: 'seminars', field: 'og_title', source: 'seo.og_title', optional: true },
+  { type: 'seminars', field: 'og_description', source: 'seo.og_description', optional: true },
+  { type: 'seminars', field: 'og_image', source: 'seo.og_image', transform: 'mediaUrl' },
+  { type: 'seminars', field: 'og_image_alt', source: 'seo.og_image', transform: 'mediaAlternativeText', optional: true },
   { type: 'seminars', field: 'description_html', source: 'description' },
   { type: 'seminars', field: 'description_text', source: 'description', transform: 'htmlToText' },
   { type: 'seminars', field: 'full_text_html', source: 'full_text' },
@@ -141,7 +151,11 @@ export const FIELD_MAP: readonly FieldMapEntry[] = [
   { type: 'articles', field: 'body_text', source: 'body', transform: 'htmlToText' },
   { type: 'articles', field: 'seo_title', source: 'seo.seo_title' },
   { type: 'articles', field: 'seo_description', source: 'seo.seo_description' },
+  { type: 'articles', field: 'og_title', source: 'seo.og_title', optional: true },
+  { type: 'articles', field: 'og_description', source: 'seo.og_description', optional: true },
   { type: 'articles', field: 'image', source: 'image', transform: 'mediaUrl' },
+  { type: 'articles', field: 'og_image', source: 'seo.og_image', transform: 'mediaUrl' },
+  { type: 'articles', field: 'og_image_alt', source: 'seo.og_image', transform: 'mediaAlternativeText', optional: true },
   { type: 'articles', field: 'published_at', source: 'published_date' },
 
   // schedule_entries — уже CMS-нативный тип, без legacy-иерархии: поля называются как в схеме.
@@ -240,7 +254,12 @@ export const UNMAPPED_SCHEMA_FIELDS: Readonly<Record<string, Readonly<Record<str
 /** Служебные поля ответа Strapi 5 и компонента: не атрибуты схемы. */
 const SYSTEM_FIELDS = new Set(['id', 'documentId', 'createdAt', 'updatedAt', 'publishedAt']);
 /** Подполя компонента `shared.seo`, которые сайт пока не читает. */
-export const UNMAPPED_SEO_FIELDS: Readonly<Record<string, string>> = { og_image: NOT_YET, noindex: NOT_YET };
+export const UNMAPPED_SEO_FIELDS: Readonly<Record<string, string>> = {
+  og_image: NOT_YET,
+  og_title: NOT_YET,
+  og_description: NOT_YET,
+  noindex: NOT_YET,
+};
 
 /**
  * Поля записи, о которых нет решения: ни в карте, ни в `UNMAPPED_SCHEMA_FIELDS`, ни служебные.
@@ -269,14 +288,14 @@ export function unknownRecordFields(type: string, record: Record<string, unknown
  * источник исчез из установленной CMS. `null` и пустая коллекция — законные пустые значения. Подполе
  * проверяется, когда родитель — объект: компонент `seo` или связь (`course_group.legacy_id`).
  */
-export function missingSourceFields(type: string, record: Record<string, unknown>): string[] {
+export function missingSourceFields(type: string, record: Record<string, unknown>, requireOptional = false): string[] {
   const missing = new Map<string, string>();
-  for (const { field, source } of FIELD_MAP.filter((e) => e.type === type)) {
+  for (const { field, source, optional } of FIELD_MAP.filter((e) => e.type === type)) {
     const [root, sub] = source.split('.') as [string, string | undefined];
     const parent = record[root];
     const gone = !Object.hasOwn(record, root) ||
       (sub !== undefined && parent !== null && typeof parent === 'object' && !Array.isArray(parent) && !Object.hasOwn(parent, sub));
-    if (gone && !missing.has(source)) missing.set(source, `${type}.${field} ← ${source}`);
+    if ((!optional || requireOptional) && gone && !missing.has(source)) missing.set(source, `${type}.${field} ← ${source}`);
   }
   return [...missing.values()];
 }
@@ -351,12 +370,13 @@ export function checkFieldMapAgainstSchema(input: {
   map: readonly FieldMapEntry[];
   schemas: Record<string, CmsSchema>;
   components: Record<string, CmsSchema>;
+  allowOptionalMissing?: boolean;
 }): {
   ok: boolean;
   missingSources: { type: string; field: string; source: string }[];
   unmapped: { type: string; field: string }[];
 } {
-  const { map, schemas, components } = input;
+  const { map, schemas, components, allowOptionalMissing = false } = input;
   const missingSources: { type: string; field: string; source: string }[] = [];
   const coveredRoots = new Map<string, Set<string>>();
 
@@ -366,6 +386,7 @@ export function checkFieldMapAgainstSchema(input: {
     const attr = schema?.attributes[root!];
     const gone = attr === undefined || (subfield !== undefined && componentAttributeMissing(attr, subfield, components));
     if (gone) {
+      if (entry.optional && allowOptionalMissing) continue;
       missingSources.push({ type: entry.type, field: entry.field, source: entry.source });
     } else {
       const set = coveredRoots.get(entry.type) ?? new Set<string>();

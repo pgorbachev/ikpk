@@ -5,13 +5,22 @@
 interface Props {
   title: string;
   description: string;
-  ogImage?: string;
+  openGraph?: import('../lib/media').OpenGraphMetadata;
   noindex?: boolean;
   schema?: Record<string, unknown>;
   preloadHero?: boolean;
 }
-const { title, description, ogImage, noindex = false, schema, preloadHero = false } = Astro.props;
+import { buildOpenGraphMetadata } from '../lib/media.js';
+const {
+  title,
+  description,
+  openGraph,
+  noindex = false,
+  schema,
+  preloadHero = false,
+} = Astro.props;
 const isDemo193Profile = import.meta.env.DEMO_PROFILE === 'demo193';
+const og = openGraph ?? buildOpenGraphMetadata({ title, description, pageTitle: title });
 
 function scopeSchemaToSite(value: unknown, key?: string): unknown {
   const siteOrigin = Astro.site?.origin;
@@ -63,15 +72,16 @@ import { serializeJsonLd } from '../lib/json-ld.js';
 {(noindex || isDemo193Profile) && <meta name="robots" content="noindex, nofollow" />}
 
 <!-- Open Graph -->
-<meta property="og:type" content="website" />
+<meta property="og:type" content={og.type} />
 <meta property="og:url" content={canonicalURL.href} />
-<meta property="og:title" content={title} />
-<meta property="og:description" content={description} />
+<meta property="og:title" content={og.title} />
+<meta property="og:description" content={og.description} />
 <meta property="og:site_name" content={siteName} />
 <meta property="og:locale" content="ru_RU" />
-<meta property="og:image" content={ogImage || new URL('/og-image.png', Astro.site).href} />
-{!ogImage && <meta property="og:image:width" content="1200" />}
-{!ogImage && <meta property="og:image:height" content="630" />}
+<meta property="og:image" content={new URL(og.image, Astro.site).href} />
+<meta property="og:image:width" content={String(og.width)} />
+<meta property="og:image:height" content={String(og.height)} />
+<meta property="og:image:alt" content={og.alt} />
 
 <!-- Self-hosted Inter font -->
 <link rel="preload" href="/fonts/inter-latin.woff2" as="font" type="font/woff2" crossorigin />

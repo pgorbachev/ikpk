@@ -83,7 +83,7 @@ export function readPublishedSqlite(database, schemaRoot) {
         } else if (attr.type !== 'media' && !scalarTypes.has(attr.type)) throw new Error(`schema unsupported attribute: ${uid}.${name}`);
       }
     }
-    requireColumns('files', ['id', 'document_id', 'url']);
+    requireColumns('files', ['id', 'document_id', 'url', 'alternative_text']);
     requireColumns('files_related_mph', ['file_id', 'related_id', 'related_type', 'field', 'order']);
     const rows = new Map();
     for (const [uid, schema] of Object.entries(schemas)) rows.set(uid, new Map(db.prepare(`SELECT * FROM ${quote(schema.collectionName)} ORDER BY id`).all().map((r) => [r.id, r])));
@@ -142,7 +142,7 @@ export function readPublishedSqlite(database, schemaRoot) {
         } else if (attr.type === 'media') {
           const links = db.prepare('SELECT file_id FROM files_related_mph WHERE related_id=? AND related_type=? AND field=? ORDER BY "order", file_id').all(row.id, uid, name);
           const related = links.map(({ file_id }) => {
-            const media = db.prepare('SELECT id, document_id AS documentId, url FROM files WHERE id=?').get(file_id);
+            const media = db.prepare('SELECT id, document_id AS documentId, url, alternative_text AS alternativeText FROM files WHERE id=?').get(file_id);
             if (!media || typeof media.url !== 'string' || !media.url.startsWith('/uploads/')) throw new Error(`broken or nonlocal media: ${uid}.${name}#${file_id}`);
             return { ...media };
           });

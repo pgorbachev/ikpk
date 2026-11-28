@@ -8,6 +8,7 @@ import {
   filledUnshownContentFields,
   hasValue,
   missingSourceFields,
+  checkFieldMapAgainstSchema,
   unknownRecordFields,
   type CmsSchema,
 } from '../scripts/lib/content-field-map.ts';
@@ -103,8 +104,37 @@ describe('ключ-источник в ответе и заполненные п
 
   it('исчезнувший вложенный ключ-источник назван обоими именами', () => {
     const rec = full({ seo: { id: 1, seo_description: 'd' } });
-    expect(missingSourceFields('seminars', rec)).toEqual(['seminars.seo_title ← seo.seo_title']);
+    expect(missingSourceFields('seminars', rec)).toEqual([
+      'seminars.seo_title ← seo.seo_title',
+      'seminars.og_image ← seo.og_image',
+    ]);
     expect(missingSourceFields('seminars', full({ seo: null }))).toEqual([]);
+  });
+
+  it('new OG text fields may be absent without relaxing the existing SEO and image sources', () => {
+    expect(missingSourceFields('seminars', full({
+      seo: { id: 1, seo_title: 'Title', seo_description: 'Description', og_image: null },
+    }))).toEqual([]);
+    expect(unknownRecordFields('institutes', {
+      seo: { seo_title: 'Title', seo_description: 'Description', og_title: null, og_description: null },
+    })).toEqual([]);
+  });
+
+  it('current REST capture rejects an absent mapped OG text key but accepts null', () => {
+    const record = full({ seo: { id: 1, seo_title: 'Title', seo_description: 'Description', og_image: null } });
+    expect(missingSourceFields('seminars', record, true)).toEqual([
+      'seminars.og_title ← seo.og_title', 'seminars.og_description ← seo.og_description',
+    ]);
+    record.seo = { id: 1, seo_title: 'Title', seo_description: 'Description', og_title: null, og_description: null, og_image: null };
+    expect(missingSourceFields('seminars', record, true)).toEqual([]);
+  });
+
+  it('checkout schema rejects absent OG text attributes unless the sealed legacy exception is explicit', () => {
+    const map = FIELD_MAP.filter((entry) => entry.type === 'seminars');
+    const schemas = { seminars: { attributes: { seo: { type: 'component', component: 'shared.seo' } } } };
+    const components = { 'shared.seo': { attributes: { seo_title: { type: 'string' }, seo_description: { type: 'text' }, og_image: { type: 'media' } } } };
+    expect(checkFieldMapAgainstSchema({ map, schemas, components }).missingSources.map((entry) => entry.field)).toContain('og_title');
+    expect(checkFieldMapAgainstSchema({ map, schemas, components, allowOptionalMissing: true }).missingSources.map((entry) => entry.field)).not.toContain('og_title');
   });
 
   it('пустой rich-text и false — не данные', () => {

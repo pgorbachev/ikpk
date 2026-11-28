@@ -79,10 +79,17 @@ describe('built Article metadata uses normalized snapshot values', () => {
     const fallbackDescription = 'Санитизированный текст & сущности статьи для generated metadata.';
     fallbackArticle.body_html = '<p>Санитизированный текст &amp; сущности статьи для generated metadata.</p>';
     fallbackArticle.body_text = fallbackDescription;
+    fallbackArticle.image = '/uploads/article-primary.webp';
     delete fallbackArticle.seo_title;
     delete fallbackArticle.seo_description;
     explicitArticle.seo_title = 'Сохранённый SEO title';
     explicitArticle.seo_description = 'Сохранённое редакторское описание';
+    explicitArticle.og_title = 'Заголовок карточки ссылки';
+    explicitArticle.og_description = '  ';
+    explicitArticle.image = '/uploads/article-primary.webp';
+    delete explicitArticle.og_image;
+    const defaultArticle = data.content.types.articles[2]!;
+    delete defaultArticle.image;
     writeFileSync(snapshotPath, JSON.stringify(data));
     try {
       execFileSync(join(WEB_ROOT, 'node_modules', '.bin', 'astro'), ['build', '--outDir', dist], {
@@ -95,6 +102,7 @@ describe('built Article metadata uses normalized snapshot values', () => {
       const readPage = (slug: string) => readFileSync(join(dist, 'statyi', slug, 'index.html'), 'utf8');
       const fallbackHtml = readPage(String(fallbackArticle.slug));
       const explicitHtml = readPage(String(explicitArticle.slug));
+      const defaultHtml = readPage(String(defaultArticle.slug));
       const metadata = (html: string, selector: string): string => {
         const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
         const match = html.match(new RegExp(`<meta\\s+[^>]*(?:name|property)="${escaped}"[^>]*content="([^"]*)"|<meta\\s+[^>]*content="([^"]*)"[^>]*(?:name|property)="${escaped}"`));
@@ -113,14 +121,21 @@ describe('built Article metadata uses normalized snapshot values', () => {
       expect(schema(fallbackHtml).url).toBe(`https://ikpk.su/statyi/${fallbackArticle.slug}`);
       expect(metadata(fallbackHtml, 'robots')).toBe('');
       expect(metadata(fallbackHtml, 'og:image')).toBe('https://ikpk.su/og-image.png');
+      expect(metadata(fallbackHtml, 'og:image:width')).toBe('1200');
+      expect(metadata(fallbackHtml, 'og:image:height')).toBe('630');
+      expect(metadata(fallbackHtml, 'og:image:alt')).toBe('Логотип и название Института клинической прикладной кинезиологии');
+      expect(metadata(fallbackHtml, 'og:type')).toBe('article');
       expect(explicitHtml).toContain('<title>Сохранённый SEO title</title>');
       expect(metadata(explicitHtml, 'description')).toBe('Сохранённое редакторское описание');
-      expect(metadata(explicitHtml, 'og:title')).toBe('Сохранённый SEO title');
+      expect(metadata(explicitHtml, 'og:title')).toBe('Заголовок карточки ссылки');
       expect(metadata(explicitHtml, 'og:description')).toBe('Сохранённое редакторское описание');
       expect(schema(explicitHtml)).toMatchObject({ headline: 'Сохранённый SEO title', description: 'Сохранённое редакторское описание' });
       expect(schema(explicitHtml).url).toBe(`https://ikpk.su/statyi/${explicitArticle.slug}`);
       expect(metadata(explicitHtml, 'robots')).toBe('');
       expect(metadata(explicitHtml, 'og:image')).toBe('https://ikpk.su/og-image.png');
+      expect(metadata(defaultHtml, 'og:image')).toBe('https://ikpk.su/og-image.png');
+      expect(schema(defaultHtml).image).toBe('https://ikpk.su/og-image.png');
+      expect(schema(explicitHtml).image).toBe('https://ikpk.su/media/uploads/article-primary.webp');
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

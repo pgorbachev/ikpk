@@ -15,6 +15,14 @@ function SiteRefreshIcon(props: SiteRefreshIconProps) {
   );
 }
 
+type EditViewLayout = {
+  layout: {
+    components: Record<string, {
+      layout: { name: string; label?: string; hint?: string }[][];
+    }>;
+  };
+};
+
 type CollectionLinks = { ctLinks: { uid: string; title: string }[] };
 
 const pageTranslations = {
@@ -115,6 +123,24 @@ export default {
       ctLinks: input.ctLinks.map(link =>
         link.uid === 'api::page.page' ? { ...link, title: pageTranslations.Page } : link),
     }));
+    app.registerHook('Admin/CM/pages/EditView/mutate-edit-view-layout', (input: EditViewLayout) => {
+      const seo = input.layout.components['shared.seo'];
+      if (!seo) return input;
+      const layout = seo.layout
+        .map(row => row.map(field => {
+          if (field.name === 'og_image') {
+            return {
+              ...field,
+              label: 'Обложка ссылки',
+              hint: 'Используется для ссылок на программы, семинары и статьи. Если оставить поле пустым, сайт покажет общую обложку ИКПК.',
+            };
+          }
+          if (field.name === 'og_title') return { ...field, label: 'Open Graph Title' };
+          if (field.name === 'og_description') return { ...field, label: 'Open Graph Description' };
+          return field;
+        }));
+      return { ...input, layout: { ...input.layout, components: { ...input.layout.components, 'shared.seo': { ...seo, layout } } } };
+    });
     app.addMenuLink({
       to: '/site-refresh',
       icon: SiteRefreshIcon,

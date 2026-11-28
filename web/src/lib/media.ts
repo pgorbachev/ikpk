@@ -10,6 +10,9 @@ import manifest from './media-manifest.json' with { type: 'json' };
 // Продублирован в scripts/download-media.ts (разные npm-пакеты) —
 // при изменении бакета править ОБА места.
 export const BUCKET_PREFIX = 'https://storage.yandexcloud.net/ikpk-image';
+export const DEFAULT_OG_IMAGE = '/og-image.png';
+export const DEFAULT_OG_IMAGE_DIMENSIONS = { width: 1200, height: 630 } as const;
+export const DEFAULT_OG_IMAGE_ALT = 'Логотип и название Института клинической прикладной кинезиологии';
 const SITE_UPLOADS_PREFIX = '/media/uploads/';
 
 interface ManifestEntry {
@@ -72,6 +75,49 @@ export function getAssetDimensions(path: string): { width: number; height: numbe
   const entry = MANIFEST[key];
   if (entry?.width && entry?.height) return { width: entry.width, height: entry.height };
   return undefined;
+}
+
+export interface OpenGraphMetadata {
+  title: string;
+  description: string;
+  image: string;
+  width: number;
+  height: number;
+  alt: string;
+  type: 'website' | 'article';
+}
+
+/** Resolve copy and metadata from the exact published image selected for this page. */
+export function buildOpenGraphMetadata(input: {
+  title: string;
+  description: string;
+  pageTitle: string;
+  image?: string | null;
+  imageAlt?: string | null;
+  titleOverride?: string | null;
+  descriptionOverride?: string | null;
+  type?: 'website' | 'article';
+}): OpenGraphMetadata {
+  const image = input.image?.trim() || DEFAULT_OG_IMAGE;
+  const isDefaultImage = image === DEFAULT_OG_IMAGE;
+  const dimensions = isDefaultImage ? DEFAULT_OG_IMAGE_DIMENSIONS : getAssetDimensions(image);
+  if (!dimensions) {
+    throw new Error(`Open Graph image has no published dimensions in media-manifest.json: ${image}`);
+  }
+
+  const titleOverride = input.titleOverride?.trim();
+  const descriptionOverride = input.descriptionOverride?.trim();
+  return {
+    title: titleOverride || input.title,
+    description: descriptionOverride || input.description,
+    image,
+    width: dimensions.width,
+    height: dimensions.height,
+    alt: isDefaultImage
+      ? DEFAULT_OG_IMAGE_ALT
+      : input.imageAlt?.trim() || `Обложка страницы «${input.pageTitle}»`,
+    type: input.type ?? 'website',
+  };
 }
 
 /**

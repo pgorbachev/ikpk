@@ -75,7 +75,10 @@ export default {
     await backfillProgramEditorLabels(strapi);
     await ensureContentAdminRole(strapi);
     await migrateContentAdminSchemaPermissions(strapi, {
-      additions: { 'api::course-group.course-group': ['editor_label'] },
+      additions: {
+        'api::course-group.course-group': ['editor_label'],
+        'api::seminar.seminar': ['seo.og_title', 'seo.og_description'],
+      },
     });
     await bootstrapCaptureTokenForRehearsal(
       strapi as unknown as Parameters<typeof bootstrapCaptureTokenForRehearsal>[0],

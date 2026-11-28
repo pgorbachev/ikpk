@@ -7,14 +7,16 @@
 //
 // Три требования, восемь сценариев. Соответствие «сценарий → тест» — в отчёте сессии.
 
-import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { createHash } from 'node:crypto';
 import { contentFingerprint, type SnapshotContent } from '../scripts/lib/content-snapshot';
+import { unknownRecordFields, FIELD_MAP } from '../scripts/lib/content-field-map';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { parseFragment } from 'parse5';
+import sharp from 'sharp';
 import { assertSitePhoneOutput, editorialPhone, organizationSlug } from './helpers/site-phone-output';
 import { cleanBodyHtml } from '../src/lib/data';
 import {
@@ -50,6 +52,8 @@ const seo = (name: string): Record<string, unknown> => ({
   id: 1,
   seo_title: `${name} — заголовок страницы`,
   seo_description: `${name} — описание страницы`,
+  og_title: null,
+  og_description: null,
   og_image: null,
   noindex: false,
 });
@@ -187,7 +191,7 @@ async function stub(over: Record<string, StubCollection> = {}): Promise<CmsStub>
   // fixture independent from the media-delivery fixture while still supplying
   // bytes for all image records (articles use ids through ARTICLE_COUNT).
   const uploads = Object.fromEntries(
-    Array.from({ length: ARTICLE_COUNT }, (_, i) => [
+    Array.from({ length: ARTICLE_COUNT + 1 }, (_, i) => [
       `/uploads/img-${i + 1}.webp`,
       { bytes: Buffer.from(`live-capture-image-${i + 1}`) },
     ]),
@@ -522,10 +526,10 @@ describe('Article SEO fallbacks through live snapshot capture', () => {
     const records = dataset().articles.records.map((record, index) => {
       if (index === 5) return { ...record, body: `<p>${'a'.repeat(199)}😀z</p>`, seo: null };
       if (index === 0) return { ...record, body: sourceBody, seo: null };
-      if (index === 1) return { ...record, body: '<p>Только описание</p>', seo: { seo_title: 'Авторский заголовок', seo_description: '' } };
-      if (index === 2) return { ...record, body: '<p>Только заголовок</p>', seo: { seo_title: '   ', seo_description: 'Авторское описание' } };
-      if (index === 3) return { ...record, body: '<p>Пробелы</p>', seo: { seo_title: '  ', seo_description: '\t ' } };
-      if (index === 4) return { ...record, seo: { seo_title: 'Сохранённый заголовок', seo_description: 'Д'.repeat(250) } };
+      if (index === 1) return { ...record, body: '<p>Только описание</p>', seo: { og_image: null, og_title: null, og_description: null, seo_title: 'Авторский заголовок', seo_description: '' } };
+      if (index === 2) return { ...record, body: '<p>Только заголовок</p>', seo: { og_image: null, og_title: null, og_description: null, seo_title: '   ', seo_description: 'Авторское описание' } };
+      if (index === 3) return { ...record, body: '<p>Пробелы</p>', seo: { og_image: null, og_title: null, og_description: null, seo_title: '  ', seo_description: '\t ' } };
+      if (index === 4) return { ...record, seo: { og_image: null, og_title: null, og_description: null, seo_title: 'Сохранённый заголовок', seo_description: 'Д'.repeat(250) } };
       return record;
     });
     const cms = await stub({ articles: { records } });
@@ -598,7 +602,7 @@ describe('Article SEO fallbacks through live snapshot capture', () => {
 
   it('refuses a snapshot when sanitization leaves no body text and no explicit SEO description', async () => {
     const records = dataset().articles.records.map((record, index) => index === 0
-      ? { ...record, body: '<script>discard()</script><style>.discard{display:none}</style>', seo: { seo_title: 'Explicit title', seo_description: '' } }
+      ? { ...record, body: '<script>discard()</script><style>.discard{display:none}</style>', seo: { og_image: null, og_title: null, og_description: null, seo_title: 'Explicit title', seo_description: '' } }
       : record);
     const cms = await stub({ articles: { records } });
     const dir = outDir();
@@ -1268,6 +1272,24 @@ describe('съём понимает формы данных установлен
     expect(seminar?.nmo).toEqual({ status: 'possible', url: 'https://example.org/#nmo' });
   });
 
+  it('снимает отдельную обложку статьи и сохраняет файл обложки в снимке', async () => {
+    const records = d.articles!.records.map((record, index) => ({
+      ...record,
+      image: index === ARTICLE_COUNT - 1 ? null : record.image,
+      seo: { ...(record.seo as object), og_image: index === 0 ? media(ARTICLE_COUNT + 1) : null },
+    }));
+    const cms = await stub({ articles: { records } });
+    const dir = outDir();
+    const run = await runCapture({ CMS_URL: cms.url, CONTENT_SNAPSHOT_DIR: dir });
+    expect(run.status, run.output).toBe(0);
+    const snapshot = readSnapshot(dir);
+    expect(typesOf(snapshot).articles?.[0]?.og_image).toBe(`/uploads/img-${ARTICLE_COUNT + 1}.webp`);
+    expect(typesOf(snapshot).articles?.[1]).not.toHaveProperty('og_image');
+    expect((snapshot.content as SnapshotContent).media).toContainEqual(expect.objectContaining({
+      ref: `/media/uploads/img-${ARTICLE_COUNT + 1}.webp`,
+    }));
+  });
+
   it('заполненный seo.noindex назван в выводе', async () => {
     const cms = await stub({ articles: { records: d.articles!.records.map((r, i) => ({ ...r, seo: { ...(r.seo as object), noindex: i < 3 } })) } });
 
@@ -1500,4 +1522,127 @@ describe('site phones through live capture and offline Astro build', () => {
       expect(existsSync(join(dir, 'snapshot.json'))).toBe(false);
     } finally { rmSync(dir, { recursive: true, force: true }); }
   });
+});
+
+describe('published Open Graph metadata through capture and build', () => {
+  it('renders unique OG properties on article, program and seminar URLs', async () => {
+    const source = dataset();
+    const customImage = { ...media(ARTICLE_COUNT + 1), width: 1440, height: 1080, alternativeText: 'Описание обложки из медиатеки' };
+    const collections = ['articles', 'course-groups', 'seminars'] as const;
+    for (const collection of collections) {
+      source[collection]!.records = source[collection]!.records.map((record, index) => ({
+        ...record,
+        seo: {
+          ...(record.seo as object),
+          og_title: index === 0 ? 'Заголовок карточки' : '  ',
+          og_description: index === 0 ? '  ' : 'Описание карточки',
+          og_image: index === 0 ? customImage : null,
+        },
+      }));
+    }
+    const uploads = Object.fromEntries(Array.from({ length: ARTICLE_COUNT + 1 }, (_, i) => [
+      `/uploads/img-${i + 1}.webp`,
+      { bytes: readFileSync(join(WEB_ROOT, 'public/books/ozon.webp')) },
+    ]));
+    const cms = await startCmsStub(source, uploads);
+    stubs.push(cms);
+    const dir = outDir();
+    const dist = join(dir, 'dist');
+    try {
+      const capture = await runCapture({ CMS_URL: cms.url, CONTENT_SNAPSHOT_DIR: dir });
+      expect(capture.status, `capture failed:\n${capture.output}`).toBe(0);
+      for (const endpoint of ['articles', 'course-groups', 'seminars']) {
+        const requests = cms.requests.filter((request) => request.endpoint === endpoint);
+        expect(requests.length, `${endpoint}: REST boundary was not queried`).toBeGreaterThan(0);
+        for (const request of requests) {
+          const params = new URLSearchParams(request.query);
+          expect(params.get('status'), `${endpoint}: published filter`).toBe('published');
+          expect(params.get('populate[seo][populate][og_image]'), `${endpoint}: SEO OG image populate`).toBe('true');
+        }
+      }
+      const isolatedWeb = join(dir, 'build-repo', 'web');
+      const excluded = new Set(['node_modules', '.astro', '.snapshot', 'dist', 'dist-snapshot', 'public/media']);
+      cpSync(WEB_ROOT, isolatedWeb, {
+        recursive: true,
+        filter: (path) => !excluded.has(path.slice(WEB_ROOT.length + 1)),
+      });
+      symlinkSync(join(WEB_ROOT, 'node_modules'), join(isolatedWeb, 'node_modules'), 'dir');
+      symlinkSync(join(WEB_ROOT, '..', 'media-originals'), join(dir, 'build-repo', 'media-originals'), 'dir');
+      symlinkSync(join(WEB_ROOT, '..', 'fixtures'), join(dir, 'build-repo', 'fixtures'), 'dir');
+      execFileSync('npm', ['run', 'prebuild'], {
+        cwd: isolatedWeb,
+        env: { ...process.env, CONTENT_SNAPSHOT_DIR: dir },
+        timeout: 180_000,
+        stdio: 'pipe',
+      });
+      execFileSync(join(isolatedWeb, 'node_modules', '.bin', 'astro'), ['build', '--outDir', dist], {
+        cwd: isolatedWeb,
+        env: { ...process.env, CONTENT_SNAPSHOT_DIR: dir },
+        timeout: 120_000,
+        stdio: 'pipe',
+      });
+      const publishedImage = join(dist, 'media', 'uploads', `img-${ARTICLE_COUNT + 1}.webp`);
+      expect(existsSync(publishedImage), 'individual OG image is absent from the published site').toBe(true);
+      const dimensions = await sharp(publishedImage).metadata();
+      const manifest = JSON.parse(readFileSync(join(isolatedWeb, 'src/lib/media-manifest.json'), 'utf8'));
+      expect(manifest[`/media/uploads/img-${ARTICLE_COUNT + 1}.webp`]).toMatchObject({
+        width: dimensions.width, height: dimensions.height,
+      });
+      expect(dimensions.width).toBeGreaterThan(0);
+      expect(dimensions.height).toBeGreaterThan(0);
+      const paths = [
+        ['statyi/art-001', 'article', true], ['statyi/art-002', 'article', false],
+        ['programmy/cg-001', 'website', true], ['programmy/cg-002', 'website', false],
+        ['inst-001/cg-001', 'website', true], ['inst-001/cg-002', 'website', false],
+        ['seminary/sem-001', 'website', true], ['seminary/sem-002', 'website', false],
+        ['inst-001/cg-001/sem-001', 'website', true], ['inst-001/cg-001/sem-002', 'website', false],
+      ] as const;
+      for (const [path, type, custom] of paths) {
+        const html = readFileSync(join(dist, path, 'index.html'), 'utf8');
+        const tags = Array.from(html.matchAll(/<meta\s+[^>]*property="(og:[^"]+)"[^>]*>/g));
+        const properties = ['title', 'description', 'image', 'url', 'type', 'site_name', 'locale', 'image:width', 'image:height', 'image:alt'];
+        const value = (property: string) => {
+          const matches = tags.filter((tag) => tag[1] === `og:${property}`);
+          expect(matches, `${path} og:${property}`).toHaveLength(1);
+          return matches[0]![0].match(/content="([^"]*)"/)?.[1];
+        };
+        for (const property of properties) value(property);
+        const canonical = html.match(/<link\s+rel="canonical"\s+href="([^"]+)"/)?.[1];
+        expect(value('url'), path).toBe(canonical);
+        expect(value('type'), path).toBe(type);
+        expect(value('site_name'), path).toBe('ИКПК');
+        expect(value('locale'), path).toBe('ru_RU');
+        const title = html.match(/<title>([^<]*)<\/title>/)?.[1];
+        const description = html.match(/<meta\s+name="description"\s+content="([^"]*)"/)?.[1];
+        expect(value('title'), path).toBe(custom ? 'Заголовок карточки' : title);
+        expect(value('description'), path).toBe(custom ? description : 'Описание карточки');
+        if (custom) {
+          const imageUrl = new URL(value('image')!);
+          expect(imageUrl.protocol, path).toBe('https:');
+          expect(imageUrl.pathname, path).toBe(`/media/uploads/img-${ARTICLE_COUNT + 1}.webp`);
+          expect(value('image:width'), path).toBe(String(dimensions.width));
+          expect(value('image:height'), path).toBe(String(dimensions.height));
+          expect(value('image:alt'), path).toBe('Описание обложки из медиатеки');
+        } else {
+          expect(value('image'), path).toMatch(/^https:\/\/[^/]+\/og-image\.png$/);
+          expect(value('image:width'), path).toBe('1200');
+          expect(value('image:height'), path).toBe('630');
+          expect(value('image:alt'), path).toBe('Логотип и название Института клинической прикладной кинезиологии');
+        }
+      }
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }, 360_000);
+});
+
+
+it('classifies published OG text fields for each supported CMS type', () => {
+  for (const type of ['articles', 'course_groups', 'seminars']) {
+    const seo = { og_title: 'Заголовок карточки', og_description: 'Описание карточки' };
+    expect(unknownRecordFields(type, { seo }), type).toEqual([]);
+    for (const field of ['og_title', 'og_description']) {
+      expect(FIELD_MAP.some((entry) => entry.type === type && entry.source === `seo.${field}`), `${type}.${field}`).toBe(true);
+    }
+  }
 });

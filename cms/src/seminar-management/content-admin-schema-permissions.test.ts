@@ -114,6 +114,55 @@ test('migration preserves intentional field and action restrictions', async () =
   assert.equal(context.assignments, 1, 'migration must not replace the graph');
 });
 
+test('bootstrap addition grants new SEO fields only to complete existing seminar grants', async () => {
+  const roleId = 17;
+  const rows = ['read', 'create', 'update'].map((verb, index) => ({
+    id: index + 1,
+    role: roleId,
+    action: action(verb),
+    subject: seminar,
+    conditions: [],
+    properties: { fields: ['name', 'seo.seo_title', 'seo.seo_description'] },
+  }));
+  rows[2].properties.fields = ['name'];
+  const writes = [];
+  const strapi = {
+    service: (uid) => uid === 'admin::role' ? { findOne: async () => ({ id: roleId }) } : undefined,
+    db: {
+      transaction: async (callback) => callback({ trx: {} }),
+      query: (uid) => {
+        assert.equal(uid, 'admin::permission');
+        return {
+          findMany: async () => structuredClone(rows),
+          update: async ({ where, data }) => {
+            writes.push(where.id);
+            Object.assign(rows.find((row) => row.id === where.id), structuredClone(data));
+          },
+        };
+      },
+    },
+    contentType: () => ({ attributes: {
+      name: { type: 'string' },
+      seo: { type: 'component', component: 'shared.seo' },
+    } }),
+    components: { 'shared.seo': { attributes: {
+      seo_title: { type: 'string' },
+      seo_description: { type: 'text' },
+      og_title: { type: 'string' },
+      og_description: { type: 'text' },
+    } } },
+  };
+
+  await roleModule.migrateContentAdminSchemaPermissions(strapi, {
+    additions: { [seminar]: ['seo.og_title', 'seo.og_description'] },
+  });
+
+  assert.deepEqual(writes, [1, 2], 'only grants that still include their full previous field set are extended');
+  assert.deepEqual(rows[0].properties.fields, ['name', 'seo.seo_title', 'seo.seo_description', 'seo.og_title', 'seo.og_description']);
+  assert.deepEqual(rows[1].properties.fields, ['name', 'seo.seo_title', 'seo.seo_description', 'seo.og_title', 'seo.og_description']);
+  assert.deepEqual(rows[2].properties.fields, ['name'], 'custom narrowed grants remain narrowed');
+});
+
 test('runner callback uses the same transaction and failure rolls back permissions and ledger', async () => {
   const c = await fixture(), before = structuredClone(c.rows);
   await assert.rejects(roleModule.migrateContentAdminSchemaPermissions(c.strapi, { onApplied: async (trx, result) => {

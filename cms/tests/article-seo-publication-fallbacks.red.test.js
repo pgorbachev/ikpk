@@ -65,10 +65,10 @@ function lifecycle(article, action = 'publish') {
   };
 }
 
-test('CMS and scripts validators accept absent or blank Article SEO only, preserving other required fields', () => {
+test('CMS and scripts validators accept optional Article SEO and image, preserving other required fields', () => {
   const rejected = [];
   for (const record of [
-    { ...completeArticle, seo_title: undefined, seo_description: undefined },
+    { ...completeArticle, image: null, seo_title: undefined, seo_description: undefined },
     { ...completeArticle, seo_title: '   ', seo_description: null },
     { ...completeArticle, seo_title: 'Редакторский заголовок', seo_description: '' },
     { ...completeArticle, seo_title: '', seo_description: 'Редакторское описание' },
@@ -83,7 +83,7 @@ test('CMS and scripts validators accept absent or blank Article SEO only, preser
     assert.deepEqual(cms, scripts, 'the synchronized validators diverged');
     if (!cms.ok) rejected.push(`${JSON.stringify([record.seo_title, record.seo_description])}: ${cms.message}`);
   }
-  for (const missing of ['title', 'identifier', 'body', 'image', 'published_at']) {
+  for (const missing of ['title', 'identifier', 'body', 'published_at']) {
     const record = { title: 't', identifier: 's', body: 'b', image: 'i', published_at: 'date', categories: ['c'] };
     delete record[missing];
     for (const validate of [cmsCheck, scriptsCheck]) {
@@ -110,7 +110,7 @@ test('CMS lifecycle publishes nested SEO omission or partial values without deri
 });
 
 test('CMS lifecycle does not require the web sanitizer to leave a description fallback', async () => {
-  const article = { ...completeArticle, seo: null };
+  const article = { ...completeArticle, image: null, seo: null };
   assert.equal(await lifecycle(article)({}), 'published');
 });
 

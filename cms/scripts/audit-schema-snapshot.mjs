@@ -1,6 +1,14 @@
 import { createHash } from 'node:crypto';
 
 const ALLOWED = new Map([
+  ['components_shared_seos.og_title', {
+    table: 'components_shared_seos', name: 'og_title', sqlType: /^varchar\s*\(\s*255\s*\)$/i,
+    expected: { name: 'og_title', type: 'string', args: [], defaultTo: null, notNullable: false, unsigned: false },
+  }],
+  ['components_shared_seos.og_description', {
+    table: 'components_shared_seos', name: 'og_description', sqlType: /^text$/i,
+    expected: { name: 'og_description', type: 'text', args: ['longtext'], defaultTo: null, notNullable: false, unsigned: false },
+  }],
   ...['center_phone', 'manager_phone'].map(name => [`pages.${name}`, {
     table: 'pages', name, sqlType: /^varchar\s*\(\s*255\s*\)$/i,
     expected: { name, type: 'string', args: [], defaultTo: null, notNullable: false, unsigned: false },

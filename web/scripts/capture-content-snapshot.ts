@@ -56,6 +56,7 @@ interface SealedCaptureMedia {
 
 interface Staging193Capture {
   directory: string;
+  schemaRoot: string;
   profile: 'staging194' | 'initial-prod' | 'production-static';
   media: SealedCaptureMedia[];
   readback: { collections: Record<string, unknown[]>; schemaDigest: string };
@@ -88,8 +89,12 @@ async function serverInput(): Promise<Staging193Capture | undefined> {
     : profile === 'initial-prod'
       ? verifier.verifyInitialProdBundle(bundle!, schemaRoot)
       : verifier.verifyProductionStaticBundle(bundle!, schemaRoot);
-  return { ...capture, profile } as Staging193Capture;
+  return { ...capture, profile, schemaRoot } as Staging193Capture;
 }
+
+// Digest emitted by the sealed capture verifier for the pinned pre-OG CMS schema. This is the
+// schema-root digest, not the git-export digest used by the paired release operator.
+const LEGACY_OG_TEXT_SCHEMA_DIGEST = '22054a4401f784c3067735f1c4477ce23b579d07eeb4318317a8221984df2013';
 const serverCapture = await serverInput();
 
 /**
@@ -279,7 +284,7 @@ function entryTeachers(value: unknown): unknown {
   });
 }
 
-const MEDIA_TRANSFORMS = new Set(['mediaRef', 'mediaUrl', 'mediaUrlList']);
+const MEDIA_TRANSFORMS = new Set(['mediaRef', 'mediaUrl', 'mediaUrlList', 'mediaAlternativeText']);
 
 /**
  * Установленная CMS отдаёт медиа списком (`multiple: true`), прежняя схема — объектом. Сайт
@@ -304,6 +309,9 @@ const TRANSFORMS: Record<string, (value: unknown) => unknown> = {
   htmlToText: (value) => (typeof value === 'string' ? htmlToText(value) : value),
   mediaRef,
   mediaUrl,
+  mediaAlternativeText: (value) => value && typeof value === 'object'
+    ? (value as Record<string, unknown>).alternativeText
+    : undefined,
   mediaUrlList,
   refList,
   entryTeachers,
@@ -356,7 +364,23 @@ function mapRecord(type: string, record: Record<string, unknown>): Record<string
     delete out.center_phone;
     delete out.manager_phone;
   }
-  if (type === 'articles') normalizeArticleSeo(record, out);
+  if (type === 'articles') {
+    normalizeArticleSeo(record, out);
+  }
+  if (['articles', 'course_groups', 'seminars'].includes(type)) {
+    for (const field of ['og_title', 'og_description', 'og_image', 'og_image_alt']) {
+      const value = out[field];
+      if (value === null || value === undefined) {
+        delete out[field];
+      } else if (typeof value !== 'string') {
+        throw new Error(`${type}.${field}: ожидается строка или null (${recordKey(record)})`);
+      } else if (value.trim() === '') {
+        delete out[field];
+      } else if (field !== 'og_image') {
+        out[field] = value.trim();
+      }
+    }
+  }
   return out;
 }
 
@@ -396,8 +420,12 @@ async function fetchAllPages(endpoint: string): Promise<Record<string, unknown>[
   for (;;) {
     assertWithinBudget(`${endpoint}, страница ${page}`);
     const populate = endpoint === 'seminars'
-      ? 'populate[seo]=true&populate[image]=true&populate[course_group]=true&populate[teachers]=true&populate[documents][populate][registry]=true&populate[training_registries]=true&populate[nmo]=true'
-      : 'populate=*';
+      ? 'populate[seo][populate][og_image]=true&populate[image]=true&populate[course_group]=true&populate[teachers]=true&populate[documents][populate][registry]=true&populate[training_registries]=true&populate[nmo]=true'
+      : endpoint === 'course-groups'
+        ? 'populate[seo][populate][og_image]=true&populate[image]=true&populate[institute]=true'
+      : endpoint === 'articles'
+        ? 'populate[seo][populate][og_image]=true&populate[image]=true&populate[categories]=true'
+        : 'populate=*';
     const url = `${cmsUrl}/api/${endpoint}?status=published&pagination[page]=${page}&pagination[pageSize]=100&${populate}`;
     const res = await fetch(url, {
       headers: cmsToken ? { Authorization: `Bearer ${cmsToken}` } : {},
@@ -545,11 +573,12 @@ async function liveCapture(): Promise<void> {
   // checkout может отставать от установленной CMS, поэтому ниже та же карта сверяется ещё и с
   // ответом CMS по каждой записи.
   const schemas: Record<string, CmsSchema> = {};
+  const schemaRoot = serverCapture?.schemaRoot ?? join(repoRoot, 'cms', 'src');
   for (const st of SOURCE_TYPES) {
-    schemas[st.type] = JSON.parse(readFileSync(join(repoRoot, st.schema), 'utf-8')) as CmsSchema;
+    schemas[st.type] = JSON.parse(readFileSync(join(schemaRoot, st.schema.replace(/^cms\/src\//, '')), 'utf-8')) as CmsSchema;
   }
   const components: Record<string, CmsSchema> = {};
-  const componentsDir = join(repoRoot, 'cms', 'src', 'components');
+  const componentsDir = join(schemaRoot, 'components');
   if (existsSync(componentsDir)) {
     for (const group of readdirSync(componentsDir)) {
       const groupDir = join(componentsDir, group);
@@ -562,7 +591,14 @@ async function liveCapture(): Promise<void> {
     }
   }
 
-  const mapCheck = checkFieldMapAgainstSchema({ map: FIELD_MAP, schemas, components });
+  const seoAttributes = components['shared.seo']?.attributes ?? {};
+  const legacyOgTextSchema = serverCapture?.profile === 'production-static'
+    && serverCapture.proof.schemaDigest === LEGACY_OG_TEXT_SCHEMA_DIGEST
+    && !Object.hasOwn(seoAttributes, 'og_title')
+    && !Object.hasOwn(seoAttributes, 'og_description');
+  const mapCheck = checkFieldMapAgainstSchema({
+    map: FIELD_MAP, schemas, components, allowOptionalMissing: legacyOgTextSchema,
+  });
   if (!mapCheck.ok) {
     const first = mapCheck.missingSources[0]!;
     throw new Error(
@@ -580,12 +616,14 @@ async function liveCapture(): Promise<void> {
   for (const st of SOURCE_TYPES) {
     for (const record of rawByType[st.type]!) {
       for (const name of unknownRecordFields(st.type, record)) unknown.add(name);
-      for (const name of missingSourceFields(st.type, record)) missing.push(`${name} (запись ${recordKey(record)})`);
+      for (const name of missingSourceFields(st.type, record, !legacyOgTextSchema)) missing.push(`${name} (запись ${recordKey(record)})`);
       for (const name of filledUnshownContentFields(st.type, record)) unshown.push(`${name} (запись ${recordKey(record)})`);
       const seo = (record.seo ?? {}) as Record<string, unknown>;
       const filled = [
         ...Object.keys(UNMAPPED_SCHEMA_FIELDS[st.type] ?? {}).filter((f) => hasValue(record[f])).map((f) => `${st.type}.${f}`),
-        ...Object.keys(UNMAPPED_SEO_FIELDS).filter((f) => hasValue(seo[f])).map((f) => `${st.type}.seo.${f}`),
+        ...Object.keys(UNMAPPED_SEO_FIELDS).filter((f) =>
+          hasValue(seo[f]) && !FIELD_MAP.some((entry) => entry.type === st.type && entry.source === `seo.${f}`),
+        ).map((f) => `${st.type}.seo.${f}`),
       ];
       for (const name of filled) filledUnmapped.set(name, (filledUnmapped.get(name) ?? 0) + 1);
     }

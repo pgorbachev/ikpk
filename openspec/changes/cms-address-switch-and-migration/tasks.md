@@ -155,8 +155,8 @@ D.1–D.8 остаются невыполненными до предъявле�
       адресе и решено отдельно (Q31). Сейчас все четыре плоских детальных шаблона размечены
       `noindex` явно:
       `web/src/pages/instituty/[slug].astro:47`, `noindex`; тот же атрибут там же —
-      `web/src/pages/programmy/[slug].astro:34`, `noindex`;
-      `web/src/pages/seminary/[slug].astro:44`, `noindex`;
+      `web/src/pages/programmy/[slug].astro:47`, `noindex`;
+      `web/src/pages/seminary/[slug].astro:57`, `noindex`;
       `web/src/pages/specialisty/[slug].astro:32`, `noindex`.
       Условие снятия: источник данных сборки
       переключён (соседний change) — до этого страница по плоскому адресу отдаёт то же
