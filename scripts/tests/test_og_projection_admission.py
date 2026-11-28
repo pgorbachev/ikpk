@@ -146,16 +146,26 @@ class OgProjectionAdmissionTests(unittest.TestCase):
                 patch.object(operator, "production_paired_schema_from_commit", return_value="not-og"):
             self.assertIsNone(operator.reviewed_og_transition("669e4d1e4706ea4f0e09261184ca6444142649f0", backup))
 
+    def test_absolute_legacy_body_url_is_unchanged_without_media_entry(self):
+        original, expected = self.snapshots()
+        original["content"]["types"]["articles"][0]["body_html"] = "https://ikpk.su/uploads/legacy.pdf"
+        expected["content"]["types"]["articles"][0]["body_html"] = "https://ikpk.su/uploads/legacy.pdf"
+        self.validate(original, expected, expected)
+
     def test_acceptance_entrypoint_admits_real_og_branch_with_fake_tar(self):
         original, expected = self.snapshots()
         expected["content"]["types"]["articles"][0].update(
             og_image_alt="Article cover")
         original["fingerprint"] = "sha256:" + "3" * 64
         expected["fingerprint"] = "sha256:" + "4" * 64
+        expected["referenceDate"] = "2026-11-27"
+        expected["origin"] = {"capturedAt": "2026-11-27T23:55:00.000Z"}
         original["captureProof"] = {"version": 1, "method": "quiesced-sqlite-backup",
                                      "captureId": "og-fake", "sourceSha": "669e4d1e4706ea4f0e09261184ca6444142649f0",
                                      "runId": 1, "attempt": 1, "schemaDigest": "a" * 64}
         candidate = copy.deepcopy(expected)
+        candidate["referenceDate"] = "2026-11-28"
+        candidate["origin"] = {"capturedAt": "2026-11-28T00:00:00.000Z"}
         op, source = "og-fake", "669e4d1e4706ea4f0e09261184ca6444142649f0"
         old = "059bae78c343508730b095879190273d1eaa87b3"
         old_contract = "6b7e003dfb4d4905b8635c198c6b979efa90a434284dd794441d868deb8284bc"
@@ -212,6 +222,12 @@ class OgProjectionAdmissionTests(unittest.TestCase):
                 archive_payload, "a" * 64, "sha256:" + "4" * 64,
                 path, backup, op, source, {"runId": 1, "attempt": 1})
             self.assertEqual(projector_mock.call_count, 2)
+
+            candidate["referenceDate"] = "2026-11-27"
+            with self.assertRaisesRegex(operator.Refusal, "capture time"):
+                operator.validate_production_content_acceptance(
+                    candidate_archive(capture), "a" * 64, "sha256:" + "4" * 64,
+                    path, backup, op, source, {"runId": 1, "attempt": 1})
 
             missing_source = copy.deepcopy(backup)
             missing_source.pop("oldProjectorSourceSha")

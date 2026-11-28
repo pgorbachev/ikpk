@@ -1431,14 +1431,10 @@ def validate_production_snapshot_composition(original: dict, candidate: dict, *,
             or _canonical_json(expected_content.get("historicalExceptions"))
             != _canonical_json(candidate_content.get("historicalExceptions"))):
         raise Refusal("OG composition changes historical exceptions")
-    expected_media = _expected_public_media(expected_types, source_media)
     actual_media = candidate_content["media"]
     if not isinstance(actual_media, list) or any(not isinstance(item, dict) for item in actual_media):
         raise Refusal("OG composition has an invalid media inventory")
-    actual_map = {item.get("ref"): item.get("contentId") for item in actual_media}
-    if (len(actual_map) != len(actual_media)
-            or _canonical_json(actual_map) != _canonical_json(expected_media)
-            or _canonical_json(candidate_content["media"]) != _canonical_json(expected_content["media"])):
+    if _canonical_json(candidate_content["media"]) != _canonical_json(expected_content["media"]):
         raise Refusal("OG composition changes the verified public media inventory")
 
 
@@ -2074,6 +2070,17 @@ def validate_production_content_acceptance(candidate_archive: bytes, static_dige
                 if og_pair and og_schema:
                     if source_media_bytes is None or capture.get("mediaManifestSha256") != hashlib.sha256(source_media_bytes).hexdigest():
                         raise Refusal("OG candidate media manifest differs from the verified backup manifest")
+                    captured_at = capture.get("capturedAt")
+                    if not isinstance(captured_at, str):
+                        raise Refusal("OG candidate capture time is missing")
+                    try:
+                        capture_date = datetime.strptime(captured_at, "%Y-%m-%dT%H:%M:%S.%fZ").date().isoformat()
+                    except ValueError as error:
+                        raise Refusal("OG candidate capture time is invalid") from error
+                    origin = projected.get("origin")
+                    if (not isinstance(origin, dict) or origin.get("capturedAt") != captured_at
+                            or projected.get("referenceDate") != capture_date):
+                        raise Refusal("OG projection identity is not bound to the candidate capture time")
                     with tempfile.TemporaryDirectory(prefix="ikpk-og-expected-projection-") as directory:
                         expected_path = Path(directory) / "snapshot.json"
                         expected_fingerprint = production_paired_backup_fingerprint(
