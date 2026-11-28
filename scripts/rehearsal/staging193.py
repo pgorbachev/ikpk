@@ -1232,6 +1232,56 @@ REVIEWED_ADDITIVE_SCHEMA_PAIRS = {
     ),
 }
 
+# The OG rollout is admitted as one exact source/schema/contract transition.
+# Keeping the hashes here makes the exception hash-bound to the reviewed
+# candidate; a later projector or schema cannot reuse this path accidentally.
+REVIEWED_OG_PROJECTOR_PAIRS = {
+    (
+        "059bae78c343508730b095879190273d1eaa87b3",
+        "6b7e003dfb4d4905b8635c198c6b979efa90a434284dd794441d868deb8284bc",
+        "8b1ba2479a955bc8cf43ad75f7281068ef7d685157cfa1d3763e378db5c8ff57",
+    ),
+    (
+        "7f52340a55d71525c95c8bef0b4c0516885683d4",
+        "6b7e003dfb4d4905b8635c198c6b979efa90a434284dd794441d868deb8284bc",
+        "8b1ba2479a955bc8cf43ad75f7281068ef7d685157cfa1d3763e378db5c8ff57",
+    ),
+}
+REVIEWED_OG_SCHEMA_PAIRS = {
+    (
+        "974abb10127748e47b552edb9c6cc1204ef8b2b2affe9ba876c76728aeee2a90",
+        "a4982acf217e8e2c5f46b9f2187c5195459e8b9342681d65526fb090ebbd832a",
+    ),
+}
+
+
+def reviewed_og_transition(source_sha: str, backup: dict) -> Optional[dict[str, str]]:
+    """Return the exact reviewed OG transition for this candidate, if any."""
+    if not SHA.fullmatch(source_sha) or not isinstance(backup, dict):
+        return None
+    old_source = backup.get("oldCmsSourceSha")
+    old_projector = backup.get("oldProjectorSourceSha")
+    old_schema = backup.get("oldCmsSchemaSha256")
+    if (old_source not in {"059bae78c343508730b095879190273d1eaa87b3", "7f52340a55d71525c95c8bef0b4c0516885683d4"}
+            or not re.fullmatch(r"[a-f0-9]{64}", str(old_schema))):
+        return None
+    candidate_contract = production_projector_contract(source_sha, source_sha)
+    if candidate_contract != "8b1ba2479a955bc8cf43ad75f7281068ef7d685157cfa1d3763e378db5c8ff57":
+        return None
+    with tempfile.TemporaryDirectory(prefix="ikpk-og-schema-admission-") as directory:
+        candidate_schema = production_paired_schema_from_commit(source_sha, Path(directory) / "schema")
+    if (old_schema, candidate_schema) not in REVIEWED_OG_SCHEMA_PAIRS:
+        return None
+    if "oldProjectorSourceSha" not in backup:
+        raise Refusal("OG transition requires explicit oldProjectorSourceSha")
+    if old_source != old_projector:
+        return None
+    old_contract = production_projector_contract(old_projector, old_source)
+    if (old_projector, old_contract, candidate_contract) not in REVIEWED_OG_PROJECTOR_PAIRS:
+        return None
+    return {"oldContract": old_contract, "candidateContract": candidate_contract,
+            "candidateSchema": candidate_schema}
+
 
 # Digests cover exactly the admitted CMS schema files, independently of the
 # candidate commit or the projector's own claims about its output.
@@ -1286,6 +1336,106 @@ process.stdout.write(JSON.stringify({fingerprint, snapshotId: snapshotId({...sna
             snapshot["captureProof"].pop(key, None)
     if json.dumps(expected, sort_keys=True, allow_nan=False) != json.dumps(actual, sort_keys=True, allow_nan=False):
         raise Refusal("production candidate differs from the independent contacts migration projection")
+
+
+def validate_production_snapshot_composition(original: dict, candidate: dict, *,
+                                             old_projector_sha: str, candidate_projector_sha: str,
+                                             old_projector_contract_sha256: str,
+                                             candidate_projector_contract_sha256: str,
+                                             old_schema_sha256: str, candidate_schema_sha256: str,
+                                             source_media: list[dict],
+                                             expected_candidate: Optional[dict] = None) -> None:
+    """Admit only the reviewed OG schema's empty-field projection.
+
+    The verified backup is the source of truth.  The new CMS fields are
+    intentionally empty on first installation; therefore the public result
+    must be byte-for-byte equivalent after those optional fields are removed.
+    This is deliberately separate from ordinary projector equivalence: an
+    OG candidate is admitted only with its exact source/schema/contract
+    bindings and a closed-world media inventory.
+    """
+    for label, value in (("old projector", old_projector_sha),
+                         ("candidate projector", candidate_projector_sha)):
+        if not SHA.fullmatch(value):
+            raise Refusal(f"OG composition has an invalid {label} source binding")
+    if (old_projector_sha, old_projector_contract_sha256, candidate_projector_contract_sha256) \
+            not in REVIEWED_OG_PROJECTOR_PAIRS:
+        raise Refusal("OG composition has no exact reviewed projector binding")
+    for label, value in (("old projector contract", old_projector_contract_sha256),
+                         ("candidate projector contract", candidate_projector_contract_sha256),
+                         ("old schema", old_schema_sha256),
+                         ("candidate schema", candidate_schema_sha256)):
+        if not re.fullmatch(r"[a-f0-9]{64}", str(value)):
+            raise Refusal(f"OG composition has an invalid {label} digest")
+    if (old_schema_sha256, candidate_schema_sha256) not in REVIEWED_OG_SCHEMA_PAIRS:
+        raise Refusal("OG composition has no exact reviewed schema binding")
+    if not isinstance(source_media, list) or any(not isinstance(item, dict) for item in source_media):
+        raise Refusal("OG composition lacks the verified media inventory")
+    if not isinstance(original, dict) or not isinstance(candidate, dict):
+        raise Refusal("OG production projection is not an object")
+    expected = expected_candidate if expected_candidate is not None else original
+    if not isinstance(expected, dict):
+        raise Refusal("OG composition expected projection is not an object")
+    original_content, expected_content, candidate_content = (original.get("content"),
+                                                             expected.get("content"), candidate.get("content"))
+    if (not isinstance(original_content, dict) or not isinstance(candidate_content, dict)
+            or not isinstance(expected_content, dict)
+            or set(original_content) - {"types", "media", "historicalExceptions"}
+            or set(expected_content) - {"types", "media", "historicalExceptions"}
+            or set(candidate_content) - {"types", "media", "historicalExceptions"}
+            or ("historicalExceptions" in original_content) != ("historicalExceptions" in expected_content)
+            or ("historicalExceptions" in expected_content) != ("historicalExceptions" in candidate_content)):
+        raise Refusal("OG composition changes the public content envelope")
+    original_types, expected_types, candidate_types = (original_content["types"], expected_content["types"],
+                                                        candidate_content["types"])
+    if (not isinstance(original_types, dict) or not isinstance(expected_types, dict)
+            or not isinstance(candidate_types, dict) or original_types.keys() != expected_types.keys()
+            or expected_types.keys() != candidate_types.keys()):
+        raise Refusal("OG composition changes the published collection set")
+
+    text_fields = {"og_title", "og_description"}
+    media_fields = {"og_image", "og_image_alt"}
+    allowed_types = {"articles", "course_groups", "seminars"}
+
+    def normalized(kind: str, records: object, *, strip_og: bool) -> list[dict]:
+        if not isinstance(records, list) or any(not isinstance(row, dict) for row in records):
+            raise Refusal(f"OG composition has an invalid {kind} record inventory")
+        result = []
+        for row in records:
+            value = copy.deepcopy(row)
+            if kind in allowed_types:
+                for field in text_fields:
+                    if field in value and (value[field] is not None
+                                           and (not isinstance(value[field], str) or value[field].strip())):
+                        raise Refusal("OG composition contains a non-empty new text field")
+                    if strip_og:
+                        value.pop(field, None)
+                # Media-backed OG fields are independently compared against
+                # the verified expected projection below.
+                if strip_og:
+                    for field in media_fields:
+                        value.pop(field, None)
+            result.append(value)
+        return result
+
+    for kind in original_types:
+        if _canonical_json(normalized(kind, original_types[kind], strip_og=True)) != _canonical_json(
+                normalized(kind, expected_types[kind], strip_og=True)):
+            raise Refusal(f"OG composition expected projection changes unrelated public projection in {kind}")
+        if _canonical_json(normalized(kind, expected_types[kind], strip_og=False)) != _canonical_json(
+                normalized(kind, candidate_types[kind], strip_og=False)):
+            raise Refusal(f"OG composition changes unrelated public projection in {kind}")
+
+    if (_canonical_json(original_content.get("historicalExceptions"))
+            != _canonical_json(expected_content.get("historicalExceptions"))
+            or _canonical_json(expected_content.get("historicalExceptions"))
+            != _canonical_json(candidate_content.get("historicalExceptions"))):
+        raise Refusal("OG composition changes historical exceptions")
+    actual_media = candidate_content["media"]
+    if not isinstance(actual_media, list) or any(not isinstance(item, dict) for item in actual_media):
+        raise Refusal("OG composition has an invalid media inventory")
+    if _canonical_json(candidate_content["media"]) != _canonical_json(expected_content["media"]):
+        raise Refusal("OG composition changes the verified public media inventory")
 
 
 def validate_ordinary_projector_equivalence(original: dict, candidate: dict, *,
@@ -1591,6 +1741,11 @@ def _expected_public_media(types: dict, source_media: list[dict]) -> dict[str, s
     return expected
 
 
+def _canonical_json(value: object) -> str:
+    """Serialize JSON with deterministic ordering while preserving JSON types."""
+    return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False)
+
+
 def _expected_public_history(schedule: list[dict], registry: list[dict]) -> list[dict]:
     events = {event["documentId"]: event for event in schedule}
     pairs = [(entry, events.get(entry.get("documentId"))) for entry in registry]
@@ -1820,9 +1975,10 @@ def validate_production_content_acceptance(candidate_archive: bytes, static_dige
                 capture_bytes = archive.extractfile("snapshot/capture-manifest.json").read()
                 projected = json.load(archive.extractfile("snapshot/snapshot.json"))
             else:
-                if (snapshot_fingerprint != backup.get("snapshotFingerprint") and
-                        (backup.get("oldCmsSchemaSha256") != PHONE_SCHEMA_TRANSITION[0]
-                         or backup.get("oldCmsSourceSha") == source_sha)):
+                og_source_transition = reviewed_og_transition(source_sha, backup) is not None
+                if (snapshot_fingerprint != backup.get("snapshotFingerprint") and not og_source_transition
+                        and (backup.get("oldCmsSchemaSha256") != PHONE_SCHEMA_TRANSITION[0]
+                             or backup.get("oldCmsSourceSha") == source_sha)):
                     raise Refusal("built production snapshot differs from the fingerprint captured in the verified backup")
                 candidate_manifest, capture_bytes = _strict_archive_json(archive, "snapshot/capture-manifest.json")
                 projected, _ = _strict_archive_json(archive, "snapshot/snapshot.json")
@@ -1833,6 +1989,8 @@ def validate_production_content_acceptance(candidate_archive: bytes, static_dige
         old_contract = production_projector_contract(projector_sha, schema_sha)
         if backup.get("oldProjectorContractSha256", old_contract) != old_contract:
             raise Refusal("production original projector contract does not match its verified backup")
+        og_transition = reviewed_og_transition(source_sha, backup)
+        og_source_transition = og_transition is not None
         if proof is None:
             candidate_contract = production_projector_contract(source_sha, source_sha)
             if old_contract != candidate_contract:
@@ -1854,6 +2012,13 @@ def validate_production_content_acceptance(candidate_archive: bytes, static_dige
                         raise Refusal("production historical public projection differs from the verified backup")
                     original = json.loads(original_path.read_bytes())
                     actual_candidate_schema = production_paired_schema_from_commit(source_sha, candidate_schema_root)
+                    source_media_bytes: bytes | None = None
+                    if og_transition is not None:
+                        with tarfile.open(fileobj=io.BytesIO(backup_bytes), mode="r:") as source_archive:
+                            source_media_bytes = source_archive.extractfile("media-manifest.json").read()
+                            source_media_document = json.loads(source_media_bytes)
+                        source_media = (source_media_document.get("media")
+                                        if isinstance(source_media_document, dict) else source_media_document)
                     original_proof = original.get("captureProof") if isinstance(original, dict) else None
                     if (not isinstance(original_proof, dict)
                             or type(original_proof.get("version")) is not int or original_proof.get("version") != 1
@@ -1874,7 +2039,8 @@ def validate_production_content_acceptance(candidate_archive: bytes, static_dige
                                for key in ("runId", "attempt"))
                         or not re.fullmatch(r"[a-f0-9]{64}", str(capture.get("databaseSha256", "")))
                         or not re.fullmatch(r"[a-f0-9]{64}", str(capture.get("mediaManifestSha256", "")))
-                        or (not phone_transition and actual_candidate_schema != backup.get("oldCmsSchemaSha256")
+                        or (not phone_transition and not og_source_transition
+                            and actual_candidate_schema != backup.get("oldCmsSchemaSha256")
                             and (backup.get("oldCmsSchemaSha256"), actual_candidate_schema)
                             not in REVIEWED_ADDITIVE_SCHEMA_PAIRS)):
                     raise Refusal("ordinary production candidate capture is not bound to the exact release and schema")
@@ -1899,17 +2065,56 @@ def validate_production_content_acceptance(candidate_archive: bytes, static_dige
                         raise Refusal("contacts projection differs from the browser-checked snapshot")
                     validate_phone_projection(original, projected, projector_sha, capture.get("capturedAt"))
                     return
-                validate_ordinary_projector_equivalence(
-                    original, projected,
-                    old_projector_sha=projector_sha,
-                    candidate_projector_sha=source_sha,
-                    old_projector_contract_sha256=old_contract,
-                    candidate_projector_contract_sha256=candidate_contract,
-                    old_schema_sha256=backup["oldCmsSchemaSha256"],
-                    candidate_schema_sha256=actual_candidate_schema,
-                )
-                if (original_fingerprint != snapshot_fingerprint
-                        or projected.get("fingerprint") != snapshot_fingerprint):
+                og_pair = (projector_sha, old_contract, candidate_contract) in REVIEWED_OG_PROJECTOR_PAIRS
+                og_schema = (backup["oldCmsSchemaSha256"], actual_candidate_schema) in REVIEWED_OG_SCHEMA_PAIRS
+                if og_pair and og_schema:
+                    if source_media_bytes is None or capture.get("mediaManifestSha256") != hashlib.sha256(source_media_bytes).hexdigest():
+                        raise Refusal("OG candidate media manifest differs from the verified backup manifest")
+                    captured_at = capture.get("capturedAt")
+                    if not isinstance(captured_at, str):
+                        raise Refusal("OG candidate capture time is missing")
+                    try:
+                        capture_date = datetime.strptime(captured_at, "%Y-%m-%dT%H:%M:%S.%fZ").date().isoformat()
+                    except ValueError as error:
+                        raise Refusal("OG candidate capture time is invalid") from error
+                    origin = projected.get("origin")
+                    if (not isinstance(origin, dict) or origin.get("capturedAt") != captured_at
+                            or projected.get("referenceDate") != capture_date):
+                        raise Refusal("OG projection identity is not bound to the candidate capture time")
+                    with tempfile.TemporaryDirectory(prefix="ikpk-og-expected-projection-") as directory:
+                        expected_path = Path(directory) / "snapshot.json"
+                        expected_fingerprint = production_paired_backup_fingerprint(
+                            backup_bytes, source_sha, operation_id, backup["runId"], backup["attempt"],
+                            schema_sha, backup["oldCmsSchemaSha256"], projector_sha=source_sha,
+                            projection_output=expected_path)
+                        expected_projection = json.loads(expected_path.read_bytes())
+                    validate_production_snapshot_composition(
+                        original, projected,
+                        old_projector_sha=projector_sha,
+                        candidate_projector_sha=source_sha,
+                        old_projector_contract_sha256=old_contract,
+                        candidate_projector_contract_sha256=candidate_contract,
+                        old_schema_sha256=backup["oldCmsSchemaSha256"],
+                        candidate_schema_sha256=actual_candidate_schema,
+                        source_media=source_media,
+                        expected_candidate=expected_projection,
+                    )
+                else:
+                    validate_ordinary_projector_equivalence(
+                        original, projected,
+                        old_projector_sha=projector_sha,
+                        candidate_projector_sha=source_sha,
+                        old_projector_contract_sha256=old_contract,
+                        candidate_projector_contract_sha256=candidate_contract,
+                        old_schema_sha256=backup["oldCmsSchemaSha256"],
+                        candidate_schema_sha256=actual_candidate_schema,
+                    )
+                if og_pair and og_schema:
+                    if (expected_fingerprint != snapshot_fingerprint
+                            or projected.get("fingerprint") != expected_fingerprint):
+                        raise Refusal("OG production projection differs from the independently derived expected identity")
+                elif (original_fingerprint != snapshot_fingerprint
+                      or projected.get("fingerprint") != snapshot_fingerprint):
                     raise Refusal("ordinary production browser fingerprint differs from the reviewed projections")
             elif snapshot_fingerprint != backup.get("snapshotFingerprint"):
                 raise Refusal("built production snapshot differs from the fingerprint captured in the verified backup")

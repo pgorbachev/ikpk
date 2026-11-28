@@ -19,6 +19,7 @@ const PHONE_LABELS = {
   manager_phone: { label: 'Мобильный телефон менеджера' },
 };
 const ARTICLE_CONFIG_KEY = 'plugin_content_manager_configuration_content_types::api::article.article';
+const SEO_COMPONENT_CONFIG_KEY = 'plugin_content_manager_configuration_components::shared.seo';
 const COURSE_GROUP_CONFIG_KEY = 'plugin_content_manager_configuration_content_types::api::course-group.course-group';
 const INSTITUTE_CONFIG_KEY = 'plugin_content_manager_configuration_content_types::api::institute.institute';
 const CORE_STORE_KEYS = new Set([
@@ -29,6 +30,7 @@ const CORE_STORE_KEYS = new Set([
   COURSE_GROUP_CONFIG_KEY,
   INSTITUTE_CONFIG_KEY,
   ARTICLE_CONFIG_KEY,
+  SEO_COMPONENT_CONFIG_KEY,
   'plugin_upload_metrics',
   'strapi_content_types_schema',
 ]);
@@ -87,14 +89,27 @@ const PERMISSION_FIELD_ADDITIONS = new Map([
   ...['content-admin', 'strapi-super-admin'].flatMap((role) => ['create', 'read', 'update'].map((action) => [
     `${role}\0plugin::content-manager.explorer.${action}\0api::schedule-entry.schedule-entry`, ['image', 'isEventCollection'],
   ])),
-  ['strapi-editor\0plugin::content-manager.explorer.read\0api::course-group.course-group', ['editor_label']],
+  ['strapi-editor\0plugin::content-manager.explorer.read\0api::course-group.course-group', ['editor_label', 'seo.og_title', 'seo.og_description']],
+  ['strapi-editor\0plugin::content-manager.explorer.update\0api::course-group.course-group', ['seo.og_title', 'seo.og_description']],
+  ...['api::article.article', 'api::seminar.seminar'].flatMap((subject) => ['create', 'read', 'update'].map((action) => [
+    `strapi-editor\0plugin::content-manager.explorer.${action}\0${subject}`, ['seo.og_title', 'seo.og_description'],
+  ])),
   ...['create', 'read', 'update'].map((action) => [
-    `strapi-super-admin\0plugin::content-manager.explorer.${action}\0api::course-group.course-group`, ['editor_label'],
+    `strapi-super-admin\0plugin::content-manager.explorer.${action}\0api::course-group.course-group`, ['editor_label', 'seo.og_title', 'seo.og_description'],
+  ]),
+  ...['api::article.article', 'api::institute.institute', 'api::seminar.seminar', 'api::video-playlist.video-playlist'].flatMap((subject) => ['create', 'read', 'update'].map((action) => [
+    `strapi-super-admin\0plugin::content-manager.explorer.${action}\0${subject}`, ['seo.og_title', 'seo.og_description'],
+  ])),
+  ...['create', 'read', 'update'].map((action) => [
+    `strapi-super-admin\0plugin::content-manager.explorer.${action}\0api::page.page`, [...Object.keys(CONTACT_PHONES), 'seo.og_title', 'seo.og_description'],
   ]),
 ]);
 // content-admin получает поле тем же id: bootstrap обновляет строку, а не создаёт её заново.
 const IN_PLACE_PERMISSION_FIELD_ADDITIONS = new Map([
   ['content-admin\0plugin::content-manager.explorer.read\0api::course-group.course-group', ['editor_label']],
+  ...['create', 'read', 'update'].map((action) => [
+    `content-admin\0plugin::content-manager.explorer.${action}\0api::seminar.seminar`, ['seo.og_title', 'seo.og_description'],
+  ]),
 ]);
 // Тот же набор, что PROGRAM_FIELDS и скрытые поля в forms.ts.
 const PROGRAM_EDITOR_FIELDS = [
@@ -527,11 +542,22 @@ function permissionGraph(db, differences, label) {
 function permissionIdentity(permission) {
   return `${permission.role}\0${permission.action}\0${permission.subject}`;
 }
-function pendingFieldAdditions(additions, sourceValues) {
+function seoAdditionAllowed(row, field, sourceValues, seoTransition = true) {
+  if (!field.startsWith('seo.og_')) return true;
+  if (!seoTransition) return false;
+  if (!row.fields?.includes('seo.seo_title') || !row.fields?.includes('seo.seo_description')) return false;
+  if (row.role !== 'content-admin' || row.subject !== 'api::seminar.seminar') return true;
+  const full = sourceValues.find((value) => value.role === 'strapi-super-admin'
+    && value.action === 'plugin::content-manager.explorer.read' && value.subject === row.subject)?.fields;
+  return Boolean(full?.filter((name) => !['content_format', 'content_section_anchors', 'legacy_id'].includes(name))
+    .every((name) => row.fields.includes(name)));
+}
+function pendingFieldAdditions(additions, sourceValues, excluded = new Set(), seoTransition = true) {
   return [...additions].filter(([identity, fields]) => {
+    if (excluded.has(identity)) return false;
     const [role, action, subject] = identity.split('\0');
     const row = sourceValues.find((value) => value.role === role && value.action === action && value.subject === subject);
-    return Boolean(row?.fields && fields.some((field) => !row.fields.includes(field)));
+    return Boolean(row?.fields && fields.some((field) => seoAdditionAllowed(row, field, sourceValues, seoTransition) && !row.fields.includes(field)));
   });
 }
 function samePermissionStorage(before, after) {
@@ -628,6 +654,21 @@ const EDITOR_CARD_GRANTS = (() => {
     ['read', read.sort()], ['update', update.sort()], ['publish', null],
   ].map(([action, fields]) => [`strapi-editor\0plugin::content-manager.explorer.${action}\0${subject}`, fields])));
 })();
+function scopedEditorCardGrants(sourceValues, seoTransition) {
+  const grants = new Map([...EDITOR_CARD_GRANTS].map(([identity, fields]) => [identity, fields === null ? null : [...fields]]));
+  for (const identity of [
+    'strapi-editor\0plugin::content-manager.explorer.read\0api::course-group.course-group',
+    'strapi-editor\0plugin::content-manager.explorer.update\0api::course-group.course-group',
+  ]) {
+    const current = sourceValues.find((row) => readEditorCardGrant(row) === identity);
+    const existingOg = current?.fields?.filter((field) => field === 'seo.og_title' || field === 'seo.og_description') ?? [];
+    const additions = seoTransition ? ['seo.og_title', 'seo.og_description'] : existingOg;
+    if (additions.length > 0) {
+      grants.set(identity, [...grants.get(identity), ...additions].filter((field, index, all) => all.indexOf(field) === index).sort());
+    }
+  }
+  return grants;
+}
 
 const EDITOR_CARD_PREIMAGE = new Map([
   ['strapi-editor\0plugin::content-manager.explorer.read\0api::course-group.course-group', ['editor_label', 'is_article_category', 'name', 'slug']],
@@ -647,10 +688,11 @@ function readEditorCardGrant(permission) {
   return identity;
 }
 
-function comparePermissionGraphs(sourceDb, candidateDb, receipt, differences) {
+function comparePermissionGraphs(sourceDb, candidateDb, receipt, differences, { seoOrderFallback = false, seoTransition = false } = {}) {
   const source = permissionGraph(sourceDb, differences, 'source');
   const candidate = permissionGraph(candidateDb, differences, 'candidate');
   if (!source || !candidate) return;
+  const editorCardGrants = scopedEditorCardGrants([...source.values()], seoTransition);
   const sourceValues = [...source.values()];
   const priorCardGrants = new Map(sourceValues.flatMap((permission) => {
     const identity = readEditorCardGrant(permission);
@@ -658,10 +700,10 @@ function comparePermissionGraphs(sourceDb, candidateDb, receipt, differences) {
   }));
   const evolution = [...EDITOR_CARD_PREIMAGE].every(([identity, fields]) =>
     json(priorCardGrants.get(identity)) === json(fields) ||
-    json(priorCardGrants.get(identity)) === json(EDITOR_CARD_GRANTS.get(identity)),
+    json(priorCardGrants.get(identity)) === json(editorCardGrants.get(identity)),
   );
   const newCardGrants = new Map(evolution
-    ? [...EDITOR_CARD_GRANTS].filter(([identity]) => !priorCardGrants.has(identity))
+    ? [...editorCardGrants].filter(([identity]) => !priorCardGrants.has(identity))
     : []);
   const replacedCardIds = new Set();
   if (candidate.size !== source.size + newCardGrants.size) {
@@ -678,9 +720,9 @@ function comparePermissionGraphs(sourceDb, candidateDb, receipt, differences) {
     const identity = permissionIdentity(before);
     const recreatedAllowed = PERMISSION_FIELD_ADDITIONS.get(identity) ?? [];
     const inPlaceAllowed = IN_PLACE_PERMISSION_FIELD_ADDITIONS.get(identity) ?? [];
-    const allowed = [...recreatedAllowed, ...inPlaceAllowed];
+    const allowed = [...recreatedAllowed, ...inPlaceAllowed].filter((field) => seoAdditionAllowed(before, field, sourceValues, seoTransition));
     const cardGrant = evolution && readEditorCardGrant(before);
-    const expectedFields = cardGrant ? EDITOR_CARD_GRANTS.get(cardGrant)
+    const expectedFields = cardGrant ? editorCardGrants.get(cardGrant)
       : before.fields === null ? null : [...new Set([...before.fields, ...allowed])].sort();
     if (json(expectedFields) !== json(after.fields)) differences.push({ table: 'admin_permissions', kind: 'logical-permission-fields-mismatch', keySha256: sha(Buffer.from(key)) });
     const fieldsChange = json(expectedFields) !== json(before.fields);
@@ -712,8 +754,12 @@ function comparePermissionGraphs(sourceDb, candidateDb, receipt, differences) {
       ordinal: permission.permissionOrd, linkId: permission.linkId, timestamps: permission.timestamps,
     });
   }
-  if (newCardGrants.size || recreated.length !== pendingFieldAdditions(PERMISSION_FIELD_ADDITIONS, sourceValues).length + replacedCardIds.size + addedCards
-    || inPlace.length !== pendingFieldAdditions(IN_PLACE_PERMISSION_FIELD_ADDITIONS, sourceValues).length) {
+  const cardIdentities = evolution ? new Set([...source.values()].flatMap((permission) => {
+    const identity = readEditorCardGrant(permission);
+    return identity ? [identity] : [];
+  })) : new Set();
+  if (newCardGrants.size || recreated.length !== pendingFieldAdditions(PERMISSION_FIELD_ADDITIONS, sourceValues, cardIdentities, seoTransition).length + replacedCardIds.size + addedCards
+    || inPlace.length !== pendingFieldAdditions(IN_PLACE_PERMISSION_FIELD_ADDITIONS, sourceValues, new Set(), seoTransition).length) {
     differences.push({ table: 'admin_permissions', kind: 'recreated-permission-count-mismatch' });
   }
   const candidateDocumentIds = [...candidate.values()].map(({ documentId }) => documentId).filter((id) => id !== null && id !== undefined);
@@ -750,12 +796,23 @@ function comparePermissionGraphs(sourceDb, candidateDb, receipt, differences) {
     }
   }
   for (const role of new Set(recreated.map(({ role }) => role))) {
-    const sourceOrdinals = sourceValues.filter((row) => row.role === role && !replacedCardIds.has(row.id)).map(({ permissionOrd }) => permissionOrd)
-      .map((value) => typeof value === 'bigint' ? Number(value) : value).filter(Number.isSafeInteger);
-    const start = Math.max(-1, ...sourceOrdinals) + 1;
+    const unchangedOrdinals = new Set(sourceValues
+      .filter((row) => row.role === role && !recreated.some((item) => item.sourceId === row.id))
+      .map(({ permissionOrd }) => typeof permissionOrd === 'bigint' ? Number(permissionOrd) : permissionOrd));
     const roleRows = recreated.filter((row) => row.role === role).sort((a, b) => String(a.id).localeCompare(String(b.id), undefined, { numeric: true }));
     const candidateOrdinals = roleRows.map(({ ordinal }) => typeof ordinal === 'bigint' ? Number(ordinal) : ordinal);
-    if (candidateOrdinals.some((value, index) => value !== start + index)) differences.push({ table: 'admin_permissions_role_lnk', kind: 'recreated-permission-order-not-appended' });
+    const contiguous = candidateOrdinals.every((value, index) => Number.isSafeInteger(value)
+      && (index === 0 || value === candidateOrdinals[index - 1] + 1));
+    const overlaps = candidateOrdinals.some((value) => unchangedOrdinals.has(value));
+    if (seoOrderFallback) {
+      const start = Math.max(-1, ...[...unchangedOrdinals].filter(Number.isSafeInteger)) + 1;
+      if (!contiguous || overlaps || candidateOrdinals[0] !== start) differences.push({ table: 'admin_permissions_role_lnk', kind: 'recreated-permission-order-not-contiguous' });
+    } else {
+      const sourceOrdinals = sourceValues.filter((row) => row.role === role && !replacedCardIds.has(row.id)).map(({ permissionOrd }) => permissionOrd)
+        .map((value) => typeof value === 'bigint' ? Number(value) : value).filter(Number.isSafeInteger);
+      const start = Math.max(-1, ...sourceOrdinals) + 1;
+      if (candidateOrdinals.some((value, index) => value !== start + index)) differences.push({ table: 'admin_permissions_role_lnk', kind: 'recreated-permission-order-not-appended' });
+    }
   }
   const asMillis = (value) => typeof value === 'bigint' ? Number(value) : value;
   for (const { before, after } of inPlace) {
@@ -872,6 +929,29 @@ function expectedCoreStoreValue(key, sourceValue, programSchema) {
       };
     }
     return { ...expected, metadatas };
+  }
+  if (key === SEO_COMPONENT_CONFIG_KEY) {
+    if (!Array.isArray(expected.layouts?.edit) || !expected.metadatas || typeof expected.metadatas !== 'object'
+      || Array.isArray(expected.metadatas) || Object.hasOwn(expected.metadatas, 'og_title')
+      || Object.hasOwn(expected.metadatas, 'og_description')) return null;
+    const metadatas = { ...expected.metadatas };
+    const additions = [
+      ['og_title', 6, true, true],
+      ['og_description', 6, true, true],
+    ];
+    for (const [name, size, searchable, sortable] of additions) {
+      const last = expected.layouts.edit.at(-1);
+      if (!Array.isArray(last)) return null;
+      const used = last.reduce((sum, field) => sum + (Number(field?.size) || 0), 0);
+      if (used + size <= 12) last.push({ name, size });
+      else expected.layouts.edit.push([{ name, size }]);
+      metadatas[name] = {
+        edit: { label: name, description: '', placeholder: '', visible: true, editable: true },
+        list: { label: name, searchable, sortable },
+      };
+    }
+    expected.metadatas = metadatas;
+    return expected;
   }
   if (key === 'plugin_content_manager_configuration_content_types::api::promotion.promotion') {
     if (!Array.isArray(expected.layouts?.edit) || !expected.metadatas || typeof expected.metadatas !== 'object'
@@ -1022,7 +1102,7 @@ function expectedCoreStoreValue(key, sourceValue, programSchema) {
   }
   return null;
 }
-function compareCoreStore(sourceDb, candidateDb, differences, receipt, programSchema) {
+function compareCoreStore(sourceDb, candidateDb, differences, receipt, programSchema, { seoTransition = false } = {}) {
   let programSchemaNormalized = false;
   const sourceHasTable = tableNames(sourceDb).includes(CORE_STORE_TABLE);
   const candidateHasTable = tableNames(candidateDb).includes(CORE_STORE_TABLE);
@@ -1058,7 +1138,21 @@ function compareCoreStore(sourceDb, candidateDb, differences, receipt, programSc
     if (canonicalJson(sourceMetadata) !== canonicalJson(candidateMetadata)) {
       differences.push({ table: CORE_STORE_TABLE, kind: 'core-store-row-metadata-changed', keySha256: sha(Buffer.from(key)) });
     }
-    if (sourceRow.value === candidateRow.value) continue;
+    if (sourceRow.value === candidateRow.value) {
+      if (key === SEO_COMPONENT_CONFIG_KEY && seoTransition) {
+        const expected = expectedCoreStoreValue(key, sourceRow.value, programSchema);
+        let current;
+        try { current = JSON.parse(candidateRow.value); } catch { current = null; }
+        if (!expected || !current || canonicalJson(expected) !== canonicalJson(current)) {
+          differences.push({ table: CORE_STORE_TABLE, kind: 'core-store-structure-mismatch', keySha256: sha(Buffer.from(key)) });
+        }
+      }
+      continue;
+    }
+    if (key === SEO_COMPONENT_CONFIG_KEY && !seoTransition) {
+      differences.push({ table: CORE_STORE_TABLE, kind: 'core-store-structure-mismatch', keySha256: sha(Buffer.from(key)) });
+      continue;
+    }
     if (!CORE_STORE_KEYS.has(key)) {
       differences.push({ table: CORE_STORE_TABLE, kind: 'core-store-unexpected-change', keySha256: sha(Buffer.from(key)) });
       continue;
@@ -1119,7 +1213,7 @@ function validateSchemaHistory(sourceDb, candidateDb, candidateSchema, differenc
           { name, type: 'string', args: [], defaultTo: null, notNullable: false, unsigned: false }])),
         'course_groups.editor_label': { name: 'editor_label', type: 'string', args: [], defaultTo: null, notNullable: false, unsigned: false },
         'components_shared_seos.og_title': { name: 'og_title', type: 'string', args: [], defaultTo: null, notNullable: false, unsigned: false },
-        'components_shared_seos.og_description': { name: 'og_description', type: 'text', args: [], defaultTo: null, notNullable: false, unsigned: false },
+        'components_shared_seos.og_description': { name: 'og_description', type: 'text', args: ['longtext'], defaultTo: null, notNullable: false, unsigned: false },
       },
     });
     return true;
@@ -1297,6 +1391,10 @@ export function auditMigration({ sourceDbPath, candidateDbPath, plan, receipt, a
         && target.type === (name === 'og_title' ? 'varchar(255)' : 'TEXT'));
     });
     const acceptedOgColumns = physicalOgAdditions && (acceptedSchemaSnapshot || !tableNames(source).includes('strapi_database_schema'));
+    const sourceMissingOgColumns = ['og_title', 'og_description'].every((name) =>
+      !sourceSchema.components_shared_seos?.some((column) => column.name === name));
+    const seoOrderFallback = acceptedSchemaSnapshot && sourceMissingOgColumns && physicalOgAdditions;
+    const seoTransition = seoOrderFallback;
     if (transforms.bookSeller) {
       for (const [table, originalExpected] of Object.entries(BOOK_SEED_COLUMNS)) {
         const expected = table === 'components_shared_seos' && acceptedOgColumns
@@ -1390,8 +1488,8 @@ export function auditMigration({ sourceDbPath, candidateDbPath, plan, receipt, a
     }
     const runnerCounts = allowRunnerRows(source, candidate, plan, receipt, transforms, differences);
     compareNativeHistory(source, candidate, transforms.nativeSteps, differences);
-    const permissionAudit = comparePermissionGraphs(source, candidate, receipt, differences);
-    const programSchemaNormalized = compareCoreStore(source, candidate, differences, receipt, programSchema);
+    const permissionAudit = comparePermissionGraphs(source, candidate, receipt, differences, { seoOrderFallback, seoTransition });
+    const programSchemaNormalized = compareCoreStore(source, candidate, differences, receipt, programSchema, { seoTransition: seoOrderFallback });
     const sourceCounts = countByTable(source, Object.keys(sourceSchema));
     const candidateCounts = countByTable(candidate, Object.keys(candidateSchema));
     const report = {
