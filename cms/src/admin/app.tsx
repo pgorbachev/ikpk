@@ -5,6 +5,7 @@ import { OccurrenceRelations } from './components/OccurrenceRelations';
 import OccurrencePrice from './components/OccurrencePrice';
 import ArticleCalendarDate from './components/ArticleCalendarDate';
 import { SITE_REFRESH_ICON_PATH, siteRefreshIconProps, type SiteRefreshIconProps } from './site-refresh-icon';
+import { hideUnneededEditFields } from './edit-form-fields';
 
 function SiteRefreshIcon(props: SiteRefreshIconProps) {
   return (
@@ -99,6 +100,7 @@ export default {
     });
   },
   bootstrap(app: StrapiApp) {
+    app.registerHook('Admin/CM/pages/EditView/mutate-edit-view-layout', hideUnneededEditFields);
     // Динамический импорт: модуль конфигурации выполняется и вне браузера
     // (cms/tests/admin-locale.test.js читает `config.locales` без `require`).
     void import('./admin-localization').then(({ ensureDefaultAdminLocale }) =>
