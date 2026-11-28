@@ -403,8 +403,8 @@ test('content-admin seminar permissions admit only the two reviewed Open Graph f
   Object.assign(receipt, { operationId: candidateLineage.operationId });
   Object.assign(receipt.source, { snapshotSha256: sourceLineage.sourceSnapshotSha256, schemaFingerprint: sourceLineage.sourceSchemaSha256 });
   const report = auditMigration({ sourceDbPath, candidateDbPath, plan, receipt });
-  assert.equal(report.passed, true, JSON.stringify(report.differences));
-  assert.equal(report.transformations.permissionRowsRecreated, 0);
+  assert.equal(report.passed, false, 'OG ACL changes without a verified schema transition must be rejected');
+  assert.ok(report.differences.some(({ table, kind }) => table === 'admin_permissions' && kind === 'logical-permission-fields-mismatch'));
 
   const rejectedPath = join(directory, 'content-admin-seminar-rejected.db');
   createContentAdminSeminarPermissionShape(rejectedPath, { candidate: true, extraField: 'seo.og_image' });
@@ -730,7 +730,7 @@ function weeklyCronAt(value) {
   const date = new Date(value);
   return `${date.getUTCSeconds()} ${date.getUTCMinutes()} ${date.getUTCHours()} * * ${date.getUTCDay()}`;
 }
-function coreStoreValues(candidate) {
+function coreStoreValues(candidate, { ogComponent = false } = {}) {
   const promotion = {
     layouts: { edit: ['name', 'description', 'date', 'image', 'link'].map((name) => [{ name, size: 6 }]) },
     metadatas: { name: { edit: { label: 'name' }, list: { label: 'name' } } }, settings: { defaultSortBy: 'name' },
@@ -784,9 +784,11 @@ function coreStoreValues(candidate) {
     schedule.metadatas.image = { edit: { label: 'Изображение', description: '', placeholder: '', visible: true, editable: true }, list: { label: 'Изображение', searchable: false, sortable: false } };
     schedule.metadatas.isEventCollection = { edit: { label: 'Исходный флаг коллекции', description: '', placeholder: '', visible: false, editable: false }, list: { label: 'Исходный флаг коллекции', searchable: true, sortable: true } };
     seminar.metadatas.seo.edit.description = SEMINAR_SEO_DESCRIPTION;
-    seoComponent.layouts.edit.push([{ name: 'og_title', size: 6 }, { name: 'og_description', size: 6 }]);
-    seoComponent.metadatas.og_title = { edit: { label: 'og_title', description: '', placeholder: '', visible: true, editable: true }, list: { label: 'og_title', searchable: true, sortable: true } };
-    seoComponent.metadatas.og_description = { edit: { label: 'og_description', description: '', placeholder: '', visible: true, editable: true }, list: { label: 'og_description', searchable: true, sortable: true } };
+    if (ogComponent) {
+      seoComponent.layouts.edit.push([{ name: 'og_title', size: 6 }, { name: 'og_description', size: 6 }]);
+      seoComponent.metadatas.og_title = { edit: { label: 'og_title', description: '', placeholder: '', visible: true, editable: true }, list: { label: 'og_title', searchable: true, sortable: true } };
+      seoComponent.metadatas.og_description = { edit: { label: 'og_description', description: '', placeholder: '', visible: true, editable: true }, list: { label: 'og_description', searchable: true, sortable: true } };
+    }
     for (const uid of Object.keys(schema)) {
       const fields = uid === 'api::promotion.promotion'
         ? [['type', { type: 'enumeration', enum: ['SHOP', 'INSTITUTE'] }]]
@@ -807,11 +809,21 @@ function coreStoreValues(candidate) {
     ['unrelated-key', JSON.stringify({ preserved: true })],
   ]);
 }
-function createCoreStoreShape(path, { candidate = false, mutate = null } = {}) {
-  const values = coreStoreValues(candidate);
+function createCoreStoreShape(path, { candidate = false, ogComponent = false, mutate = null } = {}) {
+  const values = coreStoreValues(candidate, { ogComponent });
   if (mutate) mutate(values);
   const db = new Database(path);
   db.exec('CREATE TABLE strapi_core_store_settings (id INTEGER PRIMARY KEY, key TEXT NOT NULL, value TEXT, type TEXT, environment TEXT, tag TEXT)');
+  if (ogComponent) {
+    db.exec(`CREATE TABLE components_shared_seos (id INTEGER PRIMARY KEY, seo_title varchar(255), seo_description text, noindex boolean${candidate ? ', og_title varchar(255), og_description text' : ''});
+      CREATE TABLE strapi_database_schema (id INTEGER PRIMARY KEY, schema TEXT NOT NULL, time INTEGER NOT NULL, hash TEXT NOT NULL);`);
+    const schema = { version: 1, tables: [{ name: 'components_shared_seos', columns: [
+      { name: 'id', type: 'increments', unsigned: true }, { name: 'seo_title', type: 'string' }, { name: 'seo_description', type: 'text' }, { name: 'noindex', type: 'boolean' },
+      ...(candidate ? [{ name: 'og_title', type: 'string', args: [], defaultTo: null, notNullable: false, unsigned: false }, { name: 'og_description', type: 'text', args: ['longtext'], defaultTo: null, notNullable: false, unsigned: false }] : []),
+    ], indexes: [], foreignKeys: [] }] };
+    const schemaJson = JSON.stringify(schema);
+    db.prepare('INSERT INTO strapi_database_schema VALUES (?, ?, ?, ?)').run(candidate ? 2 : 1, schemaJson, candidate ? 200 : 100, sha256(Buffer.from(schemaJson)));
+  }
   const insert = db.prepare('INSERT INTO strapi_core_store_settings VALUES (?, ?, ?, ?, ?, ?)');
   let id = 1;
   for (const [key, value] of values) insert.run(id++, key, value, 'object', null, null);
@@ -892,8 +904,8 @@ test('core-store accepts only reviewed content-type updates and a stale upload m
 test('core-store accepts only the exact shared SEO Open Graph component additions', () => {
   const sourceDbPath = join(directory, 'seo-component-source.db');
   const candidateDbPath = join(directory, 'seo-component-candidate.db');
-  createCoreStoreShape(sourceDbPath);
-  createCoreStoreShape(candidateDbPath, { candidate: true });
+  createCoreStoreShape(sourceDbPath, { ogComponent: true });
+  createCoreStoreShape(candidateDbPath, { candidate: true, ogComponent: true });
   const plan = emptyBoundPlan();
   const report = auditMigration({ sourceDbPath, candidateDbPath, plan, receipt: boundReceipt(sourceDbPath, candidateDbPath, plan) });
   assert.equal(report.differences.some(({ table, kind }) => table === 'strapi_core_store_settings' && kind.startsWith('core-store-')), false,
@@ -1196,7 +1208,7 @@ test('program editor label recreates the four full-list permissions and updates 
         ordinal: candidate ? (role === 'strapi-editor' ? 1 : 2 + index) : sourceOrdinal,
         timestamp: stamp + index,
         action,
-      fields: [...fields, ...(candidate ? (role === 'strapi-editor' ? ['editor_label', 'seo.og_title', 'seo.og_description'] : ['editor_label', 'seo.og_title', 'seo.og_description']) : [])],
+      fields: [...fields, ...(candidate ? ['editor_label'] : [])],
       });
     });
     db.close();

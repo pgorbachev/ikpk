@@ -97,9 +97,12 @@ const PERMISSION_FIELD_ADDITIONS = new Map([
   ...['create', 'read', 'update'].map((action) => [
     `strapi-super-admin\0plugin::content-manager.explorer.${action}\0api::course-group.course-group`, ['editor_label', 'seo.og_title', 'seo.og_description'],
   ]),
-  ...['api::article.article', 'api::institute.institute', 'api::page.page', 'api::seminar.seminar', 'api::video-playlist.video-playlist'].flatMap((subject) => ['create', 'read', 'update'].map((action) => [
+  ...['api::article.article', 'api::institute.institute', 'api::seminar.seminar', 'api::video-playlist.video-playlist'].flatMap((subject) => ['create', 'read', 'update'].map((action) => [
     `strapi-super-admin\0plugin::content-manager.explorer.${action}\0${subject}`, ['seo.og_title', 'seo.og_description'],
   ])),
+  ...['create', 'read', 'update'].map((action) => [
+    `strapi-super-admin\0plugin::content-manager.explorer.${action}\0api::page.page`, [...Object.keys(CONTACT_PHONES), 'seo.og_title', 'seo.og_description'],
+  ]),
 ]);
 // content-admin получает поле тем же id: bootstrap обновляет строку, а не создаёт её заново.
 const IN_PLACE_PERMISSION_FIELD_ADDITIONS = new Map([
@@ -539,12 +542,22 @@ function permissionGraph(db, differences, label) {
 function permissionIdentity(permission) {
   return `${permission.role}\0${permission.action}\0${permission.subject}`;
 }
-function pendingFieldAdditions(additions, sourceValues, excluded = new Set()) {
+function seoAdditionAllowed(row, field, sourceValues, seoTransition = true) {
+  if (!field.startsWith('seo.og_')) return true;
+  if (!seoTransition) return false;
+  if (!row.fields?.includes('seo.seo_title') || !row.fields?.includes('seo.seo_description')) return false;
+  if (row.role !== 'content-admin' || row.subject !== 'api::seminar.seminar') return true;
+  const full = sourceValues.find((value) => value.role === 'strapi-super-admin'
+    && value.action === 'plugin::content-manager.explorer.read' && value.subject === row.subject)?.fields;
+  return Boolean(full?.filter((name) => !['content_format', 'content_section_anchors', 'legacy_id'].includes(name))
+    .every((name) => row.fields.includes(name)));
+}
+function pendingFieldAdditions(additions, sourceValues, excluded = new Set(), seoTransition = true) {
   return [...additions].filter(([identity, fields]) => {
     if (excluded.has(identity)) return false;
     const [role, action, subject] = identity.split('\0');
     const row = sourceValues.find((value) => value.role === role && value.action === action && value.subject === subject);
-    return Boolean(row?.fields && fields.some((field) => !row.fields.includes(field)));
+    return Boolean(row?.fields && fields.some((field) => seoAdditionAllowed(row, field, sourceValues, seoTransition) && !row.fields.includes(field)));
   });
 }
 function samePermissionStorage(before, after) {
@@ -660,7 +673,7 @@ function readEditorCardGrant(permission) {
   return identity;
 }
 
-function comparePermissionGraphs(sourceDb, candidateDb, receipt, differences, { seoOrderFallback = false } = {}) {
+function comparePermissionGraphs(sourceDb, candidateDb, receipt, differences, { seoOrderFallback = false, seoTransition = false } = {}) {
   const source = permissionGraph(sourceDb, differences, 'source');
   const candidate = permissionGraph(candidateDb, differences, 'candidate');
   if (!source || !candidate) return;
@@ -691,7 +704,7 @@ function comparePermissionGraphs(sourceDb, candidateDb, receipt, differences, { 
     const identity = permissionIdentity(before);
     const recreatedAllowed = PERMISSION_FIELD_ADDITIONS.get(identity) ?? [];
     const inPlaceAllowed = IN_PLACE_PERMISSION_FIELD_ADDITIONS.get(identity) ?? [];
-    const allowed = [...recreatedAllowed, ...inPlaceAllowed];
+    const allowed = [...recreatedAllowed, ...inPlaceAllowed].filter((field) => seoAdditionAllowed(before, field, sourceValues, seoTransition));
     const cardGrant = evolution && readEditorCardGrant(before);
     const expectedFields = cardGrant ? EDITOR_CARD_GRANTS.get(cardGrant)
       : before.fields === null ? null : [...new Set([...before.fields, ...allowed])].sort();
@@ -729,8 +742,8 @@ function comparePermissionGraphs(sourceDb, candidateDb, receipt, differences, { 
     const identity = readEditorCardGrant(permission);
     return identity ? [identity] : [];
   })) : new Set();
-  if (newCardGrants.size || recreated.length !== pendingFieldAdditions(PERMISSION_FIELD_ADDITIONS, sourceValues, cardIdentities).length + replacedCardIds.size + addedCards
-    || inPlace.length !== pendingFieldAdditions(IN_PLACE_PERMISSION_FIELD_ADDITIONS, sourceValues).length) {
+  if (newCardGrants.size || recreated.length !== pendingFieldAdditions(PERMISSION_FIELD_ADDITIONS, sourceValues, cardIdentities, seoTransition).length + replacedCardIds.size + addedCards
+    || inPlace.length !== pendingFieldAdditions(IN_PLACE_PERMISSION_FIELD_ADDITIONS, sourceValues, new Set(), seoTransition).length) {
     differences.push({ table: 'admin_permissions', kind: 'recreated-permission-count-mismatch' });
   }
   const candidateDocumentIds = [...candidate.values()].map(({ documentId }) => documentId).filter((id) => id !== null && id !== undefined);
@@ -776,7 +789,8 @@ function comparePermissionGraphs(sourceDb, candidateDb, receipt, differences, { 
       && (index === 0 || value === candidateOrdinals[index - 1] + 1));
     const overlaps = candidateOrdinals.some((value) => unchangedOrdinals.has(value));
     if (seoOrderFallback) {
-      if (!contiguous || overlaps) differences.push({ table: 'admin_permissions_role_lnk', kind: 'recreated-permission-order-not-contiguous' });
+      const start = Math.max(-1, ...[...unchangedOrdinals].filter(Number.isSafeInteger)) + 1;
+      if (!contiguous || overlaps || candidateOrdinals[0] !== start) differences.push({ table: 'admin_permissions_role_lnk', kind: 'recreated-permission-order-not-contiguous' });
     } else {
       const sourceOrdinals = sourceValues.filter((row) => row.role === role && !replacedCardIds.has(row.id)).map(({ permissionOrd }) => permissionOrd)
         .map((value) => typeof value === 'bigint' ? Number(value) : value).filter(Number.isSafeInteger);
@@ -1072,7 +1086,7 @@ function expectedCoreStoreValue(key, sourceValue, programSchema) {
   }
   return null;
 }
-function compareCoreStore(sourceDb, candidateDb, differences, receipt, programSchema) {
+function compareCoreStore(sourceDb, candidateDb, differences, receipt, programSchema, { seoTransition = false } = {}) {
   let programSchemaNormalized = false;
   const sourceHasTable = tableNames(sourceDb).includes(CORE_STORE_TABLE);
   const candidateHasTable = tableNames(candidateDb).includes(CORE_STORE_TABLE);
@@ -1108,7 +1122,21 @@ function compareCoreStore(sourceDb, candidateDb, differences, receipt, programSc
     if (canonicalJson(sourceMetadata) !== canonicalJson(candidateMetadata)) {
       differences.push({ table: CORE_STORE_TABLE, kind: 'core-store-row-metadata-changed', keySha256: sha(Buffer.from(key)) });
     }
-    if (sourceRow.value === candidateRow.value) continue;
+    if (sourceRow.value === candidateRow.value) {
+      if (key === SEO_COMPONENT_CONFIG_KEY && seoTransition) {
+        const expected = expectedCoreStoreValue(key, sourceRow.value, programSchema);
+        let current;
+        try { current = JSON.parse(candidateRow.value); } catch { current = null; }
+        if (!expected || !current || canonicalJson(expected) !== canonicalJson(current)) {
+          differences.push({ table: CORE_STORE_TABLE, kind: 'core-store-structure-mismatch', keySha256: sha(Buffer.from(key)) });
+        }
+      }
+      continue;
+    }
+    if (key === SEO_COMPONENT_CONFIG_KEY && !seoTransition) {
+      differences.push({ table: CORE_STORE_TABLE, kind: 'core-store-structure-mismatch', keySha256: sha(Buffer.from(key)) });
+      continue;
+    }
     if (!CORE_STORE_KEYS.has(key)) {
       differences.push({ table: CORE_STORE_TABLE, kind: 'core-store-unexpected-change', keySha256: sha(Buffer.from(key)) });
       continue;
@@ -1350,6 +1378,7 @@ export function auditMigration({ sourceDbPath, candidateDbPath, plan, receipt, a
     const sourceMissingOgColumns = ['og_title', 'og_description'].every((name) =>
       !sourceSchema.components_shared_seos?.some((column) => column.name === name));
     const seoOrderFallback = acceptedSchemaSnapshot && sourceMissingOgColumns && physicalOgAdditions;
+    const seoTransition = seoOrderFallback;
     if (transforms.bookSeller) {
       for (const [table, originalExpected] of Object.entries(BOOK_SEED_COLUMNS)) {
         const expected = table === 'components_shared_seos' && acceptedOgColumns
@@ -1443,8 +1472,8 @@ export function auditMigration({ sourceDbPath, candidateDbPath, plan, receipt, a
     }
     const runnerCounts = allowRunnerRows(source, candidate, plan, receipt, transforms, differences);
     compareNativeHistory(source, candidate, transforms.nativeSteps, differences);
-    const permissionAudit = comparePermissionGraphs(source, candidate, receipt, differences, { seoOrderFallback });
-    const programSchemaNormalized = compareCoreStore(source, candidate, differences, receipt, programSchema);
+    const permissionAudit = comparePermissionGraphs(source, candidate, receipt, differences, { seoOrderFallback, seoTransition });
+    const programSchemaNormalized = compareCoreStore(source, candidate, differences, receipt, programSchema, { seoTransition: seoOrderFallback });
     const sourceCounts = countByTable(source, Object.keys(sourceSchema));
     const candidateCounts = countByTable(candidate, Object.keys(candidateSchema));
     const report = {
