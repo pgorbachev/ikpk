@@ -933,19 +933,25 @@ function expectedCoreStoreValue(key, sourceValue, programSchema) {
   if (key === PAGE_CONFIG_KEY) {
     if (!expected.metadatas || !Array.isArray(expected.layouts?.edit)) return null;
     if (Object.hasOwn(expected.metadatas, STUDENT_FORM_FIELD)) return null;
-    for (const [name, labels] of Object.entries(PHONE_LABELS)) {
-      if (Object.hasOwn(expected.metadatas, name)) return null;
-      expected.metadatas[name] = {
-        edit: { description: '', placeholder: '', visible: true, editable: true, ...labels },
-        list: { label: name, searchable: true, sortable: true },
-      };
+    const existingPhoneMetadata = Object.keys(PHONE_LABELS).filter(name => Object.hasOwn(expected.metadatas, name));
+    if (existingPhoneMetadata.length === 1) return null;
+    if (existingPhoneMetadata.length === 0) {
+      for (const [name, labels] of Object.entries(PHONE_LABELS)) {
+        expected.metadatas[name] = {
+          edit: { description: '', placeholder: '', visible: true, editable: true, ...labels },
+          list: { label: name, searchable: true, sortable: true },
+        };
+      }
+      expected.layouts.edit.push(Object.keys(PHONE_LABELS).map(name => ({ name, size: 6 })));
     }
-    expected.layouts.edit.push(Object.keys(PHONE_LABELS).map(name => ({ name, size: 6 })));
     expected.metadatas[STUDENT_FORM_FIELD] = {
       edit: { description: '', placeholder: '', visible: true, editable: true, label: STUDENT_FORM_LABEL },
-      list: { label: STUDENT_FORM_LABEL, searchable: true, sortable: true },
+      list: { label: STUDENT_FORM_FIELD, searchable: true, sortable: true },
     };
-    expected.layouts.edit.push([{ name: STUDENT_FORM_FIELD, size: 12 }]);
+    const last = expected.layouts.edit.at(-1);
+    const used = Array.isArray(last) ? last.reduce((sum, cell) => sum + (Number.isFinite(cell?.size) ? cell.size : 0), 0) : 12;
+    if (Array.isArray(last) && used + 6 <= 12) last.push({ name: STUDENT_FORM_FIELD, size: 6 });
+    else expected.layouts.edit.push([{ name: STUDENT_FORM_FIELD, size: 6 }]);
     return expected;
   }
   if (key === ARTICLE_CONFIG_KEY) {

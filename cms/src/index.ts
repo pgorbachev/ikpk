@@ -13,7 +13,6 @@ import { applyEditorForms } from './seminar-management/forms';
 import { registerSitePhones } from './api/page/site-phones';
 import { registerSiteBooks } from './api/page/site-books';
 import { registerSiteStudentDocumentForm } from './api/page/site-student-document-form';
-import { registerStudentDocumentFormWriteGuard } from './api/page/student-document-form-write-guard';
 import { registerSiteRefresh } from './seminar-management/site-refresh';
 
 export default {
@@ -31,10 +30,6 @@ export default {
     registerSitePhones(strapi);
     registerSiteBooks(strapi);
     registerSiteStudentDocumentForm(strapi);
-    // This field is intentionally writable only through the role-checked,
-    // If-Match endpoint above. Core Page REST and Content Manager writes may
-    // still update unrelated fields, but cannot change the public URL.
-    registerStudentDocumentFormWriteGuard(strapi);
   },
 
   /**

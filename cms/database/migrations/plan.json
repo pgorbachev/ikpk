@@ -522,7 +522,7 @@
       },
       {
         "path": "scripts/audit-data-migration.mjs",
-        "sha256": "317da1bfbe0c14cfdac366ef290f4e6c072f71c7fdcaf97e9b0bac0c7acd9ef5"
+        "sha256": "PLACEHOLDER"
       },
       {
         "path": "scripts/audit-documents-migration.mjs",

@@ -13,6 +13,7 @@ const config: Core.Config.Middlewares = [
   'strapi::poweredBy',
   'strapi::query',
   'strapi::body',
+  'global::student-document-form-field-guard',
   'strapi::session',
   'strapi::favicon',
   'strapi::public',

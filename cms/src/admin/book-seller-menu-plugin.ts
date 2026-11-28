@@ -45,8 +45,9 @@ export function bookSellerMenuLinkPlugin(): Plugin {
         return () => { current = false; };
     }, [get]);
     const canOpenPages = canEditPhones || canEditBooks || canEditStudentDocumentForm;
-    const collectionTypeLinks = canOpenPages && !nativeCollectionTypeLinks.some(link => link.uid === 'api::page.page')
-        ? [...nativeCollectionTypeLinks, { uid: 'ikpk-managed-pages', title: 'Страницы', to: '/content-manager/collection-types/site-pages' }]
+    const managedPagesLink = { uid: 'ikpk-managed-pages', title: 'Страницы', to: '/content-manager/collection-types/site-pages' };
+    const collectionTypeLinks = canOpenPages
+        ? [...nativeCollectionTypeLinks.map(link => link.uid === 'api::page.page' ? { ...link, title: 'Все страницы' } : link), managedPagesLink]
         : nativeCollectionTypeLinks;`);
     },
     generateBundle() {

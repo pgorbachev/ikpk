@@ -28,7 +28,10 @@ function fixture({ roles = ['content-admin'], body = 'Опубликованны
   const strapi = {
     admin: { routes: { admin: { routes } } },
     db: {
-      query(uid) { return { async findOne() { return uid === 'admin::user' ? { roles: roles.map(code => ({ code })) } : null; } }; },
+      query(uid) { return {
+        async findOne() { return uid === 'admin::user' ? { roles: roles.map(code => ({ code })) } : null; },
+        async findMany() { return pages.map(page => ({ ...page, seo: page.seo })); },
+      }; },
       async transaction(callback) { return callback({ trx }); },
     },
   };
@@ -63,6 +66,18 @@ test('publish updates only the address and keeps the unrelated draft pending', a
   assert.equal(publish.body.draft, next);
 });
 
+test('publishing a new address with no other draft changes leaves no pending draft indicator', async () => {
+  const { pages, handlerFor, makeContext } = fixture();
+  const read = makeContext('GET'); await handlerFor('/site-student-document-form')(read);
+  const next = 'https://b24-cbqwqo.bitrix24site.ru/crm_form_new8/?sig=publish';
+  const publish = makeContext('POST', 7, { student_document_form_url: next }, `"${read.body.revision}"`);
+  await handlerFor('/site-student-document-form/publish')(publish);
+  assert.equal(publish.status, undefined);
+  assert.equal(pages[0].student_document_form_url, next);
+  assert.equal(pages[1].student_document_form_url, next);
+  assert.equal(Number(pages[0].updated_at), Number(pages[1].updated_at));
+});
+
 test('If-Match allows the first write and rejects a stale concurrent second write', async () => {
   const { pages, handlerFor, makeContext } = fixture();
   const read = makeContext('GET'); await handlerFor('/site-student-document-form')(read);
@@ -80,6 +95,16 @@ test('roles are reloaded from the database; unauthorized users cannot read or wr
   const context = makeContext('PUT', 7, { student_document_form_url: URL }, '"revision"');
   await handlerFor('/site-student-document-form/draft')(context);
   assert.equal(context.status, 403);
+});
+
+test('all three supported roles can reach the Page → Оплата screen capability', async () => {
+  for (const role of ['strapi-editor', 'content-admin', 'strapi-super-admin']) {
+    const { handlerFor, makeContext } = fixture({ roles: [role] });
+    const context = makeContext('GET');
+    await handlerFor('/site-student-document-form')(context);
+    assert.equal(context.status, undefined, `${role} should pass the same route capability check`);
+    assert.equal(context.body.draft, URL);
+  }
 });
 
 test('the endpoint rejects invalid addresses and fields outside its single-field contract', async () => {

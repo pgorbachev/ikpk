@@ -33,7 +33,7 @@ export default function SitePages() {
       Вводный текст книг
     </Button>}
     {capabilities?.studentDocumentForm && <Button variant="secondary" onClick={() => navigate('/content-manager/collection-types/site-student-document-form')}>
-      Заполнение документов
+      Оплата
     </Button>}
     {capabilities && !capabilities.contacts && !capabilities.books && !capabilities.studentDocumentForm &&
       <Typography textColor="danger600">Для этой роли нет разрешённых страниц.</Typography>}

@@ -31,7 +31,7 @@ export default function SiteStudentDocumentForm() {
     } finally { setBusy(false); }
   };
   return <Box padding={8} background="neutral0"><Flex direction="column" alignItems="stretch" gap={4} maxWidth="760px">
-    <Typography variant="alpha" tag="h1">Заполнение документов</Typography>
+    <Typography variant="alpha" tag="h1">Оплата</Typography>
     <Typography>Ссылка станет доступна на сайте после публикации и успешного обновления сайта.</Typography>
     <TextInput label={label} name="student_document_form_url" value={value} onChange={event => setValue(event.currentTarget.value)} disabled={busy} />
     {view && <Typography>Опубликовано: {view.published || 'адрес пока не опубликован'}</Typography>}

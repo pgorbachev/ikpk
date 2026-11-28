@@ -125,7 +125,7 @@ export default {
     app.registerHook('Admin/CM/pages/App/mutate-collection-types-links', (input: CollectionLinks) => ({
       ...input,
       ctLinks: input.ctLinks.map(link =>
-        link.uid === 'api::page.page' ? { ...link, title: pageTranslations.Page } : link),
+        link.uid === 'api::page.page' ? { ...link, title: 'Все страницы' } : link),
     }));
     app.registerHook('Admin/CM/pages/EditView/mutate-edit-view-layout', (input: EditViewLayout) => {
       const seo = input.layout.components['shared.seo'];

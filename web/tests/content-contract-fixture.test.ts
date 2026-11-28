@@ -43,6 +43,14 @@ describe('закреплённая фикстура и её собственны
     }
   });
 
+  it('отказывает сохранённому снимку без static_pages', () => {
+    const broken = structuredClone(snapshot) as Snapshot;
+    delete broken.content.types.static_pages;
+    expect(validateSnapshotContract(broken).violations).toContainEqual(expect.objectContaining({
+      type: 'static_pages', recordId: 'oplata', field: 'student_document_form_url', rule: 'invalid-value',
+    }));
+  });
+
   it('capture fails closed for missing, duplicate and invalid /oplata values', () => {
     const page = snapshot.content.types.static_pages?.find(record => record.slug === 'oplata');
     expect(() => assertStudentDocumentFormSnapshot(undefined)).toThrow(/снимок не записан/);

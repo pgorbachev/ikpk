@@ -69,7 +69,7 @@ export function registerSiteStudentDocumentForm(strapi) {
           ctx.body = { draft: previousDraft, published: previousPublished, revision: currentRevision };
           return;
         }
-        const pending = action === 'publish' && (draftChanged || await hasOtherDraftChanges(strapi, draft, published));
+        const pending = action === 'publish' && await hasOtherDraftChanges(strapi, draft, published);
         const previousPublication = new Date(published.updated_at ?? 0).getTime();
         const now = Math.max(Date.now(), previousPublication + 1);
         const publishedTime = publishedChanged ? now : previousPublication;
