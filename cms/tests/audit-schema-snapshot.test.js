@@ -13,6 +13,7 @@ function snapshot(tables, marker = 'kept') {
 const sourceTables = () => [
   table('promotions', [{ name: 'id', type: 'increments', unsigned: true }, { name: 'name', type: 'string', nullable: false }], { indexes: [{ name: 'promotions_name_idx', columns: ['name'] }] }),
   table('schedule_entries', [{ name: 'id', type: 'increments', unsigned: true }, { name: 'name', type: 'string' }], { foreignKeys: [{ name: 'schedule_fk', columns: ['id'], referencedTable: 'entries' }] }),
+  table('pages', [{ name: 'id', type: 'increments', unsigned: true }, { name: 'slug', type: 'string' }]),
 ];
 const actualColumns = {
   promotions: [
@@ -25,24 +26,38 @@ const actualColumns = {
     { name: 'name', type: 'varchar(255)', notnull: 0, defaultValue: null, pk: 0 },
     { name: 'is_event_collection', type: 'boolean', notnull: 0, defaultValue: null, pk: 0 },
   ],
+  pages: [
+    { name: 'id', type: 'INTEGER', notnull: 0, defaultValue: null, pk: 1 },
+    { name: 'slug', type: 'varchar(255)', notnull: 0, defaultValue: null, pk: 0 },
+    { name: 'center_phone', type: 'varchar(255)', notnull: 0, defaultValue: null, pk: 0 },
+    { name: 'manager_phone', type: 'varchar(255)', notnull: 0, defaultValue: null, pk: 0 },
+    { name: 'student_document_form_url', type: 'varchar(255)', notnull: 0, defaultValue: null, pk: 0 },
+  ],
 };
 function candidateTables() {
   return [
     table('promotions', [...sourceTables()[0].columns, { name: 'type', type: 'string', args: [], defaultTo: null, notNullable: false, unsigned: false }], { indexes: [{ name: 'promotions_name_idx', columns: ['name'] }] }),
     table('schedule_entries', [...sourceTables()[1].columns, { name: 'is_event_collection', type: 'boolean', args: [], defaultTo: null, notNullable: false, unsigned: false }], { foreignKeys: [{ name: 'schedule_fk', columns: ['id'], referencedTable: 'entries' }] }),
+    table('pages', [...sourceTables()[2].columns,
+      { name: 'center_phone', type: 'string', args: [], defaultTo: null, notNullable: false, unsigned: false },
+      { name: 'manager_phone', type: 'string', args: [], defaultTo: null, notNullable: false, unsigned: false },
+      { name: 'student_document_form_url', type: 'string', args: [], defaultTo: null, notNullable: false, unsigned: false }]),
   ];
 }
 const expectedColumns = {
+  'pages.center_phone': { name: 'center_phone', type: 'string', args: [], defaultTo: null, notNullable: false, unsigned: false },
+  'pages.manager_phone': { name: 'manager_phone', type: 'string', args: [], defaultTo: null, notNullable: false, unsigned: false },
   'promotions.type': { name: 'type', type: 'string', args: [], defaultTo: null, notNullable: false, unsigned: false },
   'schedule_entries.is_event_collection': { name: 'is_event_collection', type: 'boolean', args: [], defaultTo: null, notNullable: false, unsigned: false },
+  'pages.student_document_form_url': { name: 'student_document_form_url', type: 'string', args: [], defaultTo: null, notNullable: false, unsigned: false },
 };
 
-test('accepts only the two approved Strapi 5 additive columns and verifies stored hashes', () => {
+test('accepts only the approved Strapi 5 additive columns and verifies stored hashes', () => {
   const sourceRows = [snapshot(sourceTables())];
   const candidateRows = [snapshot(candidateTables())];
   assert.deepEqual(validateSchemaSnapshot({ sourceRows, candidateRows, actualColumns, expectedColumns }), {
     valid: true,
-    addedColumns: ['promotions.type', 'schedule_entries.is_event_collection'],
+    addedColumns: ['pages.center_phone', 'pages.manager_phone', 'pages.student_document_form_url', 'promotions.type', 'schedule_entries.is_event_collection'],
   });
 });
 
@@ -62,6 +77,8 @@ test('accepts editor_label when the earlier additive columns are already in the 
   const previous = sourceTables();
   previous[0].columns.push({ name: 'type', type: 'string', args: [], defaultTo: null, notNullable: false, unsigned: false });
   previous[1].columns.push({ name: 'is_event_collection', type: 'boolean', args: [], defaultTo: null, notNullable: false, unsigned: false });
+  previous[2].columns.push(...Object.values(expectedColumns).filter(column => column.name.startsWith('center_phone')
+    || column.name.startsWith('manager_phone') || column.name === 'student_document_form_url'));
   previous.push(table('course_groups', [{ name: 'id', type: 'increments', unsigned: true }, { name: 'name', type: 'string' }]));
   const next = structuredClone(previous);
   next.find(({ name }) => name === 'course_groups').columns.push({ name: 'editor_label', type: 'string', args: [], defaultTo: null, notNullable: false, unsigned: false });

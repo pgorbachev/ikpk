@@ -13,6 +13,10 @@ const ALLOWED = new Map([
     table: 'pages', name, sqlType: /^varchar\s*\(\s*255\s*\)$/i,
     expected: { name, type: 'string', args: [], defaultTo: null, notNullable: false, unsigned: false },
   }]),
+  ['pages.student_document_form_url', {
+    table: 'pages', name: 'student_document_form_url', sqlType: /^varchar\s*\(\s*255\s*\)$/i,
+    expected: { name: 'student_document_form_url', type: 'string', args: [], defaultTo: null, notNullable: false, unsigned: false },
+  }],
   ['promotions.type', {
     table: 'promotions', name: 'type', sqlType: /^varchar\s*\(\s*255\s*\)$/i,
     expected: { name: 'type', type: 'string', args: [], defaultTo: null, notNullable: false, unsigned: false },

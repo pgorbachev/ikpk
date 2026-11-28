@@ -367,6 +367,7 @@ export interface VideoPlaylist {
 export interface StaticPage {
   center_phone?: string | null;
   manager_phone?: string | null;
+  student_document_form_url?: string | null;
   legacy_id: string;
   legacy_url: string;
   title: string;

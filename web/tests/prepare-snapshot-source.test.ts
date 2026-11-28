@@ -90,6 +90,32 @@ describe('prepare-snapshot: источник снимка', () => {
     expect(run.status, `живой снимок отвергнут:\n${run.output}`).toBe(0);
   });
 
+  it('отказывает при подготовке сохранённого снимка без типа static_pages', () => {
+    const dir = dirWithSnapshot();
+    const path = join(dir, 'snapshot.json');
+    const snapshot = JSON.parse(readFileSync(path, 'utf8'));
+    delete snapshot.content.types.static_pages;
+    writeFileSync(path, JSON.stringify(snapshot));
+    const run = prepare({ CONTENT_SNAPSHOT_DIR: dir, SNAPSHOT_SOURCE: undefined });
+    expect(run.status, `сохранённый снимок без /oplata прошёл подготовку:\n${run.output}`).not.toBe(0);
+    expect(run.output).toMatch(/опубликованная Page \/oplata|снимок не записан/);
+  });
+
+  it.each([
+    ['адрес с окружающим пробелом', (address: string) => ` ${address}`],
+    ['адрес длиннее 2048 символов', () => `https://b24-cbqwqo.bitrix24site.ru/crm_form_k5ush/?q=${'x'.repeat(2048)}`],
+  ])('отказывает при подготовке сохранённого снимка: %s', (_name, mutateAddress) => {
+    const dir = dirWithSnapshot();
+    const path = join(dir, 'snapshot.json');
+    const snapshot = JSON.parse(readFileSync(path, 'utf8'));
+    const page = snapshot.content.types.static_pages.find((item: { slug: string }) => item.slug === 'oplata');
+    page.student_document_form_url = mutateAddress(page.student_document_form_url);
+    writeFileSync(path, JSON.stringify(snapshot));
+    const run = prepare({ CONTENT_SNAPSHOT_DIR: dir, SNAPSHOT_SOURCE: undefined });
+    expect(run.status, `невалидный URL прошёл подготовку:\n${run.output}`).not.toBe(0);
+    expect(run.output).toMatch(/снимок не записан|контракт снимка нарушен/);
+  });
+
   it('сборка отклоняет изменённое историческое проведение до копирования снимка', () => {
     const dir = dirWithSnapshot();
     const path = join(dir, 'snapshot.json');

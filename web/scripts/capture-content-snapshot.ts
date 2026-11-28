@@ -1,6 +1,7 @@
 import { siteContactPhones } from '../src/lib/site-contact-phones.ts';
 import { resolveSeminar } from '../src/lib/seminar-identity.ts';
 import { articleSeoDescriptionFallback } from './lib/article-seo-fallback.ts';
+import { assertStudentDocumentFormSnapshot } from './lib/student-document-form-snapshot.ts';
 /**
  * Снятие снимка контента. Живой путь читает CMS по REST, когда `CMS_URL`/`STRAPI_URL` задан;
  * без адреса — закреплённая фикстура. Неудача живого захвата при заданном адресе — ОТКАЗ, а
@@ -810,6 +811,7 @@ async function liveCapture(): Promise<void> {
     );
   }
   siteContactPhones(types.static_pages);
+  assertStudentDocumentFormSnapshot(types.static_pages);
 
   if (emptyTypes.length > 0) {
     console.warn(`snapshot:capture: пустые типы (${emptyTypes.length}): ${emptyTypes.join(', ')}`);

@@ -18,6 +18,8 @@ const PHONE_LABELS = {
   center_phone: { label: 'Телефон центра', description: 'Телефоны для сайта задаются в этих двух полях. Текст Body на странице /kontakty не выводится.' },
   manager_phone: { label: 'Мобильный телефон менеджера' },
 };
+const STUDENT_FORM_FIELD = 'student_document_form_url';
+const STUDENT_FORM_LABEL = 'Ссылка на форму заполнения документов';
 const ARTICLE_CONFIG_KEY = 'plugin_content_manager_configuration_content_types::api::article.article';
 const SEO_COMPONENT_CONFIG_KEY = 'plugin_content_manager_configuration_components::shared.seo';
 const COURSE_GROUP_CONFIG_KEY = 'plugin_content_manager_configuration_content_types::api::course-group.course-group';
@@ -55,6 +57,8 @@ const KNOWN_RENAMES = new Map([
   ['schedule_entries', ['status', 'entry_status']],
 ]);
 const CONTACT_PHONES = { center_phone: '+7 (812) 646-54-50', manager_phone: '+7 981 038-77-97' };
+const STUDENT_DOCUMENT_FORM_URL = 'https://b24-cbqwqo.bitrix24site.ru/crm_form_k5ush/?telemetry_sign=v1%3A6%3Adirect_link.2b373ae14476af8c466795c40598e242f26f55b15de21454f4c9dcb4d5acb8c4';
+const LEGACY_BOOK_SELLER_SHA = '645ec7800d64cd531f54c4a24945c6f1fbd31512052165b84f17bbf6427a7f21';
 const BOOK_PAGE = {
   slug: 'knigi-i-uchebnye-materialy',
   title: 'Книги и учебные материалы',
@@ -66,7 +70,7 @@ const BOOK_PAGE = {
   publishedAt: 1795766400001,
 };
 const BOOK_SEED_COLUMNS = {
-  pages: ['id', 'document_id', 'title', 'slug', 'body', 'legacy_id', 'created_at', 'updated_at', 'published_at', 'created_by_id', 'updated_by_id', 'locale', 'center_phone', 'manager_phone'],
+  pages: ['id', 'document_id', 'title', 'slug', 'body', 'legacy_id', 'created_at', 'updated_at', 'published_at', 'created_by_id', 'updated_by_id', 'locale', 'center_phone', 'manager_phone', 'student_document_form_url'],
   components_shared_seos: ['id', 'seo_title', 'seo_description', 'noindex'],
   pages_cmps: ['id', 'entity_id', 'cmp_id', 'component_type', 'field', 'order'],
 };
@@ -256,10 +260,14 @@ function compareRows(sourceDb, candidateDb, sourceTable, candidateTable, columns
 }
 function expectedColumns(sourceColumns, table, knownTransforms) {
   const rename = KNOWN_RENAMES.get(table);
-  return sourceColumns.map((column) => {
+  const columns = sourceColumns.map((column) => {
     if (rename && knownTransforms.nativeRenameTables.has(table) && column.name === rename[0]) return { ...column, name: rename[1] };
     return column;
   });
+  if (table === 'pages' && knownTransforms.studentDocumentForm && !columns.some(({ name }) => name === 'student_document_form_url')) {
+    columns.push({ name: 'student_document_form_url', type: 'varchar(255)', notnull: 0, defaultValue: null, pk: 0 });
+  }
+  return columns;
 }
 function normalizeAddedTableDefinition(definition, table, column) {
   if (definition.type !== 'table') return definition;
@@ -269,7 +277,7 @@ function normalizeAddedTableDefinition(definition, table, column) {
   return { ...definition, sql: normalized };
 }
 function deriveKnownTransforms(sourceDb, plan, receipt) {
-  const transforms = { nativeRename: false, nativeRenameTables: new Set(), classification: null, documentsState: null, nativeSteps: [] };
+  const transforms = { nativeRename: false, nativeRenameTables: new Set(), classification: null, documentsState: null, studentDocumentForm: null, nativeSteps: [] };
   for (const step of plan.steps) {
     if (step.kind === 'strapi-native' && step.id === '2026.09.21T00.00.00.rename-status-columns'
       && step.path === '2026.09.21T00.00.00.rename-status-columns.js'
@@ -325,6 +333,19 @@ function deriveKnownTransforms(sourceDb, plan, receipt) {
       const recorded = tableNames(sourceDb).includes('ikpk_data_migration_history') &&
         sourceDb.prepare('SELECT 1 FROM ikpk_data_migration_history WHERE step_id = ? AND payload_sha256 = ?').get(step.id, step.sha256);
       transforms.sitePhones = { pending: !recorded, updatedRows: contacts.filter(row => Object.keys(CONTACT_PHONES).some(key => row[key] == null)).length };
+    } else if (step.kind === 'data' && step.id === 'student-document-form-v1' && step.handler === 'student-document-form'
+      && step.path === 'data-steps/student-document-form.mjs'
+      && step.sha256 === 'ca79bd56bd2e9b15a82d096f80bbb7d5842f148509be1f7828bea71119cd6182') {
+      const rows = sourceDb.prepare('SELECT * FROM pages').all();
+      const pages = rows.filter(row => row.slug === 'oplata' || row.legacy_id === 'oplata');
+      const ids = new Set(pages.map(row => row.document_id));
+      if (ids.size !== 1 || pages.length !== 2 || pages.filter(row => row.published_at !== null).length !== 1
+          || rows.filter(row => ids.has(row.document_id)).some(row => !row.document_id || row.slug !== 'oplata' || row.legacy_id !== 'oplata')) {
+        throw new Error('invalid source /oplata identity for student document form migration');
+      }
+      const recorded = tableNames(sourceDb).includes('ikpk_data_migration_history') &&
+        sourceDb.prepare('SELECT 1 FROM ikpk_data_migration_history WHERE step_id = ? AND payload_sha256 = ?').get(step.id, step.sha256);
+      transforms.studentDocumentForm = { pending: !recorded, updatedRows: pages.filter(row => row.student_document_form_url == null).length };
     } else if (step.kind === 'data' && step.id === 'book-seller-page-v1' && step.handler === 'book-seller'
       && step.path === 'data-steps/book-seller.mjs') {
       const names = new Set(tableNames(sourceDb));
@@ -333,7 +354,7 @@ function deriveKnownTransforms(sourceDb, plan, receipt) {
         WHERE slug=? OR legacy_id=? OR document_id IN (SELECT document_id FROM pages WHERE slug=? OR legacy_id=?) ORDER BY id`)
         .all(BOOK_PAGE.slug, BOOK_PAGE.slug, BOOK_PAGE.slug, BOOK_PAGE.slug);
       const rawHistory = names.has('ikpk_data_migration_history')
-        ? sourceDb.prepare('SELECT lineage_id,operation_id,payload_sha256 FROM ikpk_data_migration_history WHERE step_id=?').get(step.id)
+        ? sourceDb.prepare('SELECT lineage_id,operation_id,payload_sha256,result_json,completed_at FROM ikpk_data_migration_history WHERE step_id=?').get(step.id)
         : null;
       let recorded = false;
       if (rawHistory) {
@@ -342,8 +363,16 @@ function deriveKnownTransforms(sourceDb, plan, receipt) {
         }
         const lineage = sourceDb.prepare('SELECT lineage_id,source_snapshot_sha256,source_schema_sha256 FROM ikpk_migration_lineage WHERE singleton=1').get();
         const operation = sourceDb.prepare('SELECT lineage_id,source_snapshot_sha256,source_schema_sha256 FROM ikpk_migration_operations WHERE operation_id=?').get(rawHistory.operation_id);
+        let legacyResult;
+        try { legacyResult = JSON.parse(rawHistory.result_json); } catch { legacyResult = null; }
+        const legacyHashAccepted = step.id === 'book-seller-page-v1' && step.phase === 'after-sync' && step.kind === 'data'
+          && step.handler === 'book-seller' && step.path === 'data-steps/book-seller.mjs'
+          && rawHistory.payload_sha256 === LEGACY_BOOK_SELLER_SHA && rawHistory.operation_id !== receipt?.operationId
+          && (json(legacyResult) === json({ createdPages: 0, createdSeoComponents: 0, createdPageLinks: 0 })
+            || json(legacyResult) === json({ createdPages: 2, createdSeoComponents: 2, createdPageLinks: 2 }))
+          && Number.isFinite(Date.parse(rawHistory.completed_at ?? ''));
         recorded = Boolean(lineage && operation && rawHistory.lineage_id === lineage.lineage_id
-          && rawHistory.payload_sha256 === step.sha256 && operation.lineage_id === lineage.lineage_id
+          && (rawHistory.payload_sha256 === step.sha256 || legacyHashAccepted) && operation.lineage_id === lineage.lineage_id
           && HASH.test(lineage.lineage_id ?? '')
           && HASH.test(lineage.source_snapshot_sha256 ?? '') && HASH.test(lineage.source_schema_sha256 ?? '')
           && HASH.test(operation.source_snapshot_sha256 ?? '') && HASH.test(operation.source_schema_sha256 ?? ''));
@@ -354,7 +383,7 @@ function deriveKnownTransforms(sourceDb, plan, receipt) {
         const draft = rows.find(row => row.published_at === null), published = rows.find(row => row.published_at !== null);
         if (rows.length !== 2 || !draft || !published || !draft.document_id || draft.document_id !== published.document_id
           || rows.some(row => row.slug !== BOOK_PAGE.slug || row.legacy_id !== BOOK_PAGE.slug)
-          || (!recorded && (rows.some(row => row.title !== BOOK_PAGE.title) || published.body !== BOOK_PAGE.body))) {
+      || (!recorded && (rows.some(row => row.title !== BOOK_PAGE.title) || published.body !== BOOK_PAGE.body))) {
           throw new Error('existing book Page is ambiguous or does not match the current-site seed');
         }
         for (const row of rows) {
@@ -393,6 +422,11 @@ function expectedTableRows(sourceDb, sourceTable, columns, transforms, candidate
       for (const [key, seed] of Object.entries(CONTACT_PHONES)) {
         row[key] ??= row.slug === 'kontakty' && transforms.sitePhones.pending ? seed : null;
       }
+    }
+  }
+  if (sourceTable === 'pages' && transforms.studentDocumentForm) {
+    for (const row of rows) {
+      row.student_document_form_url ??= row.slug === 'oplata' && transforms.studentDocumentForm.pending ? STUDENT_DOCUMENT_FORM_URL : null;
     }
   }
   if (transforms.bookSeller?.pending && ['pages', 'components_shared_seos', 'pages_cmps'].includes(sourceTable)) {
@@ -898,14 +932,26 @@ function expectedCoreStoreValue(key, sourceValue, programSchema) {
   if (!expected || typeof expected !== 'object' || Array.isArray(expected)) return null;
   if (key === PAGE_CONFIG_KEY) {
     if (!expected.metadatas || !Array.isArray(expected.layouts?.edit)) return null;
-    for (const [name, labels] of Object.entries(PHONE_LABELS)) {
-      if (Object.hasOwn(expected.metadatas, name)) return null;
-      expected.metadatas[name] = {
-        edit: { description: '', placeholder: '', visible: true, editable: true, ...labels },
-        list: { label: name, searchable: true, sortable: true },
-      };
+    if (Object.hasOwn(expected.metadatas, STUDENT_FORM_FIELD)) return null;
+    const existingPhoneMetadata = Object.keys(PHONE_LABELS).filter(name => Object.hasOwn(expected.metadatas, name));
+    if (existingPhoneMetadata.length === 1) return null;
+    if (existingPhoneMetadata.length === 0) {
+      for (const [name, labels] of Object.entries(PHONE_LABELS)) {
+        expected.metadatas[name] = {
+          edit: { description: '', placeholder: '', visible: true, editable: true, ...labels },
+          list: { label: name, searchable: true, sortable: true },
+        };
+      }
+      expected.layouts.edit.push(Object.keys(PHONE_LABELS).map(name => ({ name, size: 6 })));
     }
-    expected.layouts.edit.push(Object.keys(PHONE_LABELS).map(name => ({ name, size: 6 })));
+    expected.metadatas[STUDENT_FORM_FIELD] = {
+      edit: { description: '', placeholder: '', visible: true, editable: true, label: STUDENT_FORM_LABEL },
+      list: { label: STUDENT_FORM_FIELD, searchable: true, sortable: true },
+    };
+    const last = expected.layouts.edit.at(-1);
+    const used = Array.isArray(last) ? last.reduce((sum, cell) => sum + (Number.isFinite(cell?.size) ? cell.size : 0), 0) : 12;
+    if (Array.isArray(last) && used + 6 <= 12) last.push({ name: STUDENT_FORM_FIELD, size: 6 });
+    else expected.layouts.edit.push([{ name: STUDENT_FORM_FIELD, size: 6 }]);
     return expected;
   }
   if (key === ARTICLE_CONFIG_KEY) {
@@ -1064,15 +1110,30 @@ function expectedCoreStoreValue(key, sourceValue, programSchema) {
       contentType.__schema__.attributes[field] = structuredClone(definition);
     }
     const page = expected['api::page.page'];
+    if (page) {
+      if (!page.attributes || !page.__schema__?.attributes) return null;
+      const exists = Object.hasOwn(page.attributes, STUDENT_FORM_FIELD);
+      if (exists !== Object.hasOwn(page.__schema__.attributes, STUDENT_FORM_FIELD)) return null;
+      if (!exists) {
+        const attribute = { type: 'string', conditions: { visible: { '==': [{ var: 'slug' }, 'oplata'] } } };
+        page.attributes[STUDENT_FORM_FIELD] = structuredClone(attribute);
+        page.__schema__.attributes[STUDENT_FORM_FIELD] = structuredClone(attribute);
+        page.config ??= { metadatas: {} };
+        if (!page.config.metadatas || Object.hasOwn(page.config.metadatas, STUDENT_FORM_FIELD)) return null;
+        page.config.metadatas[STUDENT_FORM_FIELD] = { edit: { label: STUDENT_FORM_LABEL } };
+      }
+    }
     if (page && !Object.hasOwn(page.attributes ?? {}, 'center_phone')) {
-      if (!page.attributes || !page.__schema__?.attributes || Object.hasOwn(page, 'config')) return null;
+      if (!page.attributes || !page.__schema__?.attributes
+        || (page.config && (!page.config.metadatas || Object.keys(page.config.metadatas).some(name => name !== STUDENT_FORM_FIELD)))) return null;
       for (const name of Object.keys(PHONE_LABELS)) {
         if (Object.hasOwn(page.attributes, name) || Object.hasOwn(page.__schema__.attributes, name)) return null;
         const attribute = { type: 'string', conditions: { visible: { '==': [{ var: 'slug' }, 'kontakty'] } } };
         page.attributes[name] = attribute;
         page.__schema__.attributes[name] = attribute;
       }
-      page.config = { metadatas: Object.fromEntries(Object.entries(PHONE_LABELS)
+      page.config ??= { metadatas: {} };
+      page.config.metadatas = { ...page.config.metadatas, ...Object.fromEntries(Object.entries(PHONE_LABELS)
         .map(([name, edit]) => [name, { edit }])) };
     }
     const courseGroup = expected['api::course-group.course-group'];
@@ -1211,6 +1272,7 @@ function validateSchemaHistory(sourceDb, candidateDb, candidateSchema, differenc
         'schedule_entries.is_event_collection': { name: 'is_event_collection', type: 'boolean', args: [], defaultTo: null, notNullable: false, unsigned: false },
         ...Object.fromEntries(Object.keys(CONTACT_PHONES).map(name => [`pages.${name}`,
           { name, type: 'string', args: [], defaultTo: null, notNullable: false, unsigned: false }])),
+        'pages.student_document_form_url': { name: 'student_document_form_url', type: 'string', args: [], defaultTo: null, notNullable: false, unsigned: false },
         'course_groups.editor_label': { name: 'editor_label', type: 'string', args: [], defaultTo: null, notNullable: false, unsigned: false },
         'components_shared_seos.og_title': { name: 'og_title', type: 'string', args: [], defaultTo: null, notNullable: false, unsigned: false },
         'components_shared_seos.og_description': { name: 'og_description', type: 'text', args: ['longtext'], defaultTo: null, notNullable: false, unsigned: false },
@@ -1262,13 +1324,16 @@ function allowRunnerRows(sourceDb, candidateDb, plan, receipt, transforms, diffe
   if (ledger.length !== expectedDataSteps.length) differences.push({ table: 'ikpk_data_migration_history', kind: 'ledger-step-set-mismatch' });
   for (const step of expectedDataSteps) {
     const row = ledger.find(({ step_id }) => step_id === step.id);
-    if (!row || row.payload_sha256 !== step.sha256 || !operations.some(({ operation_id }) => operation_id === row.operation_id)) {
+    const legacyBookSeller = row?.step_id === 'book-seller-page-v1' && row.payload_sha256 === LEGACY_BOOK_SELLER_SHA
+      && row.operation_id !== receipt.operationId && sourceLedger.some(old => old.step_id === row.step_id && json(valueKey(old)) === json(valueKey(row)));
+    if (!row || (row.payload_sha256 !== step.sha256 && !legacyBookSeller) || !operations.some(({ operation_id }) => operation_id === row.operation_id)) {
       differences.push({ table: 'ikpk_data_migration_history', kind: 'ledger-step-mismatch', stepId: step.id });
       continue;
     }
     let result;
     try { result = JSON.parse(row.result_json); } catch { result = null; }
     const expectedResult = step.handler === 'site-phones' ? { updatedRows: transforms.sitePhones.updatedRows }
+      : step.handler === 'student-document-form' ? { updatedRows: transforms.studentDocumentForm.updatedRows }
       : step.handler === 'book-seller' ? { createdPages: transforms.bookSeller.pending ? 2 : 0,
         createdSeoComponents: transforms.bookSeller.pending ? 2 : 0, createdPageLinks: transforms.bookSeller.pending ? 2 : 0 }
       : step.handler === 'classification' && transforms.classification
@@ -1276,7 +1341,7 @@ function allowRunnerRows(sourceDb, candidateDb, plan, receipt, transforms, diffe
       : step.handler === 'normalize-documents-state' && transforms.documentsState
         ? { updatedRows: transforms.documentsState.candidateRows.length, logicalDocuments: transforms.documentsState.logicalDocuments }
         : null;
-    const validHistoricalResult = step.handler === 'site-phones' ? Number.isInteger(result?.updatedRows) && result.updatedRows >= 0 && result.updatedRows <= 2
+    const validHistoricalResult = step.handler === 'site-phones' || step.handler === 'student-document-form' ? Number.isInteger(result?.updatedRows) && result.updatedRows >= 0 && result.updatedRows <= 2
       : step.handler === 'classification'
       ? Number.isSafeInteger(result?.updatedRows) && result.updatedRows >= 0 && Number.isSafeInteger(result?.noops) && result.noops >= 0
         && result.updatedRows + result.noops <= 24
@@ -1420,6 +1485,9 @@ export function auditMigration({ sourceDbPath, candidateDbPath, plan, receipt, a
         ? Object.keys(CONTACT_PHONES).filter(name => !before.some(column => column.name === name))
           .map(name => ({ name, type: 'varchar(255)' })) : [];
       for (const column of phoneAdditions) expected.push({ ...column, notnull: 0, defaultValue: null, pk: 0 });
+      const formAddition = table === 'pages' && transforms.studentDocumentForm
+        && !before.some(({ name }) => name === STUDENT_FORM_FIELD)
+        ? { name: STUDENT_FORM_FIELD, type: 'varchar(255)' } : null;
       const addition = CURRENT_CONTENT_ADDITIONS[table];
       const sourceHasAddition = addition && before.some(({ name }) => name === addition.name);
       const candidateHasAddition = addition && after.some(({ name }) => name === addition.name);
@@ -1448,6 +1516,8 @@ export function auditMigration({ sourceDbPath, candidateDbPath, plan, receipt, a
       for (const column of phoneAdditions) {
         afterRelations.definitions = afterRelations.definitions.map(item => normalizeAddedTableDefinition(item, table, column));
       }
+      if (formAddition) afterRelations.definitions = afterRelations.definitions
+        .map(item => normalizeAddedTableDefinition(item, table, formAddition));
       if (acceptedAddition) afterRelations = {
         ...afterRelations,
         definitions: afterRelations.definitions.map((item) => normalizeAddedTableDefinition(item, table, addition)),
@@ -1475,7 +1545,7 @@ export function auditMigration({ sourceDbPath, candidateDbPath, plan, receipt, a
       const before = sourceSchema[table]; const after = candidateSchema[table];
       const expectedNames = new Set(expectedColumns(before, table, transforms).map(({ name }) => name));
       const rename = KNOWN_RENAMES.get(table);
-      const changed = (table === 'pages' && (transforms.sitePhones || transforms.bookSeller))
+      const changed = (table === 'pages' && (transforms.sitePhones || transforms.studentDocumentForm || transforms.bookSeller))
         || (transforms.bookSeller && ['components_shared_seos', 'pages_cmps'].includes(table))
         || (transforms.classification && table === 'teachers')
         || (transforms.documentsState && table === 'seminars')

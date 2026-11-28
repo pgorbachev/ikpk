@@ -116,6 +116,21 @@ export function validateSnapshotContract(snapshot: Snapshot, trust: HistoricalTr
   const institutes = types.institutes ?? [];
   const teachers = types.teachers ?? [];
   const schedule = types.schedule ?? types.schedule_entries ?? [];
+  if (Object.hasOwn(types, 'static_pages')) {
+    const staticPages = types.static_pages ?? [];
+    const paymentPages = staticPages.filter((page) => page.slug === 'oplata');
+    const address = paymentPages[0]?.student_document_form_url;
+    let valid = paymentPages.length === 0;
+    if (paymentPages.length === 1 && typeof address === 'string' && address.trim() === address && address.length <= 2048) {
+      try {
+        const url = new URL(address);
+        valid = url.protocol === 'https:' && url.hostname === 'b24-cbqwqo.bitrix24site.ru'
+          && !url.username && !url.password && !url.port && !url.hash
+          && /^\/crm_form_[a-z0-9]+\/$/.test(url.pathname);
+      } catch { /* invalid URL fails closed below */ }
+    }
+    if (!valid) violations.push({ type: 'static_pages', recordId: 'oplata', field: 'student_document_form_url', rule: 'invalid-value' });
+  }
 
   const rawRegistry = snapshot.content.historicalExceptions;
   const registry = Array.isArray(rawRegistry) ? rawRegistry : [];

@@ -730,7 +730,39 @@ function weeklyCronAt(value) {
   const date = new Date(value);
   return `${date.getUTCSeconds()} ${date.getUTCMinutes()} ${date.getUTCHours()} * * ${date.getUTCDay()}`;
 }
-function coreStoreValues(candidate, { ogComponent = false } = {}) {
+function coreStoreValues(candidate, { ogComponent = false, includePageConfig = false } = {}) {
+  const page = {
+    layouts: { edit: [[{ name: 'title', size: 6 }], [
+      { name: 'center_phone', size: 6 }, { name: 'manager_phone', size: 6 },
+    ]] },
+    metadatas: {
+      center_phone: {
+        edit: { description: 'Телефоны для сайта задаются в этих двух полях. Текст Body на странице /kontakty не выводится.',
+          placeholder: '', visible: true, editable: true, label: 'Телефон центра' },
+        list: { label: 'center_phone', searchable: true, sortable: true },
+      },
+      manager_phone: {
+        edit: { description: '', placeholder: '', visible: true, editable: true, label: 'Мобильный телефон менеджера' },
+        list: { label: 'manager_phone', searchable: true, sortable: true },
+      },
+    },
+    settings: {},
+  };
+  const pageAttributes = {
+    title: { type: 'string' }, slug: { type: 'uid' },
+    center_phone: { type: 'string', conditions: { visible: { '==': [{ var: 'slug' }, 'kontakty'] } } },
+    manager_phone: { type: 'string', conditions: { visible: { '==': [{ var: 'slug' }, 'kontakty'] } } },
+  };
+  if (candidate) {
+    page.layouts.edit.push([{ name: 'student_document_form_url', size: 6 }]);
+    page.metadatas.student_document_form_url = {
+      edit: { description: '', placeholder: '', visible: true, editable: true, label: 'Ссылка на форму заполнения документов' },
+      list: { label: 'student_document_form_url', searchable: true, sortable: true },
+    };
+    pageAttributes.student_document_form_url = {
+      type: 'string', conditions: { visible: { '==': [{ var: 'slug' }, 'oplata'] } },
+    };
+  }
   const promotion = {
     layouts: { edit: ['name', 'description', 'date', 'image', 'link'].map((name) => [{ name, size: 6 }]) },
     metadatas: { name: { edit: { label: 'name' }, list: { label: 'name' } } }, settings: { defaultSortBy: 'name' },
@@ -767,6 +799,7 @@ function coreStoreValues(candidate, { ogComponent = false } = {}) {
     },
   };
   const schema = {
+    'api::page.page': { attributes: structuredClone(pageAttributes), __schema__: { attributes: structuredClone(pageAttributes) }, config: { metadatas: Object.fromEntries(Object.entries(page.metadatas).map(([name, value]) => [name, { edit: { label: value.edit.label } }])) } },
     'api::promotion.promotion': { attributes: { name: { type: 'string' } }, __schema__: { attributes: { name: { type: 'string' } } } },
     'api::schedule-entry.schedule-entry': { attributes: { startAt: { type: 'datetime' } }, __schema__: { attributes: { startAt: { type: 'datetime' } } } },
   };
@@ -792,7 +825,9 @@ function coreStoreValues(candidate, { ogComponent = false } = {}) {
     for (const uid of Object.keys(schema)) {
       const fields = uid === 'api::promotion.promotion'
         ? [['type', { type: 'enumeration', enum: ['SHOP', 'INSTITUTE'] }]]
-        : [['image', { type: 'media', multiple: false, allowedTypes: ['images'] }], ['isEventCollection', { type: 'boolean', default: false }]];
+        : uid === 'api::schedule-entry.schedule-entry'
+          ? [['image', { type: 'media', multiple: false, allowedTypes: ['images'] }], ['isEventCollection', { type: 'boolean', default: false }]]
+          : [];
       for (const [name, definition] of fields) {
         schema[uid].attributes[name] = structuredClone(definition);
         schema[uid].__schema__.attributes[name] = structuredClone(definition);
@@ -800,6 +835,7 @@ function coreStoreValues(candidate, { ogComponent = false } = {}) {
     }
   }
   return new Map([
+    ...(includePageConfig ? [['plugin_content_manager_configuration_content_types::api::page.page', JSON.stringify(page)]] : []),
     [PROMOTION_CONFIG_KEY, JSON.stringify(promotion)],
     [SCHEDULE_CONFIG_KEY, JSON.stringify(schedule)],
     [SEMINAR_CONFIG_KEY, JSON.stringify(seminar)],
@@ -809,8 +845,8 @@ function coreStoreValues(candidate, { ogComponent = false } = {}) {
     ['unrelated-key', JSON.stringify({ preserved: true })],
   ]);
 }
-function createCoreStoreShape(path, { candidate = false, ogComponent = false, mutate = null } = {}) {
-  const values = coreStoreValues(candidate, { ogComponent });
+function createCoreStoreShape(path, { candidate = false, ogComponent = false, mutate = null, includePageConfig = false } = {}) {
+  const values = coreStoreValues(candidate, { ogComponent, includePageConfig });
   if (mutate) mutate(values);
   const db = new Database(path);
   db.exec('CREATE TABLE strapi_core_store_settings (id INTEGER PRIMARY KEY, key TEXT NOT NULL, value TEXT, type TEXT, environment TEXT, tag TEXT)');
@@ -889,16 +925,31 @@ function auditCourseGroupSchemaTransition(name, { sourceSchema, candidateSchema,
   return auditMigration({ sourceDbPath, candidateDbPath, plan, receipt, allowPlanProgramSchema: includeIntegrity });
 }
 
-test('core-store accepts only reviewed content-type updates and a stale upload metrics schedule refresh', () => {
+test('core-store admits the new form field when the source already has phone metadata and accepts only reviewed updates', () => {
   const sourceDbPath = join(directory, 'core-store-source.db');
   const candidateDbPath = join(directory, 'core-store-candidate.db');
-  createCoreStoreShape(sourceDbPath);
-  createCoreStoreShape(candidateDbPath, { candidate: true });
+  createCoreStoreShape(sourceDbPath, { includePageConfig: true });
+  createCoreStoreShape(candidateDbPath, { candidate: true, includePageConfig: true });
   const plan = emptyBoundPlan();
   const report = auditMigration({ sourceDbPath, candidateDbPath, plan, receipt: boundReceipt(sourceDbPath, candidateDbPath, plan) });
 
   assert.equal(report.differences.some(({ table, kind }) => table === 'strapi_core_store_settings' && kind.startsWith('core-store-')), false,
-    'only exact metadata, layout, compiled content schema additions, and stale upload schedule refresh are allowed');
+    `only exact metadata, layout, compiled content schema additions, and stale upload schedule refresh are allowed: ${JSON.stringify(report.differences)}`);
+
+  const damagedCandidateDbPath = join(directory, 'core-store-missing-prior-phone-candidate.db');
+  createCoreStoreShape(damagedCandidateDbPath, { candidate: true, includePageConfig: true, mutate(values) {
+    const key = 'plugin_content_manager_configuration_content_types::api::page.page';
+    const page = JSON.parse(values.get(key));
+    delete page.metadatas.manager_phone;
+    page.layouts.edit = page.layouts.edit.filter(row => !row.some(field => field.name === 'manager_phone'));
+    values.set(key, JSON.stringify(page));
+  } });
+  const rejected = auditMigration({
+    sourceDbPath, candidateDbPath: damagedCandidateDbPath, plan,
+    receipt: boundReceipt(sourceDbPath, damagedCandidateDbPath, plan),
+  });
+  assert.ok(rejected.differences.some(({ table, kind }) => table === 'strapi_core_store_settings' && kind === 'core-store-structure-mismatch'),
+    'accepting prior phone metadata must not permit dropping or rewriting it');
 });
 
 test('core-store accepts only the exact shared SEO Open Graph component additions', () => {

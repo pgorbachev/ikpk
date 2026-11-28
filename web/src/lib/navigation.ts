@@ -1,5 +1,6 @@
 import { getPages } from './data';
 import { siteContactPhones } from './site-contact-phones';
+import { registrationHref } from './forms';
 
 // Информационная архитектура навигации — единый источник для TopNavLayout
 // и мобильного меню. Все ссылки — реальные роуты (или внешние с external:true),
@@ -17,6 +18,8 @@ export interface NavItem extends NavLink {
   children?: NavLink[];
 }
 
+const studentDocumentFormHref = registrationHref(getPages().find(page => page.slug === 'oplata')?.student_document_form_url);
+
 export const primaryNav: NavItem[] = [
   {
     label: 'Обучение',
@@ -27,6 +30,7 @@ export const primaryNav: NavItem[] = [
       { label: 'Институт Барраля', href: '/institut-barralya' },
       { label: 'Расписание и цены', href: '/raspisanie-i-tseny' },
       { label: 'Оплата', href: '/oplata' },
+      { label: 'Заполнение документов', href: studentDocumentFormHref || '/oplata', external: /^https?:\/\//.test(studentDocumentFormHref), rel: 'noopener noreferrer' },
     ],
   },
   { label: 'Расписание', href: '/raspisanie-i-tseny' },

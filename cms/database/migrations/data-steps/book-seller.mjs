@@ -10,7 +10,7 @@ const CREATED_AT = 1795766400000;
 const PUBLISHED_AT = CREATED_AT + 1;
 
 const EXPECTED_COLUMNS = {
-  pages: ['id', 'document_id', 'title', 'slug', 'body', 'legacy_id', 'center_phone', 'manager_phone', 'created_at', 'updated_at', 'published_at', 'created_by_id', 'updated_by_id', 'locale'],
+  pages: ['id', 'document_id', 'title', 'slug', 'body', 'legacy_id', 'center_phone', 'manager_phone', 'student_document_form_url', 'created_at', 'updated_at', 'published_at', 'created_by_id', 'updated_by_id', 'locale'],
   components_shared_seos: ['id', 'seo_title', 'seo_description', 'noindex'],
   pages_cmps: ['id', 'entity_id', 'cmp_id', 'component_type', 'field', 'order'],
 };

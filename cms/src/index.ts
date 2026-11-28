@@ -12,6 +12,7 @@ import { backfillProgramEditorLabels, registerProgramEditor } from './lib/progra
 import { applyEditorForms } from './seminar-management/forms';
 import { registerSitePhones } from './api/page/site-phones';
 import { registerSiteBooks } from './api/page/site-books';
+import { registerSiteStudentDocumentForm } from './api/page/site-student-document-form';
 import { registerSiteRefresh } from './seminar-management/site-refresh';
 
 export default {
@@ -28,6 +29,7 @@ export default {
     registerSiteRefresh(strapi);
     registerSitePhones(strapi);
     registerSiteBooks(strapi);
+    registerSiteStudentDocumentForm(strapi);
   },
 
   /**

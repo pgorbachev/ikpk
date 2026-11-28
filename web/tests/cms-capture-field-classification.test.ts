@@ -129,6 +129,16 @@ describe('ключ-источник в ответе и заполненные п
     expect(missingSourceFields('seminars', record, true)).toEqual([]);
   });
 
+  it('modern capture still requires optional OG keys, while the sealed legacy path permits them and page URL stays row-optional', () => {
+    const withoutOg = full({ seo: { id: 1, seo_title: 'Title', seo_description: 'Description', og_image: null } });
+    expect(missingSourceFields('seminars', withoutOg, true)).toEqual([
+      'seminars.og_title ← seo.og_title', 'seminars.og_description ← seo.og_description',
+    ]);
+    expect(missingSourceFields('seminars', withoutOg, false)).toEqual([]);
+    expect(missingSourceFields('static_pages', { slug: 'kontakty', title: 'Контакты' }, true))
+      .not.toContain('static_pages.student_document_form_url ← student_document_form_url');
+  });
+
   it('checkout schema rejects absent OG text attributes unless the sealed legacy exception is explicit', () => {
     const map = FIELD_MAP.filter((entry) => entry.type === 'seminars');
     const schemas = { seminars: { attributes: { seo: { type: 'component', component: 'shared.seo' } } } };

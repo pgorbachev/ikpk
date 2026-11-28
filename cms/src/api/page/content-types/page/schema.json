@@ -60,6 +60,10 @@
           ]
         }
       }
+    },
+    "student_document_form_url": {
+      "type": "string",
+      "conditions": { "visible": { "==": [{ "var": "slug" }, "oplata"] } }
     }
   },
   "config": {
@@ -73,6 +77,11 @@
       "manager_phone": {
         "edit": {
           "label": "Мобильный телефон менеджера"
+        }
+      },
+      "student_document_form_url": {
+        "edit": {
+          "label": "Ссылка на форму заполнения документов"
         }
       }
     }
