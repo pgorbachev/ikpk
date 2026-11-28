@@ -11,6 +11,7 @@ import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSy
 import { tmpdir } from 'node:os';
 import { createHash } from 'node:crypto';
 import { contentFingerprint, type SnapshotContent } from '../scripts/lib/content-snapshot';
+import { unknownRecordFields, FIELD_MAP } from '../scripts/lib/content-field-map';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -1518,4 +1519,92 @@ describe('site phones through live capture and offline Astro build', () => {
       expect(existsSync(join(dir, 'snapshot.json'))).toBe(false);
     } finally { rmSync(dir, { recursive: true, force: true }); }
   });
+});
+
+describe('published Open Graph metadata through capture and build', () => {
+  it('renders unique OG properties on article, program and seminar URLs', async () => {
+    const source = dataset();
+    const customImage = { ...media(ARTICLE_COUNT + 1), width: 1440, height: 1080, alternativeText: 'Описание обложки из медиатеки' };
+    const collections = ['articles', 'course-groups', 'seminars'] as const;
+    for (const collection of collections) {
+      source[collection]!.records = source[collection]!.records.map((record, index) => ({
+        ...record,
+        seo: {
+          ...(record.seo as object),
+          og_title: index === 0 ? 'Заголовок карточки' : '  ',
+          og_description: index === 0 ? '  ' : 'Описание карточки',
+          og_image: index === 0 ? customImage : null,
+        },
+      }));
+    }
+    const uploads = Object.fromEntries(Array.from({ length: ARTICLE_COUNT + 1 }, (_, i) => [
+      `/uploads/img-${i + 1}.webp`,
+      { bytes: i === ARTICLE_COUNT ? readFileSync(join(WEB_ROOT, 'public/books/ozon.webp')) : Buffer.from(`image-${i + 1}`) },
+    ]));
+    const cms = await startCmsStub(source, uploads);
+    stubs.push(cms);
+    const dir = outDir();
+    const dist = join(dir, 'dist');
+    try {
+      const capture = await runCapture({ CMS_URL: cms.url, CONTENT_SNAPSHOT_DIR: dir });
+      expect(capture.status, `capture failed:\n${capture.output}`).toBe(0);
+      execFileSync(join(WEB_ROOT, 'node_modules', '.bin', 'astro'), ['build', '--outDir', dist], {
+        cwd: WEB_ROOT,
+        env: { ...process.env, CONTENT_SNAPSHOT_DIR: dir },
+        timeout: 120_000,
+        stdio: 'pipe',
+      });
+      const paths = [
+        ['statyi/art-001', 'article', true], ['statyi/art-002', 'article', false],
+        ['programmy/cg-001', 'website', true], ['programmy/cg-002', 'website', false],
+        ['inst-001/cg-001', 'website', true], ['inst-001/cg-002', 'website', false],
+        ['seminary/sem-001', 'website', true], ['seminary/sem-002', 'website', false],
+        ['inst-001/cg-001/sem-001', 'website', true], ['inst-001/cg-001/sem-002', 'website', false],
+      ] as const;
+      for (const [path, type, custom] of paths) {
+        const html = readFileSync(join(dist, path, 'index.html'), 'utf8');
+        const tags = Array.from(html.matchAll(/<meta\s+[^>]*property="(og:[^"]+)"[^>]*>/g));
+        const properties = ['title', 'description', 'image', 'url', 'type', 'site_name', 'locale', 'image:width', 'image:height', 'image:alt'];
+        const value = (property: string) => {
+          const matches = tags.filter((tag) => tag[1] === `og:${property}`);
+          expect(matches, `${path} og:${property}`).toHaveLength(1);
+          return matches[0]![0].match(/content="([^"]*)"/)?.[1];
+        };
+        for (const property of properties) value(property);
+        const canonical = html.match(/<link\s+rel="canonical"\s+href="([^"]+)"/)?.[1];
+        expect(value('url'), path).toBe(canonical);
+        expect(value('type'), path).toBe(type);
+        expect(value('site_name'), path).toBe('ИКПК');
+        expect(value('locale'), path).toBe('ru_RU');
+        const title = html.match(/<title>([^<]*)<\/title>/)?.[1];
+        const description = html.match(/<meta\s+name="description"\s+content="([^"]*)"/)?.[1];
+        expect(value('title'), path).toBe(custom ? 'Заголовок карточки' : title);
+        expect(value('description'), path).toBe(custom ? description : 'Описание карточки');
+        if (custom) {
+          expect(value('image'), path).toMatch(/^https:\/\/[^/]+\/.*img-131\.webp$/);
+          expect(value('image:width'), path).toBe('1440');
+          expect(value('image:height'), path).toBe('1080');
+          expect(value('image:alt'), path).toBe('Описание обложки из медиатеки');
+        } else {
+          expect(value('image'), path).toMatch(/^https:\/\/[^/]+\/og-image\.png$/);
+          expect(value('image:width'), path).toBe('1200');
+          expect(value('image:height'), path).toBe('630');
+          expect(value('image:alt'), path).toBeTruthy();
+        }
+      }
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }, 180_000);
+});
+
+
+it('classifies published OG text fields for each supported CMS type', () => {
+  for (const type of ['articles', 'course_groups', 'seminars']) {
+    const seo = { og_title: 'Заголовок карточки', og_description: 'Описание карточки' };
+    expect(unknownRecordFields(type, { seo }), type).toEqual([]);
+    for (const field of ['og_title', 'og_description']) {
+      expect(FIELD_MAP.some((entry) => entry.type === type && entry.source === `seo.${field}`), `${type}.${field}`).toBe(true);
+    }
+  }
 });
