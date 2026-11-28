@@ -142,6 +142,7 @@ export const FIELD_MAP: readonly FieldMapEntry[] = [
   { type: 'articles', field: 'seo_title', source: 'seo.seo_title' },
   { type: 'articles', field: 'seo_description', source: 'seo.seo_description' },
   { type: 'articles', field: 'image', source: 'image', transform: 'mediaUrl' },
+  { type: 'articles', field: 'og_image', source: 'seo.og_image', transform: 'mediaUrl' },
   { type: 'articles', field: 'published_at', source: 'published_date' },
 
   // schedule_entries — уже CMS-нативный тип, без legacy-иерархии: поля называются как в схеме.

@@ -6,6 +6,7 @@ import AsideCard from '../../components/ui/AsideCard.astro';
 import MetaLabel from '../../components/ui/MetaLabel.astro';
 import PageHeader from '../../components/ui/PageHeader.astro';
 import { getArticles, formatDate, cleanBodyHtml } from '../../lib/data';
+import { DEFAULT_OG_IMAGE } from '../../lib/media.js';
 import { prepareArticleImages } from '../../lib/article-images';
 import { renderArticleBody } from '../../lib/article-body-render';
 import RichContent from '../../components/RichContent.astro';
@@ -22,6 +23,8 @@ export const getStaticPaths: GetStaticPaths = () => {
 
 const { article } = Astro.props as { article: Article };
 const articleImages = prepareArticleImages(article.body_html, article.image);
+const previewImage = article.og_image || article.image;
+const ogImage = previewImage ? new URL(previewImage, Astro.site).href : undefined;
 
 // До 4 «других статей». Подбор ДЕТЕРМИНИРОВАННЫЙ: раньше здесь был
 // sort(() => Math.random() - 0.5), но это frontmatter статической сборки —
@@ -63,7 +66,7 @@ const articleSchema = {
   url: `https://ikpk.su/statyi/${article.slug}`,
   ...(article.published_at ? { datePublished: article.published_at } : {}),
   // JSON-LD требует абсолютный URL картинки (image локализован в /media/**)
-  ...(article.image ? { image: new URL(article.image, Astro.site).href } : {}),
+  image: new URL(article.image || previewImage || DEFAULT_OG_IMAGE, Astro.site).href,
   author: {
     '@type': 'Organization',
     name: 'ИКПК',
@@ -80,6 +83,7 @@ const articleSchema = {
 <BaseLayout
   title={article.seo_title || article.title}
   description={article.seo_description || article.body_text.slice(0, 200)}
+  ogImage={ogImage}
   schema={articleSchema}
 >
   <div class="container">

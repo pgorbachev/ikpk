@@ -14,6 +14,14 @@ function SiteRefreshIcon(props: SiteRefreshIconProps) {
   );
 }
 
+type EditViewLayout = {
+  layout: {
+    components: Record<string, {
+      layout: { name: string; label?: string; hint?: string }[][];
+    }>;
+  };
+};
+
 type CollectionLinks = { ctLinks: { uid: string; title: string }[] };
 
 const pageTranslations = {
@@ -113,6 +121,20 @@ export default {
       ctLinks: input.ctLinks.map(link =>
         link.uid === 'api::page.page' ? { ...link, title: pageTranslations.Page } : link),
     }));
+    app.registerHook('Admin/CM/pages/EditView/mutate-edit-view-layout', (input: EditViewLayout) => {
+      const seo = input.layout.components['shared.seo'];
+      if (!seo) return input;
+      const layout = seo.layout
+        .map(row => row.filter(field => field.name !== 'noindex').map(field => field.name === 'og_image'
+          ? {
+              ...field,
+              label: 'Обложка ссылки',
+              hint: 'Картинка в превью ссылки на статью. Если оставить поле пустым, сайт возьмёт основное изображение статьи. Если и его нет, появится общая обложка ИКПК.',
+            }
+          : field))
+        .filter(row => row.length > 0);
+      return { ...input, layout: { ...input.layout, components: { ...input.layout.components, 'shared.seo': { ...seo, layout } } } };
+    });
     app.addMenuLink({
       to: '/site-refresh',
       icon: SiteRefreshIcon,

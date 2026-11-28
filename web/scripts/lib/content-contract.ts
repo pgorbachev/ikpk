@@ -20,7 +20,6 @@ export const REQUIRED_SNAPSHOT_FIELDS: readonly RequiredFieldGroup[] = [
   { type: 'articles', anyOf: ['body', 'body_html'] },
   { type: 'articles', anyOf: ['page_title', 'seo_title'] },
   { type: 'articles', anyOf: ['page_description', 'seo_description'] },
-  { type: 'articles', anyOf: ['image'] },
 ] as const;
 
 export interface ContractViolation {
@@ -174,7 +173,6 @@ export function validateSnapshotContract(snapshot: Snapshot, trust: HistoricalTr
     requireGroup('articles', article, ['body', 'body_html'], violations);
     requireGroup('articles', article, ['page_title', 'seo_title'], violations);
     requireGroup('articles', article, ['page_description', 'seo_description'], violations);
-    requireGroup('articles', article, ['image'], violations);
     const slug = typeof article.slug === 'string' ? article.slug : '';
     if (slug && !URL_SAFE_SLUG.test(slug)) {
       violations.push({ type: 'articles', recordId: slug, rule: 'slug-not-url-safe' });

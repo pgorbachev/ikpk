@@ -295,6 +295,7 @@ export interface Article {
   body_text: string;
   published_at: string | null;
   image: string | null;
+  og_image?: string | null;
 }
 
 export interface ScheduleEntry {

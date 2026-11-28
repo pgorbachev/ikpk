@@ -187,7 +187,7 @@ async function stub(over: Record<string, StubCollection> = {}): Promise<CmsStub>
   // fixture independent from the media-delivery fixture while still supplying
   // bytes for all image records (articles use ids through ARTICLE_COUNT).
   const uploads = Object.fromEntries(
-    Array.from({ length: ARTICLE_COUNT }, (_, i) => [
+    Array.from({ length: ARTICLE_COUNT + 1 }, (_, i) => [
       `/uploads/img-${i + 1}.webp`,
       { bytes: Buffer.from(`live-capture-image-${i + 1}`) },
     ]),
@@ -522,10 +522,10 @@ describe('Article SEO fallbacks through live snapshot capture', () => {
     const records = dataset().articles.records.map((record, index) => {
       if (index === 5) return { ...record, body: `<p>${'a'.repeat(199)}😀z</p>`, seo: null };
       if (index === 0) return { ...record, body: sourceBody, seo: null };
-      if (index === 1) return { ...record, body: '<p>Только описание</p>', seo: { seo_title: 'Авторский заголовок', seo_description: '' } };
-      if (index === 2) return { ...record, body: '<p>Только заголовок</p>', seo: { seo_title: '   ', seo_description: 'Авторское описание' } };
-      if (index === 3) return { ...record, body: '<p>Пробелы</p>', seo: { seo_title: '  ', seo_description: '\t ' } };
-      if (index === 4) return { ...record, seo: { seo_title: 'Сохранённый заголовок', seo_description: 'Д'.repeat(250) } };
+      if (index === 1) return { ...record, body: '<p>Только описание</p>', seo: { og_image: null, seo_title: 'Авторский заголовок', seo_description: '' } };
+      if (index === 2) return { ...record, body: '<p>Только заголовок</p>', seo: { og_image: null, seo_title: '   ', seo_description: 'Авторское описание' } };
+      if (index === 3) return { ...record, body: '<p>Пробелы</p>', seo: { og_image: null, seo_title: '  ', seo_description: '\t ' } };
+      if (index === 4) return { ...record, seo: { og_image: null, seo_title: 'Сохранённый заголовок', seo_description: 'Д'.repeat(250) } };
       return record;
     });
     const cms = await stub({ articles: { records } });
@@ -598,7 +598,7 @@ describe('Article SEO fallbacks through live snapshot capture', () => {
 
   it('refuses a snapshot when sanitization leaves no body text and no explicit SEO description', async () => {
     const records = dataset().articles.records.map((record, index) => index === 0
-      ? { ...record, body: '<script>discard()</script><style>.discard{display:none}</style>', seo: { seo_title: 'Explicit title', seo_description: '' } }
+      ? { ...record, body: '<script>discard()</script><style>.discard{display:none}</style>', seo: { og_image: null, seo_title: 'Explicit title', seo_description: '' } }
       : record);
     const cms = await stub({ articles: { records } });
     const dir = outDir();
@@ -1266,6 +1266,23 @@ describe('съём понимает формы данных установлен
     expect(seminar?.documents).toEqual([{ document: 'Удостоверение', issuer_unknown: true, prior_education: 'medical', registry: [{ name: 'ФИС ФРДО', subject: 'document', url: 'https://example.org/#registry' }] }]);
     expect(seminar?.training_registries).toEqual([{ name: 'IAHE', subject: 'training', url: 'https://example.org/#training' }]);
     expect(seminar?.nmo).toEqual({ status: 'possible', url: 'https://example.org/#nmo' });
+  });
+
+  it('снимает отдельную обложку статьи и сохраняет файл обложки в снимке', async () => {
+    const records = d.articles!.records.map((record, index) => ({
+      ...record,
+      image: index === ARTICLE_COUNT - 1 ? null : record.image,
+      seo: { ...(record.seo as object), og_image: index === 0 ? media(ARTICLE_COUNT + 1) : null },
+    }));
+    const cms = await stub({ articles: { records } });
+    const dir = outDir();
+    const run = await runCapture({ CMS_URL: cms.url, CONTENT_SNAPSHOT_DIR: dir });
+    expect(run.status, run.output).toBe(0);
+    const snapshot = readSnapshot(dir);
+    expect(typesOf(snapshot).articles?.[0]?.og_image).toBe(`/uploads/img-${ARTICLE_COUNT + 1}.webp`);
+    expect((snapshot.content as SnapshotContent).media).toContainEqual(expect.objectContaining({
+      ref: `/media/uploads/img-${ARTICLE_COUNT + 1}.webp`,
+    }));
   });
 
   it('заполненный seo.noindex назван в выводе', async () => {

@@ -48,6 +48,7 @@ const seo = (name: string): Record<string, unknown> => ({
   id: 1,
   seo_title: `${name}: title`,
   seo_description: `${name}: description`,
+  og_image: null,
 });
 
 /**

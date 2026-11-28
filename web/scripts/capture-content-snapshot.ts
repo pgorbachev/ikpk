@@ -397,7 +397,9 @@ async function fetchAllPages(endpoint: string): Promise<Record<string, unknown>[
     assertWithinBudget(`${endpoint}, страница ${page}`);
     const populate = endpoint === 'seminars'
       ? 'populate[seo]=true&populate[image]=true&populate[course_group]=true&populate[teachers]=true&populate[documents][populate][registry]=true&populate[training_registries]=true&populate[nmo]=true'
-      : 'populate=*';
+      : endpoint === 'articles'
+        ? 'populate[seo][populate][og_image]=true&populate[image]=true&populate[categories]=true'
+        : 'populate=*';
     const url = `${cmsUrl}/api/${endpoint}?status=published&pagination[page]=${page}&pagination[pageSize]=100&${populate}`;
     const res = await fetch(url, {
       headers: cmsToken ? { Authorization: `Bearer ${cmsToken}` } : {},
@@ -585,7 +587,9 @@ async function liveCapture(): Promise<void> {
       const seo = (record.seo ?? {}) as Record<string, unknown>;
       const filled = [
         ...Object.keys(UNMAPPED_SCHEMA_FIELDS[st.type] ?? {}).filter((f) => hasValue(record[f])).map((f) => `${st.type}.${f}`),
-        ...Object.keys(UNMAPPED_SEO_FIELDS).filter((f) => hasValue(seo[f])).map((f) => `${st.type}.seo.${f}`),
+        ...Object.keys(UNMAPPED_SEO_FIELDS).filter((f) =>
+          hasValue(seo[f]) && !(st.type === 'articles' && f === 'og_image'),
+        ).map((f) => `${st.type}.seo.${f}`),
       ];
       for (const name of filled) filledUnmapped.set(name, (filledUnmapped.get(name) ?? 0) + 1);
     }

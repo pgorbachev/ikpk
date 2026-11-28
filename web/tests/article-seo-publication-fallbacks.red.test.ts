@@ -82,12 +82,12 @@ describe('built Article metadata uses normalized snapshot values', () => {
     fallbackArticle.image = '/uploads/article-primary.webp';
     delete fallbackArticle.seo_title;
     delete fallbackArticle.seo_description;
-    fallbackArticle.seo = { og_image: null, noindex: false };
     explicitArticle.seo_title = 'Сохранённый SEO title';
     explicitArticle.seo_description = 'Сохранённое редакторское описание';
-    explicitArticle.seo = { og_image: '/uploads/editorial-og.webp', noindex: false };
+    explicitArticle.image = '/uploads/article-primary.webp';
+    explicitArticle.og_image = '/uploads/editorial-og.webp';
     const defaultArticle = data.content.types.articles[2]!;
-    defaultArticle.seo = { og_image: null, noindex: false };
+    delete defaultArticle.image;
     writeFileSync(snapshotPath, JSON.stringify(data));
     try {
       execFileSync(join(WEB_ROOT, 'node_modules', '.bin', 'astro'), ['build', '--outDir', dist], {
@@ -118,7 +118,7 @@ describe('built Article metadata uses normalized snapshot values', () => {
       expect(schema(fallbackHtml)).toMatchObject({ headline: fallbackArticle.title, description: fallbackDescription });
       expect(schema(fallbackHtml).url).toBe(`https://ikpk.su/statyi/${fallbackArticle.slug}`);
       expect(metadata(fallbackHtml, 'robots')).toBe('');
-      expect(metadata(fallbackHtml, 'og:image')).toBe('https://ikpk.su/uploads/article-primary.webp');
+      expect(metadata(fallbackHtml, 'og:image')).toBe('https://ikpk.su/media/uploads/article-primary.webp');
       expect(explicitHtml).toContain('<title>Сохранённый SEO title</title>');
       expect(metadata(explicitHtml, 'description')).toBe('Сохранённое редакторское описание');
       expect(metadata(explicitHtml, 'og:title')).toBe('Сохранённый SEO title');
@@ -126,8 +126,10 @@ describe('built Article metadata uses normalized snapshot values', () => {
       expect(schema(explicitHtml)).toMatchObject({ headline: 'Сохранённый SEO title', description: 'Сохранённое редакторское описание' });
       expect(schema(explicitHtml).url).toBe(`https://ikpk.su/statyi/${explicitArticle.slug}`);
       expect(metadata(explicitHtml, 'robots')).toBe('');
-      expect(metadata(explicitHtml, 'og:image')).toBe('https://ikpk.su/uploads/editorial-og.webp');
+      expect(metadata(explicitHtml, 'og:image')).toBe('https://ikpk.su/media/uploads/editorial-og.webp');
       expect(metadata(defaultHtml, 'og:image')).toBe('https://ikpk.su/og-image.png');
+      expect(schema(defaultHtml).image).toBe('https://ikpk.su/og-image.png');
+      expect(schema(explicitHtml).image).toBe('https://ikpk.su/media/uploads/article-primary.webp');
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

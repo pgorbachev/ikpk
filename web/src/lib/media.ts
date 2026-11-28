@@ -10,6 +10,7 @@ import manifest from './media-manifest.json' with { type: 'json' };
 // Продублирован в scripts/download-media.ts (разные npm-пакеты) —
 // при изменении бакета править ОБА места.
 export const BUCKET_PREFIX = 'https://storage.yandexcloud.net/ikpk-image';
+export const DEFAULT_OG_IMAGE = '/og-image.png';
 const SITE_UPLOADS_PREFIX = '/media/uploads/';
 
 interface ManifestEntry {
