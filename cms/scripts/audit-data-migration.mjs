@@ -660,7 +660,7 @@ function scopedEditorCardGrants(sourceValues, seoTransition) {
     'strapi-editor\0plugin::content-manager.explorer.read\0api::course-group.course-group',
     'strapi-editor\0plugin::content-manager.explorer.update\0api::course-group.course-group',
   ]) {
-    const current = sourceValues.find((row) => permissionIdentity(row) === identity);
+    const current = sourceValues.find((row) => readEditorCardGrant(row) === identity);
     const existingOg = current?.fields?.filter((field) => field === 'seo.og_title' || field === 'seo.og_description') ?? [];
     const additions = seoTransition ? ['seo.og_title', 'seo.og_description'] : existingOg;
     if (additions.length > 0) {
