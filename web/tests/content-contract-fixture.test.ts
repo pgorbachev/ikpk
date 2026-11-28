@@ -30,7 +30,9 @@ describe('закреплённая фикстура и её собственны
 
   it('отказывает в публикации при отсутствующем или подменённом URL формы документов', () => {
     for (const value of [undefined, '', 'https://b24-cbqwqo.bitrix24site.ru.evil.test/crm_form_k5ush/',
-      'http://b24-cbqwqo.bitrix24site.ru/crm_form_k5ush/', 'https://b24-cbqwqo.bitrix24site.ru/wrong/']) {
+      'http://b24-cbqwqo.bitrix24site.ru/crm_form_k5ush/', 'https://b24-cbqwqo.bitrix24site.ru/wrong/',
+      ` ${snapshot.content.types.static_pages?.find(record => record.slug === 'oplata')?.student_document_form_url}`,
+      `https://b24-cbqwqo.bitrix24site.ru/crm_form_k5ush/?q=${'x'.repeat(2048)}`]) {
       const broken = structuredClone(snapshot) as Snapshot;
       const page = broken.content.types.static_pages?.find(record => record.slug === 'oplata');
       if (value === undefined) delete page?.student_document_form_url;
@@ -54,6 +56,10 @@ describe('закреплённая фикстура и её собственны
     expect(() => assertStudentDocumentFormSnapshot([])).toThrow(/снимок не записан/);
     expect(() => assertStudentDocumentFormSnapshot([page!, page!])).toThrow(/единственную действительную/);
     expect(() => assertStudentDocumentFormSnapshot([{ ...page!, student_document_form_url: 'https://evil.test/' }]))
+      .toThrow(/снимок не записан/);
+    expect(() => assertStudentDocumentFormSnapshot([{ ...page!, student_document_form_url: ` ${page!.student_document_form_url}` }]))
+      .toThrow(/снимок не записан/);
+    expect(() => assertStudentDocumentFormSnapshot([{ ...page!, student_document_form_url: `https://b24-cbqwqo.bitrix24site.ru/crm_form_k5ush/?q=${'x'.repeat(2048)}` }]))
       .toThrow(/снимок не записан/);
     expect(() => assertStudentDocumentFormSnapshot([page!])).not.toThrow();
   });

@@ -78,6 +78,21 @@ test('publishing a new address with no other draft changes leaves no pending dra
   assert.equal(Number(pages[0].updated_at), Number(pages[1].updated_at));
 });
 
+test('OG-only draft keeps the pending draft indicator while publishing the form address', async () => {
+  const { pages, handlerFor, makeContext } = fixture();
+  const publishedSeo = { seo_title: 'Оплата', seo_description: 'Описание', noindex: false, og_image: null, og_title: null, og_description: null };
+  pages[0].seo = { ...publishedSeo, og_title: 'Черновой OG заголовок', og_description: 'Черновое OG описание' };
+  pages[1].seo = { ...publishedSeo };
+  const read = makeContext('GET'); await handlerFor('/site-student-document-form')(read);
+  const next = 'https://b24-cbqwqo.bitrix24site.ru/crm_form_og7/?sig=publish';
+  const publish = makeContext('POST', 7, { student_document_form_url: next }, `"${read.body.revision}"`);
+  await handlerFor('/site-student-document-form/publish')(publish);
+  assert.equal(publish.status, undefined);
+  assert.ok(Number(pages[0].updated_at) > Number(pages[1].updated_at));
+  assert.equal(pages[0].seo.og_title, 'Черновой OG заголовок');
+  assert.equal(pages[0].seo.og_description, 'Черновое OG описание');
+});
+
 test('If-Match allows the first write and rejects a stale concurrent second write', async () => {
   const { pages, handlerFor, makeContext } = fixture();
   const read = makeContext('GET'); await handlerFor('/site-student-document-form')(read);
@@ -109,9 +124,11 @@ test('all three supported roles can reach the Page → Оплата screen capab
 
 test('the endpoint rejects invalid addresses and fields outside its single-field contract', async () => {
   const { handlerFor, makeContext } = fixture();
-  const invalid = makeContext('PUT', 7, { student_document_form_url: 'https://evil.test/' }, '"revision"');
-  await handlerFor('/site-student-document-form/draft')(invalid);
-  assert.equal(invalid.status, 400);
+  for (const address of ['https://evil.test/', ` ${URL}`, `${URL}${'x'.repeat(2048)}`]) {
+    const invalid = makeContext('PUT', 7, { student_document_form_url: address }, '"revision"');
+    await handlerFor('/site-student-document-form/draft')(invalid);
+    assert.equal(invalid.status, 400);
+  }
   const extra = makeContext('PUT', 7, { student_document_form_url: URL, body: 'replace content' }, '"revision"');
   await handlerFor('/site-student-document-form/draft')(extra);
   assert.equal(extra.status, 400);

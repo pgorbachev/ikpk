@@ -617,7 +617,7 @@ async function liveCapture(): Promise<void> {
   for (const st of SOURCE_TYPES) {
     for (const record of rawByType[st.type]!) {
       for (const name of unknownRecordFields(st.type, record)) unknown.add(name);
-      for (const name of missingSourceFields(st.type, record)) missing.push(`${name} (запись ${recordKey(record)})`);
+      for (const name of missingSourceFields(st.type, record, !legacyOgTextSchema)) missing.push(`${name} (запись ${recordKey(record)})`);
       for (const name of filledUnshownContentFields(st.type, record)) unshown.push(`${name} (запись ${recordKey(record)})`);
       const seo = (record.seo ?? {}) as Record<string, unknown>;
       const filled = [

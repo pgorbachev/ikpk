@@ -2,7 +2,7 @@ export function assertStudentDocumentFormSnapshot(pages: Record<string, unknown>
   const matches = (pages ?? []).filter((record) => record.slug === 'oplata');
   const address = matches[0]?.student_document_form_url;
   let valid = false;
-  if (matches.length === 1 && typeof address === 'string') {
+  if (matches.length === 1 && typeof address === 'string' && address.trim() === address && address.length <= 2048) {
     try {
       const url = new URL(address);
       valid = url.protocol === 'https:' && url.hostname === 'b24-cbqwqo.bitrix24site.ru'

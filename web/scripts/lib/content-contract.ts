@@ -121,7 +121,7 @@ export function validateSnapshotContract(snapshot: Snapshot, trust: HistoricalTr
     const paymentPages = staticPages.filter((page) => page.slug === 'oplata');
     const address = paymentPages[0]?.student_document_form_url;
     let valid = paymentPages.length === 0;
-    if (paymentPages.length === 1 && typeof address === 'string') {
+    if (paymentPages.length === 1 && typeof address === 'string' && address.trim() === address && address.length <= 2048) {
       try {
         const url = new URL(address);
         valid = url.protocol === 'https:' && url.hostname === 'b24-cbqwqo.bitrix24site.ru'

@@ -20,7 +20,8 @@ async function hasOtherDraftChanges(strapi, draft: PageRow, published: PageRow) 
     title: row.title, slug: row.slug, legacy_id: row.legacy_id, body: row.body,
     center_phone: row.center_phone, manager_phone: row.manager_phone,
     seo: row.seo ? { seo_title: row.seo.seo_title, seo_description: row.seo.seo_description,
-      noindex: row.seo.noindex, og_image: row.seo.og_image?.id ?? null } : null,
+      noindex: row.seo.noindex, og_image: row.seo.og_image?.id ?? null,
+      og_title: row.seo.og_title, og_description: row.seo.og_description } : null,
   });
   const draftValue = valuesFor(rows.find(row => row.id === draft.id));
   const publishedValue = valuesFor(rows.find(row => row.id === published.id));

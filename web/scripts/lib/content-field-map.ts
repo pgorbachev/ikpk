@@ -25,8 +25,10 @@ export interface FieldMapEntry {
   source: string;
   /** Имя преобразования, исполняемого захватом. Без него поле — прямой passthrough. */
   transform?: string;
-  /** New SEO fields are optional so older CMS deployments and saved snapshots remain valid. */
+  /** This source may be absent when the capture explicitly allows optional fields. */
   optional?: boolean;
+  /** This source may be absent from an individual record even when modern capture requires optional schema fields. */
+  optionalPerRecord?: boolean;
 }
 
 export interface SourceType {
@@ -201,7 +203,7 @@ export const FIELD_MAP: readonly FieldMapEntry[] = [
   // static_pages
   { type: 'static_pages', field: 'center_phone', source: 'center_phone' },
   { type: 'static_pages', field: 'manager_phone', source: 'manager_phone' },
-  { type: 'static_pages', field: 'student_document_form_url', source: 'student_document_form_url', optional: true },
+  { type: 'static_pages', field: 'student_document_form_url', source: 'student_document_form_url', optional: true, optionalPerRecord: true },
   { type: 'static_pages', field: 'legacy_id', source: 'legacy_id' },
   { type: 'static_pages', field: 'legacy_url', source: 'legacy_id', transform: 'legacyUrlFromId' },
   { type: 'static_pages', field: 'title', source: 'title' },
@@ -285,18 +287,20 @@ export function unknownRecordFields(type: string, record: Record<string, unknown
 }
 
 /**
- * Источники карты, которых нет в записи ответа, — `поле снимка ← источник`. Отсутствие ключа — отказ:
- * источник исчез из установленной CMS. `null` и пустая коллекция — законные пустые значения. Подполе
- * проверяется, когда родитель — объект: компонент `seo` или связь (`course_group.legacy_id`).
+ * Источники карты, которых нет в записи ответа, — `поле снимка ← источник`. Отсутствие ключа — отказ,
+ * кроме объявленных optional/optionalPerRecord источников. `null` и пустая коллекция — законные пустые
+ * значения. Подполе проверяется, когда родитель — объект: компонент `seo` или связь (`course_group.legacy_id`).
  */
 export function missingSourceFields(type: string, record: Record<string, unknown>, requireOptional = false): string[] {
   const missing = new Map<string, string>();
-  for (const { field, source, optional } of FIELD_MAP.filter((e) => e.type === type)) {
+  for (const { field, source, optional, optionalPerRecord } of FIELD_MAP.filter((e) => e.type === type)) {
     const [root, sub] = source.split('.') as [string, string | undefined];
     const parent = record[root];
     const gone = !Object.hasOwn(record, root) ||
       (sub !== undefined && parent !== null && typeof parent === 'object' && !Array.isArray(parent) && !Object.hasOwn(parent, sub));
-    if ((!optional || requireOptional) && gone && !missing.has(source)) missing.set(source, `${type}.${field} ← ${source}`);
+    if ((!optional || (requireOptional && !optionalPerRecord)) && gone && !missing.has(source)) {
+      missing.set(source, `${type}.${field} ← ${source}`);
+    }
   }
   return [...missing.values()];
 }
