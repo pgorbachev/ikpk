@@ -1511,6 +1511,9 @@ def _cms_release_dir(root: Path, path: Path) -> Path:
 
 def _cleanup_cms_releases(config: dict[str, Any], state: RehearsalState) -> list[str]:
     """Remove finished CMS release directories, keeping the live tree and its rollback."""
+    # production-static: releaseRoot holds static-main sources only; CMS releases are cleaned by production-paired.
+    if config.get("profile") == "production-static":
+        return []
     raw_root = config.get("releaseRoot")
     raw_current = config.get("currentCms")
     if not isinstance(raw_root, str) or not isinstance(raw_current, str):
