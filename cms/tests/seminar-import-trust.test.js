@@ -324,6 +324,13 @@ describe('доверенный перенос в собранном Strapi', { t
       app.documents(instituteUid).findOne({ documentId: institute.documentId, status, populate: ['seo'] }),
     ));
     assert.deepEqual(versions.map(entry => entry.seo.noindex), [false, true]);
+    await app.documents(instituteUid).discardDraft({ documentId: institute.documentId });
+    await app.documents(instituteUid).update({ documentId: institute.documentId, data: { course_groups: { set: [] } } });
+    assert.equal((await call('POST', entry + '/actions/publish', editorJwt, {})).status, 403);
+    const linked = await app.documents(instituteUid).findOne({
+      documentId: institute.documentId, status: 'published', populate: ['course_groups'],
+    });
+    assert.deepEqual(linked.course_groups.map(item => item.documentId), [program.documentId]);
   });
 
 

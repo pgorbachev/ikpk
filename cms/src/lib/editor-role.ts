@@ -182,6 +182,8 @@ type CardVersion = {
   slug?: string;
   legacy_id?: string;
   institute?: { documentId: string } | null;
+  course_groups?: { documentId: string }[];
+  seminars?: { documentId: string }[];
   seo?: CardSeo | null;
 };
 
@@ -190,6 +192,8 @@ function protectedValues(version: CardVersion) {
     slug: version.slug,
     legacyId: version.legacy_id,
     institute: version.institute?.documentId ?? null,
+    programs: (version.course_groups ?? []).map(({ documentId }) => documentId).sort(),
+    seminars: (version.seminars ?? []).map(({ documentId }) => documentId).sort(),
     ogImage: version.seo?.og_image?.id ?? null,
     noindex: version.seo?.noindex ?? false,
   };
@@ -213,7 +217,9 @@ export function registerEditorCardRestrictions(strapi: Core.Strapi): void {
     if (!documentId || (context.action === 'update' && !seoTouched)) return next();
     const populate = {
       ...(hasSeo ? { seo: { populate: ['og_image'] } } : {}),
-      ...(card.read.includes('institute') ? { institute: true } : {}),
+      ...(context.action === 'update' ? {} : card.subject === 'api::institute.institute'
+        ? { course_groups: { fields: ['documentId'] } }
+        : { institute: { fields: ['documentId'] }, seminars: { fields: ['documentId'] } }),
     };
     const load = (status: 'draft' | 'published') => strapi.documents(context.uid as never).findOne({
       documentId, status, populate,
